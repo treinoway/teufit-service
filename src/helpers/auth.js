@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '../../src/db.js';
+import { roleValues } from '../constants/roles.js';
 
 /**
  * Find or create a user from OAuth provider data
@@ -27,7 +28,71 @@ export async function findOrCreateUserFromOAuth(providerData) {
     accessToken,
     refreshToken = null,
     expiresAt = null,
+    role,
   } = providerData;
+
+  if (!roleValues.includes(role)) {
+    const err = new Error('Missing or invalid role');
+    err.code = 'ROLE_REQUIRED';
+    throw err;
+  }
+
+  // Convert various "expires" formats into a safe JS Date or null.
+  // Different OAuth providers / libs may return:
+  // - expiresAt as unix seconds (number)
+  // - expires_at as unix seconds
+  // - expires_in as seconds from now
+  // - an ISO string
+  // Prisma requires a valid Date object within supported range.
+  const toSafeExpiresDate = (raw) => {
+    if (raw == null) return null;
+
+    let date;
+
+    // unix seconds (number)
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      date = new Date(raw * 1000);
+    }
+
+    // unix seconds / millis (string)
+    if (!date && typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (/^\d+$/.test(trimmed)) {
+        const n = Number(trimmed);
+        if (Number.isFinite(n)) {
+          // If it looks like millis, keep it; otherwise assume seconds.
+          date = new Date(n > 1e12 ? n : n * 1000);
+        }
+      } else {
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) date = parsed;
+      }
+    }
+
+    // provider might pass a Date already
+    if (!date && raw instanceof Date) {
+      if (!Number.isNaN(raw.getTime())) date = raw;
+    }
+
+    // Some token objects may contain other fields
+    if (!date && typeof raw === 'object') {
+      // fastify/oauth2 token sometimes carries expires_in
+      if (typeof raw.expires_at === 'number') date = new Date(raw.expires_at * 1000);
+      else if (typeof raw.expiresAt === 'number') date = new Date(raw.expiresAt * 1000);
+      else if (typeof raw.expires_in === 'number') date = new Date(Date.now() + raw.expires_in * 1000);
+    }
+
+    if (!date || Number.isNaN(date.getTime())) return null;
+
+    // Guard against bizarre far-future dates (can happen when format is misread).
+    // Prisma/Postgres timestamptz can't store extremely large years.
+    const year = date.getUTCFullYear();
+    if (year < 1970 || year > 9999) return null;
+
+    return date;
+  };
+
+  const expiresAtDate = toSafeExpiresDate(expiresAt);
 
   // Find account by provider and providerId
   let account = await prisma.account.findUnique({
@@ -48,12 +113,19 @@ export async function findOrCreateUserFromOAuth(providerData) {
     // User already exists, update tokens
     user = account.user;
 
+    // Soft-delete enforcement: don't allow login for deleted users
+    if (user.deletedAt) {
+      const err = new Error('User account is deactivated');
+      err.code = 'USER_DELETED';
+      throw err;
+    }
+
     await prisma.account.update({
       where: { id: account.id },
       data: {
         accessToken,
         refreshToken,
-        expiresAt: expiresAt ? new Date(expiresAt * 1000) : null,
+        expiresAt: expiresAtDate,
       },
     });
   } else {
@@ -62,6 +134,12 @@ export async function findOrCreateUserFromOAuth(providerData) {
       where: { email },
     });
 
+    if (user?.deletedAt) {
+      const err = new Error('User account is deactivated');
+      err.code = 'USER_DELETED';
+      throw err;
+    }
+
     if (!user) {
       // Create new user
       user = await prisma.user.create({
@@ -69,7 +147,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
           email,
           username: name || email.split('@')[0],
           avatar,
-          role: 'user', // default role
+          role,
           status: 'active',
         },
       });
@@ -83,7 +161,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
         providerId,
         accessToken,
         refreshToken,
-        expiresAt: expiresAt ? new Date(expiresAt * 1000) : null,
+        expiresAt: expiresAtDate,
       },
     });
   }

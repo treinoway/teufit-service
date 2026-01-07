@@ -2,12 +2,16 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  student
+  trainer
 }
 
 model User {
@@ -15,15 +19,43 @@ model User {
   username  String    @db.Text
   email     String?   @unique @db.Text
   avatar    String?   @db.Text
-  role      String    @db.Text
+  role      Role
   status    String    @default("pending") @db.Text
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
   
   accounts  Account[]
+  students  Student[]
+  trainers  Trainer[]
 
   @@map("users")
+}
+
+model Student {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.Text
+  birthdate DateTime @db.Date
+  gender    String?  @db.Text
+  job       String?  @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("students")
+}
+
+model Trainer {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @map("user_id") @db.Uuid
+  name   String  @db.Text
+  avatar String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("trainers")
 }
 
 model Account {
@@ -37,7 +69,7 @@ model Account {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
   
   @@unique([provider, providerId])
   @@index([userId])
