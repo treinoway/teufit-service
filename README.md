@@ -4,7 +4,7 @@ Backend API for Gaujofit - A wellness and training platform.
 
 ## 🚀 Tech Stack
 
-- **Runtime**: Node.js 20+
+- **Runtime**: Node.js 24+
 - **Framework**: Fastify
 - **Database**: PostgreSQL 17 (Alpine)
 - **ORM**: Prisma 7
@@ -14,7 +14,7 @@ Backend API for Gaujofit - A wellness and training platform.
 
 Before you begin, ensure you have installed:
 
-- [Node.js](https://nodejs.org/) (v20.19.0 or higher)
+- [Node.js](https://nodejs.org/) (v24.x or higher)
 - [Docker](https://www.docker.com/) and Docker Compose
 - [Git](https://git-scm.com/)
 
