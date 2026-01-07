@@ -1,0 +1,32 @@
+{
+  "name": "gaujofit_service",
+  "version": "0.0.1",
+  "description": "Backend for gaujofit",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node --watch api/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "wellness",
+    "training"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/oauth2": "^8.1.2",
+    "@fastify/session": "^11.1.1",
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "^7.2.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.2",
+    "pg": "^8.16.3",
+    "prisma": "^7.2.0"
+  }
+}

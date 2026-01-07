@@ -1,0 +1,24 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: gaujofit_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gaujofit_user
+      POSTGRES_PASSWORD: gaujofit_password
+      POSTGRES_DB: gaujofit_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gaujofit_user -d gaujofit_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
