@@ -26,8 +26,10 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
   
   accounts  Account[]
-  students  Student[]
-  trainers  Trainer[]
+  student   Student?
+  trainer   Trainer?
+  address   Address?
+  socials   SocialNetwork?
 
   @@map("users")
 }
@@ -40,22 +42,76 @@ model Student {
   gender    String?  @db.Text
   job       String?  @db.Text
 
+  healthDetails StudentHealthDetail[]
+
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([userId])
+  @@unique([userId])
   @@map("students")
 }
 
+model StudentHealthDetail {
+  id         String    @id @default(uuid()) @db.Uuid
+  studentId  String    @map("student_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  weight     Float?
+  height     Float?
+  bodyFat    Float?    @map("body_fat")
+  conditions String[] @default([])
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@map("student_health_details")
+}
+
 model Trainer {
-  id     String  @id @default(uuid()) @db.Uuid
-  userId String  @map("user_id") @db.Uuid
-  name   String  @db.Text
-  avatar String? @db.Text
+  id                     String   @id @default(uuid()) @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  firstName              String   @map("first_name") @db.Text
+  lastName               String   @map("last_name") @db.Text
+  birthDate              DateTime @map("birth_date") @db.Date
+  avatar                 String?  @db.Text
+  professionalDocument   String?  @map("professional_document") @db.Text
+  gymName                String?  @map("gym_name") @db.Text
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([userId])
+  @@unique([userId])
   @@map("trainers")
+}
+
+model Address {
+  id            String  @id @default(uuid()) @db.Uuid
+  userId        String  @unique @map("user_id") @db.Uuid
+  street        String  @db.Text
+  streetLine2   String? @map("street_line_2") @db.Text
+  houseNumber   String  @map("house_number") @db.Text
+  neighoborhood String? @db.Text
+  city          String  @db.Text
+  state         String? @db.Text
+  country       String  @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("addresses")
+}
+
+model SocialNetwork {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @unique @map("user_id") @db.Uuid
+  instagram String? @db.Text
+  whatsapp  String? @db.Text
+  x         String? @db.Text
+  threads   String? @db.Text
+  youtube   String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("socials_networks")
 }
 
 model Account {

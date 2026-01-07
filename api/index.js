@@ -4,11 +4,16 @@ import fastifyCookie from '@fastify/cookie';
 import fastifySession from '@fastify/session';
 import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth.js';
+import { signupRoutes } from './routes/signup.js';
+import { trainerRoutes } from './routes/trainer.js';
 import { authenticate } from './middleware/auth.js';
 
 const fastify = Fastify({
   logger: true
 });
+
+// Make prisma available to route handlers and services that need transactions.
+fastify.decorate('prisma', prisma);
 
 // Register cookie support
 await fastify.register(fastifyCookie);
@@ -25,6 +30,8 @@ await fastify.register(fastifySession, {
 
 // Register auth routes
 await fastify.register(authRoutes);
+await fastify.register(signupRoutes);
+await fastify.register(trainerRoutes);
 
 // Health check endpoint (public)
 fastify.get('/', async (request, reply) => {

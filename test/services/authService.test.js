@@ -107,7 +107,9 @@ describe('src/services/authService.js', () => {
       expect(prisma.trainer.create).toHaveBeenCalledWith({
         data: {
           userId: 'u1',
-          name: 'New Trainer',
+          firstName: 'New',
+          lastName: 'Trainer',
+          birthDate: new Date('2000-01-01'),
         },
       });
       expect(res).toEqual({ created: true, role: Roles.TRAINER });

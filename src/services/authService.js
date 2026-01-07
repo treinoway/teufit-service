@@ -89,7 +89,9 @@ export async function ensureProfileForUser({ userId, role }) {
     await prisma.trainer.create({
       data: {
         userId,
-        name: 'New Trainer',
+        firstName: 'New',
+        lastName: 'Trainer',
+        birthDate: new Date('2000-01-01'),
       },
     });
     return { created: true, role };

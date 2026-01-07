@@ -148,7 +148,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
           username: name || email.split('@')[0],
           avatar,
           role,
-          status: 'active',
+          status: 'pending',
         },
       });
     }

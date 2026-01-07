@@ -61,6 +61,18 @@ export async function authRoutes(fastify) {
         role: user.role,
       });
 
+      const oauthFlow = request.session.get('oauthFlow');
+      if (oauthFlow === 'trainer-signup') {
+        request.session.delete('oauthFlow');
+        return reply.send({
+          user,
+          next: {
+            path: '/trainer/me',
+            method: 'PATCH',
+          },
+        });
+      }
+
       // Redirect to dashboard or home
       return reply.redirect('/dashboard');
     } catch (error) {
