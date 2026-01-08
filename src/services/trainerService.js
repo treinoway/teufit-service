@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import _ from 'lodash';
 
 function buildTrainerUpdateData(trainer) {
   const trainerData = {};
@@ -41,7 +42,7 @@ function buildSocialsUpsertData(socials) {
  * - Updates Trainer + optional Address + optional SocialNetwork
  * - Sets User.status=active
  */
-export async function updateMyTrainerProfile({ userId, trainer, address, socials }) {
+export async function patch({ userId, trainer, address, socials }) {
   if (trainer == null && address == null && socials == null) {
     const err = new Error('No updates provided');
     err.code = 'NO_UPDATES';
@@ -93,4 +94,52 @@ export async function updateMyTrainerProfile({ userId, trainer, address, socials
 
     return { user: userRow, trainer: trainerRow, address: addressRow, socials: socialsRow };
   });
+}
+
+// Backwards-compatible alias used by older routes/tests.
+export const updateMyTrainerProfile = patch;
+
+/**
+ * Get the trainer profile (and related 1:1 resources) for a given userId.
+ *
+ * Contract:
+ * - Input: userId (uuid string)
+ * - Output: trainer row including the linked user + address + socials (may be null)
+ */
+export async function getOneByUserId(userId) {
+  if (!userId) {
+    const err = new Error('userId is required');
+    err.code = 'USER_ID_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    include: {
+      user: {
+        include: {
+          address: true,
+          socials: true,
+        },
+      },
+    },
+  });
+
+  if (!trainer) {
+    const err = new Error('Trainer profile missing');
+    err.code = 'TRAINER_PROFILE_MISSING';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const responseTrainer = _.omit(trainer, ['user', 'userId'])
+  // Flatten to match the structure returned by patch()
+  // (trainer model doesn't have address/socials relations; those live on user)
+  // eslint-disable-next-line no-unused-vars
+  return {
+   ...responseTrainer,
+   address: trainer.user.address,
+   socialNetworks: trainer.user.socials
+  };
 }

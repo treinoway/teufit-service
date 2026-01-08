@@ -9,7 +9,6 @@ import { Roles } from '../constants/roles.js';
  */
 export function startTrainerGoogleSignup({ request }) {
   request.session.set('oauthRole', Roles.TRAINER);
-  request.session.set('oauthFlow', 'trainer-signup');
 
   return {
     redirectTo: '/auth/google',

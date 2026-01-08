@@ -122,6 +122,7 @@ The server will start on **http://localhost:3000**
 | GET | `/` | Health check |
 | GET | `/auth/google` | Start Google login |
 | GET | `/auth/google/callback` | OAuth callback (automatic) |
+| GET | `/signup/trainer/google` | Start trainer signup with Google |
 
 ### Protected Endpoints (Requires Authentication)
 
@@ -129,6 +130,7 @@ The server will start on **http://localhost:3000**
 |--------|----------|-------------|
 | GET | `/auth/me` | Get current user info |
 | GET | `/auth/logout` | Logout |
+| PATCH | `/trainer` | update trainer |
 | GET | `/dashboard` | User dashboard |
 | GET | `/users` | List all users |
 | POST | `/users` | Create user (manual) |

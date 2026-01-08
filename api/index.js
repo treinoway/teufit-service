@@ -2,11 +2,11 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifySession from '@fastify/session';
+import fastifyJwt from '@fastify/jwt';
 import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth.js';
-import { signupRoutes } from './routes/signup.js';
 import { trainerRoutes } from './routes/trainer.js';
-import { authenticate } from './middleware/auth.js';
+import { authenticate, requireActiveUser } from './middleware/auth.js';
 
 const fastify = Fastify({
   logger: true
@@ -28,9 +28,19 @@ await fastify.register(fastifySession, {
   },
 });
 
+// Register JWT support (used by mobile clients via Authorization: Bearer <token>)
+// const jwtSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+// if (!jwtSecret) {
+//   throw new Error(
+//     'Missing JWT secret. Set JWT_SECRET (recommended) or SESSION_SECRET (dev fallback) in your environment.',
+//   );
+// }
+// await fastify.register(fastifyJwt, {
+//   secret: jwtSecret,
+// });
+
 // Register auth routes
 await fastify.register(authRoutes);
-await fastify.register(signupRoutes);
 await fastify.register(trainerRoutes);
 
 // Health check endpoint (public)
@@ -38,13 +48,6 @@ fastify.get('/', async (request, reply) => {
   return { message: "i'm alive" };
 });
 
-// Dashboard endpoint (requires authentication)
-fastify.get('/dashboard', { preHandler: authenticate }, async (request, reply) => {
-  return { 
-    message: 'Welcome to your dashboard',
-    user: request.user
-  };
-});
 
 // Get all users (protected route)
 fastify.get('/users', { preHandler: authenticate }, async (request, reply) => {
@@ -82,7 +85,7 @@ const start = async () => {
     
     await fastify.listen({ port, host });
     console.log(`🚀 Server is running on http://localhost:${port}`);
-    console.log(`🔐 Login with Google: http://localhost:${port}/auth/google`);
+    console.log(`🔐 Login with Google: http://localhost:${port}/auth/trainer/google`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

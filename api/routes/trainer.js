@@ -1,28 +1,35 @@
 import { Roles } from '../../src/constants/roles.js';
-import { updateMyTrainerProfile } from '../../src/services/trainerService.js';
+import { patch, getOneByUserId } from '../../src/services/trainerService.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
 
 /**
  * Rest-ish trainer resource routes.
  *
  * Current use:
- * - PATCH /trainer/me: onboarding/profile completion for the authenticated trainer.
+ * - PATCH /trainer: onboarding/profile completion for the authenticated trainer.
  */
 export async function trainerRoutes(fastify) {
-  fastify.patch('/trainer/me', async (request, reply) => {
-    const sessionUser = request.session.get('user');
-    if (!sessionUser) {
+
+      // Get current user
+  fastify.get('/me',  { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
+    const user = request.session.get('user');
+    
+    if (!user) {
       return reply.status(401).send({ error: 'Not authenticated' });
     }
-    if (sessionUser.role !== Roles.TRAINER) {
-      return reply.status(403).send({ error: 'Forbidden' });
-    }
+
+    const trainer = await getOneByUserId(user.id);
+    return reply.send(trainer);
+  });
+
+  fastify.patch('/trainer/', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
 
     const body = request.body ?? {};
     const { trainer, address, socials } = body;
 
     try {
-      const updated = await updateMyTrainerProfile({
-        userId: sessionUser.id,
+      const updated = await patch({
+        userId: request.user.id,
         trainer,
         address,
         socials,

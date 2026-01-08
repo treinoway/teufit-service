@@ -1,0 +1,182 @@
+{
+  "info": {
+    "name": "Gaujofit Service API",
+    "_postman_id": "00000000-0000-0000-0000-000000000000",
+    "description": "Postman collection for gaujofit_service (Fastify + Prisma).\n\nNotes:\n- This API uses cookie-based sessions. For authenticated calls, either run the OAuth flow in a browser and copy the session cookie into Postman, or use the OAuth endpoints in Postman and let it store cookies automatically (requires a valid Google OAuth Client configured for your callback URL).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Mobile Google Auth (idToken -> Bearer access token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"<GOOGLE_ID_TOKEN_FROM_MOBILE>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/mobile/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "mobile", "google"]
+            }
+          },
+          "description": "For native mobile clients. Send the Google `idToken` returned by Google Sign-In SDK. Response includes `accessToken` (JWT). Use it on protected endpoints as `Authorization: Bearer {{accessToken}}`."
+        },
+        {
+          "name": "Start Google OAuth w/ role (trainer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/trainer/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "trainer", "google"]
+            }
+          }
+        },
+        {
+          "name": "OAuth Callback (Google)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "callback"]
+            }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trainer",
+      "item": [
+        {
+          "name": "Update My Trainer Profile (Onboarding PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"birthDate\": \"1995-08-15\",\n    \"gymName\": \"Gaujofit Gym\",\n    \"professionalDocument\": \"CREF-12345\"\n  },\n  \"address\": {\n    \"street\": \"Av. Paulista\",\n    \"streetLine2\": \"Apt 101\",\n    \"houseNumber\": \"1000\",\n    \"neighoborhood\": \"Bela Vista\",\n    \"city\": \"Sao Paulo\",\n    \"state\": \"SP\",\n    \"country\": \"BR\"\n  },\n  \"socials\": {\n    \"instagram\": \"@gaujofit\",\n    \"whatsapp\": \"+5511999999999\",\n    \"youtube\": \"https://youtube.com/@gaujofit\"\n  }\n}" 
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "me"]
+            }
+          },
+          "description": "Requires auth. For web, use the session cookie after OAuth. For mobile, set `Authorization: Bearer {{accessToken}}` (enable the header). Updates trainer + one address (upsert) + socials (upsert) and sets user.status=active."
+        }
+      ]
+    },
+    {
+      "name": "Users (debug/admin-ish)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "Create User (manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"manual_user\",\n  \"role\": \"trainer\",\n  \"email\": \"manual@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -7,10 +7,6 @@ vi.mock('../../src/db.js', () => {
       user: {
         findUnique: vi.fn(),
       },
-      student: {
-        findFirst: vi.fn(),
-        create: vi.fn(),
-      },
       trainer: {
         findFirst: vi.fn(),
         create: vi.fn(),
@@ -71,32 +67,6 @@ describe('src/services/authService.js', () => {
   });
 
   describe('ensureProfileForUser', () => {
-    it('creates student profile if missing', async () => {
-      prisma.student.findFirst.mockResolvedValue(null);
-      prisma.student.create.mockResolvedValue({ id: 's1' });
-
-      const res = await ensureProfileForUser({ userId: 'u1', role: Roles.STUDENT });
-
-      expect(prisma.student.findFirst).toHaveBeenCalledWith({ where: { userId: 'u1' } });
-      expect(prisma.student.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'u1',
-          name: 'New Student',
-          birthdate: new Date('2000-01-01'),
-        },
-      });
-      expect(res).toEqual({ created: true, role: Roles.STUDENT });
-    });
-
-    it('does not create student profile if it already exists', async () => {
-      prisma.student.findFirst.mockResolvedValue({ id: 's1' });
-
-      const res = await ensureProfileForUser({ userId: 'u1', role: Roles.STUDENT });
-
-      expect(prisma.student.create).not.toHaveBeenCalled();
-      expect(res).toEqual({ created: false, role: Roles.STUDENT });
-    });
-
     it('creates trainer profile if missing', async () => {
       prisma.trainer.findFirst.mockResolvedValue(null);
       prisma.trainer.create.mockResolvedValue({ id: 't1' });
@@ -138,7 +108,7 @@ describe('src/services/authService.js', () => {
       };
 
       const request = {
-        session: makeSession({ oauthRole: Roles.STUDENT }),
+        session: makeSession({ oauthRole: Roles.TRAINER }),
       };
 
       fetch.mockResolvedValue({
@@ -170,7 +140,7 @@ describe('src/services/authService.js', () => {
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresAt: token,
-          role: Roles.STUDENT,
+          role: Roles.TRAINER,
         }),
       );
 
@@ -189,7 +159,7 @@ describe('src/services/authService.js', () => {
       };
 
       const request = {
-        session: makeSession({ oauthRole: Roles.STUDENT }),
+        session: makeSession({ oauthRole: Roles.TRAINER }),
       };
 
       fetch.mockResolvedValue({

@@ -73,7 +73,7 @@ model Trainer {
   userId                 String   @map("user_id") @db.Uuid
   firstName              String   @map("first_name") @db.Text
   lastName               String   @map("last_name") @db.Text
-  birthDate              DateTime @map("birth_date") @db.Date
+  birthDate              DateTime? @map("birth_date") @db.Date
   avatar                 String?  @db.Text
   professionalDocument   String?  @map("professional_document") @db.Text
   gymName                String?  @map("gym_name") @db.Text

@@ -13,13 +13,12 @@ function makeSession(initial = {}) {
 }
 
 describe('src/services/signupService.js', () => {
-  it('sets oauthRole and oauthFlow for trainer signup and returns redirectTo', () => {
+  it('sets oauthRole for trainer signup and returns redirectTo', () => {
     const request = { session: makeSession() };
 
     const res = startTrainerGoogleSignup({ request });
 
     expect(request.session.get('oauthRole')).toBe(Roles.TRAINER);
-    expect(request.session.get('oauthFlow')).toBe('trainer-signup');
     expect(res).toEqual({ redirectTo: '/auth/google' });
   });
 });
