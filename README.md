@@ -56,6 +56,11 @@ GOOGLE_OAUTH_CALLBACK_URL=http://localhost:3000/auth/google/callback
 
 # Session Secret (change this to a random string)
 SESSION_SECRET=your-random-secret-key-here
+
+# Frontend URL to redirect after successful OAuth (backend-for-frontend pattern)
+# Example:
+# FRONTEND_REDIRECT_URL=http://localhost:5173/auth/callback
+
 ```
 
 ### 4. Start PostgreSQL Database
@@ -113,6 +118,15 @@ The server will start on **http://localhost:3000**
    - `http://localhost:3000/auth/google/callback`
 9. Copy **Client ID** and **Client Secret** to your `.env` file
 
+### OAuth callback behavior (frontend + backend)
+
+This service uses a **backend-for-frontend** pattern for web auth:
+
+- The backend handles the OAuth exchange at `GET /auth/google/callback`.
+- It stores the authenticated user in a **server-side session** (cookie-based).
+- It then **redirects the browser to your frontend** (configured via `FRONTEND_REDIRECT_URL`).
+- After redirect, your frontend should call backend APIs (e.g. `GET /me`) and the browser will automatically send the session cookie.
+
 ## 🔗 API Endpoints
 
 ### Public Endpoints
@@ -120,9 +134,10 @@ The server will start on **http://localhost:3000**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/` | Health check |
-| GET | `/auth/google` | Start Google login |
-| GET | `/auth/google/callback` | OAuth callback (automatic) |
-| GET | `/signup/trainer/google` | Start trainer signup with Google |
+| POST | `/auth/signup` | Signup with email + password (creates session) |
+| GET | `/auth/trainer/google` | Start trainer login/signup with Google (sets role=trainer then redirects to `/auth/google`) |
+| GET | `/auth/google` | Start Google OAuth (redirects to Google) |
+| GET | `/auth/google/callback` | OAuth callback (creates/updates user + ensures trainer profile) |
 
 ### Protected Endpoints (Requires Authentication)
 
@@ -130,10 +145,13 @@ The server will start on **http://localhost:3000**
 |--------|----------|-------------|
 | GET | `/auth/me` | Get current user info |
 | GET | `/auth/logout` | Logout |
-| PATCH | `/trainer` | update trainer |
+| GET | `/me` | Get current trainer profile (flattened) |
+| PATCH | `/trainer` | Update trainer + address + socials (onboarding) |
 | GET | `/dashboard` | User dashboard |
 | GET | `/users` | List all users |
 | POST | `/users` | Create user (manual) |
+
+> Note: There is a mobile (JWT/Bearer token) login endpoint and JWT plugin wiring in the codebase, but it is currently commented out in `api/routes/auth.js` and `api/index.js`. The Postman collection includes the request for convenience if/when it’s re-enabled.
 
 ## 🧪 Testing the API
 

@@ -6,6 +6,8 @@ vi.mock('../../src/db.js', () => {
     prisma: {
       user: {
         findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       trainer: {
         findFirst: vi.fn(),
@@ -29,7 +31,11 @@ import {
   authenticateWithGoogle,
   ensureProfileForUser,
   getCurrentUserWithAccounts,
+  signupWithEmailPassword,
+  loginWithEmailPassword,
 } from '../../src/services/authService.js';
+
+import crypto from 'node:crypto';
 
 function makeSession(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -171,6 +177,108 @@ describe('src/services/authService.js', () => {
       await expect(authenticateWithGoogle({ fastify, request })).rejects.toMatchObject({
         code: 'GOOGLE_PROFILE_FETCH_FAILED',
         statusCode: 502,
+      });
+    });
+  });
+
+  describe('signupWithEmailPassword', () => {
+    it('normalizes email, hashes password, and creates a trainer user', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockImplementation(async ({ data }) => ({
+        id: 'u1',
+        ...data,
+        role: data.role,
+        status: data.status,
+        deletedAt: null,
+      }));
+
+      const user = await signupWithEmailPassword({
+        email: '  Test@Example.com ',
+        password: 'password123',
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(prisma.user.create).toHaveBeenCalled();
+
+      const createCall = prisma.user.create.mock.calls[0][0];
+      expect(createCall.data.email).toBe('test@example.com');
+      expect(createCall.data.role).toBe('trainer');
+      expect(createCall.data.passwordHash).toMatch(/^scrypt\$/);
+
+      // Returned user should not include passwordHash
+      expect(user.passwordHash).toBeUndefined();
+    });
+
+    it('rejects weak passwords', async () => {
+      await expect(
+        signupWithEmailPassword({
+          email: 'a@b.com',
+          password: 'short',
+        }),
+      ).rejects.toMatchObject({ code: 'WEAK_PASSWORD', statusCode: 400 });
+    });
+  });
+
+  describe('loginWithEmailPassword', () => {
+    function makeHash(password) {
+      const salt = crypto.randomBytes(16);
+      const keylen = 64;
+      const N = 16384;
+      const r = 8;
+      const p = 1;
+      const derivedKey = crypto.scryptSync(password, salt, keylen, { N, r, p });
+      return `scrypt$N=${N},r=${r},p=${p}$${salt.toString('base64')}$${derivedKey.toString('base64')}`;
+    }
+
+    it('logs in with correct credentials and does not expose passwordHash', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        role: 'trainer',
+        status: 'pending',
+        username: null,
+        avatar: null,
+        deletedAt: null,
+        passwordHash: makeHash('password123'),
+      });
+
+      const user = await loginWithEmailPassword({ email: 'TEST@EXAMPLE.COM', password: 'password123' });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(user.passwordHash).toBeUndefined();
+      expect(user.id).toBe('u1');
+    });
+
+    it('rejects invalid credentials', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        role: 'trainer',
+        status: 'pending',
+        username: null,
+        avatar: null,
+        deletedAt: null,
+        passwordHash: makeHash('password123'),
+      });
+
+      await expect(loginWithEmailPassword({ email: 'test@example.com', password: 'wrong' })).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+        statusCode: 401,
+      });
+    });
+
+    it('rejects users without passwordHash (OAuth-only accounts)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        role: 'trainer',
+        status: 'pending',
+        deletedAt: null,
+        passwordHash: null,
+      });
+
+      await expect(loginWithEmailPassword({ email: 'test@example.com', password: 'password123' })).rejects.toMatchObject({
+        code: 'PASSWORD_NOT_SET',
+        statusCode: 409,
       });
     });
   });

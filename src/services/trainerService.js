@@ -92,7 +92,17 @@ export async function patch({ userId, trainer, address, socials }) {
       data: { status: 'active' },
     });
 
-    return { user: userRow, trainer: trainerRow, address: addressRow, socials: socialsRow };
+    // Return the same response shape as GET /me:
+    // - do not leak the user row
+    // - omit trainer.userId
+    // - merge address + socials into the payload
+    // eslint-disable-next-line no-unused-vars
+    const responseTrainer = _.omit(trainerRow, ['userId']);
+    return {
+      ...responseTrainer,
+      address: addressRow,
+      socialNetworks: socialsRow,
+    };
   });
 }
 

@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
 import { Roles } from '../constants/roles.js';
+import crypto from 'node:crypto';
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({
@@ -99,4 +100,189 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
   err.code = 'INVALID_PROFILE_TYPE';
   err.statusCode = 400;
   throw err;
+}
+
+function normalizeEmail(email) {
+  if (typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+function hashPassword(password) {
+  // scrypt params tuned for web auth (can be revisited later)
+  const salt = crypto.randomBytes(16);
+  const keylen = 64;
+  const N = 16384;
+  const r = 8;
+  const p = 1;
+
+  const derivedKey = crypto.scryptSync(password, salt, keylen, { N, r, p });
+  // Compact, self-contained format
+  return `scrypt$N=${N},r=${r},p=${p}$${salt.toString('base64')}$${derivedKey.toString('base64')}`;
+}
+
+function verifyPassword(password, stored) {
+  if (typeof stored !== 'string' || !stored.startsWith('scrypt$')) return false;
+
+  // Format: scrypt$N=...,r=...,p=...$<saltB64>$<hashB64>
+  const parts = stored.split('$');
+  if (parts.length !== 4) return false;
+
+  const paramsPart = parts[1];
+  const saltB64 = parts[2];
+  const hashB64 = parts[3];
+
+  const params = Object.fromEntries(
+    paramsPart
+      .split(',')
+      .map((kv) => kv.split('='))
+      .filter((kv) => kv.length === 2)
+      .map(([k, v]) => [k, Number(v)]),
+  );
+
+  const N = params.N;
+  const r = params.r;
+  const p = params.p;
+
+  if (![N, r, p].every((n) => Number.isFinite(n) && n > 0)) return false;
+
+  let salt;
+  let expected;
+  try {
+    salt = Buffer.from(saltB64, 'base64');
+    expected = Buffer.from(hashB64, 'base64');
+  } catch {
+    return false;
+  }
+
+  const derived = crypto.scryptSync(password, salt, expected.length, { N, r, p });
+  return crypto.timingSafeEqual(derived, expected);
+}
+
+function safeUser(user) {
+  if (!user) return user;
+  // Ensure we never leak passwordHash
+  // eslint-disable-next-line no-unused-vars
+  const { passwordHash, ...rest } = user;
+  return rest;
+}
+
+/**
+ * Email/password signup.
+ * Contract:
+ * - Creates a new user with passwordHash
+ * - Does NOT create an OAuth Account row
+ * - Sets a default role (trainer) unless provided
+ * - Returns user without the password hash
+ */
+export async function signupWithEmailPassword({ email, password, role = Roles.TRAINER }) {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    const err = new Error('Email is required');
+    err.code = 'EMAIL_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof password !== 'string' || password.length < 8) {
+    const err = new Error('Password must be at least 8 characters');
+    err.code = 'WEAK_PASSWORD';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Prevent signup with unsupported roles
+  if (role !== Roles.TRAINER) {
+    const err = new Error('Invalid role');
+    err.code = 'INVALID_ROLE';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (existing && !existing.deletedAt) {
+    const err = new Error('Email already in use');
+    err.code = 'EMAIL_IN_USE';
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (existing?.deletedAt) {
+    const err = new Error('User account is deactivated');
+    err.code = 'USER_DELETED';
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const passwordHash = hashPassword(password);
+  const created = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash,
+      role,
+      status: 'pending',
+      username: null,
+      avatar: null,
+    },
+  });
+
+  return safeUser(created);
+}
+
+/**
+ * Email/password login.
+ * Contract:
+ * - Validates email+password
+ * - Requires the user to have a passwordHash (not OAuth-only)
+ * - Rejects soft-deleted users
+ * - Returns user without passwordHash
+ */
+export async function loginWithEmailPassword({ email, password }) {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    const err = new Error('Email is required');
+    err.code = 'EMAIL_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof password !== 'string' || password.length === 0) {
+    const err = new Error('Password is required');
+    err.code = 'PASSWORD_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (!user) {
+    const err = new Error('Invalid credentials');
+    err.code = 'INVALID_CREDENTIALS';
+    err.statusCode = 401;
+    throw err;
+  }
+
+  if (user.deletedAt) {
+    const err = new Error('User account is deactivated');
+    err.code = 'USER_DELETED';
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (!user.passwordHash) {
+    const err = new Error('Password login not available for this account');
+    err.code = 'PASSWORD_NOT_SET';
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const ok = verifyPassword(password, user.passwordHash);
+  if (!ok) {
+    const err = new Error('Invalid credentials');
+    err.code = 'INVALID_CREDENTIALS';
+    err.statusCode = 401;
+    throw err;
+  }
+
+  return safeUser(user);
 }

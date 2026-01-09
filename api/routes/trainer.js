@@ -10,19 +10,13 @@ import { authenticate, requireRole } from '../middleware/auth.js';
  */
 export async function trainerRoutes(fastify) {
 
-      // Get current user
-  fastify.get('/me',  { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
-    const user = request.session.get('user');
-    
-    if (!user) {
-      return reply.status(401).send({ error: 'Not authenticated' });
-    }
-
-    const trainer = await getOneByUserId(user.id);
+  // Get current trainer profile
+  fastify.get('/me', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
+    const trainer = await getOneByUserId(request.user.id);
     return reply.send(trainer);
   });
 
-  fastify.patch('/trainer/', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
+  fastify.patch('/trainer', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
 
     const body = request.body ?? {};
     const { trainer, address, socials } = body;

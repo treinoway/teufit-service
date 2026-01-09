@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { authenticateWithGoogle, ensureProfileForUser } from '../../src/services/authService.js';
+import { authenticateWithGoogle, ensureProfileForUser, signupWithEmailPassword, loginWithEmailPassword } from '../../src/services/authService.js';
 import { Roles, roleValues } from '../../src/constants/roles.js';
 import { verifyGoogleIdToken } from '../../src/services/googleIdTokenService.js';
 import { issueAccessToken } from '../../src/services/tokenService.js';
@@ -32,8 +32,87 @@ export async function authRoutes(fastify) {
     if (typeof session.set === 'function') return session.set(key, undefined);
   };
 
+  // Email/password signup (session-based)
+  fastify.post('/auth/signup', async (request, reply) => {
+    try {
+      const body = request.body ?? {};
+      const email = body.email;
+      const password = body.password;
+
+      const user = await signupWithEmailPassword({ email, password, role: Roles.TRAINER });
+
+      // Create trainer row (pending onboarding) so the rest of the app can rely on it.
+      await ensureProfileForUser({
+        userId: user.id,
+        role: Roles.TRAINER,
+        profileSeed: {
+          name: typeof email === 'string' ? email.split('@')[0] : 'New Trainer',
+        },
+      });
+
+      request.session.set('user', {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+      });
+
+      return reply.status(201).send({ user });
+    } catch (error) {
+      if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_ROLE') {
+        return reply.status(400).send({ error: error.code, message: error.message });
+      }
+      if (error?.code === 'EMAIL_IN_USE') {
+        return reply.status(409).send({ error: 'EMAIL_IN_USE' });
+      }
+      if (error?.code === 'USER_DELETED') {
+        return reply.status(403).send({ error: 'Account deactivated' });
+      }
+
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Signup failed' });
+    }
+  });
+
+  // Email/password login (session-based)
+  fastify.post('/auth/login', async (request, reply) => {
+    try {
+      const body = request.body ?? {};
+      const email = body.email;
+      const password = body.password;
+
+      const user = await loginWithEmailPassword({ email, password });
+
+      request.session.set('user', {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+      });
+
+      return reply.send({ user });
+    } catch (error) {
+      if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'PASSWORD_REQUIRED') {
+        return reply.status(400).send({ error: error.code, message: error.message });
+      }
+      if (error?.code === 'INVALID_CREDENTIALS') {
+        return reply.status(401).send({ error: 'INVALID_CREDENTIALS' });
+      }
+      if (error?.code === 'USER_DELETED') {
+        return reply.status(403).send({ error: 'Account deactivated' });
+      }
+      if (error?.code === 'PASSWORD_NOT_SET') {
+        return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
+      }
+
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Login failed' });
+    }
+  });
+
    fastify.get('/auth/trainer/google', async (request, reply) => {
-    // Routing/session glue (not business logic): mark this OAuth run as a trainer signup.
     request.session.set('oauthRole', Roles.TRAINER);
     return reply.redirect('/auth/google');
   });
@@ -45,9 +124,9 @@ export async function authRoutes(fastify) {
       // We can't rely on query params on the callback, so we enforce the session value.
       const desiredRole = request.session.get('oauthRole');
       if (!roleValues.includes(desiredRole)) {
-        return reply.status(400).send({
+        return reply.status(403).send({
           error: 'Missing role',
-          message: `Start auth using /auth/google/start?role=${Roles.TRAINER}.`,
+          message: `Missing role for OAuth flow.`,
         });
       }
 
@@ -66,7 +145,7 @@ export async function authRoutes(fastify) {
       
   unsetSessionKey(request.session, 'oauthRole');
 
-      // Store user in session (cookie)
+    
       request.session.set('user', {
         id: user.id,
         email: user.email,
@@ -74,8 +153,16 @@ export async function authRoutes(fastify) {
         role: user.role,
       });
 
-      // Browser flow: redirect after login
-      return reply.status(200).send({UserId: user.id})
+      // Browser flow: redirect after login to your frontend.
+      // The frontend can then call backend endpoints like GET /me using the session cookie.
+      const frontendRedirectUrl = process.env.FRONTEND_REDIRECT_URL || process.env.FRONTEND_URL;
+      if (!frontendRedirectUrl) {
+        return reply
+          .status(500)
+          .send({ error: 'Missing FRONTEND_REDIRECT_URL (or FRONTEND_URL) env var' });
+      }
+
+      return reply.redirect(frontendRedirectUrl);
     } catch (error) {
       if (error?.code === 'USER_DELETED') {
         return reply.status(403).send({ error: 'Account deactivated' });
@@ -83,7 +170,7 @@ export async function authRoutes(fastify) {
       if (error?.code === 'ROLE_REQUIRED') {
         return reply.status(400).send({
           error: 'Missing role',
-          message: `Start auth using /auth/google/start?role=${Roles.TRAINER}.`,
+          message: `Start auth using /auth/trainer/google.`,
         });
       }
       fastify.log.error(error);

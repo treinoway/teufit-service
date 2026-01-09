@@ -107,10 +107,10 @@ describe('src/services/trainerService.js', () => {
     });
 
     expect(res).toEqual({
-      user: { id: 'u1', status: 'active' },
-      trainer: { id: 't1', userId: 'u1', firstName: 'Ana' },
+      id: 't1',
+      firstName: 'Ana',
       address: { id: 'a1', userId: 'u1' },
-      socials: { id: 's1', userId: 'u1' },
+      socialNetworks: { id: 's1', userId: 'u1' },
     });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
