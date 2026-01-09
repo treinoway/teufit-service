@@ -9,7 +9,10 @@ import { trainerRoutes } from './routes/trainer.js';
 import { authenticate, requireActiveUser } from './middleware/auth.js';
 
 const fastify = Fastify({
-  logger: true
+  logger: true,
+  // Railway runs behind a reverse proxy. Trust it so Fastify correctly detects HTTPS,
+  // client IPs, and sets secure cookies consistently.
+  trustProxy: true,
 });
 
 // Make prisma available to route handlers and services that need transactions.
@@ -24,6 +27,7 @@ await fastify.register(fastifySession, {
   cookie: {
     secure: process.env.NODE_ENV === 'production', // use secure cookies in production
     httpOnly: true,
+    sameSite: 'none',
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
   },
 });
@@ -85,7 +89,6 @@ const start = async () => {
     
     await fastify.listen({ port, host });
     console.log(`🚀 Server is running on http://localhost:${port}`);
-    console.log(`🔐 Login with Google: http://localhost:${port}/auth/trainer/google`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
