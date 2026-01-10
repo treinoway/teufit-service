@@ -13,6 +13,10 @@ vi.mock('../../src/db.js', () => {
         findFirst: vi.fn(),
         create: vi.fn(),
       },
+      student: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
     },
   };
 });
@@ -89,6 +93,22 @@ describe('src/services/authService.js', () => {
         },
       });
       expect(res).toEqual({ created: true, role: Roles.TRAINER });
+    });
+
+    it('creates student profile if missing', async () => {
+      prisma.student.findFirst.mockResolvedValue(null);
+      prisma.student.create.mockResolvedValue({ id: 's1' });
+
+      const res = await ensureProfileForUser({ userId: 'u1', role: Roles.STUDENT, profileSeed: { name: 'Alice' } });
+
+      expect(prisma.student.findFirst).toHaveBeenCalledWith({ where: { userId: 'u1' } });
+      expect(prisma.student.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          name: 'Alice',
+        },
+      });
+      expect(res).toEqual({ created: true, role: Roles.STUDENT });
     });
 
     it('throws INVALID_PROFILE_TYPE for an unknown role', async () => {
