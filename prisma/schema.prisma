@@ -31,6 +31,7 @@ model User {
   trainer   Trainer?
   address   Address?
   socials   SocialNetwork?
+  refreshTokens RefreshToken[]
 
   @@map("users")
 }
@@ -38,8 +39,8 @@ model User {
 model Student {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  name      String   @db.Text
-  birthdate DateTime @db.Date
+  name      String?  @db.Text
+  birthdate DateTime? @db.Date
   gender    String?  @db.Text
   job       String?  @db.Text
 
@@ -131,4 +132,19 @@ model Account {
   @@unique([provider, providerId])
   @@index([userId])
   @@map("accounts")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.Text
+  userId    String   @map("user_id") @db.Uuid
+  revoked   Boolean  @default(false)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }

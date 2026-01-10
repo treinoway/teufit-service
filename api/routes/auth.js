@@ -1,15 +1,16 @@
 import 'dotenv/config';
-import { authenticateWithGoogle, ensureProfileForUser, signupWithEmailPassword, loginWithEmailPassword } from '../../src/services/authService.js';
+import {
+  authenticateWithGoogle,
+  ensureProfileForUser,
+  signupWithEmailPasswordStateless,
+  loginWithEmailPasswordStateless,
+} from '../../src/services/authService.js';
 import { Roles, roleValues } from '../../src/constants/roles.js';
-import { verifyGoogleIdToken } from '../../src/services/googleIdTokenService.js';
-import { issueAccessToken } from '../../src/services/tokenService.js';
-import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
-import fastifyOauth2 from '@fastify/oauth2'
-
+import { issueAccessToken, verifyRefreshToken, revokeRefreshToken } from '../../src/services/tokenService.js';
+import fastifyOauth2 from '@fastify/oauth2';
 
 export async function authRoutes(fastify) {
-
-    // Configure Google OAuth2 plugin.
+  // Configure Google OAuth2 plugin.
   fastify.register(fastifyOauth2, {
     name: 'googleOAuth2',
     credentials: {
@@ -24,7 +25,6 @@ export async function authRoutes(fastify) {
     scope: ['profile', 'email'],
   });
 
-
   const unsetSessionKey = (session, key) => {
     if (!session) return;
     if (typeof session.unset === 'function') return session.unset(key);
@@ -32,33 +32,26 @@ export async function authRoutes(fastify) {
     if (typeof session.set === 'function') return session.set(key, undefined);
   };
 
-  // Email/password signup (session-based)
+  // Email/password signup (stateless)
   fastify.post('/auth/signup', async (request, reply) => {
     try {
       const body = request.body ?? {};
       const email = body.email;
       const password = body.password;
+      const role = typeof body.role === 'string' ? body.role.trim().toLowerCase() : Roles.TRAINER;
 
-      const user = await signupWithEmailPassword({ email, password, role: Roles.TRAINER });
-
-      // Create trainer row (pending onboarding) so the rest of the app can rely on it.
-      await ensureProfileForUser({
-        userId: user.id,
-        role: Roles.TRAINER,
-        profileSeed: {
-          name: typeof email === 'string' ? email.split('@')[0] : 'New Trainer',
-        },
+      const { userId, accessToken, refreshToken } = await signupWithEmailPasswordStateless({
+        fastify,
+        email,
+        password,
+        role,
       });
 
-      request.session.set('user', {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        status: user.status,
+      return reply.status(201).send({
+        user: { id: userId },
+        token: { accessToken },
+        refreshToken,
       });
-
-      return reply.status(201).send({ user });
     } catch (error) {
       if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_ROLE') {
         return reply.status(400).send({ error: error.code, message: error.message });
@@ -69,30 +62,39 @@ export async function authRoutes(fastify) {
       if (error?.code === 'USER_DELETED') {
         return reply.status(403).send({ error: 'Account deactivated' });
       }
+      if (error?.code === 'JWT_NOT_CONFIGURED') {
+        return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+      }
 
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Signup failed' });
     }
   });
 
-  // Email/password login (session-based)
-  fastify.post('/auth/login', async (request, reply) => {
+  fastify.post('/auth/login', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 minute'
+      }
+    }
+  }, async (request, reply) => {
     try {
       const body = request.body ?? {};
       const email = body.email;
       const password = body.password;
 
-      const user = await loginWithEmailPassword({ email, password });
-
-      request.session.set('user', {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        status: user.status,
+      const { userId, accessToken, refreshToken } = await loginWithEmailPasswordStateless({
+        fastify,
+        email,
+        password,
       });
 
-      return reply.send({ user });
+      return reply.send({
+        user: { id: userId },
+        token: { accessToken },
+        refreshToken,
+      });
     } catch (error) {
       if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'PASSWORD_REQUIRED') {
         return reply.status(400).send({ error: error.code, message: error.message });
@@ -106,13 +108,16 @@ export async function authRoutes(fastify) {
       if (error?.code === 'PASSWORD_NOT_SET') {
         return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
       }
+      if (error?.code === 'JWT_NOT_CONFIGURED') {
+        return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+      }
 
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Login failed' });
     }
   });
 
-   fastify.get('/auth/trainer/google', async (request, reply) => {
+  fastify.get('/auth/trainer/google', async (request, reply) => {
     request.session.set('oauthRole', Roles.TRAINER);
     return reply.redirect('/auth/google');
   });
@@ -142,10 +147,10 @@ export async function authRoutes(fastify) {
           avatar: googleUser?.picture
         },
       });
-      
-  unsetSessionKey(request.session, 'oauthRole');
 
-    
+      unsetSessionKey(request.session, 'oauthRole');
+
+
       request.session.set('user', {
         id: user.id,
         email: user.email,
@@ -247,17 +252,39 @@ export async function authRoutes(fastify) {
   //   }
   // });
 
-  // Logout route
-  fastify.get('/auth/logout', async (request, reply) => {
-    if (typeof request.session.destroy === 'function') {
-      await request.session.destroy();
-    } else {
-      // fallback: clear known keys
-      unsetSessionKey(request.session, 'user');
-      unsetSessionKey(request.session, 'oauthRole');
+  // Refresh Token Route
+  fastify.post('/auth/refresh', async (request, reply) => {
+    const { refreshToken } = request.body || {};
+
+    if (!refreshToken) {
+      return reply.status(400).send({ error: 'Missing refresh token' });
     }
-    return reply.send({ message: 'Logged out successfully' });
+
+    try {
+      const user = await verifyRefreshToken(refreshToken);
+      const token = issueAccessToken({ fastify, user });
+
+      // Optionally rotate refresh token here (issue new one, revoke old one)
+      // For simplicity, we keep the same refresh token until it expires.
+
+      return reply.send({ token: { accessToken: token.accessToken } });
+    } catch (error) {
+      return reply.status(401).send({ error: 'Invalid or expired refresh token' });
+    }
   });
 
+  fastify.post('/auth/logout', async (request, reply) => {
+    // Refresh Token revocation
+    const { refreshToken } = request.body || {};
+    if (refreshToken) {
+      try {
+        await revokeRefreshToken(refreshToken);
+      } catch (e) {
+        // Ignore errors during logout (e.g. token already invalid)
+        fastify.log.warn(`Logout revocation failed: ${e.message}`);
+      }
+    }
 
+    return reply.send({ message: 'Logged out successfully' });
+  });
 }

@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
 import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
+import { issueAccessToken, issueRefreshToken } from './tokenService.js';
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({
@@ -93,6 +94,23 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
         ...(profileSeed.avatar != null ? { avatar: profileSeed.avatar } : {}),
       },
     });
+    return { created: true, role };
+  }
+
+  if (role === Roles.STUDENT) {
+    const existing = await prisma.student.findFirst({ where: { userId } });
+    if (existing) return { created: false, role };
+
+    const rawName = typeof profileSeed?.name === 'string' ? profileSeed.name.trim() : '';
+    const name = rawName || null;
+
+    await prisma.student.create({
+      data: {
+        userId,
+        ...(name != null ? { name } : {}),
+      },
+    });
+
     return { created: true, role };
   }
 
@@ -192,7 +210,7 @@ export async function signupWithEmailPassword({ email, password, role = Roles.TR
   }
 
   // Prevent signup with unsupported roles
-  if (role !== Roles.TRAINER) {
+  if (![Roles.TRAINER, Roles.STUDENT].includes(role)) {
     const err = new Error('Invalid role');
     err.code = 'INVALID_ROLE';
     err.statusCode = 400;
@@ -285,4 +303,46 @@ export async function loginWithEmailPassword({ email, password }) {
   }
 
   return safeUser(user);
+}
+
+/**
+ * Stateless email/password signup: creates user, ensures profile, issues tokens.
+ * Returns minimal payload so routes can stay thin.
+ */
+export async function signupWithEmailPasswordStateless({ fastify, email, password, role = Roles.TRAINER }) {
+  const user = await signupWithEmailPassword({ email, password, role });
+
+  // Create trainer row (pending onboarding) so the rest of the app can rely on it.
+  await ensureProfileForUser({
+    userId: user.id,
+    role,
+    profileSeed: {
+      name: typeof user.email === 'string' ? user.email.split('@')[0] : 'New Trainer',
+    },
+  });
+
+  const access = issueAccessToken({ fastify, user });
+  const refresh = await issueRefreshToken({ user });
+
+  return {
+    userId: user.id,
+    accessToken: access.accessToken,
+    refreshToken: refresh.refreshToken,
+  };
+}
+
+/**
+ * Stateless email/password login: validates credentials and issues tokens.
+ */
+export async function loginWithEmailPasswordStateless({ fastify, email, password }) {
+  const user = await loginWithEmailPassword({ email, password });
+
+  const access = issueAccessToken({ fastify, user });
+  const refresh = await issueRefreshToken({ user });
+
+  return {
+    userId: user.id,
+    accessToken: access.accessToken,
+    refreshToken: refresh.refreshToken,
+  };
 }

@@ -39,16 +39,21 @@ describe('api/middleware/auth.js', () => {
   });
 
   it('authenticate accepts Bearer token and sets request.user from jwt payload', async () => {
+    let jwtVerifyArgs;
     const request = {
       session: makeSession({}),
       headers: { authorization: 'Bearer token' },
-      jwtVerify: async () => ({ sub: 'u2', email: 'm@b.com', role: 'trainer', status: 'pending' }),
+      jwtVerify: async (args) => {
+        jwtVerifyArgs = args;
+        return { sub: 'u2', email: 'm@b.com', role: 'trainer', status: 'pending' };
+      },
     };
     const reply = makeReply();
 
     await authenticate(request, reply);
 
     expect(reply.statusCode).toBe(null);
+    expect(jwtVerifyArgs).toEqual({ token: 'token' });
     expect(request.user).toEqual({ id: 'u2', email: 'm@b.com', role: 'trainer', status: 'pending' });
   });
 

@@ -7,13 +7,31 @@ export async function authenticate(request, reply) {
     return;
   }
 
-  // 2) Fallback to Bearer token (mobile)
+  // 2) Fallback to access token (JWT) from Authorization header (mobile)
   const authHeader = request.headers?.authorization;
-  if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
-    const token = authHeader.slice('bearer '.length).trim();
+
+  let token = null;
+  if (typeof authHeader === 'string') {
+    const trimmed = authHeader.trim();
+    if (/^bearer\s+/i.test(trimmed)) {
+      token = trimmed.replace(/^bearer\s+/i, '').trim();
+    } else if (trimmed.split('.').length === 3) {
+      // Support raw JWTs (some clients send just the token)
+      token = trimmed;
+    }
+  }
+
+  if (token) {
+    if (typeof request.jwtVerify !== 'function') {
+      return reply.status(500).send({
+        error: 'JWT_NOT_CONFIGURED',
+        message: 'JWT support not registered on server',
+      });
+    }
+
     try {
-      // fastify-jwt attaches jwtVerify to request when registered.
-      const payload = await request.jwtVerify();
+      // Explicitly verify the extracted token.
+      const payload = await request.jwtVerify({ token });
       request.user = {
         id: payload.sub,
         email: payload.email ?? null,
@@ -31,7 +49,7 @@ export async function authenticate(request, reply) {
 
   return reply.status(401).send({
     error: 'Authentication required',
-    message: 'Please login with Google to access this resource',
+    message: 'Missing Authorization header',
   });
 }
 
