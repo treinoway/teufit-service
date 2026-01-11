@@ -9,6 +9,34 @@ import { Roles, roleValues } from '../../src/constants/roles.js';
 import { issueAccessToken, verifyRefreshToken, revokeRefreshToken } from '../../src/services/tokenService.js';
 import fastifyOauth2 from '@fastify/oauth2';
 
+const authTags = ['auth'];
+
+const userIdResponseSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string' },
+  },
+};
+
+const tokenResponseSchema = {
+  type: 'object',
+  required: ['accessToken'],
+  properties: {
+    accessToken: { type: 'string' },
+  },
+};
+
+const authSuccessResponseSchema = {
+  type: 'object',
+  required: ['user', 'token', 'refreshToken'],
+  properties: {
+    user: userIdResponseSchema,
+    token: tokenResponseSchema,
+    refreshToken: { type: 'string' },
+  },
+};
+
 export async function authRoutes(fastify) {
   // Configure Google OAuth2 plugin.
   fastify.register(fastifyOauth2, {
@@ -33,7 +61,44 @@ export async function authRoutes(fastify) {
   };
 
   // Email/password signup (stateless)
-  fastify.post('/auth/signup', async (request, reply) => {
+  fastify.post(
+    '/auth/signup',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Sign up with email/password',
+        body: {
+          type: 'object',
+          required: ['email', 'password'],
+          additionalProperties: false,
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 8 },
+            role: { type: 'string', enum: roleValues, default: Roles.TRAINER },
+          },
+        },
+        response: {
+          201: authSuccessResponseSchema,
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          409: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          500: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
     try {
       const body = request.body ?? {};
       const email = body.email;
@@ -69,16 +134,53 @@ export async function authRoutes(fastify) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Signup failed' });
     }
-  });
+    },
+  );
 
-  fastify.post('/auth/login', {
-    config: {
-      rateLimit: {
-        max: 5,
-        timeWindow: '1 minute'
-      }
-    }
-  }, async (request, reply) => {
+  fastify.post(
+    '/auth/login',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+        },
+      },
+      schema: {
+        tags: authTags,
+        summary: 'Log in with email/password',
+        body: {
+          type: 'object',
+          required: ['email', 'password'],
+          additionalProperties: false,
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 1 },
+          },
+        },
+        response: {
+          200: authSuccessResponseSchema,
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          409: { type: 'object', properties: { error: { type: 'string' } } },
+          500: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
     try {
       const body = request.body ?? {};
       const email = body.email;
@@ -115,7 +217,8 @@ export async function authRoutes(fastify) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Login failed' });
     }
-  });
+    },
+  );
 
   fastify.get('/auth/trainer/google', async (request, reply) => {
     request.session.set('oauthRole', Roles.TRAINER);
@@ -253,7 +356,34 @@ export async function authRoutes(fastify) {
   // });
 
   // Refresh Token Route
-  fastify.post('/auth/refresh', async (request, reply) => {
+  fastify.post(
+    '/auth/refresh',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Exchange refresh token for a new access token',
+        body: {
+          type: 'object',
+          required: ['refreshToken'],
+          additionalProperties: false,
+          properties: {
+            refreshToken: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            required: ['token'],
+            properties: {
+              token: tokenResponseSchema,
+            },
+          },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
     const { refreshToken } = request.body || {};
 
     if (!refreshToken) {
@@ -271,9 +401,28 @@ export async function authRoutes(fastify) {
     } catch (error) {
       return reply.status(401).send({ error: 'Invalid or expired refresh token' });
     }
-  });
+    },
+  );
 
-  fastify.post('/auth/logout', async (request, reply) => {
+  fastify.post(
+    '/auth/logout',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Log out (revoke refresh token)',
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            refreshToken: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object', properties: { message: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
     // Refresh Token revocation
     const { refreshToken } = request.body || {};
     if (refreshToken) {
@@ -286,5 +435,6 @@ export async function authRoutes(fastify) {
     }
 
     return reply.send({ message: 'Logged out successfully' });
-  });
+    },
+  );
 }

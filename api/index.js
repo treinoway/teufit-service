@@ -4,6 +4,8 @@ import fastifyCookie from '@fastify/cookie';
 import fastifySession from '@fastify/session';
 import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth.js';
 import { trainerRoutes } from './routes/trainer.js';
@@ -20,6 +22,30 @@ fastify.decorate('prisma', prisma);
 
 // Register cookie support
 await fastify.register(fastifyCookie);
+
+// OpenAPI (Swagger) docs
+await fastify.register(fastifySwagger, {
+  openapi: {
+    info: {
+      title: 'gaujofit_service',
+      description: 'Backend for gaujofit',
+      version: '0.0.1',
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+  },
+});
+
+await fastify.register(fastifySwaggerUi, {
+  routePrefix: '/docs',
+});
 
 // Register session support
 await fastify.register(fastifySession, {

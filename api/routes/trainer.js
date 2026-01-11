@@ -11,12 +11,80 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 export async function trainerRoutes(fastify) {
 
   // Get current trainer profile
-  fastify.get('/me', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
+  fastify.get(
+    '/me',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: {
+        tags: ['trainer'],
+        summary: 'Get current trainer profile',
+        security: [{ bearerAuth: [] }],
+        headers: {
+          type: 'object',
+          required: ['authorization'],
+          properties: {
+            authorization: {
+              type: 'string',
+              description: 'Bearer access token (e.g., "Bearer <token>")',
+            },
+          },
+        },
+        response: {
+          200: {
+            anyOf: [
+              { type: 'object', additionalProperties: true },
+              { type: 'null' },
+            ],
+          },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
     const trainer = await getOneByUserId(request.user.id);
     return reply.send(trainer);
-  });
+    },
+  );
 
-  fastify.patch('/trainer', { preHandler: [authenticate, requireRole(Roles.TRAINER)] }, async (request, reply) => {
+  fastify.patch(
+    '/trainer',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: {
+        tags: ['trainer'],
+        summary: 'Update trainer profile',
+        security: [{ bearerAuth: [] }],
+        headers: {
+          type: 'object',
+          required: ['authorization'],
+          properties: {
+            authorization: {
+              type: 'string',
+              description: 'Bearer access token (e.g., "Bearer <token>")',
+            },
+          },
+        },
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            trainer: { type: 'object', additionalProperties: true },
+            address: { type: 'object', additionalProperties: true },
+            socials: { type: 'object', additionalProperties: true },
+          },
+        },
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          409: { type: 'object', properties: { error: { type: 'string' } } },
+          500: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
 
     const body = request.body ?? {};
     const { trainer, address, socials } = body;
@@ -41,5 +109,6 @@ export async function trainerRoutes(fastify) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to update trainer profile' });
     }
-  });
+    },
+  );
 }
