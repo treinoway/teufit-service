@@ -89,7 +89,6 @@ describe('src/services/authService.js', () => {
           userId: 'u1',
           firstName: 'New',
           lastName: 'Trainer',
-          birthDate: new Date('2000-01-01'),
         },
       });
       expect(res).toEqual({ created: true, role: Roles.TRAINER });

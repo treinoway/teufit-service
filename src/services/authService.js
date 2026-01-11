@@ -89,7 +89,6 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
         firstName: inferredFirst,
         lastName: inferredLast,
         // Keep a deterministic default for old tests/flows; it can be updated later by onboarding.
-        birthDate: new Date('2000-01-01'),
         // Only set avatar if provided. (Passing undefined can break strict test expectations.)
         ...(profileSeed.avatar != null ? { avatar: profileSeed.avatar } : {}),
       },
@@ -118,6 +117,19 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
   err.code = 'INVALID_PROFILE_TYPE';
   err.statusCode = 400;
   throw err;
+}
+
+export async function createUserBasedOnRole({ role, email, password }) {
+  if (role === Roles.TRAINER) {
+    return signupWithEmailPassword({ email, password, role: Roles.TRAINER });
+  } else if (role === Roles.STUDENT) {
+    return signupWithEmailPassword({ email, password, role: Roles.STUDENT });
+  } else {
+    const err = new Error('Invalid role for user creation');
+    err.code = 'INVALID_ROLE';
+    err.statusCode = 400;
+    throw err;
+  }
 }
 
 function normalizeEmail(email) {
@@ -239,8 +251,6 @@ export async function signupWithEmailPassword({ email, password, role = Roles.TR
       passwordHash,
       role,
       status: 'pending',
-      username: null,
-      avatar: null,
     },
   });
 
@@ -311,15 +321,6 @@ export async function loginWithEmailPassword({ email, password }) {
  */
 export async function signupWithEmailPasswordStateless({ fastify, email, password, role = Roles.TRAINER }) {
   const user = await signupWithEmailPassword({ email, password, role });
-
-  // Create trainer row (pending onboarding) so the rest of the app can rely on it.
-  await ensureProfileForUser({
-    userId: user.id,
-    role,
-    profileSeed: {
-      name: typeof user.email === 'string' ? user.email.split('@')[0] : 'New Trainer',
-    },
-  });
 
   const access = issueAccessToken({ fastify, user });
   const refresh = await issueRefreshToken({ user });
