@@ -1,6 +1,6 @@
-# Gaujofit Service
+# Treinoway Service
 
-Backend API for Gaujofit - A wellness and training platform.
+Backend API for Treinoway - A wellness and training platform.
 
 ## 🚀 Tech Stack
 
