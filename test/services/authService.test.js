@@ -165,7 +165,7 @@ describe('src/services/authService.js', () => {
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresAt: token,
-          role: Roles.TRAINER,
+          roles: [Roles.TRAINER],
         }),
       );
 
@@ -206,7 +206,7 @@ describe('src/services/authService.js', () => {
       prisma.user.create.mockImplementation(async ({ data }) => ({
         id: 'u1',
         ...data,
-        role: data.role,
+        roles: data.roles,
         status: data.status,
         deletedAt: null,
       }));
@@ -221,7 +221,7 @@ describe('src/services/authService.js', () => {
 
       const createCall = prisma.user.create.mock.calls[0][0];
       expect(createCall.data.email).toBe('test@example.com');
-      expect(createCall.data.role).toBe('trainer');
+      expect(createCall.data.roles).toEqual(['trainer']);
       expect(createCall.data.passwordHash).toMatch(/^scrypt\$/);
 
       // Returned user should not include passwordHash
@@ -253,7 +253,7 @@ describe('src/services/authService.js', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
-        role: 'trainer',
+        roles: ['trainer'],
         status: 'pending',
         username: null,
         avatar: null,
@@ -271,7 +271,7 @@ describe('src/services/authService.js', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
-        role: 'trainer',
+        roles: ['trainer'],
         status: 'pending',
         username: null,
         avatar: null,
@@ -289,7 +289,7 @@ describe('src/services/authService.js', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
-        role: 'trainer',
+        roles: ['trainer'],
         status: 'pending',
         deletedAt: null,
         passwordHash: null,

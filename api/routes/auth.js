@@ -74,7 +74,12 @@ export async function authRoutes(fastify) {
           properties: {
             email: { type: 'string', format: 'email' },
             password: { type: 'string', minLength: 8 },
-            role: { type: 'string', enum: roleValues, default: Roles.TRAINER },
+            roles: { 
+              type: 'array', 
+              items: { type: 'string', enum: roleValues },
+              default: [Roles.TRAINER],
+              description: 'Array of user roles'
+            },
           },
         },
         response: {
@@ -103,13 +108,13 @@ export async function authRoutes(fastify) {
       const body = request.body ?? {};
       const email = body.email;
       const password = body.password;
-      const role = typeof body.role === 'string' ? body.role.trim().toLowerCase() : Roles.TRAINER;
+      const roles = Array.isArray(body.roles) ? body.roles : (body.roles ? [body.roles] : undefined);
 
       const { userId, accessToken, refreshToken } = await signupWithEmailPasswordStateless({
         fastify,
         email,
         password,
-        role,
+        roles,
       });
 
       return reply.status(201).send({

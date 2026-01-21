@@ -28,11 +28,14 @@ export async function findOrCreateUserFromOAuth(providerData) {
     accessToken,
     refreshToken = null,
     expiresAt = null,
-    role,
+    roles,
   } = providerData;
 
-  if (!roleValues.includes(role)) {
-    const err = new Error('Missing or invalid role');
+  // Normalize roles to array
+  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
+  
+  if (rolesArray.length === 0 || !rolesArray.every(r => roleValues.includes(r))) {
+    const err = new Error('Missing or invalid roles');
     err.code = 'ROLE_REQUIRED';
     throw err;
   }
@@ -147,7 +150,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
           email,
           username: name || email.split('@')[0],
           avatar,
-          role,
+          roles: rolesArray,
           status: 'pending',
         },
       });

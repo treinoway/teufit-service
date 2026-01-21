@@ -15,7 +15,7 @@ describe('src/services/tokenService.js', () => {
       },
     };
 
-    const user = { id: 'u1', email: 'a@b.com', role: 'trainer', status: 'pending' };
+    const user = { id: 'u1', email: 'a@b.com', roles: ['trainer'], status: 'pending' };
     const res = issueAccessToken({ fastify, user, expiresInSeconds: 60 });
 
     expect(res).toEqual({

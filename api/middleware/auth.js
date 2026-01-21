@@ -35,7 +35,7 @@ export async function authenticate(request, reply) {
       request.user = {
         id: payload.sub,
         email: payload.email ?? null,
-        role: payload.role,
+        roles: payload.roles || (payload.role ? [payload.role] : []),
         status: payload.status,
       };
       return;
@@ -53,16 +53,26 @@ export async function authenticate(request, reply) {
   });
 }
 
-// Middleware to check if user has specific role
-export function requireRole(role) {
+// Middleware to check if user has specific role(s)
+// Accepts either a single role string or an array of allowed roles
+export function requireRole(allowedRoles) {
   return async function (request, reply) {
     const user = request.user || request.session?.get?.('user');
     if (!user) return reply.status(401).send({ error: 'Authentication required' });
 
-    if (user.role !== role) {
+    // Normalize allowedRoles to array
+    const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    
+    // Normalize user.roles to array (support both old single role and new roles array)
+    const userRoles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+    
+    // Check if user has at least one of the allowed roles
+    const hasRole = userRoles.some(role => rolesArray.includes(role));
+    
+    if (!hasRole) {
       return reply.status(403).send({ 
         error: 'Forbidden',
-        message: `This resource requires ${role} role`
+        message: `This resource requires one of the following roles: ${rolesArray.join(', ')}`
       });
     }
     

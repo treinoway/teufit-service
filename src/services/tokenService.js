@@ -14,7 +14,7 @@ function buildAccessTokenPayload(user) {
   return {
     sub: user.id,
     email: user.email ?? null,
-    role: user.role,
+    roles: user.roles || (user.role ? [user.role] : []),
     status: user.status,
   };
 }
@@ -33,8 +33,16 @@ export function issueAccessToken({ fastify, user, expiresInSeconds = DEFAULT_ACC
     err.statusCode = 500;
     throw err;
   }
-  if (!user?.id || !user?.role || !user?.status) {
+  if (!user?.id || !user?.status) {
     const err = new Error('Missing user fields for token issuance');
+    err.code = 'INVALID_TOKEN_SUBJECT';
+    err.statusCode = 500;
+    throw err;
+  }
+  
+  // Ensure roles is an array
+  if (!user?.roles && !user?.role) {
+    const err = new Error('Missing user roles for token issuance');
     err.code = 'INVALID_TOKEN_SUBJECT';
     err.statusCode = 500;
     throw err;

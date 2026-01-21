@@ -49,6 +49,9 @@ export async function authenticateWithGoogle({ fastify, request }) {
 
   const googleUser = await fetchGoogleUserProfile(token.access_token);
 
+  const oauthRole = request.session.get('oauthRole');
+  const roles = Array.isArray(oauthRole) ? oauthRole : (oauthRole ? [oauthRole] : []);
+
   const user = await findOrCreateUserFromOAuth({
     provider: 'google',
     providerId: googleUser.id,
@@ -58,7 +61,7 @@ export async function authenticateWithGoogle({ fastify, request }) {
     accessToken: token.access_token,
     refreshToken: token.refresh_token,
     expiresAt: token,
-    role: request.session.get('oauthRole'),
+    roles,
   });
 
   return { user, token, googleUser };
@@ -121,9 +124,9 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
 
 export async function createUserBasedOnRole({ role, email, password }) {
   if (role === Roles.TRAINER) {
-    return signupWithEmailPassword({ email, password, role: Roles.TRAINER });
+    return signupWithEmailPassword({ email, password, roles: [Roles.TRAINER] });
   } else if (role === Roles.STUDENT) {
-    return signupWithEmailPassword({ email, password, role: Roles.STUDENT });
+    return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
   } else {
     const err = new Error('Invalid role for user creation');
     err.code = 'INVALID_ROLE';
@@ -201,10 +204,10 @@ function safeUser(user) {
  * Contract:
  * - Creates a new user with passwordHash
  * - Does NOT create an OAuth Account row
- * - Sets a default role (trainer) unless provided
+ * - Sets default roles [trainer] unless provided
  * - Returns user without the password hash
  */
-export async function signupWithEmailPassword({ email, password, role = Roles.TRAINER }) {
+export async function signupWithEmailPassword({ email, password, roles }) {
   const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
@@ -221,8 +224,11 @@ export async function signupWithEmailPassword({ email, password, role = Roles.TR
     throw err;
   }
 
+  // Normalize roles to array, default to [TRAINER]
+  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : [Roles.TRAINER]);
+  
   // Prevent signup with unsupported roles
-  if (![Roles.TRAINER, Roles.STUDENT].includes(role)) {
+  if (!rolesArray.every(r => [Roles.TRAINER, Roles.STUDENT].includes(r))) {
     const err = new Error('Invalid role');
     err.code = 'INVALID_ROLE';
     err.statusCode = 400;
@@ -249,7 +255,7 @@ export async function signupWithEmailPassword({ email, password, role = Roles.TR
     data: {
       email: normalizedEmail,
       passwordHash,
-      role,
+      roles: rolesArray,
       status: 'pending',
     },
   });
@@ -319,8 +325,8 @@ export async function loginWithEmailPassword({ email, password }) {
  * Stateless email/password signup: creates user, ensures profile, issues tokens.
  * Returns minimal payload so routes can stay thin.
  */
-export async function signupWithEmailPasswordStateless({ fastify, email, password, role = Roles.TRAINER }) {
-  const user = await signupWithEmailPassword({ email, password, role });
+export async function signupWithEmailPasswordStateless({ fastify, email, password, roles }) {
+  const user = await signupWithEmailPassword({ email, password, roles });
 
   const access = issueAccessToken({ fastify, user });
   const refresh = await issueRefreshToken({ user });

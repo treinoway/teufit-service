@@ -20,7 +20,7 @@ model User {
   email     String?   @unique @db.Text
   avatar    String?   @db.Text
   passwordHash String? @map("password_hash") @db.Text
-  role      Role
+  roles     Role[]
   status    String    @default("pending") @db.Text
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
