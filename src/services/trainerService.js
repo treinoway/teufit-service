@@ -9,6 +9,20 @@ function buildTrainerUpdateData(trainer) {
   if (trainer.avatar != null) trainerData.avatar = trainer.avatar;
   if (trainer.professionalDocument != null) trainerData.professionalDocument = trainer.professionalDocument;
   if (trainer.gymName != null) trainerData.gymName = trainer.gymName;
+  if (trainer.serviceTypes != null) {
+    // Validate serviceTypes contains only valid values
+    const validTypes = ['InPerson', 'Online'];
+    if (Array.isArray(trainer.serviceTypes)) {
+      const invalidTypes = trainer.serviceTypes.filter(type => !validTypes.includes(type));
+      if (invalidTypes.length > 0) {
+        const err = new Error(`Invalid service types: ${invalidTypes.join(', ')}. Valid types are: ${validTypes.join(', ')}`);
+        err.code = 'INVALID_SERVICE_TYPES';
+        err.statusCode = 400;
+        throw err;
+      }
+      trainerData.serviceTypes = trainer.serviceTypes;
+    }
+  }
   return trainerData;
 }
 

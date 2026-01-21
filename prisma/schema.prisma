@@ -79,6 +79,7 @@ model Trainer {
   avatar                 String?  @db.Text
   professionalDocument   String?  @map("professional_document") @db.Text
   gymName                String?  @map("gym_name") @db.Text
+  serviceTypes           String[] @map("service_types") @default([])
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 

@@ -115,4 +115,52 @@ describe('src/services/trainerService.js', () => {
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
+
+  it('validates serviceTypes contains only valid values', async () => {
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        trainer: {
+          findUnique: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1' }),
+        },
+      };
+      return fn(tx);
+    });
+
+    await expect(
+      updateMyTrainerProfile({
+        userId: 'u1',
+        trainer: { serviceTypes: ['InPerson', 'InvalidType'] },
+      }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_SERVICE_TYPES',
+      statusCode: 400,
+    });
+  });
+
+  it('accepts valid serviceTypes', async () => {
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        trainer: {
+          findUnique: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1' }),
+          update: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1', serviceTypes: ['InPerson', 'Online'] }),
+        },
+        user: {
+          update: vi.fn().mockResolvedValue({ id: 'u1', status: 'active' }),
+        },
+      };
+      return fn(tx);
+    });
+
+    const res = await updateMyTrainerProfile({
+      userId: 'u1',
+      trainer: { serviceTypes: ['InPerson', 'Online'] },
+    });
+
+    expect(res).toEqual({
+      id: 't1',
+      serviceTypes: ['InPerson', 'Online'],
+      address: null,
+      socialNetworks: null,
+    });
+  });
 });
