@@ -144,12 +144,19 @@ export async function findOrCreateUserFromOAuth(providerData) {
     }
 
     if (!user) {
-      // Create new user
+      // Create new user with personal data populated from OAuth profile
+      const rawName = typeof name === 'string' ? name.trim() : '';
+      const parts = rawName ? rawName.split(/\s+/).filter(Boolean) : [];
+      const inferredFirst = parts[0] || null;
+      const inferredLast = parts.length > 1 ? parts.slice(1).join(' ') : null;
+
       user = await prisma.user.create({
         data: {
           email,
-          username: name || email.split('@')[0],
-          avatar,
+          username: rawName || email.split('@')[0],
+          firstName: inferredFirst,
+          lastName: inferredLast,
+          avatarUrl: avatar,
           roles: rolesArray,
           status: 'pending',
         },

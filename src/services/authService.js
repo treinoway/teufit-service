@@ -76,24 +76,9 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
   if (role === Roles.TRAINER) {
     const existing = await prisma.trainer.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
-
-    const rawName = typeof profileSeed?.name === 'string' ? profileSeed.name.trim() : '';
-    const rawGiven = typeof profileSeed?.givenName === 'string' ? profileSeed.givenName.trim() : '';
-    const rawFamily = typeof profileSeed?.familyName === 'string' ? profileSeed.familyName.trim() : '';
-
-    // Try to split the full name ("Ada Lovelace" -> ["Ada", "Lovelace"]) if given/family aren't provided.
-    const parts = rawName ? rawName.split(/\s+/).filter(Boolean) : [];
-    const inferredFirst = rawGiven || parts[0] || 'New';
-    const inferredLast = rawFamily || (parts.length > 1 ? parts.slice(1).join(' ') : '') || 'Trainer';
-
     await prisma.trainer.create({
       data: {
         userId,
-        firstName: inferredFirst,
-        lastName: inferredLast,
-        // Keep a deterministic default for old tests/flows; it can be updated later by onboarding.
-        // Only set avatar if provided. (Passing undefined can break strict test expectations.)
-        ...(profileSeed.avatar != null ? { avatar: profileSeed.avatar } : {}),
       },
     });
     return { created: true, role };
@@ -103,13 +88,9 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
     const existing = await prisma.student.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
 
-    const rawName = typeof profileSeed?.name === 'string' ? profileSeed.name.trim() : '';
-    const name = rawName || null;
-
     await prisma.student.create({
       data: {
         userId,
-        ...(name != null ? { name } : {}),
       },
     });
 

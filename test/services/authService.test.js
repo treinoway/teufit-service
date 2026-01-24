@@ -105,8 +105,6 @@ describe('src/services/authService.js', () => {
       expect(prisma.trainer.create).toHaveBeenCalledWith({
         data: {
           userId: 'u1',
-          firstName: 'New',
-          lastName: 'Trainer',
         },
       });
       expect(res).toEqual({ created: true, role: Roles.TRAINER });
@@ -122,7 +120,6 @@ describe('src/services/authService.js', () => {
       expect(prisma.student.create).toHaveBeenCalledWith({
         data: {
           userId: 'u1',
-          name: 'Alice',
         },
       });
       expect(res).toEqual({ created: true, role: Roles.STUDENT });

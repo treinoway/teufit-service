@@ -358,8 +358,63 @@ export async function authRoutes(fastify) {
     },
   );
 
+  // Start Google OAuth with explicit roles (POST)
+  fastify.post(
+    '/auth/google/start',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Start Google OAuth with selected roles',
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            roles: {
+              type: 'array',
+              items: { type: 'string', enum: roleValues },
+              default: [Roles.TRAINER],
+              description: 'Array of desired roles for the OAuth flow',
+            },
+          },
+        },
+        response: {
+          302: {
+            description: 'Redirects to /auth/google to start the OAuth2 flow',
+          },
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = request.body ?? {};
+      const rawRoles = body.roles;
+      const roles = Array.isArray(rawRoles)
+        ? rawRoles
+        : rawRoles
+        ? [rawRoles]
+        : [Roles.TRAINER];
+
+      if (!roles.length || !roles.every((r) => roleValues.includes(r))) {
+        return reply.status(400).send({
+          error: 'INVALID_ROLE',
+          message: 'roles must be an array of valid role values',
+        });
+      }
+
+      request.session.set('oauthRole', roles);
+      return reply.redirect('/auth/google');
+    },
+  );
+
+  // Backwards-compatible GET for trainer-only Google signup
   fastify.get('/auth/trainer/google', async (request, reply) => {
-    request.session.set('oauthRole', Roles.TRAINER);
+    request.session.set('oauthRole', [Roles.TRAINER]);
     return reply.redirect('/auth/google');
   });
 
@@ -368,19 +423,23 @@ export async function authRoutes(fastify) {
     try {
       // Require role selection before OAuth.
       // We can't rely on query params on the callback, so we enforce the session value.
-      const desiredRole = request.session.get('oauthRole');
-      if (!roleValues.includes(desiredRole)) {
+      const rawRoles = request.session.get('oauthRole');
+      const roles = Array.isArray(rawRoles) ? rawRoles : rawRoles ? [rawRoles] : [];
+
+      if (!roles.length || !roles.every((r) => roleValues.includes(r))) {
         return reply.status(403).send({
           error: 'Missing role',
           message: `Missing role for OAuth flow.`,
         });
       }
 
+      const primaryRole = roles[0];
+
       const { user, googleUser } = await authenticateWithGoogle({ fastify, request });
 
       await ensureProfileForUser({
         userId: user.id,
-        role: desiredRole,
+        role: primaryRole,
         profileSeed: {
           name: googleUser?.name,
           givenName: googleUser?.given_name,
@@ -390,13 +449,11 @@ export async function authRoutes(fastify) {
       });
 
       unsetSessionKey(request.session, 'oauthRole');
-
-
       request.session.set('user', {
         id: user.id,
         email: user.email,
         username: user.username,
-        role: user.role,
+        roles: user.roles || roles,
       });
 
       // Browser flow: redirect after login to your frontend.

@@ -1,27 +1,29 @@
 import { prisma } from '../db.js';
 import _ from 'lodash';
 
+function buildUserUpdateData(trainer) {
+  const userData = {};
+  if (trainer.firstName != null) userData.firstName = trainer.firstName;
+  if (trainer.lastName != null) userData.lastName = trainer.lastName;
+  if (trainer.birthDate != null) userData.birthDate = new Date(trainer.birthDate);
+  if (trainer.avatar != null) userData.avatarUrl = trainer.avatar;
+  return userData;
+}
+
 function buildTrainerUpdateData(trainer) {
   const trainerData = {};
-  if (trainer.firstName != null) trainerData.firstName = trainer.firstName;
-  if (trainer.lastName != null) trainerData.lastName = trainer.lastName;
-  if (trainer.birthDate != null) trainerData.birthDate = new Date(trainer.birthDate);
-  if (trainer.avatar != null) trainerData.avatar = trainer.avatar;
   if (trainer.professionalDocument != null) trainerData.professionalDocument = trainer.professionalDocument;
   if (trainer.gymName != null) trainerData.gymName = trainer.gymName;
-  if (trainer.serviceTypes != null) {
-    // Validate serviceTypes contains only valid values
-    const validTypes = ['InPerson', 'Online'];
-    if (Array.isArray(trainer.serviceTypes)) {
-      const invalidTypes = trainer.serviceTypes.filter(type => !validTypes.includes(type));
-      if (invalidTypes.length > 0) {
-        const err = new Error(`Invalid service types: ${invalidTypes.join(', ')}. Valid types are: ${validTypes.join(', ')}`);
-        err.code = 'INVALID_SERVICE_TYPES';
-        err.statusCode = 400;
-        throw err;
-      }
-      trainerData.serviceTypes = trainer.serviceTypes;
+  if (trainer.notes != null) trainerData.notes = trainer.notes;
+  if (trainer.serviceMode != null) {
+    const validModes = ['online', 'in_person', 'hybrid'];
+    if (!validModes.includes(trainer.serviceMode)) {
+      const err = new Error(`Invalid service mode: ${trainer.serviceMode}. Valid modes are: ${validModes.join(', ')}`);
+      err.code = 'INVALID_SERVICE_MODE';
+      err.statusCode = 400;
+      throw err;
     }
+    trainerData.serviceMode = trainer.serviceMode;
   }
   return trainerData;
 }
@@ -74,11 +76,17 @@ export async function patch({ userId, trainer, address, socials }) {
     }
 
     let trainerRow = existingTrainer;
+    let userUpdateData = {};
     if (trainer) {
-      trainerRow = await tx.trainer.update({
-        where: { id: existingTrainer.id },
-        data: buildTrainerUpdateData(trainer),
-      });
+      const trainerData = buildTrainerUpdateData(trainer);
+      userUpdateData = buildUserUpdateData(trainer);
+
+      if (Object.keys(trainerData).length > 0) {
+        trainerRow = await tx.trainer.update({
+          where: { id: existingTrainer.id },
+          data: trainerData,
+        });
+      }
     }
 
     let addressRow = null;
@@ -103,17 +111,21 @@ export async function patch({ userId, trainer, address, socials }) {
 
     const userRow = await tx.user.update({
       where: { id: userId },
-      data: { status: 'active' },
+      data: { status: 'active', ...userUpdateData },
     });
 
     // Return the same response shape as GET /me:
     // - do not leak the user row
     // - omit trainer.userId
     // - merge address + socials into the payload
-    // eslint-disable-next-line no-unused-vars
+    // - include personal data from User
     const responseTrainer = _.omit(trainerRow, ['userId']);
     return {
       ...responseTrainer,
+      firstName: userRow.firstName,
+      lastName: userRow.lastName,
+      birthDate: userRow.birthDate,
+      avatarUrl: userRow.avatarUrl,
       address: addressRow,
       socialNetworks: socialsRow,
     };
@@ -157,13 +169,16 @@ export async function getOneByUserId(userId) {
     throw err;
   }
 
-  const responseTrainer = _.omit(trainer, ['user', 'userId'])
+  const responseTrainer = _.omit(trainer, ['user', 'userId']);
   // Flatten to match the structure returned by patch()
   // (trainer model doesn't have address/socials relations; those live on user)
-  // eslint-disable-next-line no-unused-vars
   return {
-   ...responseTrainer,
-   address: trainer.user.address,
-   socialNetworks: trainer.user.socials
+    ...responseTrainer,
+    firstName: trainer.user.firstName,
+    lastName: trainer.user.lastName,
+    birthDate: trainer.user.birthDate,
+    avatarUrl: trainer.user.avatarUrl,
+    address: trainer.user.address,
+    socialNetworks: trainer.user.socials,
   };
 }

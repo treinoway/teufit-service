@@ -50,7 +50,7 @@ describe('src/services/trainerService.js', () => {
       const tx = {
         trainer: {
           findUnique: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1' }),
-          update: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1', firstName: 'Ana' }),
+          update: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1', professionalDocument: 'ABC' }),
         },
         address: {
           upsert: vi.fn().mockResolvedValue({ id: 'a1', userId: 'u1' }),
@@ -59,7 +59,7 @@ describe('src/services/trainerService.js', () => {
           upsert: vi.fn().mockResolvedValue({ id: 's1', userId: 'u1' }),
         },
         user: {
-          update: vi.fn().mockResolvedValue({ id: 'u1', status: 'active' }),
+          update: vi.fn().mockResolvedValue({ id: 'u1', status: 'active', firstName: 'Ana' }),
         },
       };
 
@@ -70,7 +70,7 @@ describe('src/services/trainerService.js', () => {
       expect(tx.trainer.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 't1' },
-          data: expect.objectContaining({ firstName: 'Ana' }),
+          data: expect.objectContaining({ professionalDocument: 'ABC' }),
         }),
       );
       expect(tx.address.upsert).toHaveBeenCalledWith(
@@ -87,14 +87,17 @@ describe('src/services/trainerService.js', () => {
           update: expect.any(Object),
         }),
       );
-      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { status: 'active' } });
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: expect.objectContaining({ status: 'active' }),
+      });
 
       return res;
     });
 
     const res = await updateMyTrainerProfile({
       userId: 'u1',
-      trainer: { firstName: 'Ana' },
+      trainer: { firstName: 'Ana', professionalDocument: 'ABC' },
       address: {
         street: 'Main',
         houseNumber: '1',
@@ -108,7 +111,11 @@ describe('src/services/trainerService.js', () => {
 
     expect(res).toEqual({
       id: 't1',
+      professionalDocument: 'ABC',
       firstName: 'Ana',
+      lastName: undefined,
+      birthDate: undefined,
+      avatarUrl: undefined,
       address: { id: 'a1', userId: 'u1' },
       socialNetworks: { id: 's1', userId: 'u1' },
     });
@@ -116,7 +123,7 @@ describe('src/services/trainerService.js', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('validates serviceTypes contains only valid values', async () => {
+  it('validates serviceMode contains only valid values', async () => {
     prisma.$transaction.mockImplementation(async (fn) => {
       const tx = {
         trainer: {
@@ -129,23 +136,23 @@ describe('src/services/trainerService.js', () => {
     await expect(
       updateMyTrainerProfile({
         userId: 'u1',
-        trainer: { serviceTypes: ['InPerson', 'InvalidType'] },
+        trainer: { serviceMode: 'invalid' },
       }),
     ).rejects.toMatchObject({
-      code: 'INVALID_SERVICE_TYPES',
+      code: 'INVALID_SERVICE_MODE',
       statusCode: 400,
     });
   });
 
-  it('accepts valid serviceTypes', async () => {
+  it('accepts valid serviceMode', async () => {
     prisma.$transaction.mockImplementation(async (fn) => {
       const tx = {
         trainer: {
           findUnique: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1' }),
-          update: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1', serviceTypes: ['InPerson', 'Online'] }),
+          update: vi.fn().mockResolvedValue({ id: 't1', userId: 'u1', serviceMode: 'online' }),
         },
         user: {
-          update: vi.fn().mockResolvedValue({ id: 'u1', status: 'active' }),
+          update: vi.fn().mockResolvedValue({ id: 'u1', status: 'active', firstName: 'Ana' }),
         },
       };
       return fn(tx);
@@ -153,12 +160,16 @@ describe('src/services/trainerService.js', () => {
 
     const res = await updateMyTrainerProfile({
       userId: 'u1',
-      trainer: { serviceTypes: ['InPerson', 'Online'] },
+      trainer: { serviceMode: 'online', firstName: 'Ana' },
     });
 
     expect(res).toEqual({
       id: 't1',
-      serviceTypes: ['InPerson', 'Online'],
+      serviceMode: 'online',
+      firstName: 'Ana',
+      lastName: undefined,
+      birthDate: undefined,
+      avatarUrl: undefined,
       address: null,
       socialNetworks: null,
     });

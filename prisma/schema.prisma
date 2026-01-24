@@ -9,19 +9,23 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  student
-  trainer
-}
-
 model User {
-  id        String    @id @default(uuid()) @db.Uuid
-  username  String?   @db.Text
-  email     String?   @unique @db.Text
-  avatar    String?   @db.Text
-  passwordHash String? @map("password_hash") @db.Text
-  roles     Role[]
-  status    String    @default("pending") @db.Text
+  id          String    @id @default(uuid()) @db.Uuid
+  username    String?   @db.Text
+  email       String?   @unique @db.Text
+  passwordHash String?  @map("password_hash") @db.Text
+  status      String    @default("pending") @db.Text
+
+  // Personal data (single source of truth)
+  firstName String?   @map("first_name") @db.Text
+  gender    String?   @db.Text
+  lastName  String?   @map("last_name") @db.Text
+  birthDate DateTime? @map("birth_date") @db.Date
+  avatarUrl String?   @map("avatar_url") @db.Text
+
+  // Logical roles, kept for authorization
+  roles     String[]
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -31,7 +35,7 @@ model User {
   trainer   Trainer?
   address   Address?
   socials   SocialNetwork?
-  refreshTokens RefreshToken[]
+  refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
 
   @@map("users")
@@ -40,10 +44,11 @@ model User {
 model Student {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  name      String?  @db.Text
-  birthdate DateTime? @db.Date
-  gender    String?  @db.Text
   job       String?  @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   healthDetails StudentHealthDetail[]
 
@@ -63,7 +68,7 @@ model StudentHealthDetail {
   weight     Float?
   height     Float?
   bodyFat    Float?    @map("body_fat")
-  conditions String[] @default([])
+  conditions String?   @db.Text
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
@@ -72,15 +77,18 @@ model StudentHealthDetail {
 }
 
 model Trainer {
-  id                     String   @id @default(uuid()) @db.Uuid
-  userId                 String   @map("user_id") @db.Uuid
-  firstName              String   @map("first_name") @db.Text
-  lastName               String   @map("last_name") @db.Text
-  birthDate              DateTime? @map("birth_date") @db.Date
-  avatar                 String?  @db.Text
-  professionalDocument   String?  @map("professional_document") @db.Text
-  gymName                String?  @map("gym_name") @db.Text
-  serviceTypes           String[] @map("service_types") @default([])
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  professionalDocument String?  @map("professional_document") @db.Text
+  gymName              String?  @map("gym_name") @db.Text
+  notes                String?  @db.Text
+
+  // Service mode: online | in_person | hybrid
+  serviceMode          String?  @map("service_mode") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -163,4 +171,20 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model Nutritionist {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  councilNumber String? @map("council_number") @db.Text
+  specialties   String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId])
+  @@map("nutritionists")
 }
