@@ -10,11 +10,11 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(uuid()) @db.Uuid
-  username    String?   @db.Text
-  email       String?   @unique @db.Text
-  passwordHash String?  @map("password_hash") @db.Text
-  status      String    @default("pending") @db.Text
+  id           String  @id @default(uuid()) @db.Uuid
+  username     String? @db.Text
+  email        String? @unique @db.Text
+  passwordHash String? @map("password_hash") @db.Text
+  status       String  @default("pending") @db.Text
 
   // Personal data (single source of truth)
   firstName String?   @map("first_name") @db.Text
@@ -24,27 +24,28 @@ model User {
   avatarUrl String?   @map("avatar_url") @db.Text
 
   // Logical roles, kept for authorization
-  roles     String[]
+  roles String[]
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-  
-  accounts  Account[]
-  student   Student?
-  trainer   Trainer?
-  address   Address?
-  socials   SocialNetwork?
+
+  accounts            Account[]
+  student             Student?
+  trainer             Trainer?
+  address             Address?
+  socials             SocialNetwork?
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  nutritionist        Nutritionist?
 
   @@map("users")
 }
 
 model Student {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  job       String?  @db.Text
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @map("user_id") @db.Uuid
+  job    String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -59,16 +60,16 @@ model Student {
 }
 
 model StudentHealthDetail {
-  id         String    @id @default(uuid()) @db.Uuid
-  studentId  String    @map("student_id") @db.Uuid
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(uuid()) @db.Uuid
+  studentId String    @map("student_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   weight     Float?
   height     Float?
-  bodyFat    Float?    @map("body_fat")
-  conditions String?   @db.Text
+  bodyFat    Float?  @map("body_fat")
+  conditions String? @db.Text
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
@@ -77,14 +78,14 @@ model StudentHealthDetail {
 }
 
 model Trainer {
-  id                   String   @id @default(uuid()) @db.Uuid
-  userId               String   @map("user_id") @db.Uuid
-  professionalDocument String?  @map("professional_document") @db.Text
-  gymName              String?  @map("gym_name") @db.Text
-  notes                String?  @db.Text
+  id                   String  @id @default(uuid()) @db.Uuid
+  userId               String  @map("user_id") @db.Uuid
+  professionalDocument String? @map("professional_document") @db.Text
+  gymName              String? @map("gym_name") @db.Text
+  notes                String? @db.Text
 
   // Service mode: online | in_person | hybrid
-  serviceMode          String?  @map("service_mode") @db.Text
+  serviceMode String? @map("service_mode") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -136,22 +137,22 @@ model Account {
   expiresAt    DateTime? @map("expires_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
-  
+
   @@unique([provider, providerId])
   @@index([userId])
   @@map("accounts")
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid()) @db.Uuid
-  tokenHash String   @unique @map("token_hash") @db.Text
-  userId    String   @map("user_id") @db.Uuid
-  revoked   Boolean  @default(false)
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Text
+  userId    String    @map("user_id") @db.Uuid
+  revoked   Boolean   @default(false)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -174,8 +175,8 @@ model PasswordResetToken {
 }
 
 model Nutritionist {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  id            String  @id @default(uuid()) @db.Uuid
+  userId        String  @map("user_id") @db.Uuid
   councilNumber String? @map("council_number") @db.Text
   specialties   String? @db.Text
 
