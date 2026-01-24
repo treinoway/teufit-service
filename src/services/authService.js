@@ -48,9 +48,8 @@ export async function authenticateWithGoogle({ fastify, request }) {
   const { token } = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
 
   const googleUser = await fetchGoogleUserProfile(token.access_token);
-
-  const oauthRole = request.session.get('oauthRole');
-  const roles = Array.isArray(oauthRole) ? oauthRole : (oauthRole ? [oauthRole] : []);
+  // Google web flow: always create/login users as students.
+  const roles = [Roles.STUDENT];
 
   const user = await findOrCreateUserFromOAuth({
     provider: 'google',
@@ -103,17 +102,9 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
   throw err;
 }
 
-export async function createUserBasedOnRole({ role, email, password }) {
-  if (role === Roles.TRAINER) {
-    return signupWithEmailPassword({ email, password, roles: [Roles.TRAINER] });
-  } else if (role === Roles.STUDENT) {
+export async function createGoogleUser({ email, password }) {
     return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
-  } else {
-    const err = new Error('Invalid role for user creation');
-    err.code = 'INVALID_ROLE';
-    err.statusCode = 400;
-    throw err;
-  }
+    return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
 }
 
 function normalizeEmail(email) {

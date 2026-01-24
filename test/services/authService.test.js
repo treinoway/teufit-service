@@ -134,7 +134,7 @@ describe('src/services/authService.js', () => {
   });
 
   describe('authenticateWithGoogle', () => {
-    it('exchanges code for token, fetches google profile, and calls findOrCreateUserFromOAuth with role from session', async () => {
+    it('exchanges code for token, fetches google profile, and calls findOrCreateUserFromOAuth with student role', async () => {
       const token = {
         access_token: 'access',
         refresh_token: 'refresh',
@@ -148,7 +148,7 @@ describe('src/services/authService.js', () => {
       };
 
       const request = {
-        session: makeSession({ oauthRole: Roles.TRAINER }),
+        session: makeSession(),
       };
 
       fetch.mockResolvedValue({
@@ -180,7 +180,7 @@ describe('src/services/authService.js', () => {
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresAt: token,
-          roles: [Roles.TRAINER],
+          roles: [Roles.STUDENT],
         }),
       );
 
@@ -199,7 +199,7 @@ describe('src/services/authService.js', () => {
       };
 
       const request = {
-        session: makeSession({ oauthRole: Roles.TRAINER }),
+        session: makeSession(),
       };
 
       fetch.mockResolvedValue({
