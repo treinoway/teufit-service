@@ -191,6 +191,10 @@ function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(derived, expected);
 }
 
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 function safeUser(user) {
   if (!user) return user;
   // Ensure we never leak passwordHash
@@ -319,6 +323,113 @@ export async function loginWithEmailPassword({ email, password }) {
   }
 
   return safeUser(user);
+}
+
+/**
+ * Request a password reset for the given email.
+ *
+ * Contract:
+ * - Always succeeds (to avoid email enumeration) if email format is valid.
+ * - Creates a PasswordResetToken row when a matching user exists and is not deleted.
+ * - Returns the plain resetToken (for local/dev usage only).
+ */
+export async function requestPasswordReset({ email }) {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    const err = new Error('Email is required');
+    err.code = 'EMAIL_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+  // To avoid user enumeration, do not reveal whether the user exists.
+  if (!user || user.deletedAt) {
+    return { resetToken: null };
+  }
+
+  const token = crypto.randomBytes(40).toString('hex');
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await prisma.passwordResetToken.create({
+    data: {
+      tokenHash,
+      userId: user.id,
+      expiresAt,
+    },
+  });
+
+  return { resetToken: token };
+}
+
+/**
+ * Reset password using a one-time token.
+ *
+ * Contract:
+ * - Validates token and expiry
+ * - Updates user's passwordHash
+ * - Marks the reset token as used
+ * - Returns the safe user (without passwordHash)
+ */
+export async function resetPasswordWithToken({ token, password }) {
+  if (typeof token !== 'string' || token.trim() === '') {
+    const err = new Error('Reset token is required');
+    err.code = 'RESET_TOKEN_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof password !== 'string' || password.length < 8) {
+    const err = new Error('Password must be at least 8 characters');
+    err.code = 'WEAK_PASSWORD';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const tokenHash = hashToken(token);
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: { user: true },
+  });
+
+  if (!resetToken || resetToken.used) {
+    const err = new Error('Invalid or used reset token');
+    err.code = 'INVALID_RESET_TOKEN';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (resetToken.expiresAt < new Date()) {
+    const err = new Error('Reset token expired');
+    err.code = 'RESET_TOKEN_EXPIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!resetToken.user || resetToken.user.deletedAt) {
+    const err = new Error('User account is deactivated');
+    err.code = 'USER_DELETED';
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const passwordHash = hashPassword(password);
+
+  const [updatedUser] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: resetToken.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetToken.update({
+      where: { tokenHash },
+      data: { used: true },
+    }),
+  ]);
+
+  return safeUser(updatedUser);
 }
 
 /**

@@ -69,7 +69,28 @@ export async function trainerRoutes(fastify) {
           type: 'object',
           additionalProperties: false,
           properties: {
-            trainer: { type: 'object', additionalProperties: true },
+            trainer: {
+              type: 'object',
+              additionalProperties: true,
+              description: 'Trainer profile fields to update',
+              properties: {
+                firstName: { type: 'string', description: 'Trainer first name' },
+                lastName: { type: 'string', description: 'Trainer last name' },
+                birthDate: { type: 'string', format: 'date', description: 'Birth date (YYYY-MM-DD)' },
+                avatar: { type: 'string', description: 'Avatar URL' },
+                professionalDocument: { type: 'string', description: 'Professional registration/document' },
+                gymName: { type: 'string', description: 'Gym or organization name' },
+                serviceTypes: {
+                  type: 'array',
+                  nullable: true,
+                  description: 'Types of services offered by the trainer',
+                  items: {
+                    type: 'string',
+                    enum: ['InPerson', 'Online'],
+                  },
+                },
+              },
+            },
             address: { type: 'object', additionalProperties: true },
             socials: { type: 'object', additionalProperties: true },
           },

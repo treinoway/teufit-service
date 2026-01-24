@@ -17,6 +17,22 @@ vi.mock('../../src/db.js', () => {
         findFirst: vi.fn(),
         create: vi.fn(),
       },
+      passwordResetToken: {
+        create: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
+      $transaction: vi.fn(async (ops) => {
+        // Simple mock: if ops is an array of promises, resolve them.
+        if (Array.isArray(ops)) {
+          return Promise.all(ops);
+        }
+        // If ops is a callback, call it with the mocked prisma object.
+        if (typeof ops === 'function') {
+          return ops(prisma);
+        }
+        return ops;
+      }),
     },
   };
 });
@@ -37,6 +53,8 @@ import {
   getCurrentUserWithAccounts,
   signupWithEmailPassword,
   loginWithEmailPassword,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from '../../src/services/authService.js';
 
 import crypto from 'node:crypto';
@@ -299,6 +317,67 @@ describe('src/services/authService.js', () => {
         code: 'PASSWORD_NOT_SET',
         statusCode: 409,
       });
+    });
+  });
+
+  describe('password reset flow', () => {
+    it('requestPasswordReset creates a token when user exists', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        deletedAt: null,
+      });
+
+      const res = await requestPasswordReset({ email: 'test@example.com' });
+
+      expect(prisma.passwordResetToken.create).toHaveBeenCalled();
+      expect(typeof res.resetToken).toBe('string');
+      expect(res.resetToken.length).toBeGreaterThan(0);
+    });
+
+    it('requestPasswordReset does nothing visible when user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      const res = await requestPasswordReset({ email: 'missing@example.com' });
+
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(res.resetToken).toBeNull();
+    });
+
+    it('resetPasswordWithToken updates password and marks token as used', async () => {
+      const now = new Date();
+
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        tokenHash: 'hash',
+        userId: 'u1',
+        used: false,
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+        user: {
+          id: 'u1',
+          email: 'test@example.com',
+          deletedAt: null,
+        },
+      });
+
+      prisma.$transaction.mockImplementation(async (ops) => {
+        const [updateUserOp] = ops;
+        // Simulate prisma.user.update returning the updated user
+        return [
+          {
+            id: 'u1',
+            email: 'test@example.com',
+            passwordHash: 'new-hash',
+            deletedAt: null,
+          },
+        ];
+      });
+
+      const user = await resetPasswordWithToken({ token: 'plain-token', password: 'new-password123' });
+
+      expect(prisma.passwordResetToken.findUnique).toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(user.id).toBe('u1');
+      expect(user.passwordHash).toBeUndefined();
     });
   });
 });

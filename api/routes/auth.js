@@ -4,6 +4,8 @@ import {
   ensureProfileForUser,
   signupWithEmailPasswordStateless,
   loginWithEmailPasswordStateless,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from '../../src/services/authService.js';
 import { Roles, roleValues } from '../../src/constants/roles.js';
 import { issueAccessToken, verifyRefreshToken, revokeRefreshToken } from '../../src/services/tokenService.js';
@@ -222,6 +224,137 @@ export async function authRoutes(fastify) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Login failed' });
     }
+    },
+  );
+
+  // Request password reset (stateless)
+  fastify.post(
+    '/auth/forgot-password',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Request a password reset email',
+        body: {
+          type: 'object',
+          required: ['email'],
+          additionalProperties: false,
+          properties: {
+            email: { type: 'string', format: 'email' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              // For local/dev, the raw token may be included for convenience
+              resetToken: { type: 'string' },
+            },
+          },
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const email = body.email;
+
+        const { resetToken } = await requestPasswordReset({ email });
+
+        const payload = {
+          message: 'If an account exists for this email, a reset link has been sent.',
+        };
+
+        // In non-production, expose the token to simplify manual testing.
+        if (process.env.NODE_ENV !== 'production' && resetToken) {
+          payload.resetToken = resetToken;
+        }
+
+        return reply.status(200).send(payload);
+      } catch (error) {
+        if (error?.code === 'EMAIL_REQUIRED') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'FORGOT_PASSWORD_FAILED', message: 'Failed to process password reset request' });
+      }
+    },
+  );
+
+  // Reset password with token (stateless)
+  fastify.post(
+    '/auth/reset-password',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Reset password using a one-time token',
+        body: {
+          type: 'object',
+          required: ['token', 'password'],
+          additionalProperties: false,
+          properties: {
+            token: { type: 'string', minLength: 1 },
+            password: { type: 'string', minLength: 8 },
+          },
+        },
+        response: {
+          200: authSuccessResponseSchema,
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          500: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const token = body.token;
+        const password = body.password;
+
+        const user = await resetPasswordWithToken({ token, password });
+
+        const access = issueAccessToken({ fastify, user });
+        const refresh = await issueRefreshToken({ user });
+
+        return reply.send({
+          user: { id: user.id },
+          token: { accessToken: access.accessToken },
+          refreshToken: refresh.refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'RESET_TOKEN_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_RESET_TOKEN' || error?.code === 'RESET_TOKEN_EXPIRED') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'Account deactivated' });
+        }
+        if (error?.code === 'JWT_NOT_CONFIGURED') {
+          return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'RESET_PASSWORD_FAILED', message: 'Failed to reset password' });
+      }
     },
   );
 
