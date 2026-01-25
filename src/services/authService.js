@@ -70,7 +70,6 @@ export async function authenticateWithGoogle({ fastify, request }) {
  * Ensure a user has an associated profile row.
  * NOTE: This does not attempt to "decide" which one; it's driven by the caller.
  */
-// profileSeed is optional, used to populate profile defaults from OAuth info.
 export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
   if (role === Roles.TRAINER) {
     const existing = await prisma.trainer.findFirst({ where: { userId } });

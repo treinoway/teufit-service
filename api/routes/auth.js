@@ -1,14 +1,22 @@
+import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
+import { Roles } from '../../src/constants/roles.js';
+import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import {
   authenticateWithGoogle,
-  signupWithEmailPasswordStateless,
+  ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
   resetPasswordWithToken,
+  signupWithEmailPasswordStateless,
 } from '../../src/services/authService.js';
-import { Roles, roleValues } from '../../src/constants/roles.js';
-import { issueAccessToken, verifyRefreshToken, revokeRefreshToken } from '../../src/services/tokenService.js';
-import fastifyOauth2 from '@fastify/oauth2';
+import { verifyGoogleIdToken } from '../../src/services/googleIdTokenService.js';
+import {
+  issueAccessToken,
+  issueRefreshToken,
+  revokeRefreshToken,
+  verifyRefreshToken
+} from '../../src/services/tokenService.js';
 
 const authTags = ['auth'];
 
@@ -92,40 +100,40 @@ export async function authRoutes(fastify) {
       },
     },
     async (request, reply) => {
-    try {
-      const body = request.body ?? {};
-      const email = body.email;
-      const password = body.password;
+      try {
+        const body = request.body ?? {};
+        const email = body.email;
+        const password = body.password;
 
-      const { userId, accessToken, refreshToken } = await signupWithEmailPasswordStateless({
-        fastify,
-        email,
-        password,
-        roles: [Roles.STUDENT],
-      });
+        const { userId, accessToken, refreshToken } = await signupWithEmailPasswordStateless({
+          fastify,
+          email,
+          password,
+          roles: [Roles.STUDENT],
+        });
 
-      return reply.status(201).send({
-        user: { id: userId },
-        token: { accessToken },
-        refreshToken,
-      });
-    } catch (error) {
-      if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_ROLE') {
-        return reply.status(400).send({ error: error.code, message: error.message });
-      }
-      if (error?.code === 'EMAIL_IN_USE') {
-        return reply.status(409).send({ error: 'EMAIL_IN_USE' });
-      }
-      if (error?.code === 'USER_DELETED') {
-        return reply.status(403).send({ error: 'Account deactivated' });
-      }
-      if (error?.code === 'JWT_NOT_CONFIGURED') {
-        return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
-      }
+        return reply.status(201).send({
+          user: { id: userId },
+          token: { accessToken },
+          refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_ROLE') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'EMAIL_IN_USE') {
+          return reply.status(409).send({ error: 'EMAIL_IN_USE' });
+        }
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'Account deactivated' });
+        }
+        if (error?.code === 'JWT_NOT_CONFIGURED') {
+          return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+        }
 
-      fastify.log.error(error);
-      return reply.status(500).send({ error: 'Signup failed' });
-    }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Signup failed' });
+      }
     },
   );
 
@@ -173,42 +181,42 @@ export async function authRoutes(fastify) {
       },
     },
     async (request, reply) => {
-    try {
-      const body = request.body ?? {};
-      const email = body.email;
-      const password = body.password;
+      try {
+        const body = request.body ?? {};
+        const email = body.email;
+        const password = body.password;
 
-      const { userId, accessToken, refreshToken } = await loginWithEmailPasswordStateless({
-        fastify,
-        email,
-        password,
-      });
+        const { userId, accessToken, refreshToken } = await loginWithEmailPasswordStateless({
+          fastify,
+          email,
+          password,
+        });
 
-      return reply.send({
-        user: { id: userId },
-        token: { accessToken },
-        refreshToken,
-      });
-    } catch (error) {
-      if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'PASSWORD_REQUIRED') {
-        return reply.status(400).send({ error: error.code, message: error.message });
-      }
-      if (error?.code === 'INVALID_CREDENTIALS') {
-        return reply.status(401).send({ error: 'INVALID_CREDENTIALS' });
-      }
-      if (error?.code === 'USER_DELETED') {
-        return reply.status(403).send({ error: 'Account deactivated' });
-      }
-      if (error?.code === 'PASSWORD_NOT_SET') {
-        return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
-      }
-      if (error?.code === 'JWT_NOT_CONFIGURED') {
-        return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
-      }
+        return reply.send({
+          user: { id: userId },
+          token: { accessToken },
+          refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'PASSWORD_REQUIRED') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'INVALID_CREDENTIALS') {
+          return reply.status(401).send({ error: 'INVALID_CREDENTIALS' });
+        }
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'Account deactivated' });
+        }
+        if (error?.code === 'PASSWORD_NOT_SET') {
+          return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
+        }
+        if (error?.code === 'JWT_NOT_CONFIGURED') {
+          return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+        }
 
-      fastify.log.error(error);
-      return reply.status(500).send({ error: 'Login failed' });
-    }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Login failed' });
+      }
     },
   );
 
@@ -435,74 +443,108 @@ export async function authRoutes(fastify) {
     },
   );
 
-  // // Mobile-native Google auth (no redirects):
-  // // Mobile app performs Google Sign-In and sends the ID token here.
-  // // Returns a Bearer access token (JWT) to be used in Authorization header.
-  // fastify.post('/auth/mobile/google', async (request, reply) => {
-  //   try {
-  //     const body = request.body ?? {};
-  //     const idToken = body.idToken ?? body.id_token;
+  // Mobile-native Google auth (no redirects):
+  // Mobile app performs Google Sign-In and sends the ID token here.
+  // Returns a Bearer access token (JWT) to be used in Authorization header.
+  fastify.post(
+    '/auth/google/mobile',
+    {
+      schema: {
+        tags: authTags,
+        summary: 'Log in with Google ID Token (mobile native SDK)',
+        description: 'Receives the idToken from the mobile app, validates it, and returns a session.',
+        body: {
+          type: 'object',
+          required: ['idToken'],
+          additionalProperties: false,
+          properties: {
+            idToken: { type: 'string', description: 'The raw idToken from Google Sign-In SDK' },
+          },
+        },
+        response: {
+          200: authSuccessResponseSchema,
+          400: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          500: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const idToken = body.idToken ?? body.id_token;
 
-  //     const google = await verifyGoogleIdToken({
-  //       idToken,
-  //       audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
-  //     });
+        if (!idToken) {
+          return reply.status(400).send({ error: 'ID_TOKEN_REQUIRED', message: 'Missing idToken' });
+        }
 
-  //     if (!google.email) {
-  //       return reply.status(400).send({ error: 'Google account email not available' });
-  //     }
+        const google = await verifyGoogleIdToken({
+          idToken,
+          audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
+        });
 
-  //     // For now, mobile auth only creates/logs in trainers.
-  //     const role = Roles.TRAINER;
+        if (!google.email) {
+          return reply.status(400).send({ error: 'GOOGLE_EMAIL_REQUIRED', message: 'Google account email not available' });
+        }
 
-  //     const user = await findOrCreateUserFromOAuth({
-  //       provider: 'google',
-  //       providerId: google.subject,
-  //       email: google.email,
-  //       name: google.name ?? google.email,
-  //       avatar: google.picture,
-  //       accessToken: null,
-  //       refreshToken: null,
-  //       expiresAt: null,
-  //       role,
-  //     });
+        // New users from Google are always Students
+        const roles = [Roles.STUDENT];
 
-  //     await ensureProfileForUser({
-  //       userId: user.id,
-  //       role,
-  //       profileSeed: {
-  //         name: google.name,
-  //       },
-  //     });
+        const user = await findOrCreateUserFromOAuth({
+          provider: 'google',
+          providerId: google.subject,
+          email: google.email,
+          name: google.name ?? google.email,
+          avatar: google.picture,
+          accessToken: null,
+          refreshToken: null,
+          expiresAt: null,
+          roles,
+        });
 
-  //     const token = issueAccessToken({ fastify, user });
-  //     return reply.send({
-  //       ...token,
-  //       user: {
-  //         id: user.id,
-  //         email: user.email,
-  //         role: user.role,
-  //         status: user.status,
-  //       },
-  //     });
-  //   } catch (error) {
-  //     if (error?.code === 'USER_DELETED') {
-  //       return reply.status(403).send({ error: 'Account deactivated' });
-  //     }
-  //     if (error?.code === 'ID_TOKEN_REQUIRED') {
-  //       return reply.status(400).send({ error: 'Missing idToken' });
-  //     }
-  //     if (error?.code === 'ERR_JWT_EXPIRED') {
-  //       return reply.status(401).send({ error: 'Google token expired' });
-  //     }
-  //     if (error?.code === 'ERR_JWS_INVALID' || error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
-  //       return reply.status(401).send({ error: 'Invalid Google token' });
-  //     }
+        // Ensure user has a profile based on their role
+        await ensureProfileForUser({
+          userId: user.id,
+          role: Roles.STUDENT,
+          profileSeed: {
+            name: google.name,
+          },
+        });
 
-  //     fastify.log.error(error);
-  //     return reply.status(500).send({ error: 'Authentication failed' });
-  //   }
-  // });
+        const token = issueAccessToken({ fastify, user });
+        const refreshTokenData = await issueRefreshToken({ user });
+
+        return reply.send({
+          user: { id: user.id },
+          token: { accessToken: token.accessToken },
+          refreshToken: refreshTokenData.refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'Account deactivated' });
+        }
+        if (error?.code === 'ID_TOKEN_REQUIRED') {
+          return reply.status(400).send({ error: 'Missing idToken' });
+        }
+        if (error?.code === 'ERR_JWT_EXPIRED') {
+          return reply.status(401).send({ error: 'Google token expired' });
+        }
+        if (error?.code === 'ERR_JWS_INVALID' || error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
+          return reply.status(401).send({ error: 'Invalid Google token' });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Authentication failed' });
+      }
+    },
+  );
 
   // Refresh Token Route
   fastify.post(
@@ -533,23 +575,23 @@ export async function authRoutes(fastify) {
       },
     },
     async (request, reply) => {
-    const { refreshToken } = request.body || {};
+      const { refreshToken } = request.body || {};
 
-    if (!refreshToken) {
-      return reply.status(400).send({ error: 'Missing refresh token' });
-    }
+      if (!refreshToken) {
+        return reply.status(400).send({ error: 'Missing refresh token' });
+      }
 
-    try {
-      const user = await verifyRefreshToken(refreshToken);
-      const token = issueAccessToken({ fastify, user });
+      try {
+        const user = await verifyRefreshToken(refreshToken);
+        const token = issueAccessToken({ fastify, user });
 
-      // Optionally rotate refresh token here (issue new one, revoke old one)
-      // For simplicity, we keep the same refresh token until it expires.
+        // Optionally rotate refresh token here (issue new one, revoke old one)
+        // For simplicity, we keep the same refresh token until it expires.
 
-      return reply.send({ token: { accessToken: token.accessToken } });
-    } catch (error) {
-      return reply.status(401).send({ error: 'Invalid or expired refresh token' });
-    }
+        return reply.send({ token: { accessToken: token.accessToken } });
+      } catch (error) {
+        return reply.status(401).send({ error: 'Invalid or expired refresh token' });
+      }
     },
   );
 
@@ -572,18 +614,18 @@ export async function authRoutes(fastify) {
       },
     },
     async (request, reply) => {
-    // Refresh Token revocation
-    const { refreshToken } = request.body || {};
-    if (refreshToken) {
-      try {
-        await revokeRefreshToken(refreshToken);
-      } catch (e) {
-        // Ignore errors during logout (e.g. token already invalid)
-        fastify.log.warn(`Logout revocation failed: ${e.message}`);
+      // Refresh Token revocation
+      const { refreshToken } = request.body || {};
+      if (refreshToken) {
+        try {
+          await revokeRefreshToken(refreshToken);
+        } catch (e) {
+          // Ignore errors during logout (e.g. token already invalid)
+          fastify.log.warn(`Logout revocation failed: ${e.message}`);
+        }
       }
-    }
 
-    return reply.send({ message: 'Logged out successfully' });
+      return reply.send({ message: 'Logged out successfully' });
     },
   );
 }
