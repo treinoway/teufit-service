@@ -25,7 +25,8 @@
     "db:seed": "npx prisma db seed",
     "setup": "npm install && npm run db:start && sleep 3 && npm run db:migrate && npm run db:generate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "bash scripts/test-e2e.sh"
   },
   "keywords": [
     "wellness",
