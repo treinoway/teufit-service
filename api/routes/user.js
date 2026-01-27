@@ -1,6 +1,6 @@
 import { authenticate } from '../middleware/auth.js';
-import { getUserProfileById } from '../../src/services/user-service.js';
-import { getMeSchema } from '../schemas/user-route.schema.js';
+import { getUserProfileById, setActiveProfileToTrainer } from '../../src/services/user-service.js';
+import { getMeSchema, becomeTrainerSchema } from '../schemas/user-route.schema.js';
 
 export async function userRoutes(fastify) {
 
@@ -28,5 +28,29 @@ export async function userRoutes(fastify) {
         return reply.status(500).send({ error: 'Internal server error' });
       }
     }
+  );
+
+  fastify.patch(
+    '/become-trainer',
+    {
+      preHandler: [authenticate],
+      schema: becomeTrainerSchema,
+    },
+    async (request, reply) => {
+      try {
+        const userId = request.user.id;
+        const preferences = await setActiveProfileToTrainer(userId);
+
+        return reply.send({ activeProfile: preferences.activeProfile });
+      } catch (error) {
+        request.log.error({ error }, 'Error updating activeProfile in PATCH /become-trainer');
+
+        if (error?.code === 'USER_ID_REQUIRED') {
+          return reply.status(400).send({ error: 'USER_ID_REQUIRED' });
+        }
+
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    },
   );
 }

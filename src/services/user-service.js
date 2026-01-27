@@ -26,6 +26,7 @@ export async function getUserProfileById(userId) {
 		include: {
 			address: true,
 			socials: true,
+			preferences: true,
 		},
 	});
 
@@ -37,5 +38,22 @@ export async function getUserProfileById(userId) {
 	}
 
 	return sanitizeUser(user);
+}
+
+export async function setActiveProfileToTrainer(userId) {
+	if (!userId) {
+		const err = new Error('userId is required');
+		err.code = 'USER_ID_REQUIRED';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	const preferences = await prisma.userPreferences.upsert({
+		where: { userId },
+		create: { userId, activeProfile: 'trainer' },
+		update: { activeProfile: 'trainer' },
+	});
+
+	return preferences;
 }
 

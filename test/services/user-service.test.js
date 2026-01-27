@@ -6,12 +6,15 @@ vi.mock('../../src/db.js', () => {
       user: {
         findUnique: vi.fn(),
       },
+      userPreferences: {
+        upsert: vi.fn(),
+      },
     },
   };
 });
 
 import { prisma } from '../../src/db.js';
-import { getUserProfileById } from '../../src/services/user-service.js';
+import { getUserProfileById, setActiveProfileToTrainer } from '../../src/services/user-service.js';
 
 describe('src/services/user-service.js', () => {
   beforeEach(() => {
@@ -40,6 +43,7 @@ describe('src/services/user-service.js', () => {
       include: {
         address: true,
         socials: true,
+        preferences: true,
       },
     });
   });
@@ -63,5 +67,36 @@ describe('src/services/user-service.js', () => {
     });
 
     expect(result.passwordHash).toBeUndefined();
+  });
+
+  it('setActiveProfileToTrainer throws USER_ID_REQUIRED when userId is missing', async () => {
+    await expect(setActiveProfileToTrainer(undefined)).rejects.toMatchObject({
+      code: 'USER_ID_REQUIRED',
+      statusCode: 400,
+    });
+
+    expect(prisma.userPreferences.upsert).not.toHaveBeenCalled();
+  });
+
+  it('setActiveProfileToTrainer upserts preferences with trainer profile', async () => {
+    prisma.userPreferences.upsert.mockResolvedValue({
+      id: 'pref1',
+      userId: 'u1',
+      activeProfile: 'trainer',
+    });
+
+    const result = await setActiveProfileToTrainer('u1');
+
+    expect(prisma.userPreferences.upsert).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      create: { userId: 'u1', activeProfile: 'trainer' },
+      update: { activeProfile: 'trainer' },
+    });
+
+    expect(result).toEqual({
+      id: 'pref1',
+      userId: 'u1',
+      activeProfile: 'trainer',
+    });
   });
 });
