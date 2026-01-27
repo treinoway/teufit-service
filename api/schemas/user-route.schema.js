@@ -44,6 +44,21 @@ export const getMeSchema = {
           additionalProperties: true,
           description: 'User social networks, if available',
         },
+        preferences: {
+          type: 'object',
+          nullable: true,
+          description: 'User preferences, including active profile',
+          properties: {
+            activeProfile: {
+              type: 'string',
+              description: 'Current active profile for this user',
+              enum: ['student', 'trainer'],
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time', nullable: true },
+          },
+	      additionalProperties: false,
+        },
         createdAt: { type: 'string', format: 'date-time' },
         updatedAt: { type: 'string', format: 'date-time' },
       },
