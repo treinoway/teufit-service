@@ -344,7 +344,7 @@ describe('src/services/auth-service.js', () => {
       expect(res.resetToken).toBeNull();
     });
 
-    it('resetPasswordWithToken updates password and marks token as used', async () => {
+    it('resetPasswordWithToken updates password and marks token as used when confirmation matches', async () => {
       const now = new Date();
 
       prisma.passwordResetToken.findUnique.mockResolvedValue({
@@ -371,12 +371,21 @@ describe('src/services/auth-service.js', () => {
         ];
       });
 
-      const user = await resetPasswordWithToken({ token: 'plain-token', password: 'new-password123' });
+      const user = await resetPasswordWithToken({ token: 'plain-token', password: 'new-password123', passwordConfirmation: 'new-password123' });
 
       expect(prisma.passwordResetToken.findUnique).toHaveBeenCalled();
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(user.id).toBe('u1');
       expect(user.passwordHash).toBeUndefined();
     });
+
+  it('resetPasswordWithToken rejects when password confirmation does not match', async () => {
+    await expect(
+    resetPasswordWithToken({ token: 'plain-token', password: 'new-password123', passwordConfirmation: 'other-pass' }),
+    ).rejects.toMatchObject({
+    code: 'PASSWORD_MISMATCH',
+    statusCode: 400,
+    });
+  });
   });
 });
