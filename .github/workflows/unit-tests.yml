@@ -5,9 +5,8 @@ on:
     branches:
       - master
   pull_request:
-    branches:
-      - master
-      - staging
+    branches: [ master, staging ]
+
 
 jobs:
   test:
@@ -28,4 +27,4 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npm test
+        run: npm run test:unit
