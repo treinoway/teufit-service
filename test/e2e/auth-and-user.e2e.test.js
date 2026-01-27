@@ -11,8 +11,15 @@ e2eDescribe('e2e: auth and user flows', () => {
 
   beforeAll(async () => {
     // Ensure secrets are set for JWT and session plugins in tests
-    process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-session-secret';
+    process.env.SESSION_SECRET =
+      process.env.SESSION_SECRET || 'test-session-secret-key-for-e2e-tests-012345';
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
+
+    // Provide dummy Google OAuth configuration so fastify-oauth2 can register
+    process.env.GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || 'test-google-client-id';
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || 'test-google-client-secret';
+    process.env.GOOGLE_OAUTH_CALLBACK_URL =
+      process.env.GOOGLE_OAUTH_CALLBACK_URL || 'http://localhost:3000/auth/google/callback';
 
     app = await buildServer({ logger: false });
   });

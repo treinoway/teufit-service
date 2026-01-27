@@ -1,14 +1,17 @@
-name: e2e-tests
+name: E2E tests
 
 on:
   push:
-    branches: [ main, staging ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, staging ]
+    branches: [ master, staging ]
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
+
+    env:
+      DISABLE_EMAIL: 'true'
 
     steps:
       - name: Checkout repository
