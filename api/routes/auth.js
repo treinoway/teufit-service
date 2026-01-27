@@ -17,34 +17,17 @@ import {
   verifyRefreshToken
 } from '../../src/services/token-service.js';
 import emailHandler from '../../src/config/email-handler.js';
-
-const authTags = ['auth'];
-
-const userIdResponseSchema = {
-  type: 'object',
-  required: ['id'],
-  properties: {
-    id: { type: 'string' },
-  },
-};
-
-const tokenResponseSchema = {
-  type: 'object',
-  required: ['accessToken'],
-  properties: {
-    accessToken: { type: 'string' },
-  },
-};
-
-const authSuccessResponseSchema = {
-  type: 'object',
-  required: ['user', 'token', 'refreshToken'],
-  properties: {
-    user: userIdResponseSchema,
-    token: tokenResponseSchema,
-    refreshToken: { type: 'string' },
-  },
-};
+import {
+  signupSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  googleStartSchema,
+  googleCallbackSchema,
+  googleMobileSchema,
+  refreshSchema,
+  logoutSchema,
+} from '../schemas/auth-route.schema.js';
 
 export async function authRoutes(fastify) {
   // Configure Google OAuth2 plugin.
@@ -66,38 +49,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/signup',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Sign up with email/password',
-        body: {
-          type: 'object',
-          required: ['email', 'password'],
-          additionalProperties: false,
-          properties: {
-            email: { type: 'string', format: 'email' },
-            password: { type: 'string', minLength: 8 },
-          },
-        },
-        response: {
-          201: authSuccessResponseSchema,
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          409: { type: 'object', properties: { error: { type: 'string' } } },
-          403: { type: 'object', properties: { error: { type: 'string' } } },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: signupSchema,
     },
     async (request, reply) => {
       try {
@@ -146,39 +98,7 @@ export async function authRoutes(fastify) {
           timeWindow: '1 minute',
         },
       },
-      schema: {
-        tags: authTags,
-        summary: 'Log in with email/password',
-        body: {
-          type: 'object',
-          required: ['email', 'password'],
-          additionalProperties: false,
-          properties: {
-            email: { type: 'string', format: 'email' },
-            password: { type: 'string', minLength: 1 },
-          },
-        },
-        response: {
-          200: authSuccessResponseSchema,
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          403: { type: 'object', properties: { error: { type: 'string' } } },
-          409: { type: 'object', properties: { error: { type: 'string' } } },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: loginSchema,
     },
     async (request, reply) => {
       try {
@@ -224,35 +144,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/forgot-password',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Request a password reset email',
-        body: {
-          type: 'object',
-          required: ['email'],
-          additionalProperties: false,
-          properties: {
-            email: { type: 'string', format: 'email' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              message: { type: 'string' },
-              // For local/dev, the raw token may be included for convenience
-              resetToken: { type: 'string' },
-            },
-          },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: forgotPasswordSchema,
     },
     async (request, reply) => {
       try {
@@ -297,37 +189,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/reset-password',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Reset password using a one-time token',
-        body: {
-          type: 'object',
-          required: ['token', 'password'],
-          additionalProperties: false,
-          properties: {
-            token: { type: 'string', minLength: 1 },
-            password: { type: 'string', minLength: 8 },
-          },
-        },
-        response: {
-          200: authSuccessResponseSchema,
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          403: { type: 'object', properties: { error: { type: 'string' } } },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: resetPasswordSchema,
     },
     async (request, reply) => {
       try {
@@ -366,22 +228,7 @@ export async function authRoutes(fastify) {
   fastify.get(
     '/auth/google/start',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Start Google OAuth (student role)',
-        response: {
-          302: {
-            description: 'Redirects to /auth/google to start the OAuth2 flow',
-          },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: googleStartSchema,
     },
     async (request, reply) => {
       // No role selection; authenticateWithGoogle always uses Roles.STUDENT
@@ -393,42 +240,7 @@ export async function authRoutes(fastify) {
   fastify.get(
     '/auth/google/callback',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Google OAuth callback',
-        querystring: {
-          type: 'object',
-          properties: {
-            code: { type: 'string', description: 'Authorization code from Google' },
-            state: { type: 'string', description: 'CSRF protection state value' },
-          },
-        },
-        response: {
-          302: {
-            description: 'Redirects to the frontend URL after successful authentication',
-          },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          403: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-          500: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-        },
-      },
+      schema: googleCallbackSchema,
     },
     async (request, reply) => {
       try {
@@ -458,32 +270,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/google/mobile',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Log in with Google ID Token (mobile native SDK)',
-        description: 'Receives the idToken from the mobile app, validates it, and returns a session.',
-        body: {
-          type: 'object',
-          required: ['idToken'],
-          additionalProperties: false,
-          properties: {
-            idToken: { type: 'string', description: 'The raw idToken from Google Sign-In SDK' },
-          },
-        },
-        response: {
-          200: authSuccessResponseSchema,
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          403: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
+      schema: googleMobileSchema,
     },
     async (request, reply) => {
       try {
@@ -561,29 +348,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/refresh',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Exchange refresh token for a new access token',
-        body: {
-          type: 'object',
-          required: ['refreshToken'],
-          additionalProperties: false,
-          properties: {
-            refreshToken: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            required: ['token'],
-            properties: {
-              token: tokenResponseSchema,
-            },
-          },
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
+      schema: refreshSchema,
     },
     async (request, reply) => {
       const { refreshToken } = request.body || {};
@@ -610,20 +375,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/logout',
     {
-      schema: {
-        tags: authTags,
-        summary: 'Log out (revoke refresh token)',
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            refreshToken: { type: 'string' },
-          },
-        },
-        response: {
-          200: { type: 'object', properties: { message: { type: 'string' } } },
-        },
-      },
+      schema: logoutSchema,
     },
     async (request, reply) => {
       // Refresh Token revocation
