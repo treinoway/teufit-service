@@ -54,3 +54,37 @@ export const getMeSchema = {
     500: { type: 'object', properties: { error: { type: 'string' } } },
   },
 };
+
+export const becomeTrainerSchema = {
+  tags: ['user'],
+  summary: 'Set active profile to trainer',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: {
+      description: 'Updated user preferences',
+      type: 'object',
+      properties: {
+        activeProfile: {
+          type: 'string',
+          description: 'The new active profile for this user',
+          enum: ['student', 'trainer'],
+        },
+      },
+      required: ['activeProfile'],
+      additionalProperties: false,
+    },
+    400: { type: 'object', properties: { error: { type: 'string' } } },
+    401: { type: 'object', properties: { error: { type: 'string' } } },
+    500: { type: 'object', properties: { error: { type: 'string' } } },
+  },
+};
