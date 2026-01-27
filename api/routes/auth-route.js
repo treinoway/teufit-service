@@ -286,6 +286,8 @@ export async function authRoutes(fastify) {
           audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
         });
 
+        console.log(`---- GOOGLE INFO: `, JSON.stringify(google));
+
         
 
         if (!google.email) {
