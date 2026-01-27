@@ -7,9 +7,9 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
-import { authRoutes } from './routes/auth.js';
-import { trainerRoutes } from './routes/trainer.js';
-import { userRoutes } from './routes/user.js';
+import { authRoutes } from './routes/auth-route.js';
+import { trainerRoutes } from './routes/trainer-route.js';
+import { userRoutes } from './routes/user-route.js';
 
 const fastify = Fastify({
   logger: true,
