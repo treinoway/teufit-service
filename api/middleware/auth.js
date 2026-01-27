@@ -39,7 +39,8 @@ export async function authenticate(request, reply) {
         status: payload.status,
       };
       return;
-    } catch (e) {
+    } catch (err) {
+      request.log.warn({ error: err }, 'JWT verification failed in authenticate middleware');
       return reply.status(401).send({
         error: 'Authentication required',
         message: 'Invalid or expired token',

@@ -356,8 +356,7 @@ describe('src/services/authService.js', () => {
         },
       });
 
-      prisma.$transaction.mockImplementation(async (ops) => {
-        const [updateUserOp] = ops;
+      prisma.$transaction.mockImplementation(async () => {
         // Simulate prisma.user.update returning the updated user
         return [
           {

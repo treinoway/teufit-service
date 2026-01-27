@@ -3,7 +3,6 @@ import 'dotenv/config';
 import { Roles } from '../../src/constants/roles.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import {
-  authenticateWithGoogle,
   ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
@@ -17,6 +16,7 @@ import {
   revokeRefreshToken,
   verifyRefreshToken
 } from '../../src/services/tokenService.js';
+import emailHandler from '../../src/config/email-handler.js';
 
 const authTags = ['auth'];
 
@@ -270,7 +270,18 @@ export async function authRoutes(fastify) {
           payload.resetToken = resetToken;
         }
 
-        return reply.status(200).send(payload);
+        return emailHandler.sendResetPasswordEmail({ to: email, token: resetToken })
+          .then((test) =>{
+            console.log(test);
+            reply.send(payload);
+          })
+          .catch((emailErr) => {
+            console.log(emailErr);
+            fastify.log.error(`Failed to send password reset email to ${email}: ${emailErr.message}`);
+            return reply.send(payload);
+          }).finally((info, error) => {
+            console.log(error);
+          })
       } catch (error) {
         if (error?.code === 'EMAIL_REQUIRED') {
           return reply.status(400).send({ error: error.code, message: error.message });
@@ -421,8 +432,6 @@ export async function authRoutes(fastify) {
     },
     async (request, reply) => {
       try {
-        const { user, googleUser } = await authenticateWithGoogle({ fastify, request });
-
         // Browser flow: redirect after login to your frontend.
         // The frontend can then call backend endpoints like GET /me using the session cookie.
         const frontendRedirectUrl = process.env.FRONTEND_REDIRECT_URL || process.env.FRONTEND_URL;
@@ -489,6 +498,8 @@ export async function authRoutes(fastify) {
           idToken,
           audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
         });
+
+        
 
         if (!google.email) {
           return reply.status(400).send({ error: 'GOOGLE_EMAIL_REQUIRED', message: 'Google account email not available' });
@@ -590,6 +601,7 @@ export async function authRoutes(fastify) {
 
         return reply.send({ token: { accessToken: token.accessToken } });
       } catch (error) {
+        request.log.warn({ error }, 'Refresh token verification failed');
         return reply.status(401).send({ error: 'Invalid or expired refresh token' });
       }
     },

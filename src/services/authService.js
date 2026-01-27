@@ -70,7 +70,7 @@ export async function authenticateWithGoogle({ fastify, request }) {
  * Ensure a user has an associated profile row.
  * NOTE: This does not attempt to "decide" which one; it's driven by the caller.
  */
-export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
+export async function ensureProfileForUser({ userId, role }) {
   if (role === Roles.TRAINER) {
     const existing = await prisma.trainer.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
@@ -102,7 +102,6 @@ export async function ensureProfileForUser({ userId, role, profileSeed = {} }) {
 }
 
 export async function createGoogleUser({ email, password }) {
-    return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
     return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
 }
 
