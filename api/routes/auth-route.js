@@ -162,7 +162,7 @@ export async function authRoutes(fastify) {
           payload.resetToken = resetToken;
         }
 
-        return emailHandler.sendResetPasswordEmail({ to: email, token: resetToken })
+        return emailHandler.sendResetPasswordEmail({ to: email, passwordToken: resetToken })
           .then((test) =>{
             console.log(test);
             reply.send(payload);
@@ -196,8 +196,9 @@ export async function authRoutes(fastify) {
         const body = request.body ?? {};
         const token = body.token;
         const password = body.password;
+        const passwordConfirmation = body.passwordConfirmation;
 
-        const user = await resetPasswordWithToken({ token, password });
+        const user = await resetPasswordWithToken({ token, password, passwordConfirmation });
 
         const access = issueAccessToken({ fastify, user });
         const refresh = await issueRefreshToken({ user });
@@ -208,7 +209,7 @@ export async function authRoutes(fastify) {
           refreshToken: refresh.refreshToken,
         });
       } catch (error) {
-        if (error?.code === 'RESET_TOKEN_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_RESET_TOKEN' || error?.code === 'RESET_TOKEN_EXPIRED') {
+        if (error?.code === 'RESET_TOKEN_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_RESET_TOKEN' || error?.code === 'RESET_TOKEN_EXPIRED' || error?.code === 'PASSWORD_MISMATCH') {
           return reply.status(400).send({ error: error.code, message: error.message });
         }
         if (error?.code === 'USER_DELETED') {

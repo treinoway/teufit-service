@@ -25,10 +25,10 @@ class EmailHandler {
     }
 
         sendResetPasswordEmail({to, passwordToken}) {
-        const subject = 'Password Reset Request';
+        const subject = 'Treinoway - Pedido de alteração de senha';
         const htmlContent = `
-            <p>Use this code to reset your password:</p>
-            <p>${passwordToken}</p>
+            <p>Utilize este código de 6 dígitos para redefinir sua senha (ele expira em 15 minutos):</p>
+            <p><strong>${passwordToken}</strong></p>
         `;
 
         // In test mode with no client configured, act as a no-op
@@ -37,7 +37,7 @@ class EmailHandler {
         }
 
         return this.resendClient.emails.send({
-            from: 'onboarding@resend.dev',
+            from: 'noreply@contato.treinoway.com.br',
             to,
             html: htmlContent,
             subject: subject,

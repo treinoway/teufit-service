@@ -319,9 +319,11 @@ export async function requestPasswordReset({ email }) {
     return { resetToken: null };
   }
 
-  const token = crypto.randomBytes(40).toString('hex');
+  // Generate a 6-digit numeric reset code
+  const token = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  // Token expires in 15 minutes
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
   await prisma.passwordResetToken.create({
     data: {
@@ -343,7 +345,7 @@ export async function requestPasswordReset({ email }) {
  * - Marks the reset token as used
  * - Returns the safe user (without passwordHash)
  */
-export async function resetPasswordWithToken({ token, password }) {
+export async function resetPasswordWithToken({ token, password, passwordConfirmation }) {
   if (typeof token !== 'string' || token.trim() === '') {
     const err = new Error('Reset token is required');
     err.code = 'RESET_TOKEN_REQUIRED';
@@ -354,6 +356,13 @@ export async function resetPasswordWithToken({ token, password }) {
   if (typeof password !== 'string' || password.length < 8) {
     const err = new Error('Password must be at least 8 characters');
     err.code = 'WEAK_PASSWORD';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof passwordConfirmation !== 'string' || password !== passwordConfirmation) {
+    const err = new Error('Passwords do not match');
+    err.code = 'PASSWORD_MISMATCH';
     err.statusCode = 400;
     throw err;
   }

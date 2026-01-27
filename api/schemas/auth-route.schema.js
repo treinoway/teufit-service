@@ -109,7 +109,13 @@ export const forgotPasswordSchema = {
       type: 'object',
       properties: {
         message: { type: 'string' },
-        resetToken: { type: 'string' },
+        resetToken: {
+          type: 'string',
+          description: '6-digit reset code (returned only in non-production environments)',
+          minLength: 6,
+          maxLength: 6,
+          pattern: '^[0-9]{6}$',
+        },
       },
     },
     400: {
@@ -127,11 +133,22 @@ export const resetPasswordSchema = {
   summary: 'Reset password using a one-time token',
   body: {
     type: 'object',
-    required: ['token', 'password'],
+    required: ['token', 'password', 'passwordConfirmation'],
     additionalProperties: false,
     properties: {
-      token: { type: 'string', minLength: 1 },
+      token: {
+        type: 'string',
+        minLength: 6,
+        maxLength: 6,
+        pattern: '^[0-9]{6}$',
+        description: '6-digit reset code sent via email (valid for 15 minutes)',
+      },
       password: { type: 'string', minLength: 8 },
+      passwordConfirmation: {
+        type: 'string',
+        minLength: 8,
+        description: 'Must match password',
+      },
     },
   },
   response: {
