@@ -129,6 +129,10 @@ e2eDescribe('e2e: auth and user flows', () => {
     const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
     expect(prefs).not.toBeNull();
     expect(prefs.activeProfile).toBe('trainer');
+
+  	// And verify that the user now has the TRAINER role in addition to existing roles
+  	const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
+  	expect(updatedUser.roles).toEqual(expect.arrayContaining(['student', 'trainer']));
   });
 
   it('rejects /me without authentication', async () => {

@@ -1,11 +1,30 @@
 import { prisma } from '../db.js';
+import { Roles } from '../constants/roles.js';
 
-function sanitizeUser(user) {
-	if (!user) return user;
-	// Never expose passwordHash (or similar) in API responses
-	// eslint-disable-next-line no-unused-vars
-	const { passwordHash, ...safeUser } = user;
-	return safeUser;
+function toUserProfile(user) {
+	if (!user) return null;
+
+	return {
+		id: user.id,
+		email: user.email,
+		roles: user.roles,
+		status: user.status,
+		firstName: user.firstName,
+		lastName: user.lastName,
+		birthDate: user.birthDate,
+		avatarUrl: user.avatarUrl,
+		address: user.address,
+		socials: user.socials,
+		preferences: user.preferences
+			? {
+					activeProfile: user.preferences.activeProfile,
+					createdAt: user.preferences.createdAt,
+					updatedAt: user.preferences.updatedAt,
+				}
+			: null,
+		createdAt: user.createdAt,
+		updatedAt: user.updatedAt,
+	};
 }
 
 /**
@@ -23,10 +42,26 @@ export async function getUserProfileById(userId) {
 
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
-		include: {
+		select: {
+			id: true,
+			email: true,
+			roles: true,
+			status: true,
+			firstName: true,
+			lastName: true,
+			birthDate: true,
+			avatarUrl: true,
 			address: true,
 			socials: true,
-			preferences: true,
+			preferences: {
+				select: {
+					activeProfile: true,
+					createdAt: true,
+					updatedAt: true,
+				},
+			},
+			createdAt: true,
+			updatedAt: true,
 		},
 	});
 
@@ -37,7 +72,7 @@ export async function getUserProfileById(userId) {
 		throw err;
 	}
 
-	return sanitizeUser(user);
+	return toUserProfile(user);
 }
 
 export async function setActiveProfileToTrainer(userId) {
@@ -46,6 +81,31 @@ export async function setActiveProfileToTrainer(userId) {
 		err.code = 'USER_ID_REQUIRED';
 		err.statusCode = 400;
 		throw err;
+	}
+
+	// Ensure the user has the TRAINER role in addition to any existing roles.
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		select: { roles: true },
+	});
+
+	if (!user) {
+		const err = new Error('User not found');
+		err.code = 'USER_NOT_FOUND';
+		err.statusCode = 404;
+		throw err;
+	}
+
+	const currentRoles = Array.isArray(user.roles) ? user.roles : [];
+	if (!currentRoles.includes(Roles.TRAINER)) {
+		await prisma.user.update({
+			where: { id: userId },
+			data: {
+				roles: {
+					set: [...currentRoles, Roles.TRAINER],
+				},
+			},
+		});
 	}
 
 	const preferences = await prisma.userPreferences.upsert({
