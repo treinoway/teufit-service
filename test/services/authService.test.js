@@ -232,12 +232,15 @@ describe('src/services/authService.js', () => {
       });
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
-      expect(prisma.user.create).toHaveBeenCalled();
-
-      const createCall = prisma.user.create.mock.calls[0][0];
-      expect(createCall.data.email).toBe('test@example.com');
-      expect(createCall.data.roles).toEqual(['trainer']);
-      expect(createCall.data.passwordHash).toMatch(/^scrypt\$/);
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            email: 'test@example.com',
+            roles: ['student'],
+            passwordHash: expect.stringMatching(/^scrypt\$/),
+          }),
+        }),
+      );
 
       // Returned user should not include passwordHash
       expect(user.passwordHash).toBeUndefined();

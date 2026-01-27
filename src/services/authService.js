@@ -167,7 +167,6 @@ function hashToken(token) {
 
 function safeUser(user) {
   if (!user) return user;
-  // Ensure we never leak passwordHash
   // eslint-disable-next-line no-unused-vars
   const { passwordHash, ...rest } = user;
   return rest;
@@ -198,8 +197,8 @@ export async function signupWithEmailPassword({ email, password, roles }) {
     throw err;
   }
 
-  // Normalize roles to array, default to [TRAINER]
-  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : [Roles.TRAINER]);
+  // Normalize roles to array, default to [STUDENT]
+  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : [Roles.STUDENT]);
   
   // Prevent signup with unsupported roles
   if (!rolesArray.every(r => [Roles.TRAINER, Roles.STUDENT].includes(r))) {

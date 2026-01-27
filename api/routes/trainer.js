@@ -1,5 +1,5 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch, getOneByUserId } from '../../src/services/trainerService.js';
+import { patch } from '../../src/services/trainerService.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 
 /**
@@ -9,43 +9,6 @@ import { authenticate, requireRole } from '../middleware/auth.js';
  * - PATCH /trainer: onboarding/profile completion for the authenticated trainer.
  */
 export async function trainerRoutes(fastify) {
-
-  // Get current trainer profile
-  fastify.get(
-    '/me',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: {
-        tags: ['trainer'],
-        summary: 'Get current trainer profile',
-        security: [{ bearerAuth: [] }],
-        headers: {
-          type: 'object',
-          required: ['authorization'],
-          properties: {
-            authorization: {
-              type: 'string',
-              description: 'Bearer access token (e.g., "Bearer <token>")',
-            },
-          },
-        },
-        response: {
-          200: {
-            anyOf: [
-              { type: 'object', additionalProperties: true },
-              { type: 'null' },
-            ],
-          },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          403: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request, reply) => {
-    const trainer = await getOneByUserId(request.user.id);
-    return reply.send(trainer);
-    },
-  );
 
   fastify.patch(
     '/trainer',

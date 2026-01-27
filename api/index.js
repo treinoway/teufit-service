@@ -9,6 +9,7 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth.js';
 import { trainerRoutes } from './routes/trainer.js';
+import { userRoutes } from './routes/user.js';
 
 const fastify = Fastify({
   logger: true,
@@ -78,6 +79,7 @@ await fastify.register(fastifyRateLimit, {
 // Register auth routes
 await fastify.register(authRoutes);
 await fastify.register(trainerRoutes);
+await fastify.register(userRoutes);
 
 // Health check endpoint (public)
 fastify.get('/', async () => {
