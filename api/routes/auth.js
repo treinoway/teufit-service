@@ -8,14 +8,14 @@ import {
   requestPasswordReset,
   resetPasswordWithToken,
   signupWithEmailPasswordStateless,
-} from '../../src/services/authService.js';
-import { verifyGoogleIdToken } from '../../src/services/googleIdTokenService.js';
+} from '../../src/services/auth-service.js';
+import { verifyGoogleIdToken } from '../../src/services/google-id-token-service.js';
 import {
   issueAccessToken,
   issueRefreshToken,
   revokeRefreshToken,
   verifyRefreshToken
-} from '../../src/services/tokenService.js';
+} from '../../src/services/token-service.js';
 import emailHandler from '../../src/config/email-handler.js';
 
 const authTags = ['auth'];

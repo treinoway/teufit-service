@@ -10,9 +10,9 @@ vi.mock('../../src/db.js', () => {
 });
 
 import { prisma } from '../../src/db.js';
-import { updateMyTrainerProfile } from '../../src/services/trainerService.js';
+import { updateMyTrainerProfile } from '../../src/services/trainer-service.js';
 
-describe('src/services/trainerService.js', () => {
+describe('src/services/trainer-service.js', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

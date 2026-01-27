@@ -2,7 +2,7 @@ import { prisma } from '../db.js';
 import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
 import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
-import { issueAccessToken, issueRefreshToken } from './tokenService.js';
+import { issueAccessToken, issueRefreshToken } from './token-service.js';
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({

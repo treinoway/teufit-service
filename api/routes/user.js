@@ -1,5 +1,5 @@
 import { authenticate } from '../middleware/auth.js';
-import { getUserProfileById } from '../../src/services/userService.js';
+import { getUserProfileById } from '../../src/services/user-service.js';
 
 export async function userRoutes(fastify) {
 

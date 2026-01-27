@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { Roles } from '../../src/constants/roles.js';
-import { startTrainerGoogleSignup } from '../../src/services/signupService.js';
+import { startTrainerGoogleSignup } from '../../src/services/signup-service.js';
 
 function makeSession(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -12,7 +12,7 @@ function makeSession(initial = {}) {
   };
 }
 
-describe('src/services/signupService.js', () => {
+describe('src/services/signup-service.js', () => {
   it('sets oauthRole for trainer signup and returns redirectTo', () => {
     const request = { session: makeSession() };
 

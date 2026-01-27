@@ -55,7 +55,7 @@ import {
   loginWithEmailPassword,
   requestPasswordReset,
   resetPasswordWithToken,
-} from '../../src/services/authService.js';
+} from '../../src/services/auth-service.js';
 
 import crypto from 'node:crypto';
 
@@ -68,7 +68,7 @@ function makeSession(initial = {}) {
   };
 }
 
-describe('src/services/authService.js', () => {
+describe('src/services/auth-service.js', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });

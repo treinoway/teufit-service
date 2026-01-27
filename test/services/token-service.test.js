@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
-import { issueAccessToken } from '../../src/services/tokenService.js';
+import { issueAccessToken } from '../../src/services/token-service.js';
 
-describe('src/services/tokenService.js', () => {
+describe('src/services/token-service.js', () => {
   it('issues a Bearer token with expiresIn', () => {
     const fastify = {
       jwt: {

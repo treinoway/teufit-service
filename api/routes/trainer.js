@@ -1,5 +1,5 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch } from '../../src/services/trainerService.js';
+import { patch } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 
 /**

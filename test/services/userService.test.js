@@ -11,9 +11,9 @@ vi.mock('../../src/db.js', () => {
 });
 
 import { prisma } from '../../src/db.js';
-import { getUserProfileById } from '../../src/services/userService.js';
+import { getUserProfileById } from '../../src/services/user-service.js';
 
-describe('src/services/userService.js', () => {
+describe('src/services/user-service.js', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
