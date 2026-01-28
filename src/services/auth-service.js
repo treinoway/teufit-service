@@ -4,6 +4,9 @@ import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
 import { issueAccessToken, issueRefreshToken } from './token-service.js';
 import emailHandler from '../config/email-handler.js';
+import createLogger from '../config/logger.js';
+
+const logger = createLogger('auth-service');
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({
@@ -184,7 +187,10 @@ function safeUser(user) {
 export async function signupWithEmailPassword({ email, password, roles }) {
   const normalizedEmail = normalizeEmail(email);
 
+  logger.info('Signup attempt with email/password', { email: normalizedEmail });
+
   if (!normalizedEmail) {
+    logger.warn('Signup failed: missing email', { email });
     const err = new Error('Email is required');
     err.code = 'EMAIL_REQUIRED';
     err.statusCode = 400;
@@ -211,6 +217,7 @@ export async function signupWithEmailPassword({ email, password, roles }) {
 
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing && !existing.deletedAt) {
+    logger.warn('Signup failed: email already in use', { email: normalizedEmail });
     const err = new Error('Email already in use');
     err.code = 'EMAIL_IN_USE';
     err.statusCode = 409;
@@ -232,6 +239,13 @@ export async function signupWithEmailPassword({ email, password, roles }) {
       roles: rolesArray,
       status: 'pending',
     },
+  });
+
+  logger.info('Signup successful', { 
+    userId: created.id, 
+    email: created.email,
+    roles: created.roles,
+    status: created.status
   });
 
   return safeUser(created);
@@ -448,7 +462,10 @@ export async function loginWithEmailPasswordStateless({ fastify, email, password
  * Add an email to the waitlist.
  */
 export async function addEmailToWaitlist({ email }) {
+  logger.info('Waitlist signup attempt', { email });
+
   if (!email || typeof email !== 'string') {
+    logger.warn('Waitlist signup failed: invalid email', { email });
     const error = new Error('Valid email is required');
     error.code = 'EMAIL_REQUIRED';
     throw error;
@@ -460,6 +477,7 @@ export async function addEmailToWaitlist({ email }) {
   });
 
   if (existingEntry) {
+    logger.warn('Waitlist signup failed: email already exists', { email: email.toLowerCase() });
     const error = new Error('Email already on waitlist');
     error.code = 'EMAIL_ALREADY_ON_WAITLIST';
     throw error;
@@ -473,14 +491,21 @@ export async function addEmailToWaitlist({ email }) {
     },
   });
 
+  logger.info('Waitlist signup successful', { 
+    email: waitlistEntry.email, 
+    id: waitlistEntry.id,
+    status: waitlistEntry.status 
+  });
+
   // Send confirmation email
   try {
     await emailHandler.sendWaitlistConfirmationEmail({
       to: waitlistEntry.email,
     });
+    logger.debug('Waitlist confirmation email sent', { email: waitlistEntry.email });
   } catch (emailError) {
     // Log error but don't fail the waitlist signup
-    console.error('Failed to send waitlist confirmation email:', emailError);
+    logger.error('Failed to send waitlist confirmation email', emailError);
   }
 
   return {

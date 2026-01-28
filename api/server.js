@@ -11,6 +11,14 @@ import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { userRoutes } from './routes/user-route.js';
+import createLogger from '../src/config/logger.js';
+
+// Initialize logger early
+const serverLogger = createLogger('server');
+serverLogger.info('Server initialization starting', {
+  nodeEnv: process.env.NODE_ENV,
+  port: process.env.PORT,
+});
 
 export async function buildServer(options = {}) {
   const fastify = Fastify({
@@ -129,6 +137,15 @@ export async function buildServer(options = {}) {
   fastify.get('/', async () => {
     return { message: "i'm alive" };
   });
+
+  // Add onClose hook to flush logs before shutdown
+  fastify.addHook('onClose', async () => {
+    serverLogger.info('Server shutting down, flushing logs...');
+    const { forceFlush } = await import('../src/config/logger.js');
+    await forceFlush();
+  });
+
+  serverLogger.info('Server configured successfully');
 
   return fastify;
 }
