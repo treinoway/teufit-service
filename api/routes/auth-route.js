@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { Roles } from '../../src/constants/roles.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import {
+  addEmailToWaitlist,
   ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
@@ -27,6 +28,7 @@ import {
   googleMobileSchema,
   refreshSchema,
   logoutSchema,
+  waitlistSchema,
 } from '../schemas/auth-route.schema.js';
 
 export async function authRoutes(fastify) {
@@ -85,6 +87,40 @@ export async function authRoutes(fastify) {
 
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Signup failed' });
+      }
+    },
+  );
+
+  // Join waitlist
+  fastify.post(
+    '/auth/signup/waitlist',
+    {
+      config: {
+        rateLimit: {
+          max: 3,
+          timeWindow: '1 hour',
+        },
+      },
+      schema: waitlistSchema,
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const email = body.email;
+
+        const result = await addEmailToWaitlist({ email });
+
+        return reply.status(201).send(result);
+      } catch (error) {
+        if (error?.code === 'EMAIL_REQUIRED') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'EMAIL_ALREADY_ON_WAITLIST') {
+          return reply.status(409).send({ error: error.code, message: error.message });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to join waitlist' });
       }
     },
   );

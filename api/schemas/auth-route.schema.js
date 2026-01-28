@@ -290,3 +290,48 @@ export const logoutSchema = {
     200: { type: 'object', properties: { message: { type: 'string' } } },
   },
 };
+
+export const waitlistSchema = {
+  tags: authTags,
+  summary: 'Join the waitlist with an email',
+  body: {
+    type: 'object',
+    required: ['email'],
+    additionalProperties: false,
+    properties: {
+      email: { type: 'string', format: 'email' },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string' },
+        status: { type: 'string' },
+        createdAt: { type: 'string' },
+      },
+    },
+    400: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    409: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    500: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+      },
+    },
+  },
+};
+

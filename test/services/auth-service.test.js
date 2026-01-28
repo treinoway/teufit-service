@@ -22,6 +22,10 @@ vi.mock('../../src/db.js', () => {
         findUnique: vi.fn(),
         update: vi.fn(),
       },
+      userWaitlist: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
       $transaction: vi.fn(async (ops) => {
         // Simple mock: if ops is an array of promises, resolve them.
         if (Array.isArray(ops)) {
@@ -55,6 +59,7 @@ import {
   loginWithEmailPassword,
   requestPasswordReset,
   resetPasswordWithToken,
+  addEmailToWaitlist,
 } from '../../src/services/auth-service.js';
 
 import crypto from 'node:crypto';
@@ -387,5 +392,115 @@ describe('src/services/auth-service.js', () => {
     statusCode: 400,
     });
   });
+  });
+
+  describe('addEmailToWaitlist', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('successfully adds a new email to the waitlist', async () => {
+      const email = 'user@example.com';
+      const mockWaitlistEntry = {
+        id: 'w1',
+        email: email.toLowerCase(),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+
+      prisma.userWaitlist.findUnique.mockResolvedValue(null);
+      prisma.userWaitlist.create.mockResolvedValue(mockWaitlistEntry);
+
+      const result = await addEmailToWaitlist({ email });
+
+      expect(prisma.userWaitlist.findUnique).toHaveBeenCalledWith({
+        where: { email: email.toLowerCase() },
+      });
+      expect(prisma.userWaitlist.create).toHaveBeenCalledWith({
+        data: {
+          email: email.toLowerCase(),
+          status: 'pending',
+        },
+      });
+      expect(result).toEqual({
+        id: mockWaitlistEntry.id,
+        email: mockWaitlistEntry.email,
+        status: mockWaitlistEntry.status,
+        createdAt: mockWaitlistEntry.createdAt,
+      });
+    });
+
+    it('converts email to lowercase before storing', async () => {
+      const email = 'USER@EXAMPLE.COM';
+      const mockWaitlistEntry = {
+        id: 'w2',
+        email: 'user@example.com',
+        status: 'pending',
+        createdAt: new Date(),
+      };
+
+      prisma.userWaitlist.findUnique.mockResolvedValue(null);
+      prisma.userWaitlist.create.mockResolvedValue(mockWaitlistEntry);
+
+      await addEmailToWaitlist({ email });
+
+      expect(prisma.userWaitlist.findUnique).toHaveBeenCalledWith({
+        where: { email: 'user@example.com' },
+      });
+      expect(prisma.userWaitlist.create).toHaveBeenCalledWith({
+        data: {
+          email: 'user@example.com',
+          status: 'pending',
+        },
+      });
+    });
+
+    it('throws EMAIL_REQUIRED when email is missing', async () => {
+      await expect(addEmailToWaitlist({ email: '' })).rejects.toMatchObject({
+        code: 'EMAIL_REQUIRED',
+        message: 'Valid email is required',
+      });
+
+      await expect(addEmailToWaitlist({ email: null })).rejects.toMatchObject({
+        code: 'EMAIL_REQUIRED',
+      });
+
+      await expect(addEmailToWaitlist({})).rejects.toMatchObject({
+        code: 'EMAIL_REQUIRED',
+      });
+    });
+
+    it('throws EMAIL_REQUIRED when email is not a string', async () => {
+      await expect(addEmailToWaitlist({ email: 123 })).rejects.toMatchObject({
+        code: 'EMAIL_REQUIRED',
+        message: 'Valid email is required',
+      });
+
+      await expect(addEmailToWaitlist({ email: {} })).rejects.toMatchObject({
+        code: 'EMAIL_REQUIRED',
+      });
+    });
+
+    it('throws EMAIL_ALREADY_ON_WAITLIST when email already exists', async () => {
+      const email = 'existing@example.com';
+      const existingEntry = {
+        id: 'w3',
+        email: email.toLowerCase(),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+
+      prisma.userWaitlist.findUnique.mockResolvedValue(existingEntry);
+
+      await expect(addEmailToWaitlist({ email })).rejects.toMatchObject({
+        code: 'EMAIL_ALREADY_ON_WAITLIST',
+        message: 'Email already on waitlist',
+      });
+
+      expect(prisma.userWaitlist.findUnique).toHaveBeenCalledWith({
+        where: { email: email.toLowerCase() },
+      });
+      expect(prisma.userWaitlist.create).not.toHaveBeenCalled();
+    });
   });
 });
