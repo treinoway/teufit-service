@@ -73,7 +73,7 @@ function makeSession(initial = {}) {
   };
 }
 
-describe('src/services/auth-service.js', () => {
+describe('authService', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });

@@ -132,6 +132,73 @@
           "description": "Requires auth via session cookie (created by POST /auth/signup, POST /auth/login, or Google OAuth). Returns a flattened trainer payload."
         },
         {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": \"male\",\n  \"birthDate\": \"1990-05-15\",\n  \"avatarUrl\": \"https://example.com/avatar.jpg\",\n  \"address\": {\n    \"line1\": \"Avenida Paulista, 1000\",\n    \"line2\": \"Apt 101\",\n    \"neighborhood\": \"Bela Vista\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brasil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"instagram\": \"@joaosilva\",\n    \"whatsapp\": \"+5511999999999\",\n    \"x\": \"@joaosilva\",\n    \"threads\": \"@joaosilva\",\n    \"youtube\": \"https://youtube.com/@joaosilva\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/me/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "profile"]
+            }
+          },
+          "response": [
+            {
+              "name": "Success - 200",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"user-id\",\n  \"email\": \"user@example.com\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": \"male\",\n  \"birthDate\": \"1990-05-15T00:00:00.000Z\",\n  \"avatarUrl\": \"https://example.com/avatar.jpg\",\n  \"roles\": [\"student\"],\n  \"status\": \"active\",\n  \"address\": {\n    \"id\": \"address-id\",\n    \"line1\": \"Avenida Paulista, 1000\",\n    \"line2\": \"Apt 101\",\n    \"neighborhood\": \"Bela Vista\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brasil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"id\": \"socials-id\",\n    \"instagram\": \"@joaosilva\",\n    \"whatsapp\": \"+5511999999999\",\n    \"x\": \"@joaosilva\",\n    \"threads\": \"@joaosilva\",\n    \"youtube\": \"https://youtube.com/@joaosilva\"\n  }\n}"
+            },
+            {
+              "name": "Bad Request - 400",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"At least one field must be provided\"\n}"
+            },
+            {
+              "name": "Not Found - 404",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"code\": \"USER_NOT_FOUND\",\n  \"message\": \"User not found\",\n  \"statusCode\": 404\n}"
+            }
+          ],
+          "description": "Updates the current user's profile. Requires authentication via JWT Bearer token. All fields are optional - only include the fields you want to update. Address and socials support nested upsert (create if not exists, update if exists)."
+        },
+        {
           "name": "Update My Trainer Profile (Onboarding PATCH)",
           "request": {
             "method": "PATCH",
@@ -139,6 +206,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
               }
             ],
             "body": {
@@ -151,7 +222,7 @@
               "path": ["trainer"]
             }
           },
-          "description": "Requires auth via session cookie. Updates trainer + one address (upsert) + socials (upsert) and sets user.status=active."
+          "description": "Requires auth via Bearer token (automatically added after login/signup). Updates trainer + one address (upsert) + socials (upsert) and sets user.status=active."
         }
       ]
     },
