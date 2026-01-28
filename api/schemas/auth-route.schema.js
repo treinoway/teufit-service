@@ -309,7 +309,6 @@ export const waitlistSchema = {
         id: { type: 'string' },
         email: { type: 'string' },
         status: { type: 'string' },
-        createdAt: { type: 'string' },
       },
     },
     400: {

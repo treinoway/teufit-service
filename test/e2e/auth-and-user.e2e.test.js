@@ -169,7 +169,6 @@ e2eDescribe('e2e: auth and user flows', () => {
       expect(body).toHaveProperty('id');
       expect(body.email).toBe(email.toLowerCase());
       expect(body.status).toBe('pending');
-      expect(body).toHaveProperty('createdAt');
 
       // Verify it was stored in the database
       const waitlistEntry = await prisma.userWaitlist.findUnique({
@@ -284,4 +283,242 @@ e2eDescribe('e2e: auth and user flows', () => {
       }
     });
   });
-});
+
+  describe('user profile update', () => {
+    it('successfully updates basic user fields', async () => {
+      const email = `profile-update-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          firstName: 'John',
+          lastName: 'Doe',
+          gender: 'male',
+          birthDate: '1990-05-15',
+          address: {
+            line1: 'Avenida Paulista, 1000',
+            line2: 'Apt 101',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'São Paulo',
+            stateCode: 'SP',
+            country: 'Brasil',
+            countryCode: 'BR',
+            postalCode: '01310-100',
+          },
+          socials: {
+            instagram: '@johndoe',
+            whatsapp: '+5511999999999',
+          },
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      const body = updateResponse.json();
+
+      expect(body).toMatchObject({
+        firstName: 'John',
+        lastName: 'Doe',
+      });
+      expect(body.gender).toBe('male');
+      expect(body).toHaveProperty('birthDate');
+    });
+
+    it('successfully updates address', async () => {
+      const email = `profile-address-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          address: {
+            line1: 'Avenida Paulista, 1000',
+            line2: 'Apt 101',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'São Paulo',
+            stateCode: 'SP',
+            country: 'Brasil',
+            countryCode: 'BR',
+            postalCode: '01310-100',
+          },
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      const body = updateResponse.json();
+
+      expect(body).toHaveProperty('address');
+      expect(body.address).toMatchObject({
+        line1: 'Avenida Paulista, 1000',
+        line2: 'Apt 101',
+        neighborhood: 'Bela Vista',
+        city: 'São Paulo',
+        state: 'São Paulo',
+        stateCode: 'SP',
+        country: 'Brasil',
+        countryCode: 'BR',
+        postalCode: '01310-100',
+      });
+    });
+
+    it('successfully updates socials', async () => {
+      const email = `profile-socials-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          socials: {
+            instagram: '@johndoe',
+            whatsapp: '+5511999999999',
+          },
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      const body = updateResponse.json();
+
+      expect(body).toHaveProperty('socials');
+      expect(body.socials).toMatchObject({
+        instagram: '@johndoe',
+        whatsapp: '+5511999999999',
+      });
+    });
+
+    it('rejects update without authentication', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        payload: {
+          firstName: 'John',
+        },
+      });
+
+      // When no Authorization header is present, Fastify's schema validation
+      // for the required header runs before the authenticate middleware
+      // and returns a 400 Bad Request.
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'Bad Request',
+      });
+    });
+
+    it('rejects empty update payload', async () => {
+      const email = `profile-empty-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {},
+      });
+
+      expect(updateResponse.statusCode).toBe(400);
+      expect(updateResponse.json()).toMatchObject({
+        error: 'At least one field must be provided',
+      });
+    });
+
+    it('rejects invalid gender value', async () => {
+      const email = `profile-invalid-gender-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          gender: 'invalid_gender',
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(400);
+    });
+
+    it('rejects invalid birthDate format', async () => {
+      const email = `profile-invalid-date-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { token: { accessToken } } = signupResponse.json();
+
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          birthDate: '15-05-1990', // Wrong format
+        },
+      });
+
+      expect(updateResponse.statusCode).toBe(400);
+    });
+  })
+  });

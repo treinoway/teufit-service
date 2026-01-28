@@ -12,7 +12,7 @@ vi.mock('../../src/db.js', () => {
 import { prisma } from '../../src/db.js';
 import { updateMyTrainerProfile } from '../../src/services/trainer-service.js';
 
-describe('src/services/trainer-service.js', () => {
+describe('trainerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

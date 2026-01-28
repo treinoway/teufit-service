@@ -12,7 +12,7 @@ function makeSession(initial = {}) {
   };
 }
 
-describe('src/services/signup-service.js', () => {
+describe('signupService', () => {
   it('sets oauthRole for trainer signup and returns redirectTo', () => {
     const request = { session: makeSession() };
 

@@ -1,6 +1,6 @@
 import { authenticate } from '../middleware/auth.js';
-import { getUserProfileById, setActiveProfileToTrainer } from '../../src/services/user-service.js';
-import { getMeSchema, becomeTrainerSchema } from '../schemas/user-route.schema.js';
+import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
+import { getMeSchema, becomeTrainerSchema, updateProfileSchema } from '../schemas/user-route.schema.js';
 
 export async function userRoutes(fastify) {
 
@@ -52,5 +52,37 @@ export async function userRoutes(fastify) {
         return reply.status(500).send({ error: 'Internal server error' });
       }
     },
+  );
+
+  fastify.patch('/me/profile', 
+    {
+      preHandler: [authenticate],
+      schema: updateProfileSchema
+    }, 
+    async (request, reply) => {
+      try {
+        const userId = request.user.id;
+        const updateData = request.body;
+
+        // Validate at least one field is provided
+        if (Object.keys(updateData).length === 0) {
+          return reply.status(400).send({ error: 'At least one field must be provided' });
+        }
+
+        const updatedProfile = await updateUserProfile(userId, updateData);
+        return reply.send(updatedProfile);
+      } catch (error) {
+        request.log.error({ error }, 'Error updating user profile in PATCH /me/profile');
+
+        if (error?.code === 'USER_ID_REQUIRED') {
+          return reply.status(400).send({ error: 'USER_ID_REQUIRED' });
+        }
+        if (error?.code === 'USER_NOT_FOUND') {
+          return reply.status(404).send({ error: 'User not found' });
+        }
+
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
   );
 }
