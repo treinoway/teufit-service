@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyCors from '@fastify/cors';
 import fastifySession from '@fastify/session';
 import fastifyJwt from '@fastify/jwt';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -21,6 +22,47 @@ export async function buildServer(options = {}) {
 
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
+
+  // Register CORS support
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  // Define allowed origins - normalize URLs by removing trailing slashes
+  const normalizeUrl = (url) => url?.replace(/\/$/, '') || '';
+  const allowedOrigins = isDevelopment 
+    ? true // Allow all in development
+    : [
+        normalizeUrl(process.env.FRONTEND_URL),
+        normalizeUrl(process.env.FRONTEND_REDIRECT_URL),
+        'https://www.treinoway.com.br', // Fallback hardcoded for staging
+      ].filter(Boolean); // Remove undefined/null values
+
+  await fastify.register(fastifyCors, {
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (isDevelopment) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = normalizeUrl(origin);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(normalizedOrigin) || 
+          allowedOrigins.some(allowed => normalizedOrigin === allowed || normalizedOrigin.startsWith(allowed))) {
+        callback(null, true);
+      } else {
+        fastify.log.warn(`CORS blocked origin: ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true, // Allow cookies
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  });
 
   // Register cookie support
   await fastify.register(fastifyCookie);
@@ -50,12 +92,13 @@ export async function buildServer(options = {}) {
   });
 
   // Register session support
+  const isDev = process.env.NODE_ENV === 'development';
   await fastify.register(fastifySession, {
     secret: process.env.SESSION_SECRET,
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // use secure cookies in production
+      secure: !isDev, // use secure cookies in staging/production (HTTPS required)
       httpOnly: true,
-      sameSite: 'none',
+      sameSite: isDev ? 'lax' : 'none', // 'lax' for local HTTP, 'none' for staging/production HTTPS
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
   });

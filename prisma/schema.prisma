@@ -204,3 +204,13 @@ model Nutritionist {
   @@unique([userId])
   @@map("nutritionists")
 }
+
+model UserWaitlist {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.Text
+  status    String   @default("pending") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("user_waitlist")
+}

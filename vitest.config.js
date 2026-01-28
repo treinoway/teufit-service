@@ -7,5 +7,9 @@ export default defineConfig({
     restoreMocks: true,
     clearMocks: true,
     mockReset: true,
+    env: {
+      DISABLE_EMAIL: 'true',
+      NODE_ENV: 'test',
+    },
   },
 });

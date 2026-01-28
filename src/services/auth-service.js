@@ -3,6 +3,7 @@ import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
 import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
 import { issueAccessToken, issueRefreshToken } from './token-service.js';
+import emailHandler from '../config/email-handler.js';
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({
@@ -442,3 +443,51 @@ export async function loginWithEmailPasswordStateless({ fastify, email, password
     refreshToken: refresh.refreshToken,
   };
 }
+
+/**
+ * Add an email to the waitlist.
+ */
+export async function addEmailToWaitlist({ email }) {
+  if (!email || typeof email !== 'string') {
+    const error = new Error('Valid email is required');
+    error.code = 'EMAIL_REQUIRED';
+    throw error;
+  }
+
+  // Check if email already exists in waitlist
+  const existingEntry = await prisma.userWaitlist.findUnique({
+    where: { email: email.toLowerCase() },
+  });
+
+  if (existingEntry) {
+    const error = new Error('Email already on waitlist');
+    error.code = 'EMAIL_ALREADY_ON_WAITLIST';
+    throw error;
+  }
+
+  // Create waitlist entry
+  const waitlistEntry = await prisma.userWaitlist.create({
+    data: {
+      email: email.toLowerCase(),
+      status: 'pending',
+    },
+  });
+
+  // Send confirmation email
+  try {
+    await emailHandler.sendWaitlistConfirmationEmail({
+      to: waitlistEntry.email,
+    });
+  } catch (emailError) {
+    // Log error but don't fail the waitlist signup
+    console.error('Failed to send waitlist confirmation email:', emailError);
+  }
+
+  return {
+    id: waitlistEntry.id,
+    email: waitlistEntry.email,
+    status: waitlistEntry.status,
+    createdAt: waitlistEntry.createdAt,
+  };
+}
+
