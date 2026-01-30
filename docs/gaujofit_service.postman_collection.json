@@ -143,7 +143,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"birthDate\": \"1995-08-15\",\n    \"gymName\": \"Gaujofit Gym\",\n    \"professionalDocument\": \"CREF-12345\"\n  },\n  \"address\": {\n    \"street\": \"Av. Paulista\",\n    \"streetLine2\": \"Apt 101\",\n    \"houseNumber\": \"1000\",\n    \"neighoborhood\": \"Bela Vista\",\n    \"city\": \"Sao Paulo\",\n    \"state\": \"SP\",\n    \"country\": \"BR\"\n  },\n  \"socials\": {\n    \"instagram\": \"@gaujofit\",\n    \"whatsapp\": \"+5511999999999\",\n    \"youtube\": \"https://youtube.com/@gaujofit\"\n  }\n}" 
+              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"birthDate\": \"1995-08-15\",\n    \"gymName\": \"Gaujofit Gym\",\n    \"professionalDocument\": \"CREF-12345\"\n  },\n  \"address\": {\n    \"line1\": \"Av. Paulista, 1000\",\n    \"line2\": \"Apt 101\",\n    \"neighborhood\": \"Bela Vista\",\n    \"city\": \"Sao Paulo\",\n    \"state\": \"SP\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brasil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"instagram\": \"@gaujofit\",\n    \"whatsapp\": \"+5511999999999\",\n    \"youtube\": \"https://youtube.com/@gaujofit\"\n  }\n}" 
             },
             "url": {
               "raw": "{{baseUrl}}/trainer",

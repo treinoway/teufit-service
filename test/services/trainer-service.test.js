@@ -99,8 +99,7 @@ describe('src/services/trainer-service.js', () => {
       userId: 'u1',
       trainer: { firstName: 'Ana', professionalDocument: 'ABC' },
       address: {
-        street: 'Main',
-        houseNumber: '1',
+        line1: 'Main St',
         city: 'NY',
         country: 'US',
       },
