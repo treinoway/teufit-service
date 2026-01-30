@@ -30,13 +30,15 @@ function buildTrainerUpdateData(trainer) {
 
 function buildAddressUpsertData(address) {
   return {
-    street: address.street,
-    streetLine2: address.streetLine2 ?? null,
-    houseNumber: address.houseNumber,
-    neighoborhood: address.neighoborhood ?? null,
-    city: address.city,
+    line1: address.line1 ?? null,
+    line2: address.line2 ?? null,
+    neighborhood: address.neighborhood ?? null,
+    city: address.city ?? null,
     state: address.state ?? null,
-    country: address.country,
+    stateCode: address.stateCode ?? null,
+    country: address.country ?? null,
+    countryCode: address.countryCode ?? null,
+    postalCode: address.postalCode ?? null,
   };
 }
 

@@ -47,6 +47,7 @@ describe('src/services/user-service.js', () => {
     roles: true,
     status: true,
     firstName: true,
+    gender: true,
     lastName: true,
     birthDate: true,
     avatarUrl: true,

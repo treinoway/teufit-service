@@ -113,15 +113,21 @@ model Trainer {
 }
 
 model Address {
-  id            String  @id @default(uuid()) @db.Uuid
-  userId        String  @unique @map("user_id") @db.Uuid
-  street        String  @db.Text
-  streetLine2   String? @map("street_line_2") @db.Text
-  houseNumber   String  @map("house_number") @db.Text
-  neighoborhood String? @db.Text
-  city          String  @db.Text
-  state         String? @db.Text
-  country       String  @db.Text
+  id           String  @id @default(uuid()) @db.Uuid
+  userId       String  @unique @map("user_id") @db.Uuid
+  line1        String? @db.Text
+  line2        String? @db.Text
+  neighborhood String? @db.Text
+  city         String? @db.Text
+  state        String? @db.Text
+  stateCode    String? @map("state_code") @db.Text
+  country      String? @db.Text
+  countryCode  String? @map("country_code") @db.Text
+  postalCode   String? @map("postal_code") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
