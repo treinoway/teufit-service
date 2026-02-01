@@ -33,7 +33,7 @@ export async function buildServer(options = {}) {
     : [
         normalizeUrl(process.env.FRONTEND_URL),
         normalizeUrl(process.env.FRONTEND_REDIRECT_URL),
-        'https://www.treinoway.com.br', // Fallback hardcoded for staging
+        normalizeUrl(process.env.BACKEND_URL), // Backend URL (e.g., for Swagger UI)
       ].filter(Boolean); // Remove undefined/null values
 
   await fastify.register(fastifyCors, {
