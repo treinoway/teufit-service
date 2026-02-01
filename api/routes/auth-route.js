@@ -1,9 +1,11 @@
 import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
+import { authenticate } from '../middleware/auth.js';
 import { Roles } from '../../src/constants/roles.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import {
   addEmailToWaitlist,
+  changePassword,
   ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
@@ -29,6 +31,7 @@ import {
   refreshSchema,
   logoutSchema,
   waitlistSchema,
+  changePasswordSchema,
 } from '../schemas/auth-route.schema.js';
 
 export async function authRoutes(fastify) {
@@ -405,6 +408,60 @@ export async function authRoutes(fastify) {
       } catch (error) {
         request.log.warn({ error }, 'Refresh token verification failed');
         return reply.status(401).send({ error: 'Invalid or expired refresh token' });
+      }
+    },
+  );
+
+  fastify.post(
+    '/auth/change-password',
+    {
+      preHandler: [authenticate],
+      schema: changePasswordSchema,
+      config: {
+        rateLimit: {
+          max: 3, // Only 3 attempts
+          timeWindow: '1 hour', // Per hour
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const userId = request.user.id;
+        const { currentPassword, newPassword, confirmPassword } = request.body;
+
+        const result = await changePassword(userId, {
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        request.log.error({ error }, 'Error changing password in POST /auth/change-password');
+
+        if (error?.code === 'USER_ID_REQUIRED') {
+          return reply.status(400).send({ error: 'USER_ID_REQUIRED' });
+        }
+        if (error?.code === 'PASSWORD_MISMATCH') {
+          return reply.status(400).send({ error: 'New password and confirmation do not match' });
+        }
+        if (error?.code === 'WEAK_PASSWORD') {
+          return reply.status(400).send({ error: 'New password must be at least 8 characters' });
+        }
+        if (error?.code === 'USER_NOT_FOUND') {
+          return reply.status(404).send({ error: 'User not found' });
+        }
+        if (error?.code === 'NO_PASSWORD_SET') {
+          return reply.status(400).send({ error: 'Cannot change password for OAuth-only accounts' });
+        }
+        if (error?.code === 'INVALID_CURRENT_PASSWORD') {
+          return reply.status(403).send({ error: 'Current password is incorrect' });
+        }
+        if (error?.code === 'SAME_PASSWORD') {
+          return reply.status(400).send({ error: 'New password must be different from current password' });
+        }
+
+        return reply.status(500).send({ error: 'Internal server error' });
       }
     },
   );

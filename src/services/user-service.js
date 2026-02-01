@@ -118,4 +118,3 @@ export async function setActiveProfileToTrainer(userId) {
 
 	return preferences;
 }
-

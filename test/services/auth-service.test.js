@@ -22,6 +22,10 @@ vi.mock('../../src/db.js', () => {
         findUnique: vi.fn(),
         update: vi.fn(),
       },
+      refreshToken: {
+        deleteMany: vi.fn(),
+        updateMany: vi.fn(),
+      },
       userWaitlist: {
         findUnique: vi.fn(),
         create: vi.fn(),
@@ -60,6 +64,7 @@ import {
   requestPasswordReset,
   resetPasswordWithToken,
   addEmailToWaitlist,
+  changePassword,
 } from '../../src/services/auth-service.js';
 
 import crypto from 'node:crypto';
@@ -392,6 +397,149 @@ describe('src/services/auth-service.js', () => {
     statusCode: 400,
     });
   });
+  });
+
+  describe('changePassword', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('throws USER_ID_REQUIRED when userId is missing', async () => {
+      await expect(
+        changePassword(null, {
+          currentPassword: 'current123',
+          newPassword: 'newpass123',
+          confirmPassword: 'newpass123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'USER_ID_REQUIRED',
+        statusCode: 400,
+      });
+    });
+
+    it('throws PASSWORD_MISMATCH when passwords do not match', async () => {
+      await expect(
+        changePassword('u1', {
+          currentPassword: 'current123',
+          newPassword: 'newpass123',
+          confirmPassword: 'different123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'PASSWORD_MISMATCH',
+        statusCode: 400,
+      });
+    });
+
+    it('throws WEAK_PASSWORD when password is too short', async () => {
+      await expect(
+        changePassword('u1', {
+          currentPassword: 'current123',
+          newPassword: 'short',
+          confirmPassword: 'short',
+        }),
+      ).rejects.toMatchObject({
+        code: 'WEAK_PASSWORD',
+        statusCode: 400,
+      });
+    });
+
+    it('throws USER_NOT_FOUND when user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        changePassword('u1', {
+          currentPassword: 'current123',
+          newPassword: 'newpass123',
+          confirmPassword: 'newpass123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'USER_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws NO_PASSWORD_SET when user has no password (OAuth only)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        passwordHash: null,
+        deletedAt: null,
+      });
+
+      await expect(
+        changePassword('u1', {
+          currentPassword: 'current123',
+          newPassword: 'newpass123',
+          confirmPassword: 'newpass123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'NO_PASSWORD_SET',
+        statusCode: 400,
+      });
+    });
+
+    it('throws INVALID_CURRENT_PASSWORD when current password is wrong', async () => {
+      // Create a real password hash for 'current123'
+      const salt = crypto.randomBytes(16);
+      const hash = crypto.scryptSync('current123', salt, 64, { N: 16384, r: 8, p: 1 });
+      const passwordHash = `scrypt$N=16384,r=8,p=1$${salt.toString('base64')}$${hash.toString('base64')}`;
+
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        passwordHash,
+        deletedAt: null,
+      });
+
+      await expect(
+        changePassword('u1', {
+          currentPassword: 'wrongpassword',
+          newPassword: 'newpass123',
+          confirmPassword: 'newpass123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_CURRENT_PASSWORD',
+        statusCode: 403,
+      });
+    });
+
+    it('successfully changes password and revokes all refresh tokens', async () => {
+      // Create a real password hash for 'current123'
+      const salt = crypto.randomBytes(16);
+      const hash = crypto.scryptSync('current123', salt, 64, { N: 16384, r: 8, p: 1 });
+      const passwordHash = `scrypt$N=16384,r=8,p=1$${salt.toString('base64')}$${hash.toString('base64')}`;
+
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        passwordHash,
+        deletedAt: null,
+      });
+
+      prisma.user.update.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        passwordHash: 'new-hash',
+        deletedAt: null,
+      });
+
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+
+      const result = await changePassword('u1', {
+        currentPassword: 'current123',
+        newPassword: 'newpass123',
+        confirmPassword: 'newpass123',
+      });
+
+      expect(prisma.user.update).toHaveBeenCalled();
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', revoked: false },
+        data: { revoked: true, revokedAt: expect.any(Date) },
+      });
+      expect(result).toEqual({
+        message: 'Password changed successfully',
+      });
+    });
   });
 
   describe('addEmailToWaitlist', () => {

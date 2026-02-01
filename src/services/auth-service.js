@@ -174,6 +174,91 @@ function safeUser(user) {
 }
 
 /**
+ * Change user password.
+ * Verifies current password and updates to new password.
+ */
+export async function changePassword(userId, { currentPassword, newPassword, confirmPassword }) {
+	if (!userId) {
+		const err = new Error('userId is required');
+		err.code = 'USER_ID_REQUIRED';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	// Validate new password and confirmation match
+	if (newPassword !== confirmPassword) {
+		const err = new Error('New password and confirmation do not match');
+		err.code = 'PASSWORD_MISMATCH';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	// Validate new password strength
+	if (typeof newPassword !== 'string' || newPassword.length < 8) {
+		const err = new Error('New password must be at least 8 characters');
+		err.code = 'WEAK_PASSWORD';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	// Fetch user with password hash
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		select: { id: true, email: true, passwordHash: true },
+	});
+
+	if (!user) {
+		const err = new Error('User not found');
+		err.code = 'USER_NOT_FOUND';
+		err.statusCode = 404;
+		throw err;
+	}
+
+	// Check if user has a password (OAuth users might not)
+	if (!user.passwordHash) {
+		const err = new Error('Cannot change password for OAuth-only accounts');
+		err.code = 'NO_PASSWORD_SET';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	// Verify current password
+	const isCurrentPasswordValid = verifyPassword(currentPassword, user.passwordHash);
+	if (!isCurrentPasswordValid) {
+		const err = new Error('Current password is incorrect');
+		err.code = 'INVALID_CURRENT_PASSWORD';
+		err.statusCode = 403;
+		throw err;
+	}
+
+	// Check that new password is different from current
+	const isSamePassword = verifyPassword(newPassword, user.passwordHash);
+	if (isSamePassword) {
+		const err = new Error('New password must be different from current password');
+		err.code = 'SAME_PASSWORD';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	// Hash new password
+	const newPasswordHash = hashPassword(newPassword);
+
+	// Update password
+	await prisma.user.update({
+		where: { id: userId },
+		data: { passwordHash: newPasswordHash },
+	});
+
+	// Revoke all refresh tokens to force re-login on all devices
+	await prisma.refreshToken.updateMany({
+		where: { userId, revoked: false },
+		data: { revoked: true, revokedAt: new Date() },
+	});
+
+	return { message: 'Password changed successfully' };
+}
+
+/**
  * Email/password signup.
  * Contract:
  * - Creates a new user with passwordHash

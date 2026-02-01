@@ -284,4 +284,240 @@ e2eDescribe('e2e: auth and user flows', () => {
       }
     });
   });
+
+  describe('change password', () => {
+    it('successfully changes password with valid credentials', async () => {
+      const email = `change-pass-${Date.now()}@example.com`;
+      const oldPassword = 'OldPassword123!';
+      const newPassword = 'NewPassword456!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: oldPassword },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      // Change password
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: oldPassword,
+          newPassword: newPassword,
+          confirmPassword: newPassword,
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(200);
+      expect(changeResponse.json()).toEqual({
+        message: 'Password changed successfully',
+      });
+
+      // Try to login with old password (should fail)
+      const oldLoginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: oldPassword },
+      });
+
+      expect(oldLoginResponse.statusCode).toBe(401);
+
+      // Login with new password (should succeed)
+      const newLoginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: newPassword },
+      });
+
+      expect(newLoginResponse.statusCode).toBe(200);
+      expect(newLoginResponse.json()).toHaveProperty('token.accessToken');
+    });
+
+    it('rejects change password with wrong current password', async () => {
+      const email = `change-pass-wrong-${Date.now()}@example.com`;
+      const password = 'CorrectPassword123!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: 'WrongPassword123!',
+          newPassword: 'NewPassword456!',
+          confirmPassword: 'NewPassword456!',
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(403);
+      expect(changeResponse.json()).toMatchObject({
+        error: 'Current password is incorrect',
+      });
+    });
+
+    it('rejects change password when new passwords do not match', async () => {
+      const email = `change-pass-mismatch-${Date.now()}@example.com`;
+      const password = 'CorrectPassword123!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: password,
+          newPassword: 'NewPassword456!',
+          confirmPassword: 'DifferentPassword789!',
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(400);
+      expect(changeResponse.json()).toMatchObject({
+        error: 'New password and confirmation do not match',
+      });
+    });
+
+    it('rejects weak password (less than 8 characters)', async () => {
+      // Use fresh app to avoid rate limiting from other tests
+      const freshApp = await buildServer({ logger: false });
+
+      try {
+        const email = `change-pass-weak-${Date.now()}@example.com`;
+        const password = 'StrongPassword123!';
+
+        const signupResponse = await freshApp.inject({
+          method: 'POST',
+          url: '/auth/signup',
+          payload: { email, password },
+        });
+
+        expect(signupResponse.statusCode).toBe(201);
+        const { token: { accessToken } } = signupResponse.json();
+
+        const changeResponse = await freshApp.inject({
+          method: 'POST',
+          url: '/auth/change-password',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+          },
+          payload: {
+            currentPassword: password,
+            newPassword: 'weak',
+            confirmPassword: 'weak',
+          },
+        });
+
+        expect(changeResponse.statusCode).toBe(400);
+        // Schema validation rejects before handler, so we get "Bad Request"
+        expect(changeResponse.json()).toMatchObject({
+          error: 'Bad Request',
+        });
+      } finally {
+        await freshApp.close();
+      }
+    });
+
+    it('rejects change password without authentication', async () => {
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        payload: {
+          currentPassword: 'OldPassword123!',
+          newPassword: 'NewPassword456!',
+          confirmPassword: 'NewPassword456!',
+        },
+      });
+
+      // Could be 400 (Bad Request - no auth) or 429 (rate limited)
+      expect([400, 429]).toContain(changeResponse.statusCode);
+      
+      if (changeResponse.statusCode === 400) {
+        expect(changeResponse.json()).toMatchObject({
+          error: 'Bad Request',
+        });
+      }
+    });
+
+    it('respects rate limiting (3 requests per hour)', async () => {
+      // Create fresh app instance to reset rate limit counters
+      const freshApp = await buildServer({ logger: false });
+
+      try {
+        const email = `change-pass-rate-${Date.now()}@example.com`;
+        const password = 'Password123!';
+
+        const signupResponse = await freshApp.inject({
+          method: 'POST',
+          url: '/auth/signup',
+          payload: { email, password },
+        });
+
+        expect(signupResponse.statusCode).toBe(201);
+        const { token: { accessToken } } = signupResponse.json();
+
+        // Make 3 attempts (max allowed per hour)
+        for (let i = 0; i < 3; i++) {
+          const response = await freshApp.inject({
+            method: 'POST',
+            url: '/auth/change-password',
+            headers: {
+              authorization: `Bearer ${accessToken}`,
+            },
+            payload: {
+              currentPassword: 'WrongPassword!',
+              newPassword: `NewPassword${i}!`,
+              confirmPassword: `NewPassword${i}!`,
+            },
+          });
+          // First 3 should fail due to wrong password (not rate limited)
+          expect(response.statusCode).toBe(403);
+        }
+
+        // 4th request should be rate limited
+        const rateLimitedResponse = await freshApp.inject({
+          method: 'POST',
+          url: '/auth/change-password',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+          },
+          payload: {
+            currentPassword: password,
+            newPassword: 'ValidNewPassword!',
+            confirmPassword: 'ValidNewPassword!',
+          },
+        });
+
+        expect(rateLimitedResponse.statusCode).toBe(429);
+      } finally {
+        await freshApp.close();
+      }
+    });
+  });
 });

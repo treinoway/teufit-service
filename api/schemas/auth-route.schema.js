@@ -335,3 +335,61 @@ export const waitlistSchema = {
   },
 };
 
+export const changePasswordSchema = {
+  tags: authTags,
+  summary: 'Change user password',
+  description: 'Allows authenticated users to change their password. Requires current password verification.',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['currentPassword', 'newPassword', 'confirmPassword'],
+    properties: {
+      currentPassword: {
+        type: 'string',
+        minLength: 1,
+        description: 'Current password for verification',
+      },
+      newPassword: {
+        type: 'string',
+        minLength: 8,
+        description: 'New password (minimum 8 characters)',
+      },
+      confirmPassword: {
+        type: 'string',
+        minLength: 8,
+        description: 'New password confirmation (must match newPassword)',
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      description: 'Password changed successfully',
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'Success message',
+        },
+      },
+      required: ['message'],
+      additionalProperties: false,
+    },
+    400: { type: 'object', properties: { error: { type: 'string' } } },
+    401: { type: 'object', properties: { error: { type: 'string' } } },
+    403: { type: 'object', properties: { error: { type: 'string' } } },
+    429: { type: 'object', properties: { error: { type: 'string' } } },
+    500: { type: 'object', properties: { error: { type: 'string' } } },
+  },
+};
+
