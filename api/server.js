@@ -11,6 +11,8 @@ import { prisma } from '../src/db.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { userRoutes } from './routes/user-route.js';
+import { addressRoutes } from './routes/address-route.js';
+import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
   const fastify = Fastify({
@@ -120,14 +122,30 @@ export async function buildServer(options = {}) {
     timeWindow: '1 minute',
   });
 
-  // Register auth routes
+  // Register auth routes (public)
   await fastify.register(authRoutes);
-  await fastify.register(trainerRoutes);
-  await fastify.register(userRoutes);
 
   // Health check endpoint (public)
   fastify.get('/', async () => {
     return { message: "i'm alive" };
+  });
+
+  // Register protected routes with authentication and per-user rate limiting
+  await fastify.register(async (fastify) => {
+    // Add authentication hook to all routes in this context
+    fastify.addHook('onRequest', authenticate);
+
+    // Configure per-user rate limit for this context
+    await fastify.register(fastifyRateLimit, {
+      max: 20,
+      timeWindow: '1 minute',
+      keyGenerator: (request) => `user:${request.user.id}`,
+    });
+
+    // Register all protected routes
+    await fastify.register(trainerRoutes);
+    await fastify.register(userRoutes);
+    await fastify.register(addressRoutes);
   });
 
   return fastify;
