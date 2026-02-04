@@ -142,14 +142,9 @@ e2eDescribe('e2e: auth and user flows', () => {
       url: '/me',
     });
 
-    // When no Authorization header is present, the request fails
-    // Fastify's schema validation for the required header and
-    // returns a 400 Bad Request. This documents the current
-    // contract; if we later change /me to return 401 directly
-    // from authenticate, this test should be updated.
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({
-      error: 'Bad Request',
+      error: 'Authentication required',
     });
   });
 
@@ -433,12 +428,9 @@ e2eDescribe('e2e: auth and user flows', () => {
         },
       });
 
-      // When no Authorization header is present, Fastify's schema validation
-      // for the required header runs before the authenticate middleware
-      // and returns a 400 Bad Request.
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(401);
       expect(response.json()).toMatchObject({
-        error: 'Bad Request',
+        error: 'Authentication required',
       });
     });
 
