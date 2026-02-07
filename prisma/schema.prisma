@@ -143,6 +143,8 @@ model SocialNetwork {
   x         String? @db.Text
   threads   String? @db.Text
   youtube   String? @db.Text
+  linkedin  String? @db.Text
+  facebook  String? @db.Text
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 

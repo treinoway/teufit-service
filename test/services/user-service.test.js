@@ -73,6 +73,8 @@ describe('userService', () => {
         x: true,
         threads: true,
         youtube: true,
+        linkedin: true,
+        facebook: true,
       }
     },
     preferences: {
@@ -108,13 +110,15 @@ describe('userService', () => {
       countryCode: null,
       postalCode: null,
     },
-    socials: { 
+    socials: {
       id: 's1',
       instagram: null,
       whatsapp: null,
       x: null,
       threads: null,
       youtube: null,
+      linkedin: null,
+      facebook: null,
     },
     preferences: {
     activeProfile: 'student',
@@ -148,13 +152,15 @@ describe('userService', () => {
       countryCode: null,
       postalCode: null,
     },
-    socials: { 
+    socials: {
       id: 's1',
       instagram: null,
       whatsapp: null,
       x: null,
       threads: null,
       youtube: null,
+      linkedin: null,
+      facebook: null,
     },
     preferences: {
     activeProfile: 'student',
@@ -400,6 +406,8 @@ describe('userService', () => {
           x: null,
           threads: null,
           youtube: null,
+          linkedin: null,
+          facebook: null,
         },
         preferences: null,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -424,6 +432,8 @@ describe('userService', () => {
                 x: null,
                 threads: null,
                 youtube: null,
+                linkedin: null,
+                facebook: null,
               },
               update: {
                 instagram: '@johndoe',

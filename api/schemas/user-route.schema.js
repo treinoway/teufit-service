@@ -63,6 +63,8 @@ export const getMeSchema = {
             x: { type: 'string', nullable: true, description: 'X (Twitter) handle or URL' },
             threads: { type: 'string', nullable: true, description: 'Threads handle or URL' },
             youtube: { type: 'string', nullable: true, description: 'YouTube channel URL' },
+            linkedin: { type: 'string', nullable: true, description: 'LinkedIn profile URL' },
+            facebook: { type: 'string', nullable: true, description: 'Facebook profile URL' },
           },
         },
         preferences: {
@@ -139,6 +141,8 @@ export const updateProfileSchema = {
           x: { type: 'string', maxLength: 200 },
           threads: { type: 'string', maxLength: 200 },
           youtube: { type: 'string', maxLength: 200 },
+          linkedin: { type: 'string', maxLength: 200 },
+          facebook: { type: 'string', maxLength: 200 },
         },
         additionalProperties: false,
       },

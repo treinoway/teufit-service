@@ -26,6 +26,8 @@ function toUserProfile(user) {
 		x: user.socials.x,
 		threads: user.socials.threads,
 		youtube: user.socials.youtube,
+		linkedin: user.socials.linkedin,
+		facebook: user.socials.facebook,
 	} : null;
 
 	return {
@@ -96,6 +98,8 @@ export async function getUserProfileById(userId) {
 					x: true,
 					threads: true,
 					youtube: true,
+					linkedin: true,
+					facebook: true,
 				},
 			},
 			preferences: {
@@ -234,6 +238,8 @@ if (!userId) {
 				x: socials.x || null,
 				threads: socials.threads || null,
 				youtube: socials.youtube || null,
+				linkedin: socials.linkedin || null,
+				facebook: socials.facebook || null,
 			},
 			update: {
 				...(socials.instagram !== undefined && { instagram: socials.instagram }),
@@ -241,6 +247,8 @@ if (!userId) {
 				...(socials.x !== undefined && { x: socials.x }),
 				...(socials.threads !== undefined && { threads: socials.threads }),
 				...(socials.youtube !== undefined && { youtube: socials.youtube }),
+				...(socials.linkedin !== undefined && { linkedin: socials.linkedin }),
+				...(socials.facebook !== undefined && { facebook: socials.facebook }),
 			},
 		},
 	} : undefined;
@@ -297,6 +305,8 @@ if (!userId) {
 					x: true,
 					threads: true,
 					youtube: true,
+					linkedin: true,
+					facebook: true,
 				},
 			},
 			preferences: {
