@@ -45,6 +45,69 @@ Adotamos uma arquitetura de **4 entidades** com tabela intermediária para garan
    - Tabela intermediária que mapeia treinos para dias da semana
    - Garante a regra "1 treino por dia no plano" via constraint de banco
 
+### Campos Editáveis por Entidade
+
+#### TrainingModel (Modelo de Treino)
+
+Campos que o treinador pode preencher ao criar/editar um modelo:
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `name` | String | ✅ Sim | Nome do modelo de treino |
+| `description` | String | ⚪ Opcional | Descrição detalhada do modelo |
+| `category` | String | ⚪ Opcional | Categoria do treino (ex: "Hipertrofia", "Emagrecimento") |
+| `bodySegment` | String | ⚪ Opcional | Segmento corporal: `upper`, `lower`, `full` |
+| `tags` | String[] | ⚪ Opcional | Tags para organização (array vazio por padrão) |
+| `isPublic` | Boolean | ⚪ Opcional | Se o modelo é público (padrão: `false`) |
+
+**Campos automáticos:** `id`, `trainerId`, `createdAt`, `updatedAt`, `deletedAt`
+
+#### TrainingPlan (Plano de Treino)
+
+Campos que o treinador pode preencher ao criar/editar um plano:
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `name` | String | ✅ Sim | Nome do plano (ex: "Plano Janeiro/2026") |
+| `description` | String | ⚪ Opcional | Descrição ou objetivos do plano |
+| `status` | String | ⚪ Opcional | Status: `active`, `completed`, `archived` (padrão: `active`) |
+| `startDate` | Date | ✅ Sim | Data de início do plano |
+| `endDate` | Date | ⚪ Opcional | Data de término (pode ser indefinido) |
+| `studentId` | UUID | ✅ Sim | ID do aluno vinculado |
+
+**Campos automáticos:** `id`, `trainerId`, `createdAt`, `updatedAt`, `deletedAt`
+
+#### Training (Treino)
+
+Campos que o treinador pode preencher ao criar/editar um treino:
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `name` | String | ✅ Sim | Nome do treino (ex: "Treino Superior A") |
+| `description` | String | ⚪ Opcional | Descrição do treino |
+| `category` | String | ⚪ Opcional | Categoria (copiado do modelo se aplicável) |
+| `bodySegment` | String | ⚪ Opcional | Segmento corporal (copiado do modelo se aplicável) |
+| `order` | Int | ⚪ Opcional | Ordem de execução (padrão: `0`) |
+| `notes` | String | ⚪ Opcional | Observações específicas para o aluno |
+| `trainingModelId` | UUID | ⚪ Opcional | Referência ao modelo original (se baseado em template) |
+
+**Campos automáticos:** `id`, `trainingPlanId`, `createdAt`, `updatedAt`, `deletedAt`
+
+**Observação:** Ao importar de um modelo, os campos `category` e `bodySegment` são **copiados** do `TrainingModel`, permitindo edição independente.
+
+#### TrainingSchedule (Agenda de Treino)
+
+Campos preenchidos ao agendar um treino:
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `weekDay` | String | ✅ Sim | Dia da semana: `MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`, `FRIDAY`, `SATURDAY`, `SUNDAY` |
+| `trainingId` | UUID | ✅ Sim | ID do treino a ser agendado |
+
+**Campos automáticos:** `id`, `trainingPlanId`, `createdAt`
+
+**Constraint:** `unique(trainingPlanId, weekDay)` garante que não há dois treinos diferentes no mesmo dia.
+
 ### Diagrama de Entidade-Relacionamento
 
 ```mermaid
