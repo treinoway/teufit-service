@@ -49,6 +49,8 @@ function buildSocialsUpsertData(socials) {
     x: socials.x ?? null,
     threads: socials.threads ?? null,
     youtube: socials.youtube ?? null,
+    linkedin: socials.linkedin ?? null,
+    facebook: socials.facebook ?? null,
   };
 }
 

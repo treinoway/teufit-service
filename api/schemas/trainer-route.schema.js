@@ -52,14 +52,18 @@ export const patchTrainerSchema = {
           postalCode: { type: 'string', nullable: true, description: 'Postal or ZIP code' },
         },
       },
-      socials: { 
-        type: 'object', 
+      socials: {
+        type: 'object',
         additionalProperties: false,
         description: 'Social media profiles',
         properties: {
           instagram: { type: 'string', nullable: true, description: 'Instagram handle or URL' },
           whatsapp: { type: 'string', nullable: true, description: 'WhatsApp phone number' },
           youtube: { type: 'string', nullable: true, description: 'YouTube channel URL' },
+          x: { type: 'string', nullable: true, description: 'X (Twitter) handle or URL' },
+          threads: { type: 'string', nullable: true, description: 'Threads handle or URL' },
+          linkedin: { type: 'string', nullable: true, description: 'LinkedIn profile URL' },
+          facebook: { type: 'string', nullable: true, description: 'Facebook profile URL' },
         },
       },
     },

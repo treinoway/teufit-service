@@ -405,6 +405,8 @@ e2eDescribe('e2e: auth and user flows', () => {
           socials: {
             instagram: '@johndoe',
             whatsapp: '+5511999999999',
+            linkedin: 'https://linkedin.com/in/johndoe',
+            facebook: 'https://facebook.com/johndoe',
           },
         },
       });
@@ -416,6 +418,8 @@ e2eDescribe('e2e: auth and user flows', () => {
       expect(body.socials).toMatchObject({
         instagram: '@johndoe',
         whatsapp: '+5511999999999',
+        linkedin: 'https://linkedin.com/in/johndoe',
+        facebook: 'https://facebook.com/johndoe',
       });
     });
 
