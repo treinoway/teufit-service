@@ -47,8 +47,15 @@ vi.mock('../../src/helpers/auth.js', () => {
   };
 });
 
+vi.mock('../../src/services/token-service.js', () => {
+  return {
+    revokeAllUserRefreshTokens: vi.fn(),
+  };
+});
+
 import { prisma } from '../../src/db.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
+import { revokeAllUserRefreshTokens } from '../../src/services/token-service.js';
 import { Roles } from '../../src/constants/roles.js';
 
 import {
@@ -60,6 +67,7 @@ import {
   requestPasswordReset,
   resetPasswordWithToken,
   addEmailToWaitlist,
+  changePassword,
 } from '../../src/services/auth-service.js';
 
 import crypto from 'node:crypto';
@@ -501,6 +509,218 @@ describe('authService', () => {
         where: { email: email.toLowerCase() },
       });
       expect(prisma.userWaitlist.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    function makeHash(password) {
+      const salt = crypto.randomBytes(16);
+      const keylen = 64;
+      const N = 16384;
+      const r = 8;
+      const p = 1;
+      const derivedKey = crypto.scryptSync(password, salt, keylen, { N, r, p });
+      return `scrypt$N=${N},r=${r},p=${p}$${salt.toString('base64')}$${derivedKey.toString('base64')}`;
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('successfully changes password when all validations pass', async () => {
+      const userId = 'u1';
+      const currentPassword = 'oldPassword123';
+      const newPassword = 'newPassword456';
+      const newPasswordConfirmation = 'newPassword456';
+
+      const mockUser = {
+        id: userId,
+        email: 'user@example.com',
+        passwordHash: makeHash(currentPassword),
+        deletedAt: null,
+        roles: ['student'],
+      };
+
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      prisma.user.update.mockResolvedValue({
+        ...mockUser,
+        passwordHash: makeHash(newPassword),
+      });
+      revokeAllUserRefreshTokens.mockResolvedValue(undefined);
+
+      const result = await changePassword({
+        userId,
+        currentPassword,
+        newPassword,
+        newPasswordConfirmation,
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: userId } });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: userId },
+        data: { passwordHash: expect.stringMatching(/^scrypt\$/) },
+      });
+      expect(revokeAllUserRefreshTokens).toHaveBeenCalledWith(userId);
+      expect(result.success).toBe(true);
+      expect(result.user.passwordHash).toBeUndefined();
+    });
+
+    it('throws USER_ID_REQUIRED when userId is missing', async () => {
+      await expect(
+        changePassword({
+          userId: null,
+          currentPassword: 'current',
+          newPassword: 'newPassword123',
+          newPasswordConfirmation: 'newPassword123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'USER_ID_REQUIRED',
+        statusCode: 400,
+      });
+    });
+
+    it('throws CURRENT_PASSWORD_REQUIRED when currentPassword is missing', async () => {
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: '',
+          newPassword: 'newPassword123',
+          newPasswordConfirmation: 'newPassword123',
+        }),
+      ).rejects.toMatchObject({
+        code: 'CURRENT_PASSWORD_REQUIRED',
+        statusCode: 400,
+      });
+    });
+
+    it('throws WEAK_PASSWORD when new password is too short', async () => {
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: 'oldPassword123',
+          newPassword: 'short',
+          newPasswordConfirmation: 'short',
+        }),
+      ).rejects.toMatchObject({
+        code: 'WEAK_PASSWORD',
+        statusCode: 400,
+      });
+    });
+
+    it('throws PASSWORD_MISMATCH when new passwords do not match', async () => {
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: 'oldPassword123',
+          newPassword: 'newPassword123',
+          newPasswordConfirmation: 'differentPassword456',
+        }),
+      ).rejects.toMatchObject({
+        code: 'PASSWORD_MISMATCH',
+        statusCode: 400,
+        message: 'New passwords do not match',
+      });
+    });
+
+    it('throws USER_NOT_FOUND when user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        changePassword({
+          userId: 'nonexistent',
+          currentPassword: 'oldPassword123',
+          newPassword: 'newPassword456',
+          newPasswordConfirmation: 'newPassword456',
+        }),
+      ).rejects.toMatchObject({
+        code: 'USER_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws USER_DELETED when user account is deactivated', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'user@example.com',
+        passwordHash: makeHash('oldPassword123'),
+        deletedAt: new Date(),
+      });
+
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: 'oldPassword123',
+          newPassword: 'newPassword456',
+          newPasswordConfirmation: 'newPassword456',
+        }),
+      ).rejects.toMatchObject({
+        code: 'USER_DELETED',
+        statusCode: 403,
+      });
+    });
+
+    it('throws PASSWORD_NOT_SET when user has no passwordHash (OAuth-only)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'user@example.com',
+        passwordHash: null,
+        deletedAt: null,
+      });
+
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: 'oldPassword123',
+          newPassword: 'newPassword456',
+          newPasswordConfirmation: 'newPassword456',
+        }),
+      ).rejects.toMatchObject({
+        code: 'PASSWORD_NOT_SET',
+        statusCode: 409,
+      });
+    });
+
+    it('throws INVALID_CURRENT_PASSWORD when current password is incorrect', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'user@example.com',
+        passwordHash: makeHash('correctPassword123'),
+        deletedAt: null,
+      });
+
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: 'wrongPassword',
+          newPassword: 'newPassword456',
+          newPasswordConfirmation: 'newPassword456',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_CURRENT_PASSWORD',
+        statusCode: 401,
+      });
+    });
+
+    it('throws PASSWORD_SAME_AS_CURRENT when new password equals current password', async () => {
+      const password = 'samePassword123';
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'user@example.com',
+        passwordHash: makeHash(password),
+        deletedAt: null,
+      });
+
+      await expect(
+        changePassword({
+          userId: 'u1',
+          currentPassword: password,
+          newPassword: password,
+          newPasswordConfirmation: password,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PASSWORD_SAME_AS_CURRENT',
+        statusCode: 400,
+      });
     });
   });
 });

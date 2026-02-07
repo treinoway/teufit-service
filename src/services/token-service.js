@@ -128,3 +128,20 @@ export async function revokeRefreshToken(token) {
     data: { revoked: true, revokedAt: new Date() },
   });
 }
+
+/**
+ * Revoke all refresh tokens for a given user.
+ * Used for security actions like password changes.
+ */
+export async function revokeAllUserRefreshTokens(userId) {
+  await prisma.refreshToken.updateMany({
+    where: {
+      userId,
+      revoked: false,
+    },
+    data: {
+      revoked: true,
+      revokedAt: new Date(),
+    },
+  });
+}

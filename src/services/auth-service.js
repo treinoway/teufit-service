@@ -2,7 +2,7 @@ import { prisma } from '../db.js';
 import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
 import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
-import { issueAccessToken, issueRefreshToken } from './token-service.js';
+import { issueAccessToken, issueRefreshToken, revokeAllUserRefreshTokens } from './token-service.js';
 import emailHandler from '../config/email-handler.js';
 
 export async function getCurrentUserWithAccounts(userId) {
@@ -489,5 +489,97 @@ export async function addEmailToWaitlist({ email }) {
     status: waitlistEntry.status,
     createdAt: waitlistEntry.createdAt,
   };
+}
+
+/**
+ * Change password for an authenticated user.
+ *
+ * Contract:
+ * - Validates current password using the same verifyPassword logic
+ * - Validates new password strength and confirmation match
+ * - Updates user's passwordHash using the same hashPassword logic (scrypt)
+ * - Only works for users with password authentication (not OAuth-only)
+ */
+export async function changePassword({ userId, currentPassword, newPassword, newPasswordConfirmation }) {
+  if (!userId) {
+    const err = new Error('User ID is required');
+    err.code = 'USER_ID_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+    const err = new Error('Current password is required');
+    err.code = 'CURRENT_PASSWORD_REQUIRED';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    const err = new Error('New password must be at least 8 characters');
+    err.code = 'WEAK_PASSWORD';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (typeof newPasswordConfirmation !== 'string' || newPassword !== newPasswordConfirmation) {
+    const err = new Error('New passwords do not match');
+    err.code = 'PASSWORD_MISMATCH';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    const err = new Error('User not found');
+    err.code = 'USER_NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (user.deletedAt) {
+    const err = new Error('User account is deactivated');
+    err.code = 'USER_DELETED';
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (!user.passwordHash) {
+    const err = new Error('Password change not available for OAuth-only accounts');
+    err.code = 'PASSWORD_NOT_SET';
+    err.statusCode = 409;
+    throw err;
+  }
+
+  // Use the same verifyPassword function used in loginWithEmailPassword
+  const isCurrentPasswordValid = verifyPassword(currentPassword, user.passwordHash);
+  if (!isCurrentPasswordValid) {
+    const err = new Error('Current password is incorrect');
+    err.code = 'INVALID_CURRENT_PASSWORD';
+    err.statusCode = 401;
+    throw err;
+  }
+
+  // Ensure new password is different from current password
+  if (currentPassword === newPassword) {
+    const err = new Error('New password must be different from current password');
+    err.code = 'PASSWORD_SAME_AS_CURRENT';
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Use the same hashPassword function used in signupWithEmailPassword and resetPasswordWithToken
+  const newPasswordHash = hashPassword(newPassword);
+
+  // Update password and revoke all existing refresh tokens for security
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: newPasswordHash },
+  });
+
+  // Revoke all existing refresh tokens to force re-authentication
+  await revokeAllUserRefreshTokens(userId);
+
+  return { success: true, user: safeUser(user) };
 }
 
