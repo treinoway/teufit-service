@@ -516,5 +516,276 @@ e2eDescribe('e2e: auth and user flows', () => {
 
       expect(updateResponse.statusCode).toBe(400);
     });
-  })
+  });
+
+  describe('change password', () => {
+    it('successfully changes password with valid credentials', async () => {
+      const email = `change-password-${Date.now()}@example.com`;
+      const oldPassword = 'OldPassw0rd!';
+      const newPassword = 'NewPassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: oldPassword },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken }, refreshToken } = signupResponse.json();
+
+      // Change password
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: oldPassword,
+          newPassword: newPassword,
+          newPasswordConfirmation: newPassword,
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(200);
+      const changeBody = changeResponse.json();
+
+      expect(changeBody).toHaveProperty('message', 'Password changed successfully');
+      expect(changeBody).toHaveProperty('token.accessToken');
+      expect(changeBody).toHaveProperty('refreshToken');
+
+      // Verify new access token is different from original
+      expect(changeBody.token.accessToken).not.toBe(accessToken);
+      expect(changeBody.refreshToken).not.toBe(refreshToken);
+
+      // Verify old password no longer works
+      const loginWithOldResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: oldPassword },
+      });
+
+      expect(loginWithOldResponse.statusCode).toBe(401);
+
+      // Verify new password works
+      const loginWithNewResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: newPassword },
+      });
+
+      expect(loginWithNewResponse.statusCode).toBe(200);
+    });
+
+    it('rejects change password without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        payload: {
+          currentPassword: 'OldPassw0rd!',
+          newPassword: 'NewPassw0rd!',
+          newPasswordConfirmation: 'NewPassw0rd!',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        error: 'Authentication required',
+      });
+    });
+
+    it('rejects when current password is incorrect', async () => {
+      const email = `change-password-wrong-${Date.now()}@example.com`;
+      const correctPassword = 'CorrectPassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: correctPassword },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      // Try to change password with wrong current password
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: 'WrongPassw0rd!',
+          newPassword: 'NewPassw0rd!',
+          newPasswordConfirmation: 'NewPassw0rd!',
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(401);
+      expect(changeResponse.json()).toMatchObject({
+        error: 'INVALID_CURRENT_PASSWORD',
+      });
+    });
+
+    it('rejects when new password is too weak', async () => {
+      const email = `change-password-weak-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      // Try to change to a weak password
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: password,
+          newPassword: 'weak',
+          newPasswordConfirmation: 'weak',
+        },
+      });
+
+      // Fastify schema validation rejects before reaching service layer
+      expect(changeResponse.statusCode).toBe(400);
+    });
+
+    it('rejects when new password confirmation does not match', async () => {
+      const email = `change-password-mismatch-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      // Try to change password with mismatched confirmation
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: password,
+          newPassword: 'NewPassw0rd!',
+          newPasswordConfirmation: 'DifferentPassw0rd!',
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(400);
+      expect(changeResponse.json()).toMatchObject({
+        error: 'PASSWORD_MISMATCH',
+      });
+    });
+
+    it('rejects when new password is same as current password', async () => {
+      const email = `change-password-same-${Date.now()}@example.com`;
+      const password = 'SamePassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { token: { accessToken } } = signupResponse.json();
+
+      // Try to change password to the same password
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        payload: {
+          currentPassword: password,
+          newPassword: password,
+          newPasswordConfirmation: password,
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(400);
+      expect(changeResponse.json().error).toBe('PASSWORD_SAME_AS_CURRENT');
+    });
+
+    it('revokes all existing refresh tokens after password change', async () => {
+      const email = `change-password-revoke-${Date.now()}@example.com`;
+      const oldPassword = 'OldPassw0rd!';
+      const newPassword = 'NewPassw0rd!';
+
+      // Sign up the user
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: oldPassword },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const {
+        token: { accessToken },
+        refreshToken: oldRefreshToken,
+        user: { id: userId }
+      } = signupResponse.json();
+
+      // Verify old refresh token exists in database
+      const oldTokenRecord = await prisma.refreshToken.findFirst({
+        where: { userId, revoked: false },
+      });
+      expect(oldTokenRecord).not.toBeNull();
+
+      // Change password (use different IP to avoid rate limiting from previous tests)
+      const changeResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/change-password',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'x-forwarded-for': '10.0.0.100',
+        },
+        payload: {
+          currentPassword: oldPassword,
+          newPassword: newPassword,
+          newPasswordConfirmation: newPassword,
+        },
+      });
+
+      expect(changeResponse.statusCode).toBe(200);
+
+      // Verify old refresh token was revoked
+      const revokedToken = await prisma.refreshToken.findFirst({
+        where: {
+          userId,
+          tokenHash: oldTokenRecord.tokenHash,
+        },
+      });
+      expect(revokedToken.revoked).toBe(true);
+
+      // Try to use old refresh token - should fail
+      const refreshResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: oldRefreshToken },
+      });
+
+      expect(refreshResponse.statusCode).toBe(401);
+    });
+  });
   });

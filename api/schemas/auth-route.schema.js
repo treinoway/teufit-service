@@ -334,3 +334,67 @@ export const waitlistSchema = {
   },
 };
 
+export const changePasswordSchema = {
+  tags: authTags,
+  summary: 'Change password for authenticated user',
+  body: {
+    type: 'object',
+    required: ['currentPassword', 'newPassword', 'newPasswordConfirmation'],
+    additionalProperties: false,
+    properties: {
+      currentPassword: { type: 'string', minLength: 1 },
+      newPassword: { type: 'string', minLength: 8 },
+      newPasswordConfirmation: {
+        type: 'string',
+        minLength: 8,
+        description: 'Must match newPassword',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['message', 'token', 'refreshToken'],
+      properties: {
+        message: { type: 'string' },
+        token: tokenResponseSchema,
+        refreshToken: { type: 'string' },
+      },
+    },
+    400: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    401: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    403: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+      },
+    },
+    409: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    500: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+  },
+};
+

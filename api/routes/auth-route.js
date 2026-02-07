@@ -2,8 +2,10 @@ import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
 import { Roles } from '../../src/constants/roles.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import {
   addEmailToWaitlist,
+  changePassword,
   ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
@@ -29,6 +31,7 @@ import {
   refreshSchema,
   logoutSchema,
   waitlistSchema,
+  changePasswordSchema,
 } from '../schemas/auth-route.schema.js';
 
 export async function authRoutes(fastify) {
@@ -427,6 +430,63 @@ export async function authRoutes(fastify) {
       }
 
       return reply.send({ message: 'Logged out successfully' });
+    },
+  );
+
+  // Change password for authenticated user
+  fastify.post(
+    '/auth/change-password',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+        },
+      },
+      schema: changePasswordSchema,
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const currentPassword = body.currentPassword;
+        const newPassword = body.newPassword;
+        const newPasswordConfirmation = body.newPasswordConfirmation;
+        const userId = request.user.id;
+
+        const result = await changePassword({
+          userId,
+          currentPassword,
+          newPassword,
+          newPasswordConfirmation,
+        });
+
+        // Issue new tokens after password change for security
+        const access = issueAccessToken({ fastify, user: result.user });
+        const refresh = await issueRefreshToken({ user: result.user });
+
+        return reply.send({
+          message: 'Password changed successfully',
+          token: { accessToken: access.accessToken },
+          refreshToken: refresh.refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'CURRENT_PASSWORD_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'PASSWORD_MISMATCH' || error?.code === 'PASSWORD_SAME_AS_CURRENT') {
+          return reply.status(400).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'INVALID_CURRENT_PASSWORD') {
+          return reply.status(401).send({ error: error.code, message: error.message });
+        }
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'Account deactivated' });
+        }
+        if (error?.code === 'PASSWORD_NOT_SET') {
+          return reply.status(409).send({ error: error.code, message: error.message });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'CHANGE_PASSWORD_FAILED', message: 'Failed to change password' });
+      }
     },
   );
 }
