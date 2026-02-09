@@ -116,11 +116,13 @@ export async function buildServer(options = {}) {
     secret: jwtSecret,
   });
 
-  // Register Rate Limiting
-  await fastify.register(fastifyRateLimit, {
-    max: 100, // Global limit: 100 req/min
-    timeWindow: '1 minute',
-  });
+  // Register Rate Limiting (disabled in test environment)
+  if (process.env.NODE_ENV !== 'test') {
+    await fastify.register(fastifyRateLimit, {
+      max: 100, // Global limit: 100 req/min
+      timeWindow: '1 minute',
+    });
+  }
 
   // Register auth routes (public)
   await fastify.register(authRoutes);
@@ -135,12 +137,14 @@ export async function buildServer(options = {}) {
     // Add authentication hook to all routes in this context
     fastify.addHook('onRequest', authenticate);
 
-    // Configure per-user rate limit for this context
-    await fastify.register(fastifyRateLimit, {
-      max: 20,
-      timeWindow: '1 minute',
-      keyGenerator: (request) => `user:${request.user.id}`,
-    });
+    // Configure per-user rate limit for this context (disabled in test environment)
+    if (process.env.NODE_ENV !== 'test') {
+      await fastify.register(fastifyRateLimit, {
+        max: 20,
+        timeWindow: '1 minute',
+        keyGenerator: (request) => `user:${request.user.id}`,
+      });
+    }
 
     // Register all protected routes
     await fastify.register(trainerRoutes);

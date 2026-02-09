@@ -1,36 +1,12 @@
 import { prisma } from '../db.js';
 import { Roles } from '../constants/roles.js';
+import { buildUserSelect } from '../helpers/user-query-builder.js';
 
 function toUserProfile(user) {
 	if (!user) return null;
 
-	// Clean up address - remove timestamps and userId
-	const address = user.address ? {
-		id: user.address.id,
-		line1: user.address.line1,
-		line2: user.address.line2,
-		neighborhood: user.address.neighborhood,
-		city: user.address.city,
-		state: user.address.state,
-		stateCode: user.address.stateCode,
-		country: user.address.country,
-		countryCode: user.address.countryCode,
-		postalCode: user.address.postalCode,
-	} : null;
-
-	// Clean up socials - remove timestamps and userId
-	const socials = user.socials ? {
-		id: user.socials.id,
-		instagram: user.socials.instagram,
-		whatsapp: user.socials.whatsapp,
-		x: user.socials.x,
-		threads: user.socials.threads,
-		youtube: user.socials.youtube,
-		linkedin: user.socials.linkedin,
-		facebook: user.socials.facebook,
-	} : null;
-
-	return {
+	// Start with base user fields
+	const profile = {
 		id: user.id,
 		email: user.email,
 		roles: user.roles,
@@ -40,23 +16,64 @@ function toUserProfile(user) {
 		gender: user.gender,
 		birthDate: user.birthDate,
 		avatarUrl: user.avatarUrl,
-		address,
-		socials,
-		preferences: user.preferences
-			? {
-					activeProfile: user.preferences.activeProfile,
-					rawPreferences: user.preferences.rawPreferences,
-				}
-			: null,
 	};
+
+	// Only include relations that were loaded (not undefined)
+	// This allows for selective loading via query parameters
+	if (user.address !== undefined) {
+		profile.address = user.address ? {
+			id: user.address.id,
+			line1: user.address.line1,
+			line2: user.address.line2,
+			neighborhood: user.address.neighborhood,
+			city: user.address.city,
+			state: user.address.state,
+			stateCode: user.address.stateCode,
+			country: user.address.country,
+			countryCode: user.address.countryCode,
+			postalCode: user.address.postalCode,
+		} : null;
+	}
+
+	if (user.socials !== undefined) {
+		profile.socials = user.socials ? {
+			id: user.socials.id,
+			instagram: user.socials.instagram,
+			whatsapp: user.socials.whatsapp,
+			x: user.socials.x,
+			threads: user.socials.threads,
+			youtube: user.socials.youtube,
+			linkedin: user.socials.linkedin,
+			facebook: user.socials.facebook,
+		} : null;
+	}
+
+	if (user.preferences !== undefined) {
+		profile.preferences = user.preferences ? {
+			activeProfile: user.preferences.activeProfile,
+			rawPreferences: user.preferences.rawPreferences,
+		} : null;
+	}
+
+	return profile;
 }
 
 /**
- * Get the full user profile for a given userId.
+ * Get user profile with selective relation loading.
  *
- * Hides sensitive fields like passwordHash from the returned object.
+ * @param {string} userId - User ID
+ * @param {string[]} includeRelations - Relations to include (default: [])
+ * @returns {Promise<Object>} User profile with requested relations
+ *
+ * @example
+ * // Minimal payload (no relations)
+ * getUserProfileById('user123', [])
+ *
+ * @example
+ * // Include specific relations
+ * getUserProfileById('user123', ['address', 'socials'])
  */
-export async function getUserProfileById(userId) {
+export async function getUserProfileById(userId, includeRelations = []) {
 	if (!userId) {
 		const err = new Error('userId is required');
 		err.code = 'USER_ID_REQUIRED';
@@ -64,51 +81,12 @@ export async function getUserProfileById(userId) {
 		throw err;
 	}
 
+	// Build dynamic select based on requested relations
+	const select = buildUserSelect(includeRelations);
+
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
-		select: {
-			id: true,
-			email: true,
-			roles: true,
-			status: true,
-			firstName: true,
-			lastName: true,
-			gender: true,
-			birthDate: true,
-			avatarUrl: true,
-			address: {
-				select: {
-					id: true,
-					line1: true,
-					line2: true,
-					neighborhood: true,
-					city: true,
-					state: true,
-					stateCode: true,
-					country: true,
-					countryCode: true,
-					postalCode: true,
-				},
-			},
-			socials: {
-				select: {
-					id: true,
-					instagram: true,
-					whatsapp: true,
-					x: true,
-					threads: true,
-					youtube: true,
-					linkedin: true,
-					facebook: true,
-				},
-			},
-			preferences: {
-				select: {
-					activeProfile: true,
-					rawPreferences: true,
-				},
-			},
-		},
+		select,
 	});
 
 	if (!user) {

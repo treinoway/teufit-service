@@ -62,7 +62,7 @@ describe('e2e: address flows', () => {
 				postalCode: '01310-100',
 			});
 			expect(body.line1).toContain('Paulista');
-		});
+		}, 15000);
 
 		it('successfully fetches address for valid postal code without formatting', async () => {
 			const response = await app.inject({
@@ -82,7 +82,7 @@ describe('e2e: address flows', () => {
 				country: 'Brasil',
 				countryCode: 'BR',
 			});
-		});
+		}, 15000);
 
 		it('returns 401 when not authenticated', async () => {
 			const response = await app.inject({
@@ -145,7 +145,7 @@ describe('e2e: address flows', () => {
 		it('returns 404 when postal code is not found', async () => {
 			const response = await app.inject({
 				method: 'GET',
-				url: '/postal-code?code=99999999',
+				url: '/postal-code?code=11111111', // CEP that returns "erro": true from ViaCEP
 				headers: {
 					authorization: `Bearer ${accessToken}`,
 				},
@@ -157,7 +157,7 @@ describe('e2e: address flows', () => {
 				error: 'POSTAL_CODE_NOT_FOUND',
 				message: 'Postal code not found',
 			});
-		});
+		}, 15000);
 
 		it('handles postal codes with special characters', async () => {
 			const response = await app.inject({
@@ -171,7 +171,7 @@ describe('e2e: address flows', () => {
 			expect(response.statusCode).toBe(200);
 			const body = response.json();
 			expect(body.city).toBe('São Paulo');
-		});
+		}, 15000);
 
 		it('returns proper address schema structure', async () => {
 			const response = await app.inject({
@@ -201,6 +201,6 @@ describe('e2e: address flows', () => {
 			expect(body.stateCode).toBe('RJ');
 			expect(body.country).toBe('Brasil');
 			expect(body.countryCode).toBe('BR');
-		});
+		}, 15000);
 	});
 });

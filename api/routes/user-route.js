@@ -1,6 +1,8 @@
 import { authenticate } from '../middleware/auth.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
 import { getMeSchema, becomeTrainerSchema, updateProfileSchema } from '../schemas/user-route.schema.js';
+import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
+import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 
 export async function userRoutes(fastify) {
 
@@ -13,7 +15,23 @@ export async function userRoutes(fastify) {
     async (request, reply) => {
       try {
         const userId = request.user.id;
-        const userProfile = await getUserProfileById(userId);
+
+        // Parse and validate ?include parameter
+        const { relations, invalid } = parseIncludeParameter(
+          request.query.include,
+          ALLOWED_USER_RELATIONS
+        );
+
+        // Return 400 if invalid relations were requested
+        if (invalid.length > 0) {
+          return reply.status(400).send({
+            error: 'INVALID_RELATIONS',
+            message: `Invalid relations requested: ${invalid.join(', ')}`,
+            allowedRelations: Array.from(ALLOWED_USER_RELATIONS),
+          });
+        }
+
+        const userProfile = await getUserProfileById(userId, relations);
         return reply.send(userProfile);
       } catch (error) {
         request.log.error({ error }, 'Error fetching user profile in GET /me');

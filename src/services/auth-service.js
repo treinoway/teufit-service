@@ -177,8 +177,8 @@ function safeUser(user) {
  * Email/password signup.
  * Contract:
  * - Creates a new user with passwordHash
- * - Does NOT create an OAuth Account row
- * - Sets default roles [trainer] unless provided
+ * - Creates an Account row with provider 'email' for consistency with OAuth flow
+ * - Sets default roles [STUDENT] unless provided
  * - Returns user without the password hash
  */
 export async function signupWithEmailPassword({ email, password, roles }) {
@@ -200,7 +200,7 @@ export async function signupWithEmailPassword({ email, password, roles }) {
 
   // Normalize roles to array, default to [STUDENT]
   const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : [Roles.STUDENT]);
-  
+
   // Prevent signup with unsupported roles
   if (!rolesArray.every(r => [Roles.TRAINER, Roles.STUDENT].includes(r))) {
     const err = new Error('Invalid role');
@@ -225,13 +225,28 @@ export async function signupWithEmailPassword({ email, password, roles }) {
   }
 
   const passwordHash = hashPassword(password);
-  const created = await prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      passwordHash,
-      roles: rolesArray,
-      status: 'pending',
-    },
+
+  // Create user and account in a transaction
+  const created = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: normalizedEmail,
+        passwordHash,
+        roles: rolesArray,
+        status: 'pending',
+      },
+    });
+
+    // Create account record to track authentication method
+    await tx.account.create({
+      data: {
+        userId: user.id,
+        provider: 'email',
+        providerId: normalizedEmail,
+      },
+    });
+
+    return user;
   });
 
   return safeUser(created);

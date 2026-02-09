@@ -1,7 +1,25 @@
+import { USER_RELATION_CONFIGS } from '../../src/constants/user-relations.js';
+
+// Dynamically generate allowed relations list from USER_RELATION_CONFIGS
+const allowedRelations = Object.keys(USER_RELATION_CONFIGS);
+const allowedRelationsStr = allowedRelations.join(', ');
+const allRelationsExample = allowedRelations.join(',');
+
 export const getMeSchema = {
   tags: ['user'],
   summary: 'Get current user profile',
+  description: 'Get authenticated user profile with optional relation loading via ?include parameter. By default, returns minimal payload with only base user fields.',
   security: [{ bearerAuth: [] }],
+  querystring: {
+    type: 'object',
+    properties: {
+      include: {
+        type: 'string',
+        description: `Comma-separated list of relations to include. Allowed values: ${allowedRelationsStr}. Default: none (minimal payload). Examples: "${allowedRelations[0]}", "${allowedRelations[0]},${allowedRelations[1]}", "${allRelationsExample}"`,
+        examples: [allowedRelations[0], `${allowedRelations[0]},${allowedRelations[1]}`, allowedRelations[2]],
+      },
+    },
+  },
   headers: {
     type: 'object',
     required: ['authorization'],
@@ -37,7 +55,7 @@ export const getMeSchema = {
           type: 'object',
           nullable: true,
           additionalProperties: false,
-          description: 'User address, if available',
+          description: 'User address, included only if ?include=address is specified',
           properties: {
             id: { type: 'string', description: 'Address record ID' },
             line1: { type: 'string', nullable: true, description: 'Primary street address line' },
@@ -55,7 +73,7 @@ export const getMeSchema = {
           type: 'object',
           nullable: true,
           additionalProperties: false,
-          description: 'User social networks, if available',
+          description: 'User social networks, included only if ?include=socials is specified',
           properties: {
             id: { type: 'string', description: 'Socials record ID' },
             instagram: { type: 'string', nullable: true, description: 'Instagram handle or URL' },
@@ -70,7 +88,7 @@ export const getMeSchema = {
         preferences: {
           type: 'object',
           nullable: true,
-          description: 'User preferences, including active profile',
+          description: 'User preferences, included only if ?include=preferences is specified',
           properties: {
             activeProfile: {
               type: 'string',
@@ -88,6 +106,19 @@ export const getMeSchema = {
         },
       },
       additionalProperties: false,
+    },
+    400: {
+      description: 'Bad request - invalid relations requested',
+      type: 'object',
+      properties: {
+        error: { type: 'string', description: 'Error code (e.g., INVALID_RELATIONS)' },
+        message: { type: 'string', description: 'Human-readable error message' },
+        allowedRelations: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of allowed relation names',
+        },
+      },
     },
     401: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },

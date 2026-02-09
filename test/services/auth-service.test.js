@@ -9,6 +9,9 @@ vi.mock('../../src/db.js', () => {
         create: vi.fn(),
         update: vi.fn(),
       },
+      account: {
+        create: vi.fn(),
+      },
       trainer: {
         findFirst: vi.fn(),
         create: vi.fn(),
@@ -229,15 +232,40 @@ describe('authService', () => {
   });
 
   describe('signupWithEmailPassword', () => {
-    it('normalizes email, hashes password, and creates a trainer user', async () => {
+    it('normalizes email, hashes password, creates user and account in transaction', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockImplementation(async ({ data }) => ({
-        id: 'u1',
-        ...data,
-        roles: data.roles,
-        status: data.status,
-        deletedAt: null,
-      }));
+
+      // Mock the transaction callback
+      prisma.$transaction.mockImplementation(async (callback) => {
+        const txPrisma = {
+          user: {
+            create: vi.fn().mockResolvedValue({
+              id: 'u1',
+              email: 'test@example.com',
+              passwordHash: 'scrypt$...',
+              roles: ['student'],
+              status: 'pending',
+              deletedAt: null,
+            }),
+          },
+          account: {
+            create: vi.fn().mockResolvedValue({
+              id: 'a1',
+              userId: 'u1',
+              provider: 'email',
+              providerId: 'test@example.com',
+            }),
+          },
+        };
+
+        const result = await callback(txPrisma);
+
+        // Store the calls for assertions
+        prisma.user.create = txPrisma.user.create;
+        prisma.account.create = txPrisma.account.create;
+
+        return result;
+      });
 
       const user = await signupWithEmailPassword({
         email: '  Test@Example.com ',
@@ -245,6 +273,7 @@ describe('authService', () => {
       });
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -254,9 +283,17 @@ describe('authService', () => {
           }),
         }),
       );
+      expect(prisma.account.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          provider: 'email',
+          providerId: 'test@example.com',
+        },
+      });
 
       // Returned user should not include passwordHash
       expect(user.passwordHash).toBeUndefined();
+      expect(user.id).toBe('u1');
     });
 
     it('rejects weak passwords', async () => {
