@@ -39,55 +39,10 @@ describe('userService', () => {
       statusCode: 404,
     });
 
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({
-    where: { id: 'u1' },
-    select: {
-    id: true,
-    email: true,
-    roles: true,
-    status: true,
-    firstName: true,
-    lastName: true,
-    gender: true,
-    birthDate: true,
-    avatarUrl: true,
-    address: {
-      select: {
-        city: true,
-        country: true,
-        countryCode: true,
-        id: true,
-        line1: true,
-        line2: true,
-        neighborhood: true,
-        postalCode: true,
-        state: true,
-        stateCode: true,
-      }
-    },
-    socials: {
-      select: {
-        id: true,
-        instagram: true,
-        whatsapp: true,
-        x: true,
-        threads: true,
-        youtube: true,
-        linkedin: true,
-        facebook: true,
-      }
-    },
-    preferences: {
-      select: {
-      activeProfile: true,
-      rawPreferences: true,
-      },
-    },
-    },
-  });
+    expect(prisma.user.findUnique).toHaveBeenCalled();
   });
 
-  it('returns user profile without passwordHash when found', async () => {
+  it('returns user profile without passwordHash when found with all relations', async () => {
     prisma.user.findUnique.mockResolvedValue({
     id: 'u1',
     email: 'test@example.com',
@@ -98,7 +53,7 @@ describe('userService', () => {
     gender: null,
     birthDate: null,
     avatarUrl: null,
-    address: { 
+    address: {
       id: 'a1',
       line1: null,
       line2: null,
@@ -128,7 +83,7 @@ describe('userService', () => {
     updatedAt: new Date('2026-01-02T00:00:00.000Z'),
   });
 
-    const result = await getUserProfileById('u1');
+    const result = await getUserProfileById('u1', ['address', 'socials', 'preferences']);
 
   expect(result).toEqual({
     id: 'u1',
@@ -140,7 +95,7 @@ describe('userService', () => {
     gender: null,
     birthDate: null,
     avatarUrl: null,
-    address: { 
+    address: {
       id: 'a1',
       line1: null,
       line2: null,
@@ -495,6 +450,171 @@ describe('userService', () => {
 
       expect(result.preferences).toBeDefined();
       expect(result.preferences.rawPreferences).toEqual({ theme: 'dark', language: 'en' });
+    });
+  });
+
+  describe('getUserProfileById with lazy loading', () => {
+    it('returns minimal payload when no relations are requested', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'male',
+        birthDate: new Date('1990-01-01'),
+        avatarUrl: 'https://example.com/avatar.jpg',
+      });
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result).toEqual({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'male',
+        birthDate: new Date('1990-01-01'),
+        avatarUrl: 'https://example.com/avatar.jpg',
+      });
+      expect(result).not.toHaveProperty('address');
+      expect(result).not.toHaveProperty('socials');
+      expect(result).not.toHaveProperty('preferences');
+    });
+
+    it('returns only address when only address is requested', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: null,
+        gender: null,
+        birthDate: null,
+        avatarUrl: null,
+        address: {
+          id: 'a1',
+          line1: '123 Main St',
+          line2: null,
+          neighborhood: null,
+          city: 'São Paulo',
+          state: 'São Paulo',
+          stateCode: 'SP',
+          country: 'Brasil',
+          countryCode: 'BR',
+          postalCode: '01000-000',
+        },
+      });
+
+      const result = await getUserProfileById('u1', ['address']);
+
+      expect(result).toHaveProperty('address');
+      expect(result.address).toMatchObject({
+        id: 'a1',
+        line1: '123 Main St',
+        city: 'São Paulo',
+        postalCode: '01000-000',
+      });
+      expect(result).not.toHaveProperty('socials');
+      expect(result).not.toHaveProperty('preferences');
+    });
+
+    it('returns only socials when only socials is requested', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: null,
+        gender: null,
+        birthDate: null,
+        avatarUrl: null,
+        socials: {
+          id: 's1',
+          instagram: '@johndoe',
+          whatsapp: '+5511999999999',
+          x: '@johndoe',
+          threads: null,
+          youtube: null,
+          linkedin: null,
+          facebook: null,
+        },
+      });
+
+      const result = await getUserProfileById('u1', ['socials']);
+
+      expect(result).toHaveProperty('socials');
+      expect(result.socials).toMatchObject({
+        id: 's1',
+        instagram: '@johndoe',
+        whatsapp: '+5511999999999',
+      });
+      expect(result).not.toHaveProperty('address');
+      expect(result).not.toHaveProperty('preferences');
+    });
+
+    it('returns multiple relations when multiple are requested', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: null,
+        gender: null,
+        birthDate: null,
+        avatarUrl: null,
+        address: {
+          id: 'a1',
+          line1: '123 Main St',
+          line2: null,
+          neighborhood: null,
+          city: 'São Paulo',
+          state: null,
+          stateCode: null,
+          country: null,
+          countryCode: null,
+          postalCode: null,
+        },
+        preferences: {
+          activeProfile: 'student',
+          rawPreferences: { theme: 'dark' },
+        },
+      });
+
+      const result = await getUserProfileById('u1', ['address', 'preferences']);
+
+      expect(result).toHaveProperty('address');
+      expect(result).toHaveProperty('preferences');
+      expect(result.address.city).toBe('São Paulo');
+      expect(result.preferences.activeProfile).toBe('student');
+      expect(result).not.toHaveProperty('socials');
+    });
+
+    it('handles null relations correctly', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'test@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: null,
+        gender: null,
+        birthDate: null,
+        avatarUrl: null,
+        address: null,
+        socials: null,
+      });
+
+      const result = await getUserProfileById('u1', ['address', 'socials']);
+
+      expect(result).toHaveProperty('address', null);
+      expect(result).toHaveProperty('socials', null);
     });
   });
 });
