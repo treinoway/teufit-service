@@ -1,0 +1,546 @@
+{
+  "info": {
+    "name": "Treinoway API",
+    "description": "API collection for Treinoway Service - a wellness/training platform backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Check if the server is alive"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Sign Up",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            },
+            "description": "Sign up with email and password. Password must be at least 8 characters."
+          },
+          "response": []
+        },
+        {
+          "name": "Join Waitlist",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"waitlist@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup/waitlist",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup", "waitlist"]
+            },
+            "description": "Join the waitlist with an email address. Rate limited to 3 requests per hour."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Log in with email and password. Rate limited to 5 requests per minute."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request a password reset email. In non-production environments, the reset token is returned in the response."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"123456\",\n  \"password\": \"newpassword123\",\n  \"passwordConfirmation\": \"newpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reset password using the 6-digit token received via email. Token is valid for 15 minutes."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpassword123\",\n  \"newPasswordConfirmation\": \"newpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "change-password"]
+            },
+            "description": "Change password for authenticated user. Requires current password. Rate limited to 5 requests per minute."
+          },
+          "response": []
+        },
+        {
+          "name": "Google OAuth Start",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "start"]
+            },
+            "description": "Start Google OAuth flow for browser. Redirects to Google for authentication. Always creates student users."
+          },
+          "response": []
+        },
+        {
+          "name": "Google Mobile Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"google-id-token-from-mobile-sdk\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/mobile",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "mobile"]
+            },
+            "description": "Log in with Google ID Token from mobile native SDK. Returns JWT tokens for mobile app authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Exchange refresh token for a new access token."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Log out and revoke the refresh token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["me"]
+            },
+            "description": "Get the current authenticated user's profile including address, socials, and preferences."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthDate\": \"1990-01-15\",\n  \"address\": {\n    \"line1\": \"123 Main St\",\n    \"line2\": \"Apt 4B\",\n    \"neighborhood\": \"Downtown\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johndoe\",\n    \"whatsapp\": \"+5511999999999\",\n    \"linkedin\": \"https://linkedin.com/in/johndoe\"\n  },\n  \"preferences\": {\n    \"rawPreferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/me/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "profile"]
+            },
+            "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Image file (JPEG, PNG, or WebP). Max 5MB."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/me/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["me", "avatar"]
+            },
+            "description": "Upload or replace user avatar image. Accepts JPEG, PNG, or WebP. Maximum file size: 5MB. Old avatar is automatically deleted. Returns { avatarUrl } with a signed URL (expires in 7 days)."
+          },
+          "response": []
+        },
+        {
+          "name": "Become Trainer",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/become-trainer",
+              "host": ["{{baseUrl}}"],
+              "path": ["become-trainer"]
+            },
+            "description": "Set the user's active profile to trainer. This adds the TRAINER role and creates a trainer profile if it doesn't exist."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Trainer",
+      "item": [
+        {
+          "name": "Update Trainer Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Trainer\",\n    \"birthDate\": \"1985-05-20\",\n    \"professionalDocument\": \"CREF 123456-G/SP\",\n    \"gymName\": \"Fitness Center\",\n    \"notes\": \"Specializes in strength training\",\n    \"serviceMode\": \"hybrid\"\n  },\n  \"address\": {\n    \"line1\": \"456 Gym Street\",\n    \"neighborhood\": \"Fitness District\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-200\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johntrainer\",\n    \"whatsapp\": \"+5511988888888\",\n    \"youtube\": \"https://youtube.com/@johntrainer\",\n    \"linkedin\": \"https://linkedin.com/in/johntrainer\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer"]
+            },
+            "description": "Update trainer profile, address, and social networks. Requires TRAINER role. Service mode can be: online, in_person, or hybrid."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Address",
+      "item": [
+        {
+          "name": "Lookup Postal Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/postal-code?code=01310100",
+              "host": ["{{baseUrl}}"],
+              "path": ["postal-code"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "01310100",
+                  "description": "Brazilian postal code (CEP) with or without formatting"
+                }
+              ]
+            },
+            "description": "Get address information by Brazilian postal code (CEP). Uses ViaCEP API. Accepts formats like '01310-100' or '01310100'."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

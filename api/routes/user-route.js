@@ -1,8 +1,9 @@
 import { authenticate } from '../middleware/auth.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
-import { getMeSchema, becomeTrainerSchema, updateProfileSchema } from '../schemas/user-route.schema.js';
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
+import { uploadAvatar } from '../../src/services/avatar-service.js';
+import { getMeSchema, becomeTrainerSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
 
 export async function userRoutes(fastify) {
 
@@ -72,11 +73,11 @@ export async function userRoutes(fastify) {
     },
   );
 
-  fastify.patch('/me/profile', 
+  fastify.patch('/me/profile',
     {
       preHandler: [authenticate],
       schema: updateProfileSchema
-    }, 
+    },
     async (request, reply) => {
       try {
         const userId = request.user.id;
@@ -97,6 +98,89 @@ export async function userRoutes(fastify) {
         }
         if (error?.code === 'USER_NOT_FOUND') {
           return reply.status(404).send({ error: 'User not found' });
+        }
+
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  fastify.post(
+    '/me/avatar',
+    {
+      preHandler: [authenticate],
+      schema: uploadAvatarSchema,
+    },
+    async (request, reply) => {
+      try {
+        const userId = request.user.id;
+
+        // Get file from multipart upload
+        let data;
+        try {
+          data = await request.file();
+        } catch (err) {
+          // request.file() throws if content-type is not multipart/form-data
+          // or if file size exceeds limit
+          if (err.code === 'FST_REQ_FILE_TOO_LARGE' || err.message?.includes('too large')) {
+            return reply.status(400).send({
+              error: 'FILE_TOO_LARGE',
+              message: err.message || 'File size exceeds 5MB limit'
+            });
+          }
+          return reply.status(400).send({
+            error: 'FILE_REQUIRED',
+            message: err.message || 'Avatar file is required'
+          });
+        }
+
+        if (!data) {
+          return reply.status(400).send({
+            error: 'FILE_REQUIRED',
+            message: 'Avatar file is required'
+          });
+        }
+
+        // Convert stream to buffer
+        let buffer;
+        try {
+          buffer = await data.toBuffer();
+        } catch (err) {
+          // toBuffer() can throw if file is too large
+          if (err.code === 'FST_REQ_FILE_TOO_LARGE' || err.message?.includes('too large')) {
+            return reply.status(400).send({
+              error: 'FILE_TOO_LARGE',
+              message: err.message || 'File size exceeds 5MB limit'
+            });
+          }
+          throw err;
+        }
+
+        // Pass to service
+        const updatedProfile = await uploadAvatar(userId, {
+          filename: data.filename,
+          mimetype: data.mimetype,
+          buffer,
+        });
+
+        return reply.send(updatedProfile);
+      } catch (error) {
+        request.log.error({ error }, 'Error uploading avatar in POST /me/avatar');
+
+        if (error?.code === 'FILE_REQUIRED') {
+          return reply.status(400).send({ error: 'FILE_REQUIRED', message: error.message });
+        }
+        if (error?.code === 'INVALID_FILE_TYPE') {
+          return reply.status(400).send({ error: 'INVALID_FILE_TYPE', message: error.message });
+        }
+        if (error?.code === 'FILE_TOO_LARGE') {
+          return reply.status(400).send({ error: 'FILE_TOO_LARGE', message: error.message });
+        }
+        if (error?.code === 'USER_NOT_FOUND') {
+          return reply.status(404).send({ error: 'USER_NOT_FOUND', message: error.message });
+        }
+        if (error?.code === 'S3_UPLOAD_FAILED') {
+          return reply.status(502).send({ error: 'S3_UPLOAD_FAILED', message: error.message });
         }
 
         return reply.status(500).send({ error: 'Internal server error' });

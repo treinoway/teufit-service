@@ -1,9 +1,13 @@
 import { prisma } from '../db.js';
 import { Roles } from '../constants/roles.js';
 import { buildUserSelect } from '../helpers/user-query-builder.js';
+import s3BucketHandler from '../config/s3-bucket-handler.js';
 
-function toUserProfile(user) {
+async function toUserProfile(user) {
 	if (!user) return null;
+
+	// Resolve avatar: S3 key → signed URL, external URL → as-is
+	const avatarUrl = await s3BucketHandler.resolveUrl(user.avatarUrl);
 
 	// Start with base user fields
 	const profile = {
@@ -15,7 +19,7 @@ function toUserProfile(user) {
 		lastName: user.lastName,
 		gender: user.gender,
 		birthDate: user.birthDate,
-		avatarUrl: user.avatarUrl,
+		avatarUrl,
 	};
 
 	// Only include relations that were loaded (not undefined)
@@ -301,6 +305,5 @@ if (!userId) {
 		console.error('Error in updateUserProfile:', err);
 		throw err;
 	}
-	
-}
 
+}

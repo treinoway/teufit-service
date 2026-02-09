@@ -25,7 +25,7 @@
     "db:seed": "npx prisma db seed",
     "setup": "npm install && npm run db:start && sleep 3 && npm run db:migrate && npm run db:generate",
     "test": "vitest run",
-    "test:unit": "vitest run --exclude test/e2e/**",
+    "test:unit": "vitest run --exclude 'test/e2e/**'",
     "test:watch": "vitest",
     "test:e2e": "bash scripts/test-e2e.sh"
   },
@@ -40,15 +40,19 @@
   },
   "devDependencies": {
     "eslint": "^9.39.2",
+    "form-data": "^4.0.5",
     "globals": "^17.1.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "vitest": "^4.0.16"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.986.0",
+    "@aws-sdk/s3-request-presigner": "^3.986.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/oauth2": "^8.1.2",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/session": "^11.1.1",
