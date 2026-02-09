@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
-import { buildServer } from '../../api/server.js';
 import { prisma } from '../../src/db.js';
+import { setupApp } from '../helpers/setup-app.js';
+import { cleanDatabase } from '../helpers/db-cleanup.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -10,18 +11,7 @@ e2eDescribe('e2e: auth and user flows', () => {
   let app;
 
   beforeAll(async () => {
-    // Ensure secrets are set for JWT and session plugins in tests
-    process.env.SESSION_SECRET =
-      process.env.SESSION_SECRET || 'test-session-secret-key-for-e2e-tests-012345';
-    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
-
-    // Provide dummy Google OAuth configuration so fastify-oauth2 can register
-    process.env.GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || 'test-google-client-id';
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || 'test-google-client-secret';
-    process.env.GOOGLE_OAUTH_CALLBACK_URL =
-      process.env.GOOGLE_OAUTH_CALLBACK_URL || 'http://localhost:3000/auth/google/callback';
-
-    app = await buildServer({ logger: false });
+    app = await setupApp();
   });
 
   afterAll(async () => {
@@ -32,24 +22,7 @@ e2eDescribe('e2e: auth and user flows', () => {
 
   beforeEach(async () => {
     // Clean database between tests to keep them isolated
-    // Delete in correct order to respect foreign key constraints
-    await prisma.$transaction([
-      // Delete dependent records first
-      prisma.studentHealthDetail.deleteMany(),
-      prisma.passwordResetToken.deleteMany(),
-      prisma.refreshToken.deleteMany(),
-      // Delete records with foreign keys to User
-      prisma.account.deleteMany(),
-      prisma.student.deleteMany(),
-      prisma.trainer.deleteMany(),
-      prisma.address.deleteMany(),
-      prisma.socialNetwork.deleteMany(),
-      prisma.nutritionist.deleteMany(),
-      prisma.userPreferences.deleteMany(),
-      // Finally delete User and independent tables
-      prisma.user.deleteMany(),
-      prisma.userWaitlist.deleteMany(),
-    ]);
+    await cleanDatabase();
   });
 
   it('responds on health check /', async () => {
@@ -269,7 +242,7 @@ e2eDescribe('e2e: auth and user flows', () => {
       // Use a new app instance with rate limiting enabled
       const originalNodeEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'development'; // Enable rate limiting
-      const freshApp = await buildServer({ logger: false });
+      const freshApp = await setupApp({ logger: false });
       process.env.NODE_ENV = originalNodeEnv; // Restore original value
 
       try {

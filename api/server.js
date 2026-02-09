@@ -4,6 +4,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
 import fastifySession from '@fastify/session';
 import fastifyJwt from '@fastify/jwt';
+import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -123,6 +124,15 @@ export async function buildServer(options = {}) {
       timeWindow: '1 minute',
     });
   }
+  
+  // Register Multipart support for file uploads
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB
+      files: 1, // Only one file per request
+    },
+    attachFieldsToBody: false, // Keep file separate from body
+  });
 
   // Register auth routes (public)
   await fastify.register(authRoutes);

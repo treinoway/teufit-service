@@ -250,3 +250,118 @@ export const becomeTrainerSchema = {
     500: { type: 'object', properties: { error: { type: 'string' } } },
   },
 };
+
+export const uploadAvatarSchema = {
+  tags: ['user'],
+  summary: 'Upload user avatar',
+  description: `Upload or replace user avatar image.
+
+**Requirements:**
+- File must be an image (JPEG, PNG, or WebP)
+- Maximum file size: 5MB
+- Only one file per request
+- File will be stored in S3-compatible storage
+- If user already has an avatar, it will be replaced
+
+**Behavior:**
+- Generates unique filename based on user ID and file extension
+- Old avatar is automatically deleted (if it exists)
+- Returns signed avatar URL`,
+  security: [{ bearerAuth: [] }],
+  consumes: ['multipart/form-data'],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: {
+      description: 'Avatar uploaded successfully. Returns signed avatar URL.',
+      type: 'object',
+      properties: {
+        avatarUrl: { type: 'string', description: 'Signed avatar URL (temporary, expires in 7 days)' },
+      },
+      required: ['avatarUrl'],
+      additionalProperties: false,
+    },
+    400: {
+      description: 'Bad request - Invalid file, missing file, wrong file type, or file too large',
+      type: 'object',
+      properties: {
+        error: {
+          type: 'string',
+          enum: ['FILE_REQUIRED', 'INVALID_FILE_TYPE', 'FILE_TOO_LARGE'],
+          description: 'Error code indicating the specific validation failure',
+        },
+        message: {
+          type: 'string',
+          description: 'Human-readable error message',
+        },
+      },
+      examples: [
+        {
+          error: 'FILE_REQUIRED',
+          message: 'Avatar file is required',
+        },
+        {
+          error: 'INVALID_FILE_TYPE',
+          message: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed. Received: image/gif',
+        },
+        {
+          error: 'FILE_TOO_LARGE',
+          message: 'File too large. Maximum size is 5MB. Received: 6.24MB',
+        },
+      ],
+    },
+    401: {
+      description: 'Unauthorized - Missing or invalid authentication token',
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+      },
+    },
+    404: {
+      description: 'User not found',
+      type: 'object',
+      properties: {
+        error: {
+          type: 'string',
+          enum: ['USER_NOT_FOUND'],
+        },
+        message: {
+          type: 'string',
+          description: 'User not found',
+        },
+      },
+    },
+    502: {
+      description: 'Bad Gateway - S3 upload failed',
+      type: 'object',
+      properties: {
+        error: {
+          type: 'string',
+          enum: ['S3_UPLOAD_FAILED'],
+        },
+        message: {
+          type: 'string',
+          description: 'Details about the S3 upload failure',
+        },
+      },
+    },
+    500: {
+      description: 'Internal server error',
+      type: 'object',
+      properties: {
+        error: {
+          type: 'string',
+          description: 'Generic error message',
+        },
+      },
+    },
+  },
+};

@@ -1,24 +1,25 @@
 import 'dotenv/config';
-import { beforeAll, afterAll, describe, it, expect } from 'vitest';
-import { buildServer } from '../../api/server.js';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { setupApp } from '../helpers/setup-app.js';
+import { cleanDatabase } from '../helpers/db-cleanup.js';
 
 describe('e2e: address flows', () => {
 	let app;
 	let accessToken;
 
 	beforeAll(async () => {
-		// Ensure secrets are set for JWT and session plugins in tests
-		process.env.SESSION_SECRET =
-			process.env.SESSION_SECRET || 'test-session-secret-key-for-e2e-tests-012345';
-		process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
+		app = await setupApp();
+	});
 
-		// Provide dummy Google OAuth configuration so fastify-oauth2 can register
-		process.env.GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || 'test-google-client-id';
-		process.env.GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || 'test-google-client-secret';
-		process.env.GOOGLE_OAUTH_CALLBACK_URL =
-			process.env.GOOGLE_OAUTH_CALLBACK_URL || 'http://localhost:3000/auth/google/callback';
+	afterAll(async () => {
+		if (app) {
+			await app.close();
+		}
+	});
 
-		app = await buildServer({ logger: false });
+	beforeEach(async () => {
+		// Clean database between tests to keep them isolated
+		await cleanDatabase();
 
 		// Sign up a test user and get access token for authenticated requests
 		const email = `test-address-${Date.now()}@example.com`;
@@ -31,12 +32,6 @@ describe('e2e: address flows', () => {
 		});
 		
 		accessToken = signupResponse.json().token.accessToken;
-	});
-
-	afterAll(async () => {
-		if (app) {
-			await app.close();
-		}
 	});
 
 	describe('GET /postal-code', () => {

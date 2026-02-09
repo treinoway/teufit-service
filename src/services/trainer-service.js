@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import _ from 'lodash';
+import s3BucketHandler from '../config/s3-bucket-handler.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -70,7 +71,7 @@ export async function patch({ userId, trainer, address, socials }) {
     throw err;
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existingTrainer = await tx.trainer.findUnique({ where: { userId } });
     if (!existingTrainer) {
       const err = new Error('Trainer profile missing');
@@ -125,15 +126,25 @@ export async function patch({ userId, trainer, address, socials }) {
     // - include personal data from User
     const responseTrainer = _.omit(trainerRow, ['userId']);
     return {
-      ...responseTrainer,
-      firstName: userRow.firstName,
-      lastName: userRow.lastName,
-      birthDate: userRow.birthDate,
-      avatarUrl: userRow.avatarUrl,
-      address: addressRow,
-      socialNetworks: socialsRow,
+      trainerRow: responseTrainer,
+      userRow,
+      addressRow,
+      socialsRow,
     };
   });
+
+  // Resolve avatar URL after transaction completes (non-DB work)
+  const avatarUrl = await s3BucketHandler.resolveUrl(result.userRow.avatarUrl);
+
+  return {
+    ...result.trainerRow,
+    firstName: result.userRow.firstName,
+    lastName: result.userRow.lastName,
+    birthDate: result.userRow.birthDate,
+    avatarUrl,
+    address: result.addressRow,
+    socialNetworks: result.socialsRow,
+  };
 }
 
 // Backwards-compatible alias used by older routes/tests.
@@ -174,6 +185,7 @@ export async function getOneByUserId(userId) {
   }
 
   const responseTrainer = _.omit(trainer, ['user', 'userId']);
+  const avatarUrl = await s3BucketHandler.resolveUrl(trainer.user.avatarUrl);
   // Flatten to match the structure returned by patch()
   // (trainer model doesn't have address/socials relations; those live on user)
   return {
@@ -181,7 +193,7 @@ export async function getOneByUserId(userId) {
     firstName: trainer.user.firstName,
     lastName: trainer.user.lastName,
     birthDate: trainer.user.birthDate,
-    avatarUrl: trainer.user.avatarUrl,
+    avatarUrl,
     address: trainer.user.address,
     socialNetworks: trainer.user.socials,
   };

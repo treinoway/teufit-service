@@ -9,12 +9,20 @@ vi.mock('../../src/db.js', () => {
   };
 });
 
+vi.mock('../../src/config/s3-bucket-handler.js', () => ({
+  default: {
+    resolveUrl: vi.fn(),
+  },
+}));
+
 import { prisma } from '../../src/db.js';
+import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import { updateMyTrainerProfile } from '../../src/services/trainer-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
   });
 
   it('throws NO_UPDATES when nothing is provided', async () => {
@@ -114,7 +122,7 @@ describe('trainerService', () => {
       firstName: 'Ana',
       lastName: undefined,
       birthDate: undefined,
-      avatarUrl: undefined,
+      avatarUrl: null,
       address: { id: 'a1', userId: 'u1' },
       socialNetworks: { id: 's1', userId: 'u1' },
     });
@@ -168,7 +176,7 @@ describe('trainerService', () => {
       firstName: 'Ana',
       lastName: undefined,
       birthDate: undefined,
-      avatarUrl: undefined,
+      avatarUrl: null,
       address: null,
       socialNetworks: null,
     });
