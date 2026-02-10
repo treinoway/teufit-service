@@ -1,10 +1,6 @@
 import crypto from 'node:crypto';
 import { prisma } from '../db.js';
-
-// 15 minutes by default
-const DEFAULT_ACCESS_TTL_SECONDS = 60 * 15;
-// 7 days by default
-const DEFAULT_REFRESH_TTL_SECONDS = 60 * 60 * 24 * 7;
+import config from '../../config/index.js';
 
 /**
  * Create the JWT payload we want clients to receive.
@@ -26,7 +22,7 @@ function buildAccessTokenPayload(user) {
  * - Input: fastify instance w/ fastify.jwt, and a user object that contains id/role/status
  * - Output: { accessToken, tokenType, expiresIn }
  */
-export function issueAccessToken({ fastify, user, expiresInSeconds = DEFAULT_ACCESS_TTL_SECONDS }) {
+export function issueAccessToken({ fastify, user, expiresInSeconds = config.auth.accessTokenTtlSeconds }) {
   if (!fastify?.jwt) {
     const err = new Error('JWT support not registered');
     err.code = 'JWT_NOT_CONFIGURED';
@@ -72,7 +68,7 @@ function hashToken(token) {
  * Issue a refresh token.
  * Saves the HASH of the token to the database.
  */
-export async function issueRefreshToken({ user, expiresInSeconds = DEFAULT_REFRESH_TTL_SECONDS }) {
+export async function issueRefreshToken({ user, expiresInSeconds = config.auth.refreshTokenTtlSeconds }) {
   const token = crypto.randomBytes(40).toString('hex');
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
