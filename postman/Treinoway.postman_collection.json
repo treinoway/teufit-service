@@ -335,6 +335,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -361,9 +362,101 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "refresh"]
             },
-            "description": "Exchange refresh token for a new access token."
+            "description": "**Rotate refresh token and get new access token**\n\nExchanges a refresh token for a NEW access token AND a NEW refresh token. The old refresh token is revoked and cannot be used again (token rotation).\n\n**Important:** The NEW refreshToken returned in the response must be stored and used for subsequent refresh requests.\n\n**Token Rotation Flow:**\n1. Client sends old refresh token\n2. Server validates token (not revoked, not expired, user active)\n3. Server revokes old token (marks rotatedAt)\n4. Server issues new refresh token (valid for 7 days)\n5. Server issues new access token (valid for 15 minutes)\n6. Client must update stored refreshToken with new value\n\n**Security Benefits:**\n- Each refresh token can only be used once\n- Stolen tokens expire quickly when rotated\n- Sessions continue indefinitely while user active\n\n**Error Codes:**\n- `REFRESH_TOKEN_REQUIRED` (400): No token provided\n- `INVALID_REFRESH_TOKEN` (401): Token not found or malformed\n- `REFRESH_TOKEN_REVOKED` (401): Token already used/revoked\n- `REFRESH_TOKEN_EXPIRED` (401): Token expired (7 days)\n- `USER_DELETED` (403): Account deactivated\n- `REFRESH_FAILED` (500): Server error"
           },
-          "response": []
+          "response": [
+            {
+              "name": "Success - 200 (Token Rotated)",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  },\n  \"refreshToken\": \"a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2\"\n}"
+            },
+            {
+              "name": "Bad Request - 400 (Missing Token)",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"REFRESH_TOKEN_REQUIRED\",\n  \"message\": \"Missing refresh token\"\n}"
+            },
+            {
+              "name": "Unauthorized - 401 (Invalid Token)",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"INVALID_REFRESH_TOKEN\",\n  \"message\": \"Invalid refresh token\"\n}"
+            },
+            {
+              "name": "Unauthorized - 401 (Token Revoked)",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"REFRESH_TOKEN_REVOKED\",\n  \"message\": \"Refresh token has been revoked. Please login again.\"\n}"
+            },
+            {
+              "name": "Unauthorized - 401 (Token Expired)",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"REFRESH_TOKEN_EXPIRED\",\n  \"message\": \"Refresh token expired. Please login again.\"\n}"
+            },
+            {
+              "name": "Forbidden - 403 (User Deleted)",
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"USER_DELETED\",\n  \"message\": \"Account deactivated\"\n}"
+            },
+            {
+              "name": "Internal Server Error - 500",
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"REFRESH_FAILED\",\n  \"message\": \"Failed to refresh token\"\n}"
+            }
+          ]
         },
         {
           "name": "Logout",

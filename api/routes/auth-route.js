@@ -17,7 +17,7 @@ import {
   issueAccessToken,
   issueRefreshToken,
   revokeRefreshToken,
-  verifyRefreshToken
+  rotateRefreshToken
 } from '../../src/services/token-service.js';
 import emailHandler from '../../src/config/email-handler.js';
 import {
@@ -394,20 +394,58 @@ export async function authRoutes(fastify) {
       const { refreshToken } = request.body || {};
 
       if (!refreshToken) {
-        return reply.status(400).send({ error: 'Missing refresh token' });
+        return reply.status(400).send({
+          error: 'REFRESH_TOKEN_REQUIRED',
+          message: 'Missing refresh token'
+        });
       }
 
       try {
-        const user = await verifyRefreshToken(refreshToken);
-        const token = issueAccessToken({ fastify, user });
+        // Rotacionar refresh token (emitir novo, revogar antigo)
+        const { refreshToken: newRefreshToken, user } = await rotateRefreshToken(refreshToken);
+        const accessTokenData = issueAccessToken({ fastify, user });
 
-        // Optionally rotate refresh token here (issue new one, revoke old one)
-        // For simplicity, we keep the same refresh token until it expires.
-
-        return reply.send({ token: { accessToken: token.accessToken } });
+        return reply.send({
+          token: { accessToken: accessTokenData.accessToken },
+          refreshToken: newRefreshToken
+        });
       } catch (error) {
-        request.log.warn({ error }, 'Refresh token verification failed');
-        return reply.status(401).send({ error: 'Invalid or expired refresh token' });
+        if (error?.code === 'INVALID_REFRESH_TOKEN') {
+          request.log.warn({ error }, 'Invalid refresh token');
+          return reply.status(401).send({
+            error: 'INVALID_REFRESH_TOKEN',
+            message: 'Invalid refresh token'
+          });
+        }
+
+        if (error?.code === 'REFRESH_TOKEN_REVOKED') {
+          request.log.warn({ error }, 'Refresh token already revoked');
+          return reply.status(401).send({
+            error: 'REFRESH_TOKEN_REVOKED',
+            message: 'Refresh token has been revoked. Please login again.'
+          });
+        }
+
+        if (error?.code === 'REFRESH_TOKEN_EXPIRED') {
+          request.log.info({ error }, 'Refresh token expired');
+          return reply.status(401).send({
+            error: 'REFRESH_TOKEN_EXPIRED',
+            message: 'Refresh token expired. Please login again.'
+          });
+        }
+
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({
+            error: 'USER_DELETED',
+            message: 'Account deactivated'
+          });
+        }
+
+        request.log.error({ error }, 'Token rotation failed');
+        return reply.status(500).send({
+          error: 'REFRESH_FAILED',
+          message: 'Failed to refresh token'
+        });
       }
     },
   );

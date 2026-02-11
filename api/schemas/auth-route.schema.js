@@ -254,7 +254,8 @@ export const googleMobileSchema = {
 
 export const refreshSchema = {
   tags: authTags,
-  summary: 'Exchange refresh token for a new access token',
+  summary: 'Rotate refresh token and get new access token',
+  description: 'Exchanges a refresh token for a new access token and a new refresh token. The old refresh token is revoked (token rotation).',
   body: {
     type: 'object',
     required: ['refreshToken'],
@@ -266,13 +267,40 @@ export const refreshSchema = {
   response: {
     200: {
       type: 'object',
-      required: ['token'],
+      required: ['token', 'refreshToken'],
       properties: {
         token: tokenResponseSchema,
+        refreshToken: { type: 'string', description: 'New refresh token to use for future requests' },
       },
     },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
+    400: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' }
+      }
+    },
+    401: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' }
+      }
+    },
+    403: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' }
+      }
+    },
+    500: {
+      type: 'object',
+      properties: {
+        error: { type: 'string' },
+        message: { type: 'string' }
+      }
+    },
   },
 };
 
