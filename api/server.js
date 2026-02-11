@@ -73,7 +73,7 @@ export async function buildServer(options = {}) {
   await fastify.register(fastifySwagger, {
     openapi: {
       info: {
-        title: 'gaujofit_service',
+        title: 'treinoway service API',
         description: 'Backend for gaujofit',
         version: '0.0.1',
       },
