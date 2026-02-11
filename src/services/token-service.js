@@ -115,6 +115,67 @@ export async function verifyRefreshToken(token) {
 }
 
 /**
+ * Rotate a refresh token: issue a new one and revoke the old one.
+ * Returns the new refresh token and the associated user.
+ */
+export async function rotateRefreshToken(oldToken) {
+  const oldTokenHash = hashToken(oldToken);
+
+  // Buscar token existente
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { tokenHash: oldTokenHash },
+    include: { user: true },
+  });
+
+  if (!storedToken) {
+    const err = new Error('Invalid refresh token');
+    err.code = 'INVALID_REFRESH_TOKEN';
+    throw err;
+  }
+
+  // Verificar se já foi revogado
+  if (storedToken.revoked) {
+    const err = new Error('Refresh token has been revoked');
+    err.code = 'REFRESH_TOKEN_REVOKED';
+    throw err;
+  }
+
+  // Verificar expiração
+  if (storedToken.expiresAt < new Date()) {
+    const err = new Error('Refresh token expired');
+    err.code = 'REFRESH_TOKEN_EXPIRED';
+    throw err;
+  }
+
+  // Verificar se usuário ainda está ativo
+  if (storedToken.user.deletedAt) {
+    const err = new Error('User account deactivated');
+    err.code = 'USER_DELETED';
+    throw err;
+  }
+
+  // Revogar token antigo (marcar como rotacionado)
+  await prisma.refreshToken.update({
+    where: { tokenHash: oldTokenHash },
+    data: {
+      revoked: true,
+      revokedAt: new Date(),
+      rotatedAt: new Date(), // Marca que foi rotacionado (não apenas revogado)
+    },
+  });
+
+  // Emitir novo refresh token
+  const newRefreshTokenData = await issueRefreshToken({
+    user: storedToken.user,
+  });
+
+  return {
+    refreshToken: newRefreshTokenData.refreshToken,
+    user: storedToken.user,
+  };
+}
+
+/**
  * Revoke a refresh token.
  */
 export async function revokeRefreshToken(token) {

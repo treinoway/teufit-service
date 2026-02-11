@@ -782,6 +782,162 @@ e2eDescribe('e2e: auth and user flows', () => {
     });
   });
 
+  describe('Token Rotation (POST /auth/refresh)', () => {
+    it('successfully rotates refresh token and returns new tokens', async () => {
+      const email = `token-rotation-${Date.now()}@example.com`;
+      const password = 'TestPassw0rd!';
+
+      // Signup to get initial tokens
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      expect(signupResponse.statusCode).toBe(201);
+      const { refreshToken: token1 } = signupResponse.json();
+      expect(token1).toBeDefined();
+
+      // Refresh to get new tokens
+      const refreshResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: token1 },
+      });
+
+      expect(refreshResponse.statusCode).toBe(200);
+      const {
+        token: { accessToken },
+        refreshToken: token2
+      } = refreshResponse.json();
+
+      expect(accessToken).toBeDefined();
+      expect(token2).toBeDefined();
+      expect(token2).not.toBe(token1); // New token should be different
+    });
+
+    it('revokes old refresh token after rotation', async () => {
+      const email = `token-revoke-${Date.now()}@example.com`;
+      const password = 'TestPassw0rd!';
+
+      // Signup
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { refreshToken: token1 } = signupResponse.json();
+
+      // Rotate token
+      const refreshResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: token1 },
+      });
+
+      expect(refreshResponse.statusCode).toBe(200);
+
+      // Try to use old token again - should fail
+      const reuseResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: token1 },
+      });
+
+      expect(reuseResponse.statusCode).toBe(401);
+      const errorBody = reuseResponse.json();
+      expect(errorBody.error).toBe('REFRESH_TOKEN_REVOKED');
+      expect(errorBody.message).toContain('revoked');
+    });
+
+    it('allows multiple sequential rotations', async () => {
+      const email = `multi-rotation-${Date.now()}@example.com`;
+      const password = 'TestPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      let currentToken = signupResponse.json().refreshToken;
+      const rotations = 5;
+
+      for (let i = 0; i < rotations; i++) {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/refresh',
+          payload: { refreshToken: currentToken },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const { refreshToken: newToken } = response.json();
+        expect(newToken).toBeDefined();
+        expect(newToken).not.toBe(currentToken);
+
+        currentToken = newToken;
+      }
+
+      // Final token should still work
+      const finalResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: currentToken },
+      });
+
+      expect(finalResponse.statusCode).toBe(200);
+    });
+
+    it('sets rotatedAt timestamp in database when rotating', async () => {
+      const email = `rotated-at-${Date.now()}@example.com`;
+      const password = 'TestPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+
+      const { refreshToken: token1, user: { id: userId } } = signupResponse.json();
+
+      // Get token hash from database before rotation
+      const tokenBefore = await prisma.refreshToken.findFirst({
+        where: { userId, revoked: false },
+      });
+
+      expect(tokenBefore.rotatedAt).toBeNull();
+
+      // Rotate token
+      await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: token1 },
+      });
+
+      // Check that old token has rotatedAt set
+      const tokenAfter = await prisma.refreshToken.findUnique({
+        where: { tokenHash: tokenBefore.tokenHash },
+      });
+
+      expect(tokenAfter.revoked).toBe(true);
+      expect(tokenAfter.rotatedAt).not.toBeNull();
+      expect(tokenAfter.rotatedAt).toBeInstanceOf(Date);
+    });
+
+    it('returns proper error for invalid refresh token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/refresh',
+        payload: { refreshToken: 'invalid-token-12345' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.error).toBe('INVALID_REFRESH_TOKEN');
+    });
+  });
+
   describe('GET /me with lazy loading (?include parameter)', () => {
     let accessToken;
     let userId;
