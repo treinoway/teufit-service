@@ -73,6 +73,20 @@ Fastify server with plugins: CORS (dynamic origin validation), rate limiting (10
 - **Test env vars**: `DISABLE_EMAIL=true` and `NODE_ENV=test` are set automatically in `vitest.config.js`
 - Mocks are auto-restored/cleared/reset between tests
 
+## Development Standards
+
+**CRITICAL**: These standards MUST be followed for all code changes:
+
+### Documentation Requirements
+- **Every new route** MUST update both:
+  - Postman collection (`postman/Treinoway.postman_collection.json`)
+  - Swagger documentation (via JSON schemas in route definitions)
+
+### Testing Requirements
+- **Every new feature** MUST include:
+  - Unit tests for services and business logic
+  - E2E tests when the feature involves API endpoints or integration flows
+
 ## Environment
 
 - Requires **Node.js 24+** and **Docker** (for PostgreSQL)
