@@ -49,8 +49,8 @@ export async function authenticateWithGoogle({ fastify, request }) {
   const { token } = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
 
   const googleUser = await fetchGoogleUserProfile(token.access_token);
-  // Google web flow: always create/login users as students.
-  const roles = [Roles.STUDENT];
+  // Google web flow: new users start with no roles (can become trainer via /become-trainer)
+  const roles = [];
 
   const user = await findOrCreateUserFromOAuth({
     provider: 'google',
@@ -83,19 +83,6 @@ export async function ensureProfileForUser({ userId, role }) {
     return { created: true, role };
   }
 
-  if (role === Roles.STUDENT) {
-    const existing = await prisma.student.findFirst({ where: { userId } });
-    if (existing) return { created: false, role };
-
-    await prisma.student.create({
-      data: {
-        userId,
-      },
-    });
-
-    return { created: true, role };
-  }
-
   const err = new Error('Invalid profile type');
   err.code = 'INVALID_PROFILE_TYPE';
   err.statusCode = 400;
@@ -103,7 +90,7 @@ export async function ensureProfileForUser({ userId, role }) {
 }
 
 export async function createGoogleUser({ email, password }) {
-    return signupWithEmailPassword({ email, password, roles: [Roles.STUDENT] });
+    return signupWithEmailPassword({ email, password, roles: [] });
 }
 
 function normalizeEmail(email) {
@@ -178,7 +165,7 @@ function safeUser(user) {
  * Contract:
  * - Creates a new user with passwordHash
  * - Creates an Account row with provider 'email' for consistency with OAuth flow
- * - Sets default roles [STUDENT] unless provided
+ * - Sets default roles [] unless provided
  * - Returns user without the password hash
  */
 export async function signupWithEmailPassword({ email, password, roles }) {
@@ -198,11 +185,11 @@ export async function signupWithEmailPassword({ email, password, roles }) {
     throw err;
   }
 
-  // Normalize roles to array, default to [STUDENT]
-  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : [Roles.STUDENT]);
+  // Normalize roles to array, default to []
+  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
 
-  // Prevent signup with unsupported roles
-  if (!rolesArray.every(r => [Roles.TRAINER, Roles.STUDENT].includes(r))) {
+  // Prevent signup with unsupported roles (only TRAINER is assignable; empty is allowed)
+  if (!rolesArray.every(r => [Roles.TRAINER].includes(r))) {
     const err = new Error('Invalid role');
     err.code = 'INVALID_ROLE';
     err.statusCode = 400;
@@ -432,6 +419,12 @@ export async function resetPasswordWithToken({ token, password, passwordConfirma
  */
 export async function signupWithEmailPasswordStateless({ fastify, email, password, roles }) {
   const user = await signupWithEmailPassword({ email, password, roles });
+
+  // Create the profile record (e.g. Trainer) for the primary role
+  const primaryRole = Array.isArray(roles) ? roles[0] : roles;
+  if (primaryRole) {
+    await ensureProfileForUser({ userId: user.id, role: primaryRole });
+  }
 
   const access = issueAccessToken({ fastify, user });
   const refresh = await issueRefreshToken({ user });

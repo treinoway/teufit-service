@@ -7,12 +7,12 @@ Backend API for the **Treinoway** wellness and training platform. Connects **tra
 ## What the Project Does
 
 - **Authentication**: signup/login (email+password), Google OAuth, JWT for web and mobile
-- **Profiles**: `User` with roles (currently `STUDENT`, `TRAINER`; STUDENT planned for removal)
+- **Profiles**: `User` with roles (`TRAINER` only; new users start with no roles)
 - **Trainers**: profile, address, social networks, service mode (online/in_person/hybrid)
-- **Students**: profile, health data (`StudentHealthDetail`)
+- **Users**: health data (`UserHealthDetail`, 1:1)
 - **Training protocols**: main system in development
   - **Protocol Template**: reusable template created by trainer
-  - **Training Protocol**: protocol assigned to a student, with dates and status
+  - **Training Protocol**: protocol assigned to a user (assignee), with dates and status
   - **Training Template**: reusable training template (can be public)
   - **Training**: workout within a protocol
   - **Training Schedule**: maps trainings to weekdays
@@ -62,7 +62,7 @@ test/
 
 - **Branch**: `feature/add-training-protocol-feature`
 - **In progress**: training protocol feature
-- **Planned**: Nutritionist routes (model exists in schema); removal of STUDENT role
+- **Planned**: Nutritionist routes (model exists in schema)
 
 ---
 

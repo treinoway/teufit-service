@@ -72,7 +72,7 @@ e2eDescribe('e2e: auth flows', () => {
 
     expect(meBody).toMatchObject({
       email,
-      roles: expect.arrayContaining(['student']),
+      roles: expect.any(Array),
       status: 'pending',
     });
     expect(meBody).not.toHaveProperty('passwordHash');

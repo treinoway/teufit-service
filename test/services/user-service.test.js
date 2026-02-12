@@ -10,6 +10,10 @@ vi.mock('../../src/db.js', () => {
       userPreferences: {
         upsert: vi.fn(),
       },
+      trainer: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
     },
   };
 });

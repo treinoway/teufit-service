@@ -16,10 +16,6 @@ vi.mock('../../src/db.js', () => {
         findFirst: vi.fn(),
         create: vi.fn(),
       },
-      student: {
-        findFirst: vi.fn(),
-        create: vi.fn(),
-      },
       passwordResetToken: {
         create: vi.fn(),
         findUnique: vi.fn(),
@@ -126,19 +122,11 @@ describe('authService', () => {
       expect(res).toEqual({ created: true, role: Roles.TRAINER });
     });
 
-    it('creates student profile if missing', async () => {
-      prisma.student.findFirst.mockResolvedValue(null);
-      prisma.student.create.mockResolvedValue({ id: 's1' });
-
-      const res = await ensureProfileForUser({ userId: 'u1', role: Roles.STUDENT, profileSeed: { name: 'Alice' } });
-
-      expect(prisma.student.findFirst).toHaveBeenCalledWith({ where: { userId: 'u1' } });
-      expect(prisma.student.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'u1',
-        },
+    it('throws INVALID_PROFILE_TYPE for STUDENT role (removed)', async () => {
+      await expect(ensureProfileForUser({ userId: 'u1', role: 'student' })).rejects.toMatchObject({
+        code: 'INVALID_PROFILE_TYPE',
+        statusCode: 400,
       });
-      expect(res).toEqual({ created: true, role: Roles.STUDENT });
     });
 
     it('throws INVALID_PROFILE_TYPE for an unknown role', async () => {
@@ -150,7 +138,7 @@ describe('authService', () => {
   });
 
   describe('authenticateWithGoogle', () => {
-    it('exchanges code for token, fetches google profile, and calls findOrCreateUserFromOAuth with student role', async () => {
+    it('exchanges code for token, fetches google profile, and calls findOrCreateUserFromOAuth with empty roles', async () => {
       const token = {
         access_token: 'access',
         refresh_token: 'refresh',
@@ -196,7 +184,7 @@ describe('authService', () => {
           accessToken: 'access',
           refreshToken: 'refresh',
           expiresAt: token,
-          roles: [Roles.STUDENT],
+          roles: [],
         }),
       );
 
@@ -243,7 +231,7 @@ describe('authService', () => {
               id: 'u1',
               email: 'test@example.com',
               passwordHash: 'scrypt$...',
-              roles: ['student'],
+              roles: [],
               status: 'pending',
               deletedAt: null,
             }),
@@ -278,7 +266,7 @@ describe('authService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             email: 'test@example.com',
-            roles: ['student'],
+            roles: [],
             passwordHash: expect.stringMatching(/^scrypt\$/),
           }),
         }),
@@ -575,7 +563,7 @@ describe('authService', () => {
         email: 'user@example.com',
         passwordHash: makeHash(currentPassword),
         deletedAt: null,
-        roles: ['student'],
+        roles: [],
       };
 
       prisma.user.findUnique.mockResolvedValue(mockUser);

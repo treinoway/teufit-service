@@ -40,7 +40,7 @@ export const getMeSchema = {
         roles: {
           type: 'array',
           items: { type: 'string' },
-          description: 'User roles (e.g., student, trainer)',
+          description: 'User roles (e.g., trainer)',
         },
         status: {
           type: 'string',
@@ -233,7 +233,7 @@ export const becomeTrainerSchema = {
   },
   response: {
     200: {
-      description: 'Updated user preferences',
+      description: 'Updated user preferences with new auth tokens',
       type: 'object',
       properties: {
         activeProfile: {
@@ -241,8 +241,19 @@ export const becomeTrainerSchema = {
           description: 'The new active profile for this user',
           enum: ['student', 'trainer'],
         },
+        token: {
+          type: 'object',
+          properties: {
+            accessToken: { type: 'string', description: 'New JWT access token with updated roles' },
+          },
+          required: ['accessToken'],
+        },
+        refreshToken: {
+          type: 'string',
+          description: 'New refresh token',
+        },
       },
-      required: ['activeProfile'],
+      required: ['activeProfile', 'token', 'refreshToken'],
       additionalProperties: false,
     },
     400: { type: 'object', properties: { error: { type: 'string' } } },
