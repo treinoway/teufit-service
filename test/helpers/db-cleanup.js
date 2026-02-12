@@ -11,12 +11,16 @@ import { prisma } from '../../src/db.js';
  */
 export async function cleanDatabase() {
   const tables = [
-    'student_health_details',
+    'training_schedules',
+    'trainings',
+    'training_protocols',
+    'training_templates',
+    'training_protocol_templates',
+    'trainers',
+    'user_health_details',
     'password_reset_tokens',
     'refresh_tokens',
     'accounts',
-    'students',
-    'trainers',
     'addresses',
     'socials_networks',
     'nutritionists',

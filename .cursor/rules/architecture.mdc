@@ -12,10 +12,10 @@ Routes (`api/routes/`) → Middleware (`api/middleware/auth.js`) → Services (`
 ## Key Layers
 
 - **Routes** (`api/routes/`): Fastify routes with JSON schema validation (`api/schemas/`). Schemas inline.
-- **Auth Middleware** (`api/middleware/auth.js`): `verifyAuth` (session/JWT), `checkRole` (RBAC). Roles: `STUDENT`, `TRAINER` in `src/constants/roles.js`.
+- **Auth Middleware** (`api/middleware/auth.js`): `verifyAuth` (session/JWT), `requireRole` (RBAC). Roles: `TRAINER` in `src/constants/roles.js`. `/student/*` routes require auth only (no role).
 - **Services** (`src/services/`): Business logic. Receive Prisma or request context. Handle auth, users, trainers, tokens, signup.
 - **Database** (`src/db.js`): Single Prisma instance, `@prisma/adapter-pg`.
-- **Schema** (`prisma/schema.prisma`): `User`, `Account`, `Trainer`, `Student`, `StudentHealthDetail`, `Address`, `SocialNetwork`, `RefreshToken`, `PasswordResetToken`, `UserWaitlist`, `UserPreferences`.
+- **Schema** (`prisma/schema.prisma`): `User`, `Account`, `Trainer`, `UserHealthDetail`, `Address`, `SocialNetwork`, `RefreshToken`, `PasswordResetToken`, `UserWaitlist`, `UserPreferences`, `TrainingProtocol` (assigneeId→User), etc.
 
 ## Authentication
 

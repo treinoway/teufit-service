@@ -1,12 +1,10 @@
 import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
-import { Roles } from '../../src/constants/roles.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import {
   addEmailToWaitlist,
   changePassword,
-  ensureProfileForUser,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
   resetPasswordWithToken,
@@ -66,7 +64,7 @@ export async function authRoutes(fastify) {
           fastify,
           email,
           password,
-          roles: [Roles.STUDENT],
+          roles: [],
         });
 
         return reply.status(201).send({
@@ -264,14 +262,13 @@ export async function authRoutes(fastify) {
     },
   );
 
-  // Start Google OAuth (always creates/logs in student users)
+  // Start Google OAuth (new users start with no roles)
   fastify.get(
     '/auth/google/start',
     {
       schema: googleStartSchema,
     },
     async (request, reply) => {
-      // No role selection; authenticateWithGoogle always uses Roles.STUDENT
       return reply.redirect('/auth/google');
     },
   );
@@ -332,8 +329,8 @@ export async function authRoutes(fastify) {
           return reply.status(400).send({ error: 'GOOGLE_EMAIL_REQUIRED', message: 'Google account email not available' });
         }
 
-        // New users from Google are always Students
-        const roles = [Roles.STUDENT];
+        // New users from Google start with no roles
+        const roles = [];
 
         const user = await findOrCreateUserFromOAuth({
           provider: 'google',
@@ -345,15 +342,6 @@ export async function authRoutes(fastify) {
           refreshToken: null,
           expiresAt: null,
           roles,
-        });
-
-        // Ensure user has a profile based on their role
-        await ensureProfileForUser({
-          userId: user.id,
-          role: Roles.STUDENT,
-          profileSeed: {
-            name: google.name,
-          },
         });
 
         const token = issueAccessToken({ fastify, user });

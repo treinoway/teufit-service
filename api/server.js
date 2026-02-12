@@ -13,6 +13,10 @@ import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { userRoutes } from './routes/user-route.js';
 import { addressRoutes } from './routes/address-route.js';
+import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
+import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
+import { trainingTemplateRoutes } from './routes/training-template-route.js';
+import { trainingRoutes } from './routes/training-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
@@ -160,6 +164,10 @@ export async function buildServer(options = {}) {
     await fastify.register(trainerRoutes);
     await fastify.register(userRoutes);
     await fastify.register(addressRoutes);
+    await fastify.register(trainingProtocolTemplateRoutes);
+    await fastify.register(trainingProtocolRoutes);
+    await fastify.register(trainingTemplateRoutes);
+    await fastify.register(trainingRoutes);
   });
 
   return fastify;

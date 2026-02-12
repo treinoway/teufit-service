@@ -31,7 +31,7 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   accounts            Account[]
-  student             Student?
+  healthDetail        UserHealthDetail?
   trainer             Trainer?
   address             Address?
   socials             SocialNetwork?
@@ -39,15 +39,16 @@ model User {
   passwordResetTokens PasswordResetToken[]
   nutritionist        Nutritionist?
   preferences         UserPreferences?
+  protocolsAsAssignee TrainingProtocol[]
 
   @@map("users")
 }
 
 model UserPreferences {
-  id             String  @id @default(uuid()) @db.Uuid
-  userId         String  @unique @map("user_id") @db.Uuid
-  activeProfile  String  @default("student") @map("active_profile") @db.Text
-  rawPreferences Json?   @map("raw_preferences")
+  id             String @id @default(uuid()) @db.Uuid
+  userId         String @unique @map("user_id") @db.Uuid
+  activeProfile  String @default("student") @map("active_profile") @db.Text
+  rawPreferences Json?  @map("raw_preferences")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -58,26 +59,9 @@ model UserPreferences {
   @@map("user_preferences")
 }
 
-model Student {
-  id     String  @id @default(uuid()) @db.Uuid
-  userId String  @map("user_id") @db.Uuid
-  job    String? @db.Text
-
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-
-  healthDetails StudentHealthDetail[]
-
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
-
-  @@unique([userId])
-  @@map("students")
-}
-
-model StudentHealthDetail {
+model UserHealthDetail {
   id        String    @id @default(uuid()) @db.Uuid
-  studentId String    @map("student_id") @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -87,10 +71,9 @@ model StudentHealthDetail {
   bodyFat    Float?  @map("body_fat")
   conditions String? @db.Text
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([studentId])
-  @@map("student_health_details")
+  @@map("user_health_details")
 }
 
 model Trainer {
@@ -106,6 +89,10 @@ model Trainer {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainingProtocols         TrainingProtocol[]
+  trainingProtocolTemplates TrainingProtocolTemplate[]
+  trainingTemplates         TrainingTemplate[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -223,4 +210,105 @@ model UserWaitlist {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("user_waitlist")
+}
+
+model TrainingProtocolTemplate {
+  id                   String   @id @default(uuid()) @db.Uuid
+  trainerId            String   @map("trainer_id") @db.Uuid
+  name                 String   @db.Text
+  description          String?  @db.Text
+  availableWeekDays    String[] @default([]) @map("available_week_days")
+  defaultDurationWeeks Int?     @map("default_duration_weeks")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer            @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  protocols TrainingProtocol[]
+
+  @@map("training_protocol_templates")
+}
+
+model TrainingProtocol {
+  id                 String    @id @default(uuid()) @db.Uuid
+  assigneeId         String    @map("assignee_id") @db.Uuid
+  trainerId          String    @map("trainer_id") @db.Uuid
+  protocolTemplateId String?   @map("protocol_template_id") @db.Uuid
+  name               String    @db.Text
+  description        String?   @db.Text
+  availableWeekDays  String[]  @default([]) @map("available_week_days")
+  status             String    @default("active") @db.Text
+  startDate          DateTime  @map("start_date") @db.Date
+  expirationDate     DateTime? @map("expiration_date") @db.Date
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  assignee          User                    @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
+  trainer           Trainer                 @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  protocolTemplate  TrainingProtocolTemplate? @relation(fields: [protocolTemplateId], references: [id], onDelete: SetNull)
+  trainings         Training[]
+  schedules         TrainingSchedule[]
+
+  @@map("training_protocols")
+}
+
+model TrainingTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  trainerId   String   @map("trainer_id") @db.Uuid
+  name        String   @db.Text
+  description String?  @db.Text
+  category    String   @db.Text
+  bodySegment String?  @map("body_segment") @db.Text
+  tags        String[] @default([])
+  isPublic    Boolean  @default(false) @map("is_public")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  trainings Training[]
+
+  @@map("training_templates")
+}
+
+model Training {
+  id                 String  @id @default(uuid()) @db.Uuid
+  trainingProtocolId String  @map("training_protocol_id") @db.Uuid
+  trainingTemplateId String? @map("training_template_id") @db.Uuid
+  name               String  @db.Text
+  description        String? @db.Text
+  category           String  @db.Text
+  bodySegment        String? @map("body_segment") @db.Text
+  order              Int     @default(0)
+  notes              String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainingProtocol TrainingProtocol   @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
+  trainingTemplate TrainingTemplate?  @relation(fields: [trainingTemplateId], references: [id], onDelete: SetNull)
+  schedules        TrainingSchedule[]
+
+  @@map("trainings")
+}
+
+model TrainingSchedule {
+  id                 String @id @default(uuid()) @db.Uuid
+  trainingProtocolId String @map("training_protocol_id") @db.Uuid
+  trainingId         String @map("training_id") @db.Uuid
+  weekDay            String @map("week_day") @db.Text
+  order              Int    @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainingProtocol TrainingProtocol @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
+  training         Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@map("training_schedules")
 }

@@ -61,7 +61,11 @@ e2eDescribe('e2e: user profile flows', () => {
     });
 
     expect(becomeTrainerResponse.statusCode).toBe(200);
-    expect(becomeTrainerResponse.json()).toEqual({ activeProfile: 'trainer' });
+    expect(becomeTrainerResponse.json()).toMatchObject({
+      activeProfile: 'trainer',
+      token: { accessToken: expect.any(String) },
+      refreshToken: expect.any(String),
+    });
 
     // Verify persisted preference in the database
     const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
@@ -70,7 +74,7 @@ e2eDescribe('e2e: user profile flows', () => {
 
     // And verify that the user now has the TRAINER role in addition to existing roles
     const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
-    expect(updatedUser.roles).toEqual(expect.arrayContaining(['student', 'trainer']));
+    expect(updatedUser.roles).toEqual(expect.arrayContaining(['trainer']));
   });
 
   describe('user profile update', () => {

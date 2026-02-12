@@ -5,14 +5,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Default test DATABASE_URL if not already set
-export DATABASE_URL="${DATABASE_URL:-postgresql://gaujofit_user:gaujofit_password@localhost:5433/gaujofit_db?schema=public}"
+export DATABASE_URL="${DATABASE_URL:-postgresql://treinoway_user:treinoway_password@localhost:5433/treinoway_db?schema=public}"
 
 echo "[e2e] Starting test Postgres via docker compose..."
 docker compose up -d postgres
 
 echo "[e2e] Waiting for Postgres to be healthy..."
 for i in {1..30}; do
-  STATUS=$(docker inspect --format='{{json .State.Health.Status}}' gaujofit_postgres 2>/dev/null || echo "null")
+  STATUS=$(docker inspect --format='{{json .State.Health.Status}}' treinoway_postgres 2>/dev/null || echo "null")
   if echo "$STATUS" | grep -q '"healthy"'; then
     echo "[e2e] Postgres is healthy."
     break

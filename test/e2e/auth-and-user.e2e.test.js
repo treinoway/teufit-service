@@ -82,7 +82,7 @@ e2eDescribe('e2e: auth and user flows', () => {
 
     expect(meBody).toMatchObject({
       email,
-      roles: expect.arrayContaining(['student']),
+      roles: expect.any(Array),
       status: 'pending',
     });
     expect(meBody).not.toHaveProperty('passwordHash');
@@ -114,7 +114,11 @@ e2eDescribe('e2e: auth and user flows', () => {
     });
 
     expect(becomeTrainerResponse.statusCode).toBe(200);
-    expect(becomeTrainerResponse.json()).toEqual({ activeProfile: 'trainer' });
+    expect(becomeTrainerResponse.json()).toMatchObject({
+      activeProfile: 'trainer',
+      token: { accessToken: expect.any(String) },
+      refreshToken: expect.any(String),
+    });
 
     // Verify persisted preference in the database
     const prefs = await prisma.userPreferences.findUnique({ where: { userId } });
@@ -123,7 +127,7 @@ e2eDescribe('e2e: auth and user flows', () => {
 
   	// And verify that the user now has the TRAINER role in addition to existing roles
   	const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
-  	expect(updatedUser.roles).toEqual(expect.arrayContaining(['student', 'trainer']));
+  	expect(updatedUser.roles).toEqual(expect.arrayContaining(['trainer']));
   });
 
   it('rejects /me without authentication', async () => {

@@ -31,11 +31,11 @@ export async function findOrCreateUserFromOAuth(providerData) {
     roles,
   } = providerData;
 
-  // Normalize roles to array
+  // Normalize roles to array (empty array is allowed for new users)
   const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
-  
-  if (rolesArray.length === 0 || !rolesArray.every(r => roleValues.includes(r))) {
-    const err = new Error('Missing or invalid roles');
+
+  if (rolesArray.length > 0 && !rolesArray.every(r => roleValues.includes(r))) {
+    const err = new Error('Invalid roles');
     err.code = 'ROLE_REQUIRED';
     throw err;
   }

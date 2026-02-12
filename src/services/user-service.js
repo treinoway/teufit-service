@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { Roles } from '../constants/roles.js';
 import { buildUserSelect } from '../helpers/user-query-builder.js';
+import { ensureProfileForUser } from './auth-service.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 
 async function toUserProfile(user) {
@@ -135,6 +136,9 @@ export async function setActiveProfileToTrainer(userId) {
 			},
 		});
 	}
+
+	// Ensure the Trainer record exists in the database
+	await ensureProfileForUser({ userId, role: Roles.TRAINER });
 
 	const preferences = await prisma.userPreferences.upsert({
 		where: { userId },

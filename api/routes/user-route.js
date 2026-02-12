@@ -3,6 +3,7 @@ import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
+import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
 import { getMeSchema, becomeTrainerSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
 
 export async function userRoutes(fastify) {
@@ -60,7 +61,16 @@ export async function userRoutes(fastify) {
         const userId = request.user.id;
         const preferences = await setActiveProfileToTrainer(userId);
 
-        return reply.send({ activeProfile: preferences.activeProfile });
+        // Fetch updated user to issue new tokens with TRAINER role
+        const updatedUser = await getUserProfileById(userId);
+        const access = issueAccessToken({ fastify, user: updatedUser });
+        const refresh = await issueRefreshToken({ user: updatedUser });
+
+        return reply.send({
+          activeProfile: preferences.activeProfile,
+          token: { accessToken: access.accessToken },
+          refreshToken: refresh.refreshToken,
+        });
       } catch (error) {
         request.log.error({ error }, 'Error updating activeProfile in PATCH /become-trainer');
 
