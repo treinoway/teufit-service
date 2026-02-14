@@ -1,0 +1,28 @@
+---
+description: Request flow, layers, authentication, and server configuration
+alwaysApply: false
+---
+
+# Architecture
+
+## Request Flow
+
+Routes (`api/routes/`) → Middleware (`api/middleware/auth.js`) → Services (`src/services/`) → Prisma Client (`src/db.js`) → PostgreSQL
+
+## Key Layers
+
+- **Routes** (`api/routes/`): Fastify routes with JSON schema validation (`api/schemas/`). Schemas inline.
+- **Auth Middleware** (`api/middleware/auth.js`): `verifyAuth` (session/JWT), `checkRole` (RBAC). Roles: `STUDENT`, `TRAINER` in `src/constants/roles.js`.
+- **Services** (`src/services/`): Business logic. Receive Prisma or request context. Handle auth, users, trainers, tokens, signup.
+- **Database** (`src/db.js`): Single Prisma instance, `@prisma/adapter-pg`.
+- **Schema** (`prisma/schema.prisma`): `User`, `Account`, `Trainer`, `Student`, `StudentHealthDetail`, `Address`, `SocialNetwork`, `RefreshToken`, `PasswordResetToken`, `UserWaitlist`, `UserPreferences`.
+
+## Authentication
+
+- **Web**: Server-side sessions (`@fastify/session`), cookie-based, 7-day TTL
+- **Mobile**: JWT bearer tokens, refresh token rotation (`@fastify/jwt`)
+- **OAuth**: Google OAuth2, backend-for-frontend — backend exchanges code, creates session, redirects with cookie
+
+## Server (`api/server.js`)
+
+Plugins: CORS (dynamic origin), rate limit (100 req/min), cookie, session, JWT, OAuth2, Swagger (`/docs`). CORS: dev allows all origins, production validates env URLs.

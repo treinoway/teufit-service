@@ -1,0 +1,40 @@
+---
+description: Project overview, common commands, environment, and CI/CD
+alwaysApply: true
+---
+
+# Treinoway Service - Project Overview
+
+Node.js backend API for a wellness/training platform. **Fastify 5**, **Prisma 7** ORM, **PostgreSQL 17**. ESM modules throughout.
+
+## Common Commands
+
+```bash
+npm run setup      # Install deps, start DB, migrations, generate Prisma client
+npm run dev        # Development server with hot reload
+npm run test       # All tests
+npm run test:unit  # Unit tests only (excludes e2e)
+npm run test:e2e   # E2E tests (fresh Postgres container)
+npm run lint       # ESLint
+npm run lint:fix   # ESLint with auto-fix
+
+# Database
+npm run db:start   # Start PostgreSQL Docker container
+npm run db:stop    # Stop container
+npm run db:migrate # Run Prisma migrations (dev)
+npm run db:generate # Regenerate Prisma Client
+npm run db:studio  # Prisma Studio GUI (localhost:5555)
+npm run db:reset   # Reset database (deletes all data)
+```
+
+## Environment
+
+- **Node.js 24+** and **Docker** required
+- PostgreSQL on port **5433** (not 5432)
+- Copy `.env.example` to `.env` for local development
+- `DISABLE_EMAIL=true` skips email (Resend) — always true in tests
+- Email: Resend (`src/config/email-handler.js`)
+
+## CI/CD
+
+GitHub Actions: `lint.yml`, `unit-tests.yml`, `e2e-tests.yml`. Pre-commit: Husky + lint-staged (ESLint on staged JS/TS).

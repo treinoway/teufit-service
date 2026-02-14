@@ -1,0 +1,27 @@
+---
+description: Route conventions, auth middleware, services, and server configuration
+globs: api/**/*.js, src/**/*.js
+alwaysApply: false
+---
+
+# API Conventions
+
+## Routes
+
+- Fastify route definitions in `api/routes/`
+- JSON schema validation for request/response
+- Use `verifyAuth` for protected routes
+- Use `checkRole` for RBAC (STUDENT, TRAINER)
+
+## Services
+
+- Business logic in `src/services/`
+- Receive Prisma client or request context
+- Handle auth flows, user management, trainer profiles, token lifecycle, signup
+
+## Server
+
+- CORS: dynamic origin validation
+- Rate limiting: 100 req/min
+- Swagger docs at `/docs`
+- Plugins: cookie, session, JWT, OAuth2

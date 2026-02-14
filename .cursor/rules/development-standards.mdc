@@ -1,0 +1,22 @@
+---
+description: Critical documentation and testing requirements for all code changes
+alwaysApply: true
+---
+
+# Development Standards (CRITICAL)
+
+These standards MUST be followed for all code changes.
+
+## Documentation Requirements
+
+**Every new route** MUST update both:
+
+- Postman collection: `postman/Treinoway.postman_collection.json`
+- Swagger documentation: via JSON schemas in route definitions
+
+## Testing Requirements
+
+**Every new feature** MUST include:
+
+- Unit tests for services and business logic
+- E2E tests when the feature involves API endpoints or integration flows

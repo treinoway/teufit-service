@@ -1,0 +1,29 @@
+---
+description: Vitest setup, unit tests, E2E tests, and mocking conventions
+globs: test/**/*.js
+alwaysApply: false
+---
+
+# Testing
+
+## Framework
+
+Vitest with Node environment. `DISABLE_EMAIL=true` and `NODE_ENV=test` set in `vitest.config.js`.
+
+## Unit Tests
+
+- Location: `test/services/`, `test/middleware/`
+- Mock Prisma and external deps with `vi.mock()`
+- Mocks auto-restored/cleared/reset between tests
+
+## E2E Tests
+
+- Location: `test/e2e/`
+- Run against real Postgres via `scripts/test-e2e.sh`
+- Run: `npm run test:e2e`
+
+## Single File
+
+```bash
+npx vitest run test/services/auth-service.test.js
+```
