@@ -1,7 +1,7 @@
 {
-  "name": "gaujofit_service",
+  "name": "treinoway-service",
   "version": "0.0.1",
-  "description": "Backend for gaujofit",
+  "description": "Backend for Treinoway",
   "main": "api/index.js",
   "type": "module",
   "engines": {

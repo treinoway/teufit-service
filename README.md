@@ -24,7 +24,7 @@ Before you begin, ensure you have installed:
 
 ```bash
 git clone <your-repo-url>
-cd gaujofit_service
+cd treinoway-service
 ```
 
 ### 2. Install Dependencies
@@ -186,7 +186,7 @@ Opens Prisma Studio at http://localhost:5555
 ## 📁 Project Structure
 
 ```
-gaujofit_service/
+treinoway-service/
 ├── api/
 │   ├── index.js              # Main server file
 │   ├── routes/
@@ -212,7 +212,7 @@ gaujofit_service/
 
 PostgreSQL runs in Docker on port **5433** (not 5432 to avoid conflicts).
 
-Data persists in Docker volume `gaujofit_service_postgres_data`.
+Data persists in Docker volume `postgres_data`.
 
 ## 🚨 Troubleshooting
 

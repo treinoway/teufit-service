@@ -1,7 +1,7 @@
 # Documento de Especificação: Ajuste na Autenticação Google para Mobile
 
 ## 1. Diagnóstico Atual
-Analisei a especificação OpenAPI (`gaujofit_service`) e identifiquei que os endpoints atuais de autenticação social foram projetados utilizando o fluxo **OAuth2 Authorization Code para Web**.
+Analisei a especificação OpenAPI (`treinoway-service`) e identifiquei que os endpoints atuais de autenticação social foram projetados utilizando o fluxo **OAuth2 Authorization Code para Web**.
 
 **Endpoints Existentes:**
 1.  **`GET /auth/google/start`**: Redireciona o navegador do usuário para o Google (`302 Redirect`).

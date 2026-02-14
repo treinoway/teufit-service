@@ -3,18 +3,18 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: gaujofit_postgres
+    container_name: treinoway_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: gaujofit_user
-      POSTGRES_PASSWORD: gaujofit_password
-      POSTGRES_DB: gaujofit_db
+      POSTGRES_USER: treinoway_user
+      POSTGRES_PASSWORD: treinoway_password
+      POSTGRES_DB: treinoway_db
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gaujofit_user -d gaujofit_db"]
+      test: ["CMD-SHELL", "pg_isready -U treinoway_user -d treinoway_db"]
       interval: 10s
       timeout: 5s
       retries: 5
