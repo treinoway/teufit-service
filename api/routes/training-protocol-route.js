@@ -154,18 +154,18 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
-  // ========== STUDENT ROUTES ==========
+  // ========== MY PROTOCOLS ROUTES ==========
 
   // Get protocols assigned to user (authenticated, no role required)
   fastify.get(
-    '/student/protocols',
+    '/my/protocols',
     {
       preHandler: [authenticate],
-      schema: schema.getStudentProtocolsSchema,
+      schema: schema.getMyProtocolsSchema,
     },
     async (request, reply) => {
       try {
-        const protocols = await service.getProtocolsByStudent(request.user.id, request.query);
+        const protocols = await service.getMyProtocols(request.user.id, request.query);
         return reply.send(protocols);
       } catch (error) {
         if (error.code === 'INVALID_STATUS') {
@@ -179,14 +179,14 @@ export async function trainingProtocolRoutes(fastify) {
 
   // Get protocol by ID (assignee context)
   fastify.get(
-    '/student/protocols/:id',
+    '/my/protocols/:id',
     {
       preHandler: [authenticate],
-      schema: schema.getProtocolByIdSchema,
+      schema: schema.getMyProtocolByIdSchema,
     },
     async (request, reply) => {
       try {
-        const protocol = await service.getProtocolById(request.user.id, request.params.id, 'student');
+        const protocol = await service.getProtocolById(request.user.id, request.params.id, 'assignee');
         return reply.send(protocol);
       } catch (error) {
         if (error.code === 'PROTOCOL_NOT_FOUND') {

@@ -239,7 +239,7 @@ e2eDescribe('e2e: training protocols', () => {
     });
   });
 
-  describe('GET /student/protocols', () => {
+  describe('GET /my/protocols', () => {
     it('returns protocols assigned to authenticated user', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken('Pedro', 'Lima');
@@ -257,7 +257,7 @@ e2eDescribe('e2e: training protocols', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/student/protocols',
+        url: '/my/protocols',
         headers: { authorization: `Bearer ${assigneeToken}` },
       });
 

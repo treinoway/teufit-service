@@ -185,18 +185,18 @@ export async function trainingRoutes(fastify) {
     },
   );
 
-  // ========== STUDENT ROUTES ==========
+  // ========== MY PROTOCOLS ROUTES ==========
 
   // Get trainings (assignee context)
   fastify.get(
-    '/student/protocols/:protocolId/trainings',
+    '/my/protocols/:protocolId/trainings',
     {
       preHandler: [authenticate],
       schema: schema.getTrainingsSchema,
     },
     async (request, reply) => {
       try {
-        const trainings = await service.getTrainingsByProtocol(request.user.id, request.params.protocolId, 'student');
+        const trainings = await service.getTrainingsByProtocol(request.user.id, request.params.protocolId, 'assignee');
         return reply.send(trainings);
       } catch (error) {
         if (error.code === 'PROTOCOL_NOT_FOUND') {
@@ -213,14 +213,14 @@ export async function trainingRoutes(fastify) {
 
   // Get training by ID (assignee context)
   fastify.get(
-    '/student/trainings/:id',
+    '/my/trainings/:id',
     {
       preHandler: [authenticate],
       schema: schema.getTrainingByIdSchema,
     },
     async (request, reply) => {
       try {
-        const training = await service.getTrainingById(request.user.id, request.params.id, 'student');
+        const training = await service.getTrainingById(request.user.id, request.params.id, 'assignee');
         return reply.send(training);
       } catch (error) {
         if (error.code === 'TRAINING_NOT_FOUND') {

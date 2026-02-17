@@ -802,17 +802,17 @@
       ]
     },
     {
-      "name": "Training Protocols - Student",
+      "name": "Training Protocols - My",
       "item": [
         {
-          "name": "Get Student Protocols",
+          "name": "Get My Protocols",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/student/protocols?status=active",
+              "raw": "{{baseUrl}}/my/protocols?status=active",
               "host": ["{{baseUrl}}"],
-              "path": ["student", "protocols"],
+              "path": ["my", "protocols"],
               "query": [
                 {
                   "key": "status",
@@ -832,9 +832,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/student/protocols/:id",
+              "raw": "{{baseUrl}}/my/protocols/:id",
               "host": ["{{baseUrl}}"],
-              "path": ["student", "protocols", ":id"],
+              "path": ["my", "protocols", ":id"],
               "variable": [
                 {
                   "key": "id",
@@ -1145,7 +1145,7 @@
       ]
     },
     {
-      "name": "Trainings - Student",
+      "name": "Trainings - My",
       "item": [
         {
           "name": "Get Trainings by Protocol",
@@ -1153,9 +1153,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/student/protocols/:protocolId/trainings",
+              "raw": "{{baseUrl}}/my/protocols/:protocolId/trainings",
               "host": ["{{baseUrl}}"],
-              "path": ["student", "protocols", ":protocolId", "trainings"],
+              "path": ["my", "protocols", ":protocolId", "trainings"],
               "variable": [
                 {
                   "key": "protocolId",
@@ -1174,9 +1174,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/student/trainings/:id",
+              "raw": "{{baseUrl}}/my/trainings/:id",
               "host": ["{{baseUrl}}"],
-              "path": ["student", "trainings", ":id"],
+              "path": ["my", "trainings", ":id"],
               "variable": [
                 {
                   "key": "id",

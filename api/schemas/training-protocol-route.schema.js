@@ -187,7 +187,13 @@ export const deleteProtocolSchema = {
     },
   },
   response: {
-    200: { type: 'object' },
+    200: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        deletedAt: { type: 'string', format: 'date-time' },
+      },
+    },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -215,15 +221,45 @@ export const importFromTemplateSchema = {
     additionalProperties: false,
   },
   response: {
-    201: { type: 'object' },
+    201: {
+      description: 'Protocol created from template with assignee info',
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        assigneeId: { type: 'string', format: 'uuid' },
+        trainerId: { type: 'string', format: 'uuid' },
+        protocolTemplateId: { type: 'string', format: 'uuid', nullable: true },
+        name: { type: 'string' },
+        description: { type: 'string', nullable: true },
+        availableWeekDays: { type: 'array', items: { type: 'string' } },
+        status: { type: 'string' },
+        startDate: { type: 'string', format: 'date' },
+        expirationDate: { type: 'string', format: 'date', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        assignee: assigneeSchema,
+      },
+    },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
 };
 
-// Student schemas
-export const getStudentProtocolsSchema = {
-  tags: ['Training Protocols - Student'],
+// My protocols schemas
+const trainerInfoSchema = {
+  type: 'object',
+  nullable: true,
+  description: 'Trainer who created this protocol',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    avatarUrl: { type: 'string', nullable: true },
+  },
+  additionalProperties: false,
+};
+
+export const getMyProtocolsSchema = {
+  tags: ['Training Protocols - My'],
   summary: 'Get protocols assigned to user',
   security: [{ bearerAuth: [] }],
   querystring: {
@@ -239,14 +275,51 @@ export const getStudentProtocolsSchema = {
         type: 'object',
         properties: {
           id: { type: 'string', format: 'uuid' },
+          assigneeId: { type: 'string', format: 'uuid' },
+          trainerId: { type: 'string', format: 'uuid' },
           name: { type: 'string' },
           status: { type: 'string' },
           startDate: { type: 'string', format: 'date' },
           expirationDate: { type: 'string', format: 'date', nullable: true },
-          trainer: { type: 'object' },
+          trainer: trainerInfoSchema,
           trainings: { type: 'array' },
         },
       },
     },
+  },
+};
+
+export const getMyProtocolByIdSchema = {
+  tags: ['Training Protocols - My'],
+  summary: 'Get protocol by ID (assignee view)',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        assigneeId: { type: 'string', format: 'uuid' },
+        trainerId: { type: 'string', format: 'uuid' },
+        protocolTemplateId: { type: 'string', format: 'uuid', nullable: true },
+        name: { type: 'string' },
+        description: { type: 'string', nullable: true },
+        availableWeekDays: { type: 'array', items: { type: 'string' } },
+        status: { type: 'string' },
+        startDate: { type: 'string', format: 'date' },
+        expirationDate: { type: 'string', format: 'date', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        trainer: trainerInfoSchema,
+        trainings: { type: 'array' },
+      },
+    },
+    403: { type: 'object', properties: { error: { type: 'string' } } },
+    404: { type: 'object', properties: { error: { type: 'string' } } },
   },
 };

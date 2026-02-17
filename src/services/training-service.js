@@ -77,7 +77,7 @@ export async function createTraining(userId, protocolId, data) {
  *
  * @param {string} userId - User ID
  * @param {string} protocolId - Protocol ID
- * @param {string} context - Context: 'trainer' or 'student'
+ * @param {string} context - Context: 'trainer' or 'assignee'
  * @returns {Promise<object[]>} List of trainings
  */
 export async function getTrainingsByProtocol(userId, protocolId, context) {
@@ -93,7 +93,7 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
     }
 
     await verifyProtocolOwnership(protocolId, trainer.id);
-  } else if (context === 'student') {
+  } else if (context === 'assignee') {
     // Verify protocol is assigned to this user
     const protocol = await prisma.trainingProtocol.findUnique({
       where: { id: protocolId },
@@ -107,7 +107,7 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
       throw buildError('FORBIDDEN_NOT_YOUR_PROTOCOL', 'This protocol is not assigned to you', 403);
     }
   } else {
-    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "student"');
+    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
   // Fetch trainings
@@ -138,7 +138,7 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
  *
  * @param {string} userId - User ID
  * @param {string} trainingId - Training ID
- * @param {string} context - Context: 'trainer' or 'student'
+ * @param {string} context - Context: 'trainer' or 'assignee'
  * @returns {Promise<object>} Training
  */
 export async function getTrainingById(userId, trainingId, context) {
@@ -181,12 +181,12 @@ export async function getTrainingById(userId, trainingId, context) {
     if (training.trainingProtocol.trainerId !== trainer.id) {
       throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this training', 403);
     }
-  } else if (context === 'student') {
+  } else if (context === 'assignee') {
     if (training.trainingProtocol.assigneeId !== userId) {
       throw buildError('FORBIDDEN_NOT_YOUR_TRAINING', 'This training is not assigned to you', 403);
     }
   } else {
-    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "student"');
+    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
   return training;

@@ -150,7 +150,7 @@ export async function getProtocolsByTrainer(userId, filters = {}) {
  * @param {string} [filters.status] - Filter by status
  * @returns {Promise<object[]>} List of protocols
  */
-export async function getProtocolsByStudent(userId, filters = {}) {
+export async function getMyProtocols(userId, filters = {}) {
   // 1. Build where clause (protocols assigned to this user)
   const where = {
     assigneeId: userId,
@@ -195,7 +195,11 @@ export async function getProtocolsByStudent(userId, filters = {}) {
     },
   });
 
-  return protocols;
+  // Map trainer.user to trainer for cleaner response
+  return protocols.map((protocol) => ({
+    ...protocol,
+    trainer: protocol.trainer?.user || null,
+  }));
 }
 
 /**
@@ -267,12 +271,19 @@ export async function getProtocolById(userId, protocolId, context) {
     if (protocol.trainerId !== trainer.id) {
       throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this protocol', 403);
     }
-  } else if (context === 'student') {
+  } else if (context === 'assignee') {
     if (protocol.assigneeId !== userId) {
       throw buildError('FORBIDDEN_NOT_YOUR_PROTOCOL', 'This protocol is not assigned to you', 403);
     }
+
+    // Map trainer.user to trainer for cleaner response
+    const { trainer, ...rest } = protocol;
+    return {
+      ...rest,
+      trainer: trainer?.user || null,
+    };
   } else {
-    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "student"');
+    throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
   return protocol;
