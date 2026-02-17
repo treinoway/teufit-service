@@ -48,7 +48,7 @@ src/
   config/          # email-handler, s3-bucket-handler
   db.js            # Prisma client
 prisma/
-  schema.prisma    # Models (User, Trainer, Student, Training*, etc.)
+  schema.prisma    # Models (User, Trainer, UserHealthDetail, Training*, etc.)
 postman/           # Postman collection
 docs/api/          # API documentation (e.g. training-protocols-api.md)
 test/

@@ -1,5 +1,32 @@
 import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
 
+const trainingResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    protocolId: { type: 'string', format: 'uuid' },
+    trainingTemplateId: { type: 'string', format: 'uuid', nullable: true },
+    name: { type: 'string' },
+    description: { type: 'string', nullable: true },
+    category: { type: 'string' },
+    bodySegment: { type: 'string', nullable: true },
+    order: { type: 'integer', nullable: true },
+    notes: { type: 'string', nullable: true },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
+const scheduleResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainingId: { type: 'string', format: 'uuid' },
+    weekDay: { type: 'string' },
+    order: { type: 'integer' },
+  },
+};
+
 export const createTrainingSchema = {
   tags: ['Trainings - Trainer'],
   summary: 'Create a training',
@@ -24,7 +51,8 @@ export const createTrainingSchema = {
     additionalProperties: false,
   },
   response: {
-    201: { type: 'object' },
+    201: trainingResponseSchema,
+    400: { type: 'object', properties: { error: { type: 'string' } } },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -39,7 +67,14 @@ export const getTrainingsSchema = {
     required: ['protocolId'],
     properties: { protocolId: { type: 'string', format: 'uuid' } },
   },
-  response: { 200: { type: 'array', items: { type: 'object' } } },
+  response: {
+    200: {
+      type: 'array',
+      items: trainingResponseSchema,
+    },
+    403: { type: 'object', properties: { error: { type: 'string' } } },
+    404: { type: 'object', properties: { error: { type: 'string' } } },
+  },
 };
 
 export const getTrainingByIdSchema = {
@@ -52,7 +87,7 @@ export const getTrainingByIdSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: { type: 'object' },
+    200: trainingResponseSchema,
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -80,7 +115,8 @@ export const updateTrainingSchema = {
     additionalProperties: false,
   },
   response: {
-    200: { type: 'object' },
+    200: trainingResponseSchema,
+    400: { type: 'object', properties: { error: { type: 'string' } } },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -96,7 +132,13 @@ export const deleteTrainingSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: { type: 'object' },
+    200: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        deletedAt: { type: 'string', format: 'date-time' },
+      },
+    },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -120,7 +162,7 @@ export const importTrainingFromTemplateSchema = {
     additionalProperties: false,
   },
   response: {
-    201: { type: 'object' },
+    201: trainingResponseSchema,
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },
@@ -149,7 +191,11 @@ export const scheduleTrainingSchema = {
     additionalProperties: false,
   },
   response: {
-    201: { type: 'array', items: { type: 'object' } },
+    201: {
+      type: 'array',
+      items: scheduleResponseSchema,
+    },
+    400: { type: 'object', properties: { error: { type: 'string' } } },
     403: { type: 'object', properties: { error: { type: 'string' } } },
     404: { type: 'object', properties: { error: { type: 'string' } } },
   },

@@ -18,7 +18,7 @@ import { prisma } from '../../src/db.js';
 import {
   createProtocol,
   getProtocolsByTrainer,
-  getProtocolsByStudent,
+  getMyProtocols,
   getProtocolById,
   updateProtocol,
   deleteProtocol,
@@ -218,7 +218,7 @@ describe('training-protocol-service', () => {
     });
   });
 
-  describe('getProtocolsByStudent', () => {
+  describe('getMyProtocols', () => {
     it('returns protocols assigned to user with trainer info', async () => {
       const protocols = [
         {
@@ -229,9 +229,16 @@ describe('training-protocol-service', () => {
       ];
       prisma.trainingProtocol.findMany.mockResolvedValue(protocols);
 
-      const result = await getProtocolsByStudent('u1');
+      const result = await getMyProtocols('u1');
 
-      expect(result).toEqual(protocols);
+      // Result should have trainer.user mapped to trainer
+      expect(result).toEqual([
+        {
+          id: 'p1',
+          assigneeId: 'u1',
+          trainer: { firstName: 'Trainer', lastName: 'Name' },
+        },
+      ]);
       expect(prisma.trainingProtocol.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -272,7 +279,7 @@ describe('training-protocol-service', () => {
       });
     });
 
-    it('throws FORBIDDEN_NOT_YOUR_PROTOCOL when student is not assignee', async () => {
+    it('throws FORBIDDEN_NOT_YOUR_PROTOCOL when user is not assignee', async () => {
       prisma.trainingProtocol.findUnique.mockResolvedValue({
         id: 'p1',
         trainerId: 't1',
@@ -281,7 +288,7 @@ describe('training-protocol-service', () => {
       });
 
       await expect(
-        getProtocolById('u1', 'p1', 'student'),
+        getProtocolById('u1', 'p1', 'assignee'),
       ).rejects.toMatchObject({
         code: 'FORBIDDEN_NOT_YOUR_PROTOCOL',
         statusCode: 403,

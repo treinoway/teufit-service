@@ -65,13 +65,13 @@ activeProfile: 'trainer' | 'student'
 
 // Example: Trainer who is also an assignee of another protocol
 const user = {
-  roles: ['trainer'],      // Backend: can access /trainer/* endpoints
-  activeProfile: 'trainer' // Frontend: show trainer UI, call /trainer/* endpoints
+  roles: ['trainer'],             // Backend: TRAINER role for trainer endpoints
+  activeProfile: 'trainer'        // Frontend: show trainer UI, call /trainer/* endpoints
 };
 
 // If user switches to assignee view:
-user.activeProfile = 'student';  // Frontend now calls /student/* endpoints
-// Backend allows /student/* for any authenticated user - it doesn't check activeProfile!
+user.activeProfile = 'student';  // Frontend now calls /my/* endpoints
+// Backend still allows both - it doesn't check activeProfile!
 ```
 
 ### API Design Pattern
@@ -79,14 +79,14 @@ user.activeProfile = 'student';  // Frontend now calls /student/* endpoints
 Endpoints are separated by context:
 
 - **`/trainer/*`** - Trainer operations (require TRAINER role)
-- **`/student/*`** - Protocol assignee operations (require authentication only; protocols assigned to this user)
+- **`/my/*`** - Protocol assignee operations (require authentication only; protocols assigned to this user)
 
 Frontend chooses which endpoint to call based on `activeProfile`:
 
 ```javascript
 const endpoint = activeProfile === 'trainer'
   ? '/trainer/protocols'  // Protocols I created
-  : '/student/protocols'; // Protocols assigned to me
+  : '/my/protocols';      // Protocols assigned to me
 ```
 
 ### Becoming a Trainer
@@ -429,16 +429,16 @@ POST /trainer/protocols/from-template
 
 ---
 
-### Training Protocols (Student)
+### Training Protocols (My)
 
-**Base URL**: `/student/protocols`
+**Base URL**: `/my/protocols`
 
 **Role Required**: Authentication only (no specific role; protocols assigned to authenticated user)
 
 #### List My Protocols
 
 ```
-GET /student/protocols?status=active
+GET /my/protocols?status=active
 ```
 
 **Query Parameters:**
@@ -446,13 +446,56 @@ GET /student/protocols?status=active
 
 **Response (200):** Array of protocols assigned to the authenticated user with trainer info and trainings
 
+```json
+[
+  {
+    "id": "uuid",
+    "assigneeId": "uuid",
+    "trainerId": "uuid",
+    "name": "Full Body Protocol",
+    "status": "active",
+    "startDate": "2023-12-31",
+    "expirationDate": "2024-02-29",
+    "trainer": {
+      "id": "uuid",
+      "firstName": "John",
+      "lastName": "Trainer",
+      "avatarUrl": "https://..."
+    },
+    "trainings": []
+  }
+]
+```
+
 #### Get Protocol by ID
 
 ```
-GET /student/protocols/:id
+GET /my/protocols/:id
 ```
 
-**Response (200):** Full protocol details with trainings
+**Response (200):** Full protocol details with trainings (excludes `assignee` since it's the authenticated user)
+
+```json
+{
+  "id": "uuid",
+  "assigneeId": "uuid",
+  "trainerId": "uuid",
+  "name": "Full Body Protocol",
+  "description": "A comprehensive full body training protocol",
+  "availableWeekDays": ["monday", "wednesday", "friday"],
+  "status": "active",
+  "startDate": "2023-12-31",
+  "expirationDate": "2024-02-29",
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "trainer": {
+    "id": "uuid",
+    "firstName": "John",
+    "lastName": "Trainer",
+    "avatarUrl": "https://..."
+  },
+  "trainings": []
+}
+```
 
 ---
 
@@ -565,9 +608,9 @@ Trainer:
 GET /trainer/protocols/:protocolId/trainings
 ```
 
-Student:
+Assignee:
 ```
-GET /student/protocols/:protocolId/trainings
+GET /my/protocols/:protocolId/trainings
 ```
 
 **Response (200):** Array of `Training` with schedules
@@ -579,9 +622,9 @@ Trainer:
 GET /trainer/trainings/:id
 ```
 
-Student:
+Assignee:
 ```
-GET /student/trainings/:id
+GET /my/trainings/:id
 ```
 
 **Response (200):** `Training` with full details
@@ -733,7 +776,7 @@ await fetch(`/trainer/trainings/${trainingId}/schedule`, {
 user.activeProfile = 'student';
 
 // Fetch protocols assigned to me (any authenticated user)
-const response = await fetch('/student/protocols', {
+const response = await fetch('/my/protocols', {
   method: 'GET',
   headers: {
     'Authorization': `Bearer ${token}`
@@ -754,27 +797,27 @@ protocols.forEach(protocol => {
 
 ```javascript
 const user = {
-  roles: ['trainer'], // STUDENT role no longer exists; any authenticated user can be an assignee
+  roles: ['trainer'],
   activeProfile: 'trainer'
 };
 
 // View 1: As Trainer (protocols I created)
 if (user.activeProfile === 'trainer') {
   const myProtocols = await fetch('/trainer/protocols');
-  // Shows protocols I created for my students
+  // Shows protocols I created for my assignees
 }
 
 // User switches view
 user.activeProfile = 'student';
 
-// View 2: As Student (protocols assigned to me)
+// View 2: As Assignee (protocols assigned to me)
 if (user.activeProfile === 'student') {
-  const assignedProtocols = await fetch('/student/protocols');
+  const assignedProtocols = await fetch('/my/protocols');
   // Shows protocols my trainer created for me
 }
 
 // Backend doesn't care about activeProfile!
-// /trainer/* requires roles.includes('trainer'); /student/* requires auth only
+// /trainer/* requires roles.includes('trainer'); /my/* requires auth only
 ```
 
 ### Example 4: Using Templates
@@ -904,7 +947,7 @@ try {
 ### Test Scenarios
 
 1. **Trainer user**: User with TRAINER role (via /become-trainer)
-2. **Assignee user**: Any authenticated user can view protocols assigned to them via /student/protocols
+2. **Assignee user**: Any authenticated user can view protocols assigned to them via /my/protocols
 3. **Ownership validation**: Ensure users can only modify their own resources
 4. **Template independence**: Verify edits to imported trainings don't affect templates
 5. **Multiple trainings per day**: Test scheduling same training on multiple days
@@ -923,7 +966,7 @@ const trainer = {
 // Create test assignee (user who receives protocols; any authenticated user)
 const assignee = {
   userId: 'assignee-uuid',
-  roles: []  // No role required for /student/protocols
+  roles: []  // No role required for /my/protocols
 };
 ```
 
