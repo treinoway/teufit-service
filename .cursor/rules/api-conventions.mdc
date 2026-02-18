@@ -22,6 +22,14 @@ alwaysApply: false
 ## Server
 
 - CORS: dynamic origin validation
-- Rate limiting: 100 req/min
+- Rate limiting:
+  - Global: 100 req/min (disabled in test env)
+  - Per-endpoint: configured via `config/environments/*.js`
+  - Examples:
+    - Postal code: 10 req/min
+    - Get user profile: 30 req/min
+    - Update profile: 10 req/min
+    - Upload avatar: 5 req/min
+    - Become trainer: 3 req/hour
 - Swagger docs at `/docs`
 - Plugins: cookie, session, JWT, OAuth2

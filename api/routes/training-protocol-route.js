@@ -2,14 +2,17 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-protocol-service.js';
 import * as schema from '../schemas/training-protocol-route.schema.js';
+import config from '../../config/index.js';
 
 export async function trainingProtocolRoutes(fastify) {
   // ========== TRAINER ROUTES ==========
 
+  // Rate limit: 20 req/min
   // Create protocol
   fastify.post(
     '/trainer/protocols',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.create },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.createProtocolSchema,
     },
@@ -30,10 +33,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 60 req/min
   // Get protocols created by trainer
   fastify.get(
     '/trainer/protocols',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.list },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getTrainerProtocolsSchema,
     },
@@ -54,10 +59,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 60 req/min
   // Get protocol by ID (trainer context)
   fastify.get(
     '/trainer/protocols/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.getById },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolByIdSchema,
     },
@@ -78,10 +85,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 20 req/min
   // Update protocol
   fastify.patch(
     '/trainer/protocols/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.update },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.updateProtocolSchema,
     },
@@ -105,10 +114,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 10 req/min
   // Delete protocol
   fastify.delete(
     '/trainer/protocols/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.delete },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.deleteProtocolSchema,
     },
@@ -129,10 +140,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 10 req/min
   // Import from template
   fastify.post(
     '/trainer/protocols/from-template',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.importFromTemplate },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.importFromTemplateSchema,
     },
@@ -156,10 +169,12 @@ export async function trainingProtocolRoutes(fastify) {
 
   // ========== STUDENT ROUTES ==========
 
+  // Rate limit: 60 req/min
   // Get protocols assigned to user (authenticated, no role required)
   fastify.get(
     '/student/protocols',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.list },
       preHandler: [authenticate],
       schema: schema.getStudentProtocolsSchema,
     },
@@ -177,10 +192,12 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 60 req/min
   // Get protocol by ID (assignee context)
   fastify.get(
     '/student/protocols/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocol.getById },
       preHandler: [authenticate],
       schema: schema.getProtocolByIdSchema,
     },
