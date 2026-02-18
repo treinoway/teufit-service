@@ -481,7 +481,7 @@ describe('userService', () => {
         firstName: 'John',
         lastName: 'Doe',
         gender: 'male',
-        birthDate: new Date('1990-01-01'),
+        birthDate: '1990-01-01',
         avatarUrl: 'https://example.com/avatar.jpg',
       });
       expect(result).not.toHaveProperty('address');

@@ -3,6 +3,7 @@ import { Roles } from '../constants/roles.js';
 import { buildUserSelect } from '../helpers/user-query-builder.js';
 import { ensureProfileForUser } from './auth-service.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
+import { formatDateOnly } from '../helpers/date-helpers.js';
 
 async function toUserProfile(user) {
 	if (!user) return null;
@@ -19,7 +20,7 @@ async function toUserProfile(user) {
 		firstName: user.firstName,
 		lastName: user.lastName,
 		gender: user.gender,
-		birthDate: user.birthDate,
+		birthDate: formatDateOnly(user.birthDate),
 		avatarUrl,
 	};
 

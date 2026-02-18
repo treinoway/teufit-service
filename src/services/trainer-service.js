@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
+import { formatDateOnly } from '../helpers/date-helpers.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -140,7 +141,7 @@ export async function patch({ userId, trainer, address, socials }) {
     ...result.trainerRow,
     firstName: result.userRow.firstName,
     lastName: result.userRow.lastName,
-    birthDate: result.userRow.birthDate,
+    birthDate: formatDateOnly(result.userRow.birthDate),
     avatarUrl,
     address: result.addressRow,
     socialNetworks: result.socialsRow,
@@ -192,7 +193,7 @@ export async function getOneByUserId(userId) {
     ...responseTrainer,
     firstName: trainer.user.firstName,
     lastName: trainer.user.lastName,
-    birthDate: trainer.user.birthDate,
+    birthDate: formatDateOnly(trainer.user.birthDate),
     avatarUrl,
     address: trainer.user.address,
     socialNetworks: trainer.user.socials,

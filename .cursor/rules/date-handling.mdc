@@ -1,0 +1,65 @@
+---
+description: Date handling conventions for API responses
+globs: "{src/services/**/*.js,api/routes/**/*.js}"
+alwaysApply: false
+---
+
+# Date Handling
+
+## Date-Only Fields (birthDate, etc.)
+
+**Problem**: Date fields without time information (like `birthDate`) stored as PostgreSQL `DATE` type are returned by Prisma as JavaScript `Date` objects. When serialized to JSON, they become ISO timestamps like `"1997-12-18T00:00:00.000Z"`, causing timezone conversion issues in frontends.
+
+**Solution**: Format date-only fields as `YYYY-MM-DD` strings using the `formatDateOnly` helper.
+
+### Using formatDateOnly
+
+```javascript
+import { formatDateOnly } from '../helpers/date-helpers.js';
+
+// In service functions that return user data
+const profile = {
+  id: user.id,
+  email: user.email,
+  birthDate: formatDateOnly(user.birthDate), // ✅ Returns "1997-12-18"
+  // ... other fields
+};
+```
+
+### Why This Matters
+
+Date-only values should not include timezone information. A birthdate of December 18, 1997 is the same regardless of the user's timezone. Without formatting:
+
+- **Backend returns**: `"1997-12-18T00:00:00.000Z"`
+- **Frontend in UTC-3 converts to**: December 17, 1997 ❌
+- **With formatDateOnly**: `"1997-12-18"` ✓ (no conversion)
+
+### When to Use
+
+Apply `formatDateOnly` to fields that represent calendar dates without time:
+
+- `birthDate`
+- `startDate`, `endDate` (for protocols, schedules)
+- Any field using `@db.Date` in Prisma schema
+
+### Input Handling
+
+When accepting date input, the existing code already handles string → Date conversion:
+
+```javascript
+// This pattern is correct (leave as-is)
+if (birthDate !== undefined) {
+  userUpdateData.birthDate = birthDate ? new Date(birthDate) : null;
+}
+```
+
+## DateTime Fields
+
+For fields that genuinely represent moments in time (timestamps), keep the default ISO format:
+
+```javascript
+// ✅ These should stay as Date objects
+createdAt: user.createdAt,
+updatedAt: user.updatedAt,
+lastLoginAt: user.lastLoginAt,
+```
