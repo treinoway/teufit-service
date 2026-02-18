@@ -5,12 +5,18 @@ import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
 import { getMeSchema, becomeTrainerSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
+import config from '../../config/index.js';
 
 export async function userRoutes(fastify) {
 
+  // Rate limit configured in config/environments/*.js
+  // Default: 30 req/min (disabled in test environment)
   fastify.get(
     '/me',
     {
+      config: {
+        rateLimit: config.rateLimit.user.getMe,
+      },
       preHandler: [authenticate],
       schema: getMeSchema,
     },
@@ -50,9 +56,13 @@ export async function userRoutes(fastify) {
     }
   );
 
+  // Rate limit: 3 req/hour (disabled in test environment)
   fastify.patch(
     '/become-trainer',
     {
+      config: {
+        rateLimit: config.rateLimit.user.becomeTrainer,
+      },
       preHandler: [authenticate],
       schema: becomeTrainerSchema,
     },
@@ -83,8 +93,12 @@ export async function userRoutes(fastify) {
     },
   );
 
+  // Rate limit: 10 req/min (disabled in test environment)
   fastify.patch('/me/profile',
     {
+      config: {
+        rateLimit: config.rateLimit.user.updateProfile,
+      },
       preHandler: [authenticate],
       schema: updateProfileSchema
     },
@@ -115,9 +129,13 @@ export async function userRoutes(fastify) {
     }
   );
 
+  // Rate limit: 5 req/min (disabled in test environment)
   fastify.post(
     '/me/avatar',
     {
+      config: {
+        rateLimit: config.rateLimit.user.uploadAvatar,
+      },
       preHandler: [authenticate],
       schema: uploadAvatarSchema,
     },

@@ -2,12 +2,15 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-protocol-template-service.js';
 import * as schema from '../schemas/training-protocol-template-route.schema.js';
+import config from '../../config/index.js';
 
 export async function trainingProtocolTemplateRoutes(fastify) {
+  // Rate limit: 20 req/min
   // Create protocol template
   fastify.post(
     '/trainer/protocol-templates',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.create },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.createProtocolTemplateSchema,
     },
@@ -28,10 +31,12 @@ export async function trainingProtocolTemplateRoutes(fastify) {
     },
   );
 
+  // Rate limit: 60 req/min
   // Get all templates
   fastify.get(
     '/trainer/protocol-templates',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.list },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolTemplatesSchema,
     },
@@ -49,10 +54,12 @@ export async function trainingProtocolTemplateRoutes(fastify) {
     },
   );
 
+  // Rate limit: 60 req/min
   // Get template by ID
   fastify.get(
     '/trainer/protocol-templates/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.getById },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolTemplateByIdSchema,
     },
@@ -73,10 +80,12 @@ export async function trainingProtocolTemplateRoutes(fastify) {
     },
   );
 
+  // Rate limit: 20 req/min
   // Update template
   fastify.patch(
     '/trainer/protocol-templates/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.update },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.updateProtocolTemplateSchema,
     },
@@ -100,10 +109,12 @@ export async function trainingProtocolTemplateRoutes(fastify) {
     },
   );
 
+  // Rate limit: 10 req/min
   // Delete template
   fastify.delete(
     '/trainer/protocol-templates/:id',
     {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.delete },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.deleteProtocolTemplateSchema,
     },
