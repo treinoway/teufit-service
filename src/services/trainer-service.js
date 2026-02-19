@@ -1,13 +1,13 @@
 import { prisma } from '../db.js';
 import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
-import { formatDateOnly } from '../helpers/date-helpers.js';
+import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
   if (trainer.firstName != null) userData.firstName = trainer.firstName;
   if (trainer.lastName != null) userData.lastName = trainer.lastName;
-  if (trainer.birthDate != null) userData.birthDate = new Date(trainer.birthDate);
+  if (trainer.birthDate != null) userData.birthDate = parseDateOnlyAsUtc(trainer.birthDate);
   if (trainer.avatar != null) userData.avatarUrl = trainer.avatar;
   return userData;
 }
