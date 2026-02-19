@@ -160,7 +160,7 @@ export const updateProfileSchema = {
           stateCode: { type: 'string', maxLength: 10, description: 'State or province code (e.g., "SP", "CA")' },
           country: { type: 'string', maxLength: 100, description: 'Country name' },
           countryCode: { type: 'string', maxLength: 3, description: 'ISO country code (e.g., "BR", "US")' },
-          postalCode: { type: 'string', maxLength: 20, description: 'Postal or ZIP code' },
+          postalCode: { type: 'string', maxLength: 20, pattern: '^[0-9]{5}-?[0-9]{3}$', description: 'Brazilian postal code (CEP) with or without hyphen (e.g., "01310-100" or "01310100")' },
         },
         additionalProperties: false,
       },
