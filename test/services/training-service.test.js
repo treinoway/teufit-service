@@ -106,7 +106,7 @@ describe('training-service', () => {
         }),
       );
 
-      await expect(getTrainingById('u1', 'tr1', 'student')).rejects.toMatchObject({
+      await expect(getTrainingById('u1', 'tr1', 'assignee')).rejects.toMatchObject({
         code: 'FORBIDDEN_NOT_YOUR_TRAINING',
         statusCode: 403,
       });
@@ -126,7 +126,7 @@ describe('training-service', () => {
       const training = makeTraining();
       prisma.training.findUnique.mockResolvedValue(training);
 
-      const result = await getTrainingById('u-student', 'tr1', 'student');
+      const result = await getTrainingById('u-student', 'tr1', 'assignee');
 
       expect(result).toEqual(training);
     });
