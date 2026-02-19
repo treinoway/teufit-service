@@ -1,4 +1,5 @@
 import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const trainingResponseSchema = {
   type: 'object',
@@ -52,9 +53,12 @@ export const createTrainingSchema = {
   },
   response: {
     201: trainingResponseSchema,
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -72,8 +76,11 @@ export const getTrainingsSchema = {
       type: 'array',
       items: trainingResponseSchema,
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -88,8 +95,11 @@ export const getTrainingByIdSchema = {
   },
   response: {
     200: trainingResponseSchema,
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -116,9 +126,12 @@ export const updateTrainingSchema = {
   },
   response: {
     200: trainingResponseSchema,
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -139,8 +152,11 @@ export const deleteTrainingSchema = {
         deletedAt: { type: 'string', format: 'date-time' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -163,8 +179,11 @@ export const importTrainingFromTemplateSchema = {
   },
   response: {
     201: trainingResponseSchema,
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -195,8 +214,11 @@ export const scheduleTrainingSchema = {
       type: 'array',
       items: scheduleResponseSchema,
     },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

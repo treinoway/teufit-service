@@ -116,9 +116,19 @@ describe('e2e: address flows', () => {
 
 			expect(response.statusCode).toBe(400);
 			const body = response.json();
-			// Schema validation happens first, so we get Fastify's validation error
-			expect(body).toHaveProperty('error');
-			expect(body.error).toBe('Bad Request');
+			// Schema validation happens before handler logic and is normalized globally.
+			expect(body).toMatchObject({
+				error: 'VALIDATION_ERROR',
+				messageCode: 'validation.failed',
+			});
+			expect(body.details).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						field: 'code',
+						messageCode: expect.stringContaining('validation.code'),
+					}),
+				])
+			);
 		});
 
 		it('returns 400 when postal code format is invalid (too long)', async () => {

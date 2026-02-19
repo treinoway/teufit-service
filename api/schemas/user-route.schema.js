@@ -1,4 +1,5 @@
 import { USER_RELATION_CONFIGS } from '../../src/constants/user-relations.js';
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 // Dynamically generate allowed relations list from USER_RELATION_CONFIGS
 const allowedRelations = Object.keys(USER_RELATION_CONFIGS);
@@ -110,8 +111,10 @@ export const getMeSchema = {
     400: {
       description: 'Bad request - invalid relations requested',
       type: 'object',
+      required: ['error', 'messageCode', 'message', 'allowedRelations'],
       properties: {
         error: { type: 'string', description: 'Error code (e.g., INVALID_RELATIONS)' },
+        messageCode: { type: 'string', description: 'Stable error code for i18n' },
         message: { type: 'string', description: 'Human-readable error message' },
         allowedRelations: {
           type: 'array',
@@ -119,10 +122,12 @@ export const getMeSchema = {
           description: 'List of allowed relation names',
         },
       },
+      additionalProperties: true,
     },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
-    500: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -211,9 +216,11 @@ export const updateProfileSchema = {
       },
       additionalProperties: false,
     },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
-    500: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -256,9 +263,10 @@ export const becomeTrainerSchema = {
       required: ['activeProfile', 'token', 'refreshToken'],
       additionalProperties: false,
     },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    500: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -303,11 +311,16 @@ export const uploadAvatarSchema = {
     400: {
       description: 'Bad request - Invalid file, missing file, wrong file type, or file too large',
       type: 'object',
+      required: ['error', 'messageCode', 'message'],
       properties: {
         error: {
           type: 'string',
           enum: ['FILE_REQUIRED', 'INVALID_FILE_TYPE', 'FILE_TOO_LARGE'],
           description: 'Error code indicating the specific validation failure',
+        },
+        messageCode: {
+          type: 'string',
+          description: 'Stable error code for i18n',
         },
         message: {
           type: 'string',
@@ -328,51 +341,18 @@ export const uploadAvatarSchema = {
           message: 'File too large. Maximum size is 5MB. Received: 6.24MB',
         },
       ],
+      additionalProperties: true,
     },
-    401: {
-      description: 'Unauthorized - Missing or invalid authentication token',
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-      },
-    },
+    401: errorResponseSchema,
     404: {
       description: 'User not found',
-      type: 'object',
-      properties: {
-        error: {
-          type: 'string',
-          enum: ['USER_NOT_FOUND'],
-        },
-        message: {
-          type: 'string',
-          description: 'User not found',
-        },
-      },
+      ...errorResponseSchema,
     },
     502: {
       description: 'Bad Gateway - S3 upload failed',
-      type: 'object',
-      properties: {
-        error: {
-          type: 'string',
-          enum: ['S3_UPLOAD_FAILED'],
-        },
-        message: {
-          type: 'string',
-          description: 'Details about the S3 upload failure',
-        },
-      },
+      ...errorResponseSchema,
     },
-    500: {
-      description: 'Internal server error',
-      type: 'object',
-      properties: {
-        error: {
-          type: 'string',
-          description: 'Generic error message',
-        },
-      },
-    },
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

@@ -1,4 +1,5 @@
 const authTags = ['auth'];
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const userIdResponseSchema = {
   type: 'object',
@@ -40,22 +41,11 @@ export const signupSchema = {
   },
   response: {
     201: authSuccessResponseSchema,
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    409: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -73,23 +63,12 @@ export const loginSchema = {
   },
   response: {
     200: authSuccessResponseSchema,
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    409: { type: 'object', properties: { error: { type: 'string' } } },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -118,13 +97,9 @@ export const forgotPasswordSchema = {
         },
       },
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -153,21 +128,10 @@ export const resetPasswordSchema = {
   },
   response: {
     200: authSuccessResponseSchema,
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -178,13 +142,9 @@ export const googleStartSchema = {
     302: {
       description: 'Redirects to /auth/google to start the OAuth2 flow',
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -202,26 +162,10 @@ export const googleCallbackSchema = {
     302: {
       description: 'Redirects to the frontend URL after successful authentication',
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    403: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-      },
-    },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -239,16 +183,11 @@ export const googleMobileSchema = {
   },
   response: {
     200: authSuccessResponseSchema,
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    500: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -273,34 +212,11 @@ export const refreshSchema = {
         refreshToken: { type: 'string', description: 'New refresh token to use for future requests' },
       },
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' }
-      }
-    },
-    401: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' }
-      }
-    },
-    403: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' }
-      }
-    },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' }
-      }
-    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -316,6 +232,8 @@ export const logoutSchema = {
   },
   response: {
     200: { type: 'object', properties: { message: { type: 'string' } } },
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -339,26 +257,10 @@ export const waitlistSchema = {
         status: { type: 'string' },
       },
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    409: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -389,40 +291,12 @@ export const changePasswordSchema = {
         refreshToken: { type: 'string' },
       },
     },
-    400: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    401: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    403: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-      },
-    },
-    409: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
-    500: {
-      type: 'object',
-      properties: {
-        error: { type: 'string' },
-        message: { type: 'string' },
-      },
-    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 

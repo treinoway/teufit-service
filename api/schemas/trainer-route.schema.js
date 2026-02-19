@@ -1,3 +1,5 @@
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+
 export const patchTrainerSchema = {
   tags: ['trainer'],
   summary: 'Update trainer profile',
@@ -70,10 +72,11 @@ export const patchTrainerSchema = {
   },
   response: {
     200: { type: 'object', additionalProperties: true },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    409: { type: 'object', properties: { error: { type: 'string' } } },
-    500: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

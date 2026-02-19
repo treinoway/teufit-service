@@ -1,4 +1,5 @@
 import { weekDayValues } from '../../src/constants/training.js';
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const weekDayEnum = weekDayValues;
 
@@ -35,10 +36,12 @@ export const createProtocolTemplateSchema = {
         updatedAt: { type: 'string', format: 'date-time', nullable: true },
       },
     },
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    401: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -63,6 +66,10 @@ export const getProtocolTemplatesSchema = {
         },
       },
     },
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -90,8 +97,11 @@ export const getProtocolTemplateByIdSchema = {
         createdAt: { type: 'string', format: 'date-time' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -131,8 +141,12 @@ export const updateProtocolTemplateSchema = {
         updatedAt: { type: 'string', format: 'date-time' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -156,7 +170,10 @@ export const deleteProtocolTemplateSchema = {
         deletedAt: { type: 'string', format: 'date-time' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

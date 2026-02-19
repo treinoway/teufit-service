@@ -31,6 +31,7 @@ Backend API for the **Treinoway** wellness and training platform. Connects **tra
 | `.cursor/rules/architecture.mdc` | Request flow, layers, auth |
 | `.cursor/rules/api-conventions.mdc` | Routes, services, server |
 | `.cursor/rules/testing.mdc` | Unit tests, E2E, Vitest |
+| `.cursor/rules/error-handling.mdc` | Unified error contract (`error`, `messageCode`, `message`, `details`) for all new features |
 
 ---
 
@@ -71,3 +72,4 @@ test/
 1. **Auth?** JWT for web and mobile via `Authorization: Bearer <token>` header.
 2. **`activeProfile` vs `roles`?** `roles` drives backend authorization; `activeProfile` is a frontend UI preference.
 3. **New routes?** Update Postman + Swagger (via schemas in routes) + add tests (unit + E2E when API is involved).
+4. **Error responses in new features?** Follow `.cursor/rules/error-handling.mdc` and keep the unified contract with `messageCode`.
