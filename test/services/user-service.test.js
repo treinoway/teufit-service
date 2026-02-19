@@ -18,7 +18,12 @@ vi.mock('../../src/db.js', () => {
   };
 });
 
+vi.mock('../../src/services/address-service.js', () => ({
+  getAddressByPostalCode: vi.fn(),
+}));
+
 import { prisma } from '../../src/db.js';
+import { getAddressByPostalCode } from '../../src/services/address-service.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
 
 describe('userService', () => {
@@ -405,6 +410,120 @@ describe('userService', () => {
       });
 
       expect(result.socials).toBeDefined();
+    });
+
+    describe('CEP validation', () => {
+      it('skips CEP validation when postalCode is not provided in address', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        prisma.user.update.mockResolvedValue({
+          id: 'u1',
+          email: 'test@example.com',
+          roles: ['student'],
+          status: 'active',
+          firstName: 'John',
+          lastName: null,
+          gender: null,
+          birthDate: null,
+          avatarUrl: null,
+          address: { id: 'a1', line1: 'Main St', line2: null, neighborhood: null, city: null, state: null, stateCode: null, country: null, countryCode: null, postalCode: null },
+          socials: null,
+          preferences: null,
+        });
+
+        await updateUserProfile('u1', { address: { line1: 'Main St' } });
+
+        expect(getAddressByPostalCode).not.toHaveBeenCalled();
+      });
+
+      it('skips CEP validation when address is not provided', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        prisma.user.update.mockResolvedValue({
+          id: 'u1',
+          email: 'test@example.com',
+          roles: ['student'],
+          status: 'active',
+          firstName: 'John',
+          lastName: null,
+          gender: null,
+          birthDate: null,
+          avatarUrl: null,
+          address: null,
+          socials: null,
+          preferences: null,
+        });
+
+        await updateUserProfile('u1', { firstName: 'John' });
+
+        expect(getAddressByPostalCode).not.toHaveBeenCalled();
+      });
+
+      it('validates CEP when postalCode is provided and calls getAddressByPostalCode', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        getAddressByPostalCode.mockResolvedValue({ postalCode: '01310-100', city: 'São Paulo' });
+        prisma.user.update.mockResolvedValue({
+          id: 'u1',
+          email: 'test@example.com',
+          roles: ['student'],
+          status: 'active',
+          firstName: null,
+          lastName: null,
+          gender: null,
+          birthDate: null,
+          avatarUrl: null,
+          address: { id: 'a1', line1: null, line2: null, neighborhood: null, city: null, state: null, stateCode: null, country: null, countryCode: null, postalCode: '01310-100' },
+          socials: null,
+          preferences: null,
+        });
+
+        await updateUserProfile('u1', { address: { postalCode: '01310-100' } });
+
+        expect(getAddressByPostalCode).toHaveBeenCalledWith('01310-100');
+      });
+
+      it('throws INVALID_POSTAL_CODE_FORMAT when postalCode has invalid format', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        const err = new Error('Invalid postal code format. Brazilian postal codes must have 8 digits');
+        err.code = 'INVALID_POSTAL_CODE_FORMAT';
+        err.statusCode = 400;
+        getAddressByPostalCode.mockRejectedValue(err);
+
+        await expect(updateUserProfile('u1', { address: { postalCode: '123' } })).rejects.toMatchObject({
+          code: 'INVALID_POSTAL_CODE_FORMAT',
+          statusCode: 400,
+        });
+
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it('throws POSTAL_CODE_NOT_FOUND when CEP does not exist', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        const err = new Error('Postal code not found');
+        err.code = 'POSTAL_CODE_NOT_FOUND';
+        err.statusCode = 404;
+        getAddressByPostalCode.mockRejectedValue(err);
+
+        await expect(updateUserProfile('u1', { address: { postalCode: '99999-999' } })).rejects.toMatchObject({
+          code: 'POSTAL_CODE_NOT_FOUND',
+          statusCode: 404,
+        });
+
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it('throws POSTAL_CODE_API_ERROR when ViaCEP is unavailable', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        const err = new Error('Failed to fetch postal code information');
+        err.code = 'POSTAL_CODE_API_ERROR';
+        err.statusCode = 502;
+        getAddressByPostalCode.mockRejectedValue(err);
+
+        await expect(updateUserProfile('u1', { address: { postalCode: '01310-100' } })).rejects.toMatchObject({
+          code: 'POSTAL_CODE_API_ERROR',
+          statusCode: 502,
+        });
+
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
     });
 
     it('upserts preferences when provided', async () => {

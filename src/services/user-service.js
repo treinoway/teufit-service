@@ -4,6 +4,7 @@ import { buildUserSelect } from '../helpers/user-query-builder.js';
 import { ensureProfileForUser } from './auth-service.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly } from '../helpers/date-helpers.js';
+import { getAddressByPostalCode } from './address-service.js';
 
 async function toUserProfile(user) {
 	if (!user) return null;
@@ -177,6 +178,11 @@ if (!userId) {
 	}
 
 	const { address, socials, preferences, firstName, lastName, birthDate, avatarUrl, gender } = data;
+
+	// Validate CEP existence before proceeding
+	if (address?.postalCode) {
+		await getAddressByPostalCode(address.postalCode);
+	}
 
 	// Build user update data
 	const userUpdateData = {};

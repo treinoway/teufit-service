@@ -977,7 +977,7 @@ e2eDescribe('e2e: auth and user flows', () => {
             stateCode: 'SP',
             country: 'Brasil',
             countryCode: 'BR',
-            postalCode: '01000-000',
+            postalCode: '01310-100',
           },
           socials: {
             instagram: '@johndoe',
@@ -1042,7 +1042,7 @@ e2eDescribe('e2e: auth and user flows', () => {
       expect(body.address).toMatchObject({
         line1: '123 Main St',
         city: 'São Paulo',
-        postalCode: '01000-000',
+        postalCode: '01310-100',
       });
       expect(body).not.toHaveProperty('socials');
       expect(body).not.toHaveProperty('preferences');
