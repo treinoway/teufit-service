@@ -1,4 +1,5 @@
 import { trainingCategoryValues, bodySegmentValues } from '../../src/constants/training.js';
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const templateResponseSchema = {
   type: 'object',
@@ -65,8 +66,11 @@ export const createTrainingTemplateSchema = {
   },
   response: {
     201: templateResponseSchema,
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -79,7 +83,10 @@ export const getTrainingTemplatesSchema = {
       type: 'array',
       items: templateWithTrainerSchema,
     },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -92,6 +99,9 @@ export const getPublicTemplatesSchema = {
       type: 'array',
       items: templateWithTrainerSchema,
     },
+    401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -106,8 +116,11 @@ export const getTrainingTemplateByIdSchema = {
   },
   response: {
     200: templateWithTrainerSchema,
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -134,9 +147,12 @@ export const updateTrainingTemplateSchema = {
   },
   response: {
     200: templateResponseSchema,
-    400: { type: 'object', properties: { error: { type: 'string' } } },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -151,7 +167,10 @@ export const deleteTrainingTemplateSchema = {
   },
   response: {
     200: templateResponseSchema,
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

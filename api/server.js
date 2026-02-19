@@ -9,6 +9,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
+import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { userRoutes } from './routes/user-route.js';
@@ -29,6 +30,50 @@ export async function buildServer(options = {}) {
 
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
+
+  fastify.setErrorHandler((error, request, reply) => {
+    const normalizedError = normalizeError(error);
+    const isServerError = normalizedError.httpStatus >= 500;
+
+    if (isServerError) {
+      request.log.error(
+        {
+          err: error,
+          method: request.method,
+          url: request.url,
+          requestId: request.id,
+        },
+        'Unhandled server error',
+      );
+    }
+
+    const payload = buildErrorPayload(normalizedError);
+    return reply.status(normalizedError.httpStatus).send(payload);
+  });
+
+  fastify.addHook('preSerialization', (request, reply, payload, done) => {
+    if (reply.statusCode < 400) {
+      done(null, payload);
+      return;
+    }
+
+    if (typeof payload === 'string') {
+      let parsedPayload;
+      try {
+        parsedPayload = JSON.parse(payload);
+      } catch {
+        done(null, payload);
+        return;
+      }
+
+      const normalizedPayload = normalizeErrorResponsePayload(parsedPayload, reply.statusCode);
+      done(null, normalizedPayload);
+      return;
+    }
+
+    const normalizedPayload = normalizeErrorResponsePayload(payload, reply.statusCode);
+    done(null, normalizedPayload);
+  });
 
   // Register CORS support
   const isDevelopment = process.env.NODE_ENV === 'development';

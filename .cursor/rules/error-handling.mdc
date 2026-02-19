@@ -1,0 +1,60 @@
+---
+description: Unified API error handling conventions
+globs: "{api/server.js,api/routes/**/*.js,api/middleware/**/*.js,src/services/**/*.js,src/helpers/**/*.js,api/schemas/**/*.js}"
+alwaysApply: false
+---
+
+# Error Handling
+
+## Objective
+
+Use one consistent error contract across the API for all new features and route changes.
+
+## Response Contract
+
+All error responses must follow:
+
+```json
+{
+  "error": "SOME_ERROR_CODE",
+  "messageCode": "some.semantic.code",
+  "message": "Human-readable fallback message",
+  "details": {}
+}
+```
+
+`details` is optional and should contain structured context (especially validation errors).
+
+## Current Architecture
+
+- Global normalization is centralized in `api/server.js` using:
+  - `setErrorHandler(...)`
+  - `onSend(...)` fallback normalization for legacy/manual responses
+- Domain error classes and normalizers live in:
+  - `src/errors/app-error.js`
+  - `src/errors/normalize-error.js`
+
+## Rules for New Features
+
+1. Prefer throwing errors from services/middlewares instead of returning ad-hoc payloads.
+2. Prefer `AppError` (or specialized classes) when creating new domain errors.
+3. Ensure 4xx keep meaningful `message`; 5xx must not expose internal details.
+4. Keep `messageCode` stable for client i18n usage.
+5. For route schemas (`api/schemas`), include the unified fields in error responses:
+   - `error`
+   - `messageCode`
+   - `message`
+   - `details` (when applicable)
+
+## Validation Errors
+
+Fastify/AJV validation errors should normalize to:
+
+- `error`: `VALIDATION_ERROR`
+- `messageCode`: `validation.failed`
+- `details`: array of field-level validation metadata
+
+## Migration Guidance
+
+During migration, legacy `error.code` / `error.statusCode` may still appear.
+Do not introduce new legacy patterns in new code.

@@ -1,4 +1,5 @@
 import { weekDayValues, trainingStatusValues } from '../../src/constants/training.js';
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const weekDayEnum = weekDayValues;
 const statusEnum = trainingStatusValues;
@@ -57,7 +58,12 @@ export const createProtocolSchema = {
         assignee: assigneeSchema,
       },
     },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -90,6 +96,11 @@ export const getTrainerProtocolsSchema = {
         },
       },
     },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -122,8 +133,11 @@ export const getProtocolByIdSchema = {
         trainings: { type: 'array' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -170,8 +184,12 @@ export const updateProtocolSchema = {
         assignee: assigneeSchema,
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -194,8 +212,11 @@ export const deleteProtocolSchema = {
         deletedAt: { type: 'string', format: 'date-time' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -239,8 +260,11 @@ export const importFromTemplateSchema = {
         assignee: assigneeSchema,
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -286,6 +310,10 @@ export const getMyProtocolsSchema = {
         },
       },
     },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };
 
@@ -319,7 +347,10 @@ export const getMyProtocolByIdSchema = {
         trainings: { type: 'array' },
       },
     },
-    403: { type: 'object', properties: { error: { type: 'string' } } },
-    404: { type: 'object', properties: { error: { type: 'string' } } },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
   },
 };

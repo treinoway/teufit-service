@@ -1,3 +1,5 @@
+import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+
 export const getPostalCodeSchema = {
 	tags: ['address'],
 	summary: 'Get address information by postal code',
@@ -32,36 +34,11 @@ export const getPostalCodeSchema = {
 			},
 			additionalProperties: false,
 		},
-		400: {
-			description: 'Bad request - Invalid postal code format',
-			type: 'object',
-			properties: {
-				error: { type: 'string' },
-				message: { type: 'string' },
-			},
-		},
-		401: {
-			description: 'Unauthorized - Authentication required',
-			type: 'object',
-			properties: {
-				error: { type: 'string' },
-			},
-		},
-		404: {
-			description: 'Postal code not found',
-			type: 'object',
-			properties: {
-				error: { type: 'string' },
-				message: { type: 'string' },
-			},
-		},
-		502: {
-			description: 'External API error',
-			type: 'object',
-			properties: {
-				error: { type: 'string' },
-				message: { type: 'string' },
-			},
-		},
+		400: badRequestErrorResponseSchema,
+		401: errorResponseSchema,
+		404: errorResponseSchema,
+		429: errorResponseSchema,
+		502: errorResponseSchema,
+		500: errorResponseSchema,
 	},
 };

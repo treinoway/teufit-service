@@ -1,10 +1,13 @@
 import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../constants/training.js';
+import { AppError } from '../errors/app-error.js';
 
 export function buildError(code, message, statusCode = 400) {
-  const err = new Error(message);
-  err.code = code;
-  err.statusCode = statusCode;
-  return err;
+  return new AppError({
+    httpStatus: statusCode,
+    error: code,
+    messageCode: `legacy.${code}`,
+    message,
+  });
 }
 
 export function validateWeekDays(weekDays, fieldName = 'weekDays') {
