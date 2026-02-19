@@ -3,7 +3,7 @@ import { Roles } from '../constants/roles.js';
 import { buildUserSelect } from '../helpers/user-query-builder.js';
 import { ensureProfileForUser } from './auth-service.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
-import { formatDateOnly } from '../helpers/date-helpers.js';
+import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
 
 async function toUserProfile(user) {
@@ -191,8 +191,7 @@ if (!userId) {
 	if (gender !== undefined) userUpdateData.gender = gender;
 	if (avatarUrl !== undefined) userUpdateData.avatarUrl = avatarUrl;
 	if (birthDate !== undefined) {
-		// Parse birthDate string to Date object
-		userUpdateData.birthDate = birthDate ? new Date(birthDate) : null;
+		userUpdateData.birthDate = parseDateOnlyAsUtc(birthDate);
 	}
 
 	// Prepare nested updates for address and socials

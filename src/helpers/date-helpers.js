@@ -13,3 +13,24 @@ export function formatDateOnly(date) {
 	const day = String(d.getUTCDate()).padStart(2, '0');
 	return `${year}-${month}-${day}`;
 }
+
+/**
+ * Parses YYYY-MM-DD strings to a stable UTC date instance.
+ * Uses noon UTC to avoid day shifts when values cross timezones.
+ *
+ * @param {string|null|undefined} value
+ * @returns {Date|null}
+ */
+export function parseDateOnlyAsUtc(value) {
+	if (!value) return null;
+
+	const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (dateOnlyMatch) {
+		const year = Number(dateOnlyMatch[1]);
+		const month = Number(dateOnlyMatch[2]);
+		const day = Number(dateOnlyMatch[3]);
+		return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+	}
+
+	return new Date(value);
+}

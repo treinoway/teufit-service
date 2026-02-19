@@ -254,17 +254,18 @@ describe('userService', () => {
         avatarUrl: 'https://example.com/avatar.jpg',
       });
 
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'u1' },
-        data: {
-          firstName: 'John',
-          lastName: 'Doe',
-          gender: 'male',
-          birthDate: new Date('1990-05-15'),
-          avatarUrl: 'https://example.com/avatar.jpg',
-        },
-        select: expect.any(Object),
+      expect(prisma.user.update).toHaveBeenCalledTimes(1);
+      const [updateArgs] = prisma.user.update.mock.calls[0];
+
+      expect(updateArgs.where).toEqual({ id: 'u1' });
+      expect(updateArgs.data).toEqual({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'male',
+        birthDate: new Date(Date.UTC(1990, 4, 15, 12, 0, 0)),
+        avatarUrl: 'https://example.com/avatar.jpg',
       });
+      expect(updateArgs.select).toEqual(expect.any(Object));
 
       expect(result).toMatchObject({
         id: 'u1',

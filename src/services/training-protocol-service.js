@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { trainingStatusValues } from '../constants/training.js';
 import { buildError, validateWeekDays } from '../helpers/training-validators.js';
+import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 
 /**
  * Validate status
@@ -12,6 +13,22 @@ function validateStatus(status) {
       `Invalid status: ${status}. Valid values are: ${trainingStatusValues.join(', ')}`,
     );
   }
+}
+
+function normalizeProtocolDateFields(protocol) {
+  if (!protocol) return protocol;
+
+  const normalizedProtocol = { ...protocol };
+
+  if (protocol.startDate !== undefined) {
+    normalizedProtocol.startDate = formatDateOnly(protocol.startDate);
+  }
+
+  if (protocol.expirationDate !== undefined) {
+    normalizedProtocol.expirationDate = formatDateOnly(protocol.expirationDate);
+  }
+
+  return normalizedProtocol;
 }
 
 /**
@@ -62,8 +79,8 @@ export async function createProtocol(userId, data) {
       description: data.description || null,
       availableWeekDays: data.availableWeekDays || [],
       status: data.status || 'active',
-      startDate: new Date(data.startDate),
-      expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
+      startDate: parseDateOnlyAsUtc(data.startDate),
+      expirationDate: parseDateOnlyAsUtc(data.expirationDate),
     },
     include: {
       assignee: {
@@ -77,7 +94,7 @@ export async function createProtocol(userId, data) {
     },
   });
 
-  return protocol;
+  return normalizeProtocolDateFields(protocol);
 }
 
 /**
@@ -139,7 +156,7 @@ export async function getProtocolsByTrainer(userId, filters = {}) {
     },
   });
 
-  return protocols;
+  return protocols.map(normalizeProtocolDateFields);
 }
 
 /**
@@ -197,7 +214,7 @@ export async function getMyProtocols(userId, filters = {}) {
 
   // Map trainer.user to trainer for cleaner response
   return protocols.map((protocol) => ({
-    ...protocol,
+    ...normalizeProtocolDateFields(protocol),
     trainer: protocol.trainer?.user || null,
   }));
 }
@@ -279,14 +296,14 @@ export async function getProtocolById(userId, protocolId, context) {
     // Map trainer.user to trainer for cleaner response
     const { trainer, ...rest } = protocol;
     return {
-      ...rest,
+      ...normalizeProtocolDateFields(rest),
       trainer: trainer?.user || null,
     };
   } else {
     throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
-  return protocol;
+  return normalizeProtocolDateFields(protocol);
 }
 
 /**
@@ -337,9 +354,9 @@ export async function updateProtocol(userId, protocolId, data) {
   if (data.description !== undefined) updateData.description = data.description;
   if (data.availableWeekDays !== undefined) updateData.availableWeekDays = data.availableWeekDays;
   if (data.status !== undefined) updateData.status = data.status;
-  if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+  if (data.startDate !== undefined) updateData.startDate = parseDateOnlyAsUtc(data.startDate);
   if (data.expirationDate !== undefined) {
-    updateData.expirationDate = data.expirationDate ? new Date(data.expirationDate) : null;
+    updateData.expirationDate = parseDateOnlyAsUtc(data.expirationDate);
   }
 
   // 6. Update protocol
@@ -358,7 +375,7 @@ export async function updateProtocol(userId, protocolId, data) {
     },
   });
 
-  return updated;
+  return normalizeProtocolDateFields(updated);
 }
 
 /**
@@ -400,7 +417,7 @@ export async function deleteProtocol(userId, protocolId) {
     },
   });
 
-  return deleted;
+  return normalizeProtocolDateFields(deleted);
 }
 
 /**
@@ -456,8 +473,8 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
       description: data.description || template.description,
       availableWeekDays: data.availableWeekDays || template.availableWeekDays,
       status: 'active',
-      startDate: data.startDate ? new Date(data.startDate) : new Date(),
-      expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
+      startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
+      expirationDate: parseDateOnlyAsUtc(data.expirationDate),
     },
     include: {
       assignee: {
@@ -471,5 +488,5 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     },
   });
 
-  return protocol;
+  return normalizeProtocolDateFields(protocol);
 }

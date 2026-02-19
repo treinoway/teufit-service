@@ -144,7 +144,10 @@ describe('training-protocol-service', () => {
         startDate: '2025-01-01',
       });
 
-      expect(result).toEqual(created);
+      expect(result).toEqual({
+        ...created,
+        startDate: '2025-01-01',
+      });
       expect(result.assignee).toMatchObject({
         id: 'assignee-1',
         firstName: 'John',
