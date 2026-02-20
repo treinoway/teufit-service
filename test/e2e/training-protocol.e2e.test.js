@@ -81,6 +81,8 @@ e2eDescribe('e2e: training protocols', () => {
           assigneeId,
           name: 'Protocol Hipertrofia',
           startDate: '2025-02-01',
+          genderOrdination: 'female',
+          trainingLevel: 'intermediate',
         },
       });
 
@@ -90,6 +92,8 @@ e2eDescribe('e2e: training protocols', () => {
       expect(body).toHaveProperty('id');
       expect(body).toHaveProperty('assigneeId', assigneeId);
       expect(body).toHaveProperty('name', 'Protocol Hipertrofia');
+      expect(body).toHaveProperty('genderOrdination', 'female');
+      expect(body).toHaveProperty('trainingLevel', 'intermediate');
       expect(body).toHaveProperty('assignee');
       expect(body.assignee).toMatchObject({
         id: assigneeId,
@@ -224,12 +228,14 @@ e2eDescribe('e2e: training protocols', () => {
         method: 'PATCH',
         url: `/trainer/protocols/${protocolId}`,
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { name: 'Updated Name' },
+        payload: { name: 'Updated Name', genderOrdination: 'male', trainingLevel: 'athlete' },
       });
 
       expect(updateResponse.statusCode).toBe(200);
       const body = updateResponse.json();
       expect(body).toHaveProperty('name', 'Updated Name');
+      expect(body).toHaveProperty('genderOrdination', 'male');
+      expect(body).toHaveProperty('trainingLevel', 'athlete');
       expect(body).toHaveProperty('assignee');
       expect(body.assignee).toMatchObject({
         id: assigneeId,

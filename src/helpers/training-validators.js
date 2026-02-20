@@ -1,4 +1,4 @@
-import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../constants/training.js';
+import { trainingCategoryValues, bodySegmentValues, weekDayValues, genderOrdinationValues, trainingLevelValues } from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
 export function buildError(code, message, statusCode = 400) {
@@ -38,6 +38,24 @@ export function validateBodySegment(bodySegment) {
     throw buildError(
       'INVALID_BODY_SEGMENT',
       `Invalid body segment: ${bodySegment}. Valid values are: ${bodySegmentValues.join(', ')}`,
+    );
+  }
+}
+
+export function validateGenderOrdination(value) {
+  if (value && !genderOrdinationValues.includes(value)) {
+    throw buildError(
+      'INVALID_GENDER_ORDINATION',
+      `Invalid gender ordination: ${value}. Valid values are: ${genderOrdinationValues.join(', ')}`,
+    );
+  }
+}
+
+export function validateTrainingLevel(value) {
+  if (value && !trainingLevelValues.includes(value)) {
+    throw buildError(
+      'INVALID_TRAINING_LEVEL',
+      `Invalid training level: ${value}. Valid values are: ${trainingLevelValues.join(', ')}`,
     );
   }
 }

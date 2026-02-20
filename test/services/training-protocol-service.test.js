@@ -119,6 +119,42 @@ describe('training-protocol-service', () => {
       });
     });
 
+    it('throws INVALID_GENDER_ORDINATION when genderOrdination is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+
+      await expect(
+        createProtocol('u1', {
+          assigneeId: 'assignee-1',
+          name: 'Protocol A',
+          startDate: '2025-01-01',
+          genderOrdination: 'invalid-gender',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_GENDER_ORDINATION',
+      });
+
+      expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_TRAINING_LEVEL when trainingLevel is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+
+      await expect(
+        createProtocol('u1', {
+          assigneeId: 'assignee-1',
+          name: 'Protocol A',
+          startDate: '2025-01-01',
+          trainingLevel: 'invalid-level',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_TRAINING_LEVEL',
+      });
+
+      expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
+    });
+
     it('creates protocol with assignee included', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
@@ -509,6 +545,63 @@ describe('training-protocol-service', () => {
         firstName: 'Jane',
         lastName: 'Smith',
       });
+    });
+
+    it('inherits genderOrdination and trainingLevel from template when not overridden', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        genderOrdination: 'female',
+        trainingLevel: 'intermediate',
+        availableWeekDays: [],
+        deletedAt: null,
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const created = { id: 'p1', assigneeId: 'assignee-1', assignee: null };
+      prisma.trainingProtocol.create.mockResolvedValue(created);
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            genderOrdination: 'female',
+            trainingLevel: 'intermediate',
+          }),
+        }),
+      );
+    });
+
+    it('overrides genderOrdination and trainingLevel from template when provided in data', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        genderOrdination: 'female',
+        trainingLevel: 'intermediate',
+        availableWeekDays: [],
+        deletedAt: null,
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const created = { id: 'p1', assigneeId: 'assignee-1', assignee: null };
+      prisma.trainingProtocol.create.mockResolvedValue(created);
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1', {
+        genderOrdination: 'male',
+        trainingLevel: 'athlete',
+      });
+
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            genderOrdination: 'male',
+            trainingLevel: 'athlete',
+          }),
+        }),
+      );
     });
   });
 });

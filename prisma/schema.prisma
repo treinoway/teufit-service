@@ -219,6 +219,8 @@ model TrainingProtocolTemplate {
   description          String?  @db.Text
   availableWeekDays    String[] @default([]) @map("available_week_days")
   defaultDurationWeeks Int?     @map("default_duration_weeks")
+  genderOrdination     String?  @map("gender_ordination") @db.Text
+  trainingLevel        String?  @map("training_level") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -241,6 +243,8 @@ model TrainingProtocol {
   status             String    @default("active") @db.Text
   startDate          DateTime  @map("start_date") @db.Date
   expirationDate     DateTime? @map("expiration_date") @db.Date
+  genderOrdination   String?   @map("gender_ordination") @db.Text
+  trainingLevel      String?   @map("training_level") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

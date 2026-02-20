@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { trainingStatusValues } from '../constants/training.js';
-import { buildError, validateWeekDays } from '../helpers/training-validators.js';
+import { buildError, validateWeekDays, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 
 /**
@@ -69,7 +69,11 @@ export async function createProtocol(userId, data) {
     validateStatus(data.status);
   }
 
-  // 5. Create protocol
+  // 5. Validate new enum fields if provided
+  validateGenderOrdination(data.genderOrdination);
+  validateTrainingLevel(data.trainingLevel);
+
+  // 6. Create protocol
   const protocol = await prisma.trainingProtocol.create({
     data: {
       trainerId: trainer.id,
@@ -81,6 +85,8 @@ export async function createProtocol(userId, data) {
       status: data.status || 'active',
       startDate: parseDateOnlyAsUtc(data.startDate),
       expirationDate: parseDateOnlyAsUtc(data.expirationDate),
+      genderOrdination: data.genderOrdination || null,
+      trainingLevel: data.trainingLevel || null,
     },
     include: {
       assignee: {
@@ -348,7 +354,11 @@ export async function updateProtocol(userId, protocolId, data) {
     validateStatus(data.status);
   }
 
-  // 5. Build update data
+  // 5. Validate new enum fields if provided
+  validateGenderOrdination(data.genderOrdination);
+  validateTrainingLevel(data.trainingLevel);
+
+  // 6. Build update data
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
@@ -358,6 +368,8 @@ export async function updateProtocol(userId, protocolId, data) {
   if (data.expirationDate !== undefined) {
     updateData.expirationDate = parseDateOnlyAsUtc(data.expirationDate);
   }
+  if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
+  if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
 
   // 6. Update protocol
   const updated = await prisma.trainingProtocol.update({
@@ -475,6 +487,8 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
       status: 'active',
       startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
       expirationDate: parseDateOnlyAsUtc(data.expirationDate),
+      genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
+      trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
     },
     include: {
       assignee: {

@@ -1,7 +1,9 @@
-import { weekDayValues } from '../../src/constants/training.js';
+import { weekDayValues, genderOrdinationValues, trainingLevelValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const weekDayEnum = weekDayValues;
+const genderOrdinationEnum = genderOrdinationValues;
+const trainingLevelEnum = trainingLevelValues;
 
 export const createProtocolTemplateSchema = {
   tags: ['Training Protocol Templates'],
@@ -19,6 +21,8 @@ export const createProtocolTemplateSchema = {
         items: { type: 'string', enum: weekDayEnum },
       },
       defaultDurationWeeks: { type: 'integer', minimum: 1 },
+      genderOrdination: { type: 'string', enum: genderOrdinationEnum },
+      trainingLevel: { type: 'string', enum: trainingLevelEnum },
     },
     additionalProperties: false,
   },
@@ -32,6 +36,8 @@ export const createProtocolTemplateSchema = {
         description: { type: 'string', nullable: true },
         availableWeekDays: { type: 'array', items: { type: 'string' } },
         defaultDurationWeeks: { type: 'integer', nullable: true },
+        genderOrdination: { type: 'string', nullable: true },
+        trainingLevel: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         updatedAt: { type: 'string', format: 'date-time', nullable: true },
       },
@@ -62,6 +68,8 @@ export const getProtocolTemplatesSchema = {
           description: { type: 'string', nullable: true },
           availableWeekDays: { type: 'array', items: { type: 'string' } },
           defaultDurationWeeks: { type: 'integer', nullable: true },
+          genderOrdination: { type: 'string', nullable: true },
+          trainingLevel: { type: 'string', nullable: true },
           createdAt: { type: 'string', format: 'date-time' },
         },
       },
@@ -94,6 +102,8 @@ export const getProtocolTemplateByIdSchema = {
         description: { type: 'string', nullable: true },
         availableWeekDays: { type: 'array', items: { type: 'string' } },
         defaultDurationWeeks: { type: 'integer', nullable: true },
+        genderOrdination: { type: 'string', nullable: true },
+        trainingLevel: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
       },
     },
@@ -126,6 +136,8 @@ export const updateProtocolTemplateSchema = {
         items: { type: 'string', enum: weekDayEnum },
       },
       defaultDurationWeeks: { type: 'integer', minimum: 1 },
+      genderOrdination: { type: 'string', enum: genderOrdinationEnum },
+      trainingLevel: { type: 'string', enum: trainingLevelEnum },
     },
     additionalProperties: false,
   },
@@ -138,6 +150,8 @@ export const updateProtocolTemplateSchema = {
         description: { type: 'string', nullable: true },
         availableWeekDays: { type: 'array', items: { type: 'string' } },
         defaultDurationWeeks: { type: 'integer', nullable: true },
+        genderOrdination: { type: 'string', nullable: true },
+        trainingLevel: { type: 'string', nullable: true },
         updatedAt: { type: 'string', format: 'date-time' },
       },
     },
