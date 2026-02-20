@@ -35,8 +35,23 @@ export const BodySegment = Object.freeze({
   FULL_BODY: 'full_body',
 });
 
+export const GenderOrdination = Object.freeze({
+  MALE: 'male',
+  FEMALE: 'female',
+  OTHER: 'other',
+});
+
+export const TrainingLevel = Object.freeze({
+  BEGINNER: 'beginner',
+  INTERMEDIATE: 'intermediate',
+  ADVANCED: 'advanced',
+  ATHLETE: 'athlete',
+});
+
 // Export arrays of values for validation
 export const weekDayValues = Object.freeze(Object.values(WeekDays));
 export const trainingCategoryValues = Object.freeze(Object.values(TrainingCategory));
 export const bodySegmentValues = Object.freeze(Object.values(BodySegment));
 export const trainingStatusValues = Object.freeze(Object.values(TrainingStatus));
+export const genderOrdinationValues = Object.freeze(Object.values(GenderOrdination));
+export const trainingLevelValues = Object.freeze(Object.values(TrainingLevel));

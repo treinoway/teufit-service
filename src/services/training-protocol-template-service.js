@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { buildError, validateWeekDays } from '../helpers/training-validators.js';
+import { buildError, validateWeekDays, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
 
 /**
  * Create a new protocol template (TRAINER only)
@@ -27,7 +27,11 @@ export async function createProtocolTemplate(userId, data) {
     validateWeekDays(data.availableWeekDays, 'availableWeekDays');
   }
 
-  // 3. Create template
+  // 3. Validate new enum fields if provided
+  validateGenderOrdination(data.genderOrdination);
+  validateTrainingLevel(data.trainingLevel);
+
+  // 4. Create template
   const template = await prisma.trainingProtocolTemplate.create({
     data: {
       trainerId: trainer.id,
@@ -35,6 +39,8 @@ export async function createProtocolTemplate(userId, data) {
       description: data.description || null,
       availableWeekDays: data.availableWeekDays || [],
       defaultDurationWeeks: data.defaultDurationWeeks || null,
+      genderOrdination: data.genderOrdination || null,
+      trainingLevel: data.trainingLevel || null,
     },
   });
 
@@ -145,14 +151,20 @@ export async function updateProtocolTemplate(userId, templateId, data) {
     validateWeekDays(data.availableWeekDays, 'availableWeekDays');
   }
 
-  // 4. Build update data (only include provided fields)
+  // 4. Validate new enum fields if provided
+  validateGenderOrdination(data.genderOrdination);
+  validateTrainingLevel(data.trainingLevel);
+
+  // 5. Build update data (only include provided fields)
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.availableWeekDays !== undefined) updateData.availableWeekDays = data.availableWeekDays;
   if (data.defaultDurationWeeks !== undefined) updateData.defaultDurationWeeks = data.defaultDurationWeeks;
+  if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
+  if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
 
-  // 5. Update template
+  // 6. Update template
   const updated = await prisma.trainingProtocolTemplate.update({
     where: { id: templateId },
     data: updateData,
