@@ -1,7 +1,41 @@
 import 'dotenv/config';
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+
+const VIACEP_FIXTURES = {
+	'01310100': {
+		logradouro: 'Avenida Paulista',
+		complemento: 'de 1 a 610 - lado par',
+		bairro: 'Bela Vista',
+		localidade: 'São Paulo',
+		estado: 'São Paulo',
+		uf: 'SP',
+		cep: '01310-100',
+	},
+	'20040020': {
+		logradouro: 'Rua da Assembléia',
+		complemento: 'de 1 a 84 - lado par',
+		bairro: 'Centro',
+		localidade: 'Rio de Janeiro',
+		estado: 'Rio de Janeiro',
+		uf: 'RJ',
+		cep: '20040-020',
+	},
+	'11111111': { erro: true },
+};
+
+function createViaCepFetchMock() {
+	return vi.fn(async (url) => {
+		const match = String(url).match(/viacep\.com\.br\/ws\/(\d{8})\/json/);
+		if (!match) {
+			return { ok: true, json: async () => ({}) };
+		}
+		const code = match[1];
+		const data = VIACEP_FIXTURES[code] ?? { erro: true };
+		return { ok: true, json: async () => data };
+	});
+}
 
 describe('e2e: address flows', () => {
 	let app;
@@ -18,6 +52,8 @@ describe('e2e: address flows', () => {
 	});
 
 	beforeEach(async () => {
+		vi.stubGlobal('fetch', createViaCepFetchMock());
+
 		// Clean database between tests to keep them isolated
 		await cleanDatabase();
 
@@ -32,6 +68,10 @@ describe('e2e: address flows', () => {
 		});
 		
 		accessToken = signupResponse.json().token.accessToken;
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
 	});
 
 	describe('GET /postal-code', () => {
@@ -57,7 +97,7 @@ describe('e2e: address flows', () => {
 				postalCode: '01310-100',
 			});
 			expect(body.line1).toContain('Paulista');
-		}, 15000);
+		});
 
 		it('successfully fetches address for valid postal code without formatting', async () => {
 			const response = await app.inject({
@@ -77,7 +117,7 @@ describe('e2e: address flows', () => {
 				country: 'Brasil',
 				countryCode: 'BR',
 			});
-		}, 15000);
+		});
 
 		it('returns 401 when not authenticated', async () => {
 			const response = await app.inject({
@@ -162,7 +202,7 @@ describe('e2e: address flows', () => {
 				error: 'POSTAL_CODE_NOT_FOUND',
 				message: 'Postal code not found',
 			});
-		}, 15000);
+		});
 
 		it('handles postal codes with special characters', async () => {
 			const response = await app.inject({
@@ -176,7 +216,7 @@ describe('e2e: address flows', () => {
 			expect(response.statusCode).toBe(200);
 			const body = response.json();
 			expect(body.city).toBe('São Paulo');
-		}, 15000);
+		});
 
 		it('returns proper address schema structure', async () => {
 			const response = await app.inject({
@@ -206,6 +246,6 @@ describe('e2e: address flows', () => {
 			expect(body.stateCode).toBe('RJ');
 			expect(body.country).toBe('Brasil');
 			expect(body.countryCode).toBe('BR');
-		}, 15000);
+		});
 	});
 });

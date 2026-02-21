@@ -226,8 +226,9 @@ model TrainingProtocolTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer   Trainer            @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  protocols TrainingProtocol[]
+  trainer           Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  protocols         TrainingProtocol[]
+  scheduleTemplates TrainingScheduleTemplate[]
 
   @@map("training_protocol_templates")
 }
@@ -273,8 +274,9 @@ model TrainingTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer   Trainer    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  trainings Training[]
+  trainer           Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  trainings         Training[]
+  scheduleTemplates TrainingScheduleTemplate[]
 
   @@map("training_templates")
 }
@@ -315,4 +317,20 @@ model TrainingSchedule {
   training         Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
 
   @@map("training_schedules")
+}
+
+model TrainingScheduleTemplate {
+  id                 String @id @default(uuid()) @db.Uuid
+  protocolTemplateId String @map("protocol_template_id") @db.Uuid
+  trainingTemplateId String @map("training_template_id") @db.Uuid
+  weekDay            String @map("week_day") @db.Text
+  order              Int    @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  protocolTemplate TrainingProtocolTemplate @relation(fields: [protocolTemplateId], references: [id], onDelete: Cascade)
+  trainingTemplate TrainingTemplate         @relation(fields: [trainingTemplateId], references: [id], onDelete: Cascade)
+
+  @@map("training_schedule_templates")
 }

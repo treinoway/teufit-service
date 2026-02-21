@@ -5,6 +5,39 @@ const weekDayEnum = weekDayValues;
 const genderOrdinationEnum = genderOrdinationValues;
 const trainingLevelEnum = trainingLevelValues;
 
+const scheduleTemplateItemSchema = {
+  type: 'object',
+  required: ['trainingTemplateId', 'weekDay'],
+  properties: {
+    trainingTemplateId: { type: 'string', format: 'uuid' },
+    weekDay: { type: 'string', enum: weekDayEnum },
+    order: { type: 'integer', minimum: 0, default: 0 },
+  },
+  additionalProperties: false,
+};
+
+const scheduleTemplateResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    protocolTemplateId: { type: 'string', format: 'uuid' },
+    trainingTemplateId: { type: 'string', format: 'uuid' },
+    weekDay: { type: 'string' },
+    order: { type: 'integer' },
+    trainingTemplate: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        name: { type: 'string' },
+        category: { type: 'string' },
+        bodySegment: { type: 'string', nullable: true },
+      },
+    },
+    createdAt: { type: 'string', format: 'date-time' },
+  },
+};
+
 export const createProtocolTemplateSchema = {
   tags: ['Training Protocol Templates'],
   summary: 'Create a new protocol template',
@@ -23,6 +56,10 @@ export const createProtocolTemplateSchema = {
       defaultDurationWeeks: { type: 'integer', minimum: 1 },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
+      trainings: {
+        type: 'array',
+        items: scheduleTemplateItemSchema,
+      },
     },
     additionalProperties: false,
   },
@@ -38,6 +75,8 @@ export const createProtocolTemplateSchema = {
         defaultDurationWeeks: { type: 'integer', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        scheduleTemplates: { type: 'array', items: scheduleTemplateResponseSchema },
+        scheduleTemplatesCount: { type: 'integer' },
         createdAt: { type: 'string', format: 'date-time' },
         updatedAt: { type: 'string', format: 'date-time', nullable: true },
       },
@@ -70,6 +109,7 @@ export const getProtocolTemplatesSchema = {
           defaultDurationWeeks: { type: 'integer', nullable: true },
           genderOrdination: { type: 'string', nullable: true },
           trainingLevel: { type: 'string', nullable: true },
+          scheduleTemplatesCount: { type: 'integer' },
           createdAt: { type: 'string', format: 'date-time' },
         },
       },
@@ -104,6 +144,7 @@ export const getProtocolTemplateByIdSchema = {
         defaultDurationWeeks: { type: 'integer', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        scheduleTemplates: { type: 'array', items: scheduleTemplateResponseSchema },
         createdAt: { type: 'string', format: 'date-time' },
       },
     },
@@ -138,6 +179,10 @@ export const updateProtocolTemplateSchema = {
       defaultDurationWeeks: { type: 'integer', minimum: 1 },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
+      trainings: {
+        type: 'array',
+        items: scheduleTemplateItemSchema,
+      },
     },
     additionalProperties: false,
   },
@@ -152,6 +197,7 @@ export const updateProtocolTemplateSchema = {
         defaultDurationWeeks: { type: 'integer', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        scheduleTemplates: { type: 'array', items: scheduleTemplateResponseSchema },
         updatedAt: { type: 'string', format: 'date-time' },
       },
     },

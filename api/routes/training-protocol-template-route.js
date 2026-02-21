@@ -19,10 +19,13 @@ export async function trainingProtocolTemplateRoutes(fastify) {
         const template = await service.createProtocolTemplate(request.user.id, request.body);
         return reply.status(201).send(template);
       } catch (error) {
-        if (error.code === 'TRAINER_PROFILE_MISSING') {
+        if (error.code === 'TRAINER_PROFILE_MISSING' || error.code === 'TRAINING_TEMPLATE_NOT_FOUND') {
           return reply.status(404).send({ error: error.message });
         }
-        if (error.code === 'INVALID_WEEK_DAYS') {
+        if (error.code === 'FORBIDDEN_TRAINING_TEMPLATE_ACCESS') {
+          return reply.status(403).send({ error: error.message });
+        }
+        if (error.code === 'INVALID_WEEK_DAYS' || error.code === 'INVALID_WEEK_DAY_FOR_SCHEDULE') {
           return reply.status(400).send({ error: error.message });
         }
         fastify.log.error(error);
@@ -94,13 +97,13 @@ export async function trainingProtocolTemplateRoutes(fastify) {
         const updated = await service.updateProtocolTemplate(request.user.id, request.params.id, request.body);
         return reply.send(updated);
       } catch (error) {
-        if (error.code === 'TEMPLATE_NOT_FOUND') {
+        if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING' || error.code === 'TRAINING_TEMPLATE_NOT_FOUND') {
           return reply.status(404).send({ error: error.message });
         }
-        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {
+        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER' || error.code === 'FORBIDDEN_TRAINING_TEMPLATE_ACCESS') {
           return reply.status(403).send({ error: error.message });
         }
-        if (error.code === 'INVALID_WEEK_DAYS') {
+        if (error.code === 'INVALID_WEEK_DAYS' || error.code === 'INVALID_WEEK_DAY_FOR_SCHEDULE') {
           return reply.status(400).send({ error: error.message });
         }
         fastify.log.error(error);

@@ -259,7 +259,7 @@ export const importFromTemplateSchema = {
   },
   response: {
     201: {
-      description: 'Protocol created from template with assignee info',
+      description: 'Protocol created from template with assignee info and copied trainings',
       type: 'object',
       properties: {
         id: { type: 'string', format: 'uuid' },
@@ -276,6 +276,7 @@ export const importFromTemplateSchema = {
         trainingLevel: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         assignee: assigneeSchema,
+        trainings: { type: 'array' },
       },
     },
     401: errorResponseSchema,
