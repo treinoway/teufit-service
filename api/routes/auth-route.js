@@ -11,6 +11,7 @@ import {
   signupWithEmailPasswordStateless,
 } from '../../src/services/auth-service.js';
 import { verifyGoogleIdToken } from '../../src/services/google-id-token-service.js';
+import { verifyFirebaseIdToken } from '../../src/services/firebase-id-token-service.js';
 import {
   issueAccessToken,
   issueRefreshToken,
@@ -26,6 +27,7 @@ import {
   googleStartSchema,
   googleCallbackSchema,
   googleMobileSchema,
+  googleWebSchema,
   refreshSchema,
   logoutSchema,
   waitlistSchema,
@@ -368,6 +370,75 @@ export async function authRoutes(fastify) {
 
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Authentication failed' });
+      }
+    },
+  );
+
+  // Web Google auth via Firebase ID token (signInWithPopup):
+  // Web frontend obtains a Firebase ID token and sends it here.
+  // Returns a Bearer access token (JWT) to be used in Authorization header.
+  fastify.post(
+    '/auth/google/web',
+    {
+      schema: googleWebSchema,
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const idToken = body.idToken;
+
+        if (!idToken) {
+          return reply.status(400).send({ error: 'ID_TOKEN_REQUIRED', messageCode: 'auth.idToken.required', message: 'Missing idToken' });
+        }
+
+        const firebase = await verifyFirebaseIdToken({
+          idToken,
+          projectId: process.env.FIREBASE_PROJECT_ID,
+        });
+
+        if (!firebase.email) {
+          return reply.status(400).send({ error: 'GOOGLE_EMAIL_REQUIRED', messageCode: 'auth.google.emailRequired', message: 'Google account email not available' });
+        }
+
+        const user = await findOrCreateUserFromOAuth({
+          provider: 'google',
+          providerId: firebase.subject,
+          email: firebase.email,
+          name: firebase.name ?? firebase.email,
+          avatar: firebase.picture,
+          accessToken: null,
+          refreshToken: null,
+          expiresAt: null,
+          roles: [],
+        });
+
+        const token = issueAccessToken({ fastify, user });
+        const refreshTokenData = await issueRefreshToken({ user });
+
+        return reply.send({
+          user: { id: user.id },
+          token: { accessToken: token.accessToken },
+          refreshToken: refreshTokenData.refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({ error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: 'Account deactivated' });
+        }
+        if (error?.code === 'ID_TOKEN_REQUIRED') {
+          return reply.status(400).send({ error: 'ID_TOKEN_REQUIRED', messageCode: 'auth.idToken.required', message: 'Missing idToken' });
+        }
+        if (error?.code === 'FIREBASE_PROJECT_ID_REQUIRED' || error?.code === 'INVALID_FIREBASE_TOKEN') {
+          return reply.status(401).send({ error: 'GOOGLE_AUTH_FAILED', messageCode: 'auth.google.failed', message: 'Invalid Firebase token' });
+        }
+        if (error?.code === 'ERR_JWT_EXPIRED') {
+          return reply.status(401).send({ error: 'GOOGLE_TOKEN_EXPIRED', messageCode: 'auth.google.tokenExpired', message: 'Google token expired' });
+        }
+        if (error?.code === 'ERR_JWS_INVALID' || error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
+          return reply.status(401).send({ error: 'GOOGLE_AUTH_FAILED', messageCode: 'auth.google.failed', message: 'Invalid Google token' });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'GOOGLE_AUTH_FAILED', messageCode: 'auth.google.failed', message: 'Authentication failed' });
       }
     },
   );

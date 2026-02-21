@@ -326,6 +326,47 @@
           "response": []
         },
         {
+          "name": "Google Web Auth (Firebase)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"firebase-id-token-from-web-signInWithPopup\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/web",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "web"]
+            },
+            "description": "Log in with Firebase ID Token from web frontend (signInWithPopup with GoogleAuthProvider). Returns JWT tokens for web app authentication."
+          },
+          "response": []
+        },
+        {
           "name": "Refresh Token",
           "event": [
             {
