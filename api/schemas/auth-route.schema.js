@@ -191,6 +191,28 @@ export const googleMobileSchema = {
   },
 };
 
+export const googleWebSchema = {
+  tags: authTags,
+  summary: 'Log in with Firebase ID Token (web)',
+  description: 'Receives the Firebase ID token from the web frontend (signInWithPopup), validates it, and returns a session.',
+  body: {
+    type: 'object',
+    required: ['idToken'],
+    additionalProperties: false,
+    properties: {
+      idToken: { type: 'string', description: 'The Firebase ID token obtained via signInWithPopup with GoogleAuthProvider' },
+    },
+  },
+  response: {
+    200: authSuccessResponseSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const refreshSchema = {
   tags: authTags,
   summary: 'Rotate refresh token and get new access token',
