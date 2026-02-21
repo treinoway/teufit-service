@@ -143,7 +143,7 @@ export async function trainingProtocolRoutes(fastify) {
   // Rate limit: 10 req/min
   // Import from template
   fastify.post(
-    '/trainer/protocols/from-template',
+    '/trainer/protocols/import-from-template',
     {
       config: { rateLimit: config.rateLimit.trainingProtocol.importFromTemplate },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],

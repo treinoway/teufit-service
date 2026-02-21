@@ -2,6 +2,49 @@ import { prisma } from '../db.js';
 import { buildError, validateWeekDays, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
 
 /**
+ * Validate that each training item in the trainings array is accessible by the trainer
+ * (either owned by the trainer or marked as public) and that weekDay is valid.
+ */
+async function validateAndResolveTrainings(trainings, trainerId, availableWeekDays) {
+  if (!Array.isArray(trainings) || trainings.length === 0) return;
+
+  const ids = trainings.map((t) => t.trainingTemplateId);
+  const templates = await prisma.trainingTemplate.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: { id: true, trainerId: true, isPublic: true },
+  });
+
+  const templateMap = new Map(templates.map((t) => [t.id, t]));
+
+  for (const item of trainings) {
+    const tpl = templateMap.get(item.trainingTemplateId);
+    if (!tpl) {
+      throw buildError(
+        'TRAINING_TEMPLATE_NOT_FOUND',
+        `Training template not found: ${item.trainingTemplateId}`,
+        404,
+      );
+    }
+
+    if (tpl.trainerId !== trainerId && !tpl.isPublic) {
+      throw buildError(
+        'FORBIDDEN_TRAINING_TEMPLATE_ACCESS',
+        `You do not have access to training template: ${item.trainingTemplateId}`,
+        403,
+      );
+    }
+
+    if (availableWeekDays && availableWeekDays.length > 0 && !availableWeekDays.includes(item.weekDay)) {
+      throw buildError(
+        'INVALID_WEEK_DAY_FOR_SCHEDULE',
+        `Week day "${item.weekDay}" is not in the template's availableWeekDays`,
+        400,
+      );
+    }
+  }
+}
+
+/**
  * Create a new protocol template (TRAINER only)
  *
  * @param {string} userId - User ID of the trainer
@@ -10,6 +53,7 @@ import { buildError, validateWeekDays, validateGenderOrdination, validateTrainin
  * @param {string} [data.description] - Template description
  * @param {string[]} [data.availableWeekDays] - Available week days
  * @param {number} [data.defaultDurationWeeks] - Default duration in weeks
+ * @param {object[]} [data.trainings] - Schedule template entries
  * @returns {Promise<object>} Created template
  */
 export async function createProtocolTemplate(userId, data) {
@@ -31,20 +75,52 @@ export async function createProtocolTemplate(userId, data) {
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
 
-  // 4. Create template
-  const template = await prisma.trainingProtocolTemplate.create({
-    data: {
-      trainerId: trainer.id,
-      name: data.name,
-      description: data.description || null,
-      availableWeekDays: data.availableWeekDays || [],
-      defaultDurationWeeks: data.defaultDurationWeeks || null,
-      genderOrdination: data.genderOrdination || null,
-      trainingLevel: data.trainingLevel || null,
-    },
+  // 4. Validate trainings if provided
+  if (data.trainings && data.trainings.length > 0) {
+    await validateAndResolveTrainings(data.trainings, trainer.id, data.availableWeekDays || []);
+  }
+
+  // 5. Create template and schedule templates in a transaction
+  const template = await prisma.$transaction(async (tx) => {
+    const created = await tx.trainingProtocolTemplate.create({
+      data: {
+        trainerId: trainer.id,
+        name: data.name,
+        description: data.description || null,
+        availableWeekDays: data.availableWeekDays || [],
+        defaultDurationWeeks: data.defaultDurationWeeks || null,
+        genderOrdination: data.genderOrdination || null,
+        trainingLevel: data.trainingLevel || null,
+      },
+    });
+
+    if (data.trainings && data.trainings.length > 0) {
+      await tx.trainingScheduleTemplate.createMany({
+        data: data.trainings.map((item) => ({
+          protocolTemplateId: created.id,
+          trainingTemplateId: item.trainingTemplateId,
+          weekDay: item.weekDay,
+          order: item.order ?? 0,
+        })),
+      });
+    }
+
+    return tx.trainingProtocolTemplate.findUnique({
+      where: { id: created.id },
+      include: {
+        scheduleTemplates: {
+          include: {
+            trainingTemplate: {
+              select: { id: true, name: true, category: true, bodySegment: true },
+            },
+          },
+          orderBy: [{ weekDay: 'asc' }, { order: 'asc' }],
+        },
+      },
+    });
   });
 
-  return template;
+  return { ...template, scheduleTemplatesCount: template.scheduleTemplates.length };
 }
 
 /**
@@ -69,12 +145,20 @@ export async function getProtocolTemplatesByTrainer(userId) {
       trainerId: trainer.id,
       deletedAt: null,
     },
+    include: {
+      _count: {
+        select: { scheduleTemplates: true },
+      },
+    },
     orderBy: {
       createdAt: 'desc',
     },
   });
 
-  return templates;
+  return templates.map(({ _count, ...tpl }) => ({
+    ...tpl,
+    scheduleTemplatesCount: _count.scheduleTemplates,
+  }));
 }
 
 /**
@@ -94,9 +178,19 @@ export async function getProtocolTemplateById(userId, templateId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Fetch template
+  // 2. Fetch template with schedule templates
   const template = await prisma.trainingProtocolTemplate.findUnique({
     where: { id: templateId },
+    include: {
+      scheduleTemplates: {
+        include: {
+          trainingTemplate: {
+            select: { id: true, name: true, category: true, bodySegment: true },
+          },
+        },
+        orderBy: [{ weekDay: 'asc' }, { order: 'asc' }],
+      },
+    },
   });
 
   if (!template) {
@@ -121,6 +215,7 @@ export async function getProtocolTemplateById(userId, templateId) {
  * @param {string} userId - User ID of the trainer
  * @param {string} templateId - Template ID
  * @param {object} data - Update data
+ * @param {object[]} [data.trainings] - Replacement schedule template entries (replaces all existing)
  * @returns {Promise<object>} Updated template
  */
 export async function updateProtocolTemplate(userId, templateId, data) {
@@ -155,7 +250,13 @@ export async function updateProtocolTemplate(userId, templateId, data) {
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
 
-  // 5. Build update data (only include provided fields)
+  // 5. Validate trainings if provided
+  const effectiveWeekDays = data.availableWeekDays ?? template.availableWeekDays;
+  if (data.trainings !== undefined) {
+    await validateAndResolveTrainings(data.trainings, trainer.id, effectiveWeekDays);
+  }
+
+  // 6. Build update data (only include provided fields)
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
@@ -164,10 +265,43 @@ export async function updateProtocolTemplate(userId, templateId, data) {
   if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
   if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
 
-  // 6. Update template
-  const updated = await prisma.trainingProtocolTemplate.update({
-    where: { id: templateId },
-    data: updateData,
+  // 7. Update template and optionally replace schedule templates in a transaction
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.trainingProtocolTemplate.update({
+      where: { id: templateId },
+      data: updateData,
+    });
+
+    if (data.trainings !== undefined) {
+      await tx.trainingScheduleTemplate.deleteMany({
+        where: { protocolTemplateId: templateId },
+      });
+
+      if (data.trainings.length > 0) {
+        await tx.trainingScheduleTemplate.createMany({
+          data: data.trainings.map((item) => ({
+            protocolTemplateId: templateId,
+            trainingTemplateId: item.trainingTemplateId,
+            weekDay: item.weekDay,
+            order: item.order ?? 0,
+          })),
+        });
+      }
+    }
+
+    return tx.trainingProtocolTemplate.findUnique({
+      where: { id: templateId },
+      include: {
+        scheduleTemplates: {
+          include: {
+            trainingTemplate: {
+              select: { id: true, name: true, category: true, bodySegment: true },
+            },
+          },
+          orderBy: [{ weekDay: 'asc' }, { order: 'asc' }],
+        },
+      },
+    });
   });
 
   return updated;

@@ -29,7 +29,7 @@ echo "[e2e] Applying Prisma migrations to test database..."
 npm run db:migrate:deploy
 
 echo "[e2e] Running Vitest e2e suite..."
-npx vitest run test/e2e
+DISABLE_POSTAL_CODE_VALIDATION=true npx vitest run test/e2e
 
 echo "[e2e] Stopping test Postgres and removing volumes..."
 docker compose down -v

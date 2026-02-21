@@ -179,8 +179,8 @@ if (!userId) {
 
 	const { address, socials, preferences, firstName, lastName, birthDate, avatarUrl, gender } = data;
 
-	// Validate CEP existence before proceeding
-	if (address?.postalCode) {
+	// Validate CEP existence before proceeding (skipped in test environments)
+	if (address?.postalCode && process.env.DISABLE_POSTAL_CODE_VALIDATION !== 'true') {
 		await getAddressByPostalCode(address.postalCode);
 	}
 

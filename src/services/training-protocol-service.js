@@ -452,9 +452,17 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify template exists and ownership
+  // 2. Verify template exists and ownership (include schedule templates)
   const template = await prisma.trainingProtocolTemplate.findUnique({
     where: { id: templateId },
+    include: {
+      scheduleTemplates: {
+        include: {
+          trainingTemplate: true,
+        },
+        orderBy: [{ weekDay: 'asc' }, { order: 'asc' }],
+      },
+    },
   });
 
   if (!template || template.deletedAt) {
@@ -475,31 +483,69 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
   }
 
-  // 4. Create protocol from template (independent copy)
-  const protocol = await prisma.trainingProtocol.create({
-    data: {
-      trainerId: trainer.id,
-      assigneeId,
-      protocolTemplateId: template.id,
-      name: data.name || template.name,
-      description: data.description || template.description,
-      availableWeekDays: data.availableWeekDays || template.availableWeekDays,
-      status: 'active',
-      startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
-      expirationDate: parseDateOnlyAsUtc(data.expirationDate),
-      genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
-      trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
-    },
-    include: {
-      assignee: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          avatarUrl: true,
+  // 4. Create protocol, trainings, and schedules in a transaction
+  const protocol = await prisma.$transaction(async (tx) => {
+    const created = await tx.trainingProtocol.create({
+      data: {
+        trainerId: trainer.id,
+        assigneeId,
+        protocolTemplateId: template.id,
+        name: data.name || template.name,
+        description: data.description || template.description,
+        availableWeekDays: data.availableWeekDays || template.availableWeekDays,
+        status: 'active',
+        startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
+        expirationDate: parseDateOnlyAsUtc(data.expirationDate),
+        genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
+        trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
+      },
+    });
+
+    for (const scheduleTemplate of template.scheduleTemplates) {
+      const { trainingTemplate } = scheduleTemplate;
+
+      const training = await tx.training.create({
+        data: {
+          trainingProtocolId: created.id,
+          trainingTemplateId: trainingTemplate.id,
+          name: trainingTemplate.name,
+          description: trainingTemplate.description,
+          category: trainingTemplate.category,
+          bodySegment: trainingTemplate.bodySegment,
+          order: scheduleTemplate.order,
+        },
+      });
+
+      await tx.trainingSchedule.create({
+        data: {
+          trainingProtocolId: created.id,
+          trainingId: training.id,
+          weekDay: scheduleTemplate.weekDay,
+          order: scheduleTemplate.order,
+        },
+      });
+    }
+
+    return tx.trainingProtocol.findUnique({
+      where: { id: created.id },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+        trainings: {
+          where: { deletedAt: null },
+          include: {
+            schedules: { orderBy: { order: 'asc' } },
+          },
+          orderBy: { order: 'asc' },
         },
       },
-    },
+    });
   });
 
   return normalizeProtocolDateFields(protocol);
