@@ -40,6 +40,7 @@ model User {
   nutritionist        Nutritionist?
   preferences         UserPreferences?
   protocolsAsAssignee TrainingProtocol[]
+  trainers            TrainerStudent[]
 
   @@map("users")
 }
@@ -93,6 +94,7 @@ model Trainer {
   trainingProtocols         TrainingProtocol[]
   trainingProtocolTemplates TrainingProtocolTemplate[]
   trainingTemplates         TrainingTemplate[]
+  students                  TrainerStudent[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -333,4 +335,18 @@ model TrainingScheduleTemplate {
   trainingTemplate TrainingTemplate         @relation(fields: [trainingTemplateId], references: [id], onDelete: Cascade)
 
   @@map("training_schedule_templates")
+}
+
+model TrainerStudent {
+  id        String @id @default(uuid()) @db.Uuid
+  trainerId String @map("trainer_id") @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([trainerId, studentId])
+  @@map("trainer_students")
 }

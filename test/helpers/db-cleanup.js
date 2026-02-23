@@ -16,6 +16,7 @@ export async function cleanDatabase() {
     'training_protocols',
     'training_templates',
     'training_protocol_templates',
+    'trainer_students',
     'trainers',
     'user_health_details',
     'password_reset_tokens',

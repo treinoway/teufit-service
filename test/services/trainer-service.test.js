@@ -5,6 +5,15 @@ vi.mock('../../src/db.js', () => {
   return {
     prisma: {
       $transaction: vi.fn(),
+      user: {
+        findUnique: vi.fn(),
+      },
+      trainerStudent: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        delete: vi.fn(),
+      },
     },
   };
 });
@@ -17,7 +26,7 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
 
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import { updateMyTrainerProfile } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, unlinkStudent } from '../../src/services/trainer-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -179,6 +188,173 @@ describe('trainerService', () => {
       avatarUrl: null,
       address: null,
       socialNetworks: null,
+    });
+  });
+});
+
+describe('linkStudentByEmail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+  });
+
+  it('throws student.notFound when no user exists with the given email', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'unknown@example.com' }),
+    ).rejects.toMatchObject({
+      error: 'NOT_FOUND',
+      messageCode: 'student.notFound',
+      httpStatus: 404,
+    });
+
+    expect(prisma.trainerStudent.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('throws student.cannotLinkSelf when trainer tries to link themselves', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-trainer',
+      email: 'trainer@example.com',
+      firstName: 'John',
+      lastName: 'Trainer',
+      avatarUrl: null,
+    });
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'trainer@example.com' }),
+    ).rejects.toMatchObject({
+      error: 'CANNOT_LINK_SELF',
+      messageCode: 'student.cannotLinkSelf',
+      httpStatus: 422,
+    });
+
+    expect(prisma.trainerStudent.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('throws student.alreadyLinked when student is already linked to the trainer', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-student',
+      email: 'student@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      avatarUrl: null,
+    });
+    prisma.trainerStudent.findUnique.mockResolvedValue({ id: 'link1', trainerId: 'trainer1', studentId: 'user-student' });
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'student@example.com' }),
+    ).rejects.toMatchObject({
+      error: 'CONFLICT',
+      messageCode: 'student.alreadyLinked',
+      httpStatus: 409,
+    });
+
+    expect(prisma.trainerStudent.create).not.toHaveBeenCalled();
+  });
+
+  it('creates the link and returns student profile on success', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-student',
+      email: 'student@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      avatarUrl: 's3://some-key',
+    });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1', trainerId: 'trainer1', studentId: 'user-student' });
+    s3BucketHandler.resolveUrl.mockResolvedValue('https://cdn.example.com/avatar.jpg');
+
+    const result = await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+    });
+
+    expect(prisma.trainerStudent.create).toHaveBeenCalledWith({
+      data: { trainerId: 'trainer1', studentId: 'user-student' },
+    });
+
+    expect(result).toEqual({
+      id: 'user-student',
+      email: 'student@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      avatarUrl: 'https://cdn.example.com/avatar.jpg',
+    });
+  });
+});
+
+describe('listStudents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+  });
+
+  it('returns an empty array when the trainer has no linked students', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([]);
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(prisma.trainerStudent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { trainerId: 'trainer1' } }),
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('returns mapped student profiles with resolved avatar URLs', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        student: { id: 's1', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', avatarUrl: 's3://alice' },
+      },
+      {
+        student: { id: 's2', email: 'bob@example.com', firstName: 'Bob', lastName: 'B', avatarUrl: null },
+      },
+    ]);
+    s3BucketHandler.resolveUrl
+      .mockResolvedValueOnce('https://cdn.example.com/alice.jpg')
+      .mockResolvedValueOnce(null);
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(result).toEqual([
+      { id: 's1', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', avatarUrl: 'https://cdn.example.com/alice.jpg' },
+      { id: 's2', email: 'bob@example.com', firstName: 'Bob', lastName: 'B', avatarUrl: null },
+    ]);
+  });
+});
+
+describe('unlinkStudent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('throws student.notLinked when no link exists between trainer and student', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+
+    await expect(
+      unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' }),
+    ).rejects.toMatchObject({
+      error: 'NOT_FOUND',
+      messageCode: 'student.notLinked',
+      httpStatus: 404,
+    });
+
+    expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the link when it exists', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue({
+      id: 'link1',
+      trainerId: 'trainer1',
+      studentId: 'student1',
+    });
+    prisma.trainerStudent.delete.mockResolvedValue({});
+
+    await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+
+    expect(prisma.trainerStudent.delete).toHaveBeenCalledWith({
+      where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
     });
   });
 });

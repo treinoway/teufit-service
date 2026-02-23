@@ -1,13 +1,15 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch } from '../../src/services/trainer-service.js';
+import { patch, linkStudentByEmail, listStudents, unlinkStudent } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
-import { patchTrainerSchema } from '../schemas/trainer-route.schema.js';
+import { patchTrainerSchema, linkStudentSchema, listStudentsSchema, unlinkStudentSchema } from '../schemas/trainer-route.schema.js';
+import { prisma } from '../../src/db.js';
 
 /**
  * Rest-ish trainer resource routes.
  *
  * Current use:
  * - PATCH /trainer: onboarding/profile completion for the authenticated trainer.
+ * - POST /trainer/students: link a student to the trainer by email.
  */
 export async function trainerRoutes(fastify) {
 
@@ -42,6 +44,93 @@ export async function trainerRoutes(fastify) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to update trainer profile' });
     }
+    },
+  );
+
+  fastify.get(
+    '/trainer/students',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: listStudentsSchema,
+    },
+    async (request, reply) => {
+      const trainerRecord = await prisma.trainer.findUnique({
+        where: { userId: request.user.id },
+        select: { id: true },
+      });
+
+      if (!trainerRecord) {
+        return reply.status(409).send({
+          error: 'TRAINER_PROFILE_MISSING',
+          messageCode: 'trainer.profileMissing',
+          message: 'Trainer profile not found',
+        });
+      }
+
+      const students = await listStudents({ trainerId: trainerRecord.id });
+      return reply.send(students);
+    },
+  );
+
+  fastify.post(
+    '/trainer/students',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: linkStudentSchema,
+    },
+    async (request, reply) => {
+      const { email } = request.body;
+      const trainerUserId = request.user.id;
+
+      const trainerRecord = await prisma.trainer.findUnique({
+        where: { userId: trainerUserId },
+        select: { id: true },
+      });
+
+      if (!trainerRecord) {
+        return reply.status(409).send({
+          error: 'TRAINER_PROFILE_MISSING',
+          messageCode: 'trainer.profileMissing',
+          message: 'Trainer profile not found',
+        });
+      }
+
+      const student = await linkStudentByEmail({
+        trainerId: trainerRecord.id,
+        trainerUserId,
+        email,
+      });
+
+      return reply.status(201).send(student);
+    },
+  );
+
+  fastify.delete(
+    '/trainer/students/:studentId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: unlinkStudentSchema,
+    },
+    async (request, reply) => {
+      const { studentId } = request.params;
+      const trainerUserId = request.user.id;
+
+      const trainerRecord = await prisma.trainer.findUnique({
+        where: { userId: trainerUserId },
+        select: { id: true },
+      });
+
+      if (!trainerRecord) {
+        return reply.status(409).send({
+          error: 'TRAINER_PROFILE_MISSING',
+          messageCode: 'trainer.profileMissing',
+          message: 'Trainer profile not found',
+        });
+      }
+
+      await unlinkStudent({ trainerId: trainerRecord.id, studentId });
+
+      return reply.status(204).send();
     },
   );
 }

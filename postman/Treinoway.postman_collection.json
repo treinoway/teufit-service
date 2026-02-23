@@ -42,8 +42,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/",
-              "host": ["{{baseUrl}}"],
-              "path": [""]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
             },
             "description": "Check if the server is alive"
           },
@@ -88,8 +92,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/signup",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "signup"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
             },
             "description": "Sign up with email and password. Password must be at least 8 characters."
           },
@@ -114,8 +123,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/signup/waitlist",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "signup", "waitlist"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup",
+                "waitlist"
+              ]
             },
             "description": "Join the waitlist with an email address. Rate limited to 3 requests per hour."
           },
@@ -155,8 +170,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
             },
             "description": "Log in with email and password. Rate limited to 5 requests per minute."
           },
@@ -181,8 +201,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/forgot-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "forgot-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
             },
             "description": "Request a password reset email. In non-production environments, the reset token is returned in the response."
           },
@@ -222,8 +247,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/reset-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "reset-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
             },
             "description": "Reset password using the 6-digit token received via email. Token is valid for 15 minutes."
           },
@@ -260,8 +290,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/change-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "change-password"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
             },
             "description": "Change password for authenticated user. Requires current password. Rate limited to 5 requests per minute."
           },
@@ -277,8 +312,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/auth/google/start",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "google", "start"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google",
+                "start"
+              ]
             },
             "description": "Start Google OAuth flow for browser. Redirects to Google for authentication. New users start with no roles."
           },
@@ -318,8 +359,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/google/mobile",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "google", "mobile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google",
+                "mobile"
+              ]
             },
             "description": "Log in with Google ID Token from mobile native SDK. Returns JWT tokens for mobile app authentication."
           },
@@ -359,8 +406,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/google/web",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "google", "web"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "google",
+                "web"
+              ]
             },
             "description": "Log in with Firebase ID Token from web frontend (signInWithPopup with GoogleAuthProvider). Returns JWT tokens for web app authentication."
           },
@@ -400,8 +453,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "refresh"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
             },
             "description": "**Rotate refresh token and get new access token**\n\nExchanges a refresh token for a NEW access token AND a NEW refresh token. The old refresh token is revoked and cannot be used again (token rotation).\n\n**Important:** The NEW refreshToken returned in the response must be stored and used for subsequent refresh requests.\n\n**Token Rotation Flow:**\n1. Client sends old refresh token\n2. Server validates token (not revoked, not expired, user active)\n3. Server revokes old token (marks rotatedAt)\n4. Server issues new refresh token (valid for 7 days)\n5. Server issues new access token (valid for 15 minutes)\n6. Client must update stored refreshToken with new value\n\n**Security Benefits:**\n- Each refresh token can only be used once\n- Stolen tokens expire quickly when rotated\n- Sessions continue indefinitely while user active\n\n**Error Codes:**\n- `REFRESH_TOKEN_REQUIRED` (400): No token provided\n- `INVALID_REFRESH_TOKEN` (401): Token not found or malformed\n- `REFRESH_TOKEN_REVOKED` (401): Token already used/revoked\n- `REFRESH_TOKEN_EXPIRED` (401): Token expired (7 days)\n- `USER_DELETED` (403): Account deactivated\n- `REFRESH_FAILED` (500): Server error"
           },
@@ -532,8 +590,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "logout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
             },
             "description": "Log out and revoke the refresh token."
           },
@@ -551,8 +614,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
             },
             "description": "Get the current authenticated user's profile including address, socials, and preferences."
           },
@@ -574,8 +641,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/me/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["me", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "profile"
+              ]
             },
             "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional."
           },
@@ -599,8 +671,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/me/avatar",
-              "host": ["{{baseUrl}}"],
-              "path": ["me", "avatar"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "avatar"
+              ]
             },
             "description": "Upload or replace user avatar image. Accepts JPEG, PNG, or WebP. Maximum file size: 5MB. Old avatar is automatically deleted. Returns { avatarUrl } with a signed URL (expires in 7 days)."
           },
@@ -628,8 +705,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/become-trainer",
-              "host": ["{{baseUrl}}"],
-              "path": ["become-trainer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "become-trainer"
+              ]
             },
             "description": "Set the user's active profile to trainer. This adds the TRAINER role and creates a trainer profile if it doesn't exist. Returns new tokens with updated roles."
           },
@@ -656,10 +737,88 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer"
+              ]
             },
             "description": "Update trainer profile, address, and social networks. Requires TRAINER role. Service mode can be: online, in_person, or hybrid."
+          },
+          "response": []
+        },
+        {
+          "name": "List Linked Students",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students"
+              ]
+            },
+            "description": "Returns the list of students linked to the authenticated trainer. Requires TRAINER role."
+          },
+          "response": []
+        },
+        {
+          "name": "Link Student by Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students"
+              ]
+            },
+            "description": "Link a student to the authenticated trainer by searching for the student by email. Requires TRAINER role. A student can be linked to multiple trainers."
+          },
+          "response": []
+        },
+        {
+          "name": "Unlink Student",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "UUID of the student to unlink"
+                }
+              ]
+            },
+            "description": "Unlink a student from the authenticated trainer. Requires TRAINER role. Returns 204 on success. Returns 404 if the student is not linked to this trainer."
           },
           "response": []
         }
@@ -675,8 +834,12 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/postal-code?code=01310100",
-              "host": ["{{baseUrl}}"],
-              "path": ["postal-code"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "postal-code"
+              ],
               "query": [
                 {
                   "key": "code",
@@ -710,8 +873,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols"
+              ]
             },
             "description": "Create a training protocol for a user. Requires TRAINER role."
           },
@@ -724,8 +892,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols?status=active",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols"
+              ],
               "query": [
                 {
                   "key": "status",
@@ -752,8 +925,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -782,8 +961,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -803,8 +988,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -833,8 +1024,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/import-from-template",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", "import-from-template"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                "import-from-template"
+              ]
             },
             "description": "Create a new protocol by importing from a template. Trainings from the template will be copied to the new protocol."
           },
@@ -852,8 +1049,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/protocols?status=active",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "protocols"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "protocols"
+              ],
               "query": [
                 {
                   "key": "status",
@@ -874,8 +1076,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/protocols/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "protocols", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "protocols",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -909,8 +1117,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocol-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates"
+              ]
             },
             "description": "Create a reusable protocol template. Optionally include a 'trainings' array to pre-populate schedule templates. Each item requires trainingTemplateId (uuid), weekDay, and optional order. Requires TRAINER role."
           },
@@ -923,8 +1136,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocol-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates"
+              ]
             },
             "description": "Get all protocol templates created by the authenticated trainer. Each template includes a 'scheduleTemplatesCount' integer showing how many training schedule entries it has."
           },
@@ -937,8 +1155,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocol-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -967,8 +1191,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocol-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -988,8 +1218,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocol-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1023,8 +1259,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:protocolId/trainings",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", ":protocolId", "trainings"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                ":protocolId",
+                "trainings"
+              ],
               "variable": [
                 {
                   "key": "protocolId",
@@ -1044,8 +1287,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:protocolId/trainings",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "protocols", ":protocolId", "trainings"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocols",
+                ":protocolId",
+                "trainings"
+              ],
               "variable": [
                 {
                   "key": "protocolId",
@@ -1065,8 +1315,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1095,8 +1351,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1116,8 +1378,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1146,8 +1414,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/from-template",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", "from-template"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                "from-template"
+              ]
             },
             "description": "Create a training by importing from a template. Can access own templates or public templates."
           },
@@ -1169,8 +1443,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:id/schedule",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":id", "schedule"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":id",
+                "schedule"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1195,8 +1476,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/protocols/:protocolId/trainings",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "protocols", ":protocolId", "trainings"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "protocols",
+                ":protocolId",
+                "trainings"
+              ],
               "variable": [
                 {
                   "key": "protocolId",
@@ -1216,8 +1504,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/trainings/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "trainings", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainings",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1251,8 +1545,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates"
+              ]
             },
             "description": "Create a reusable training template. Requires TRAINER role. Can be private or public."
           },
@@ -1265,8 +1564,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates"
+              ]
             },
             "description": "Get all training templates (own templates + public templates)."
           },
@@ -1279,8 +1583,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/public",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates", "public"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                "public"
+              ]
             },
             "description": "Get only public training templates available to all trainers."
           },
@@ -1293,8 +1603,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1323,8 +1639,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1344,8 +1666,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "training-templates", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
