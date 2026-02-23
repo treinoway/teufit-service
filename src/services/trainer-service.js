@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
+import { NotFoundAppError, ConflictAppError, AppError } from '../errors/app-error.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -150,6 +151,118 @@ export async function patch({ userId, trainer, address, socials }) {
 
 // Backwards-compatible alias used by older routes/tests.
 export const updateMyTrainerProfile = patch;
+
+/**
+ * Link a student to the authenticated trainer by the student's email.
+ *
+ * Contract:
+ * - Input: trainerId (Trainer.id), trainerUserId (User.id of trainer), email (student's email)
+ * - Throws NotFoundAppError if no user with that email exists
+ * - Throws AppError (422) if trainer tries to link themselves
+ * - Throws ConflictAppError if the student is already linked to this trainer
+ * - Output: basic student profile { id, email, firstName, lastName, avatarUrl }
+ */
+export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
+  const student = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true },
+  });
+
+  if (!student) {
+    throw new NotFoundAppError({
+      message: 'No user found with the provided email',
+      messageCode: 'student.notFound',
+    });
+  }
+
+  if (student.id === trainerUserId) {
+    throw new AppError({
+      httpStatus: 422,
+      error: 'CANNOT_LINK_SELF',
+      messageCode: 'student.cannotLinkSelf',
+      message: 'A trainer cannot link themselves as a student',
+    });
+  }
+
+  const existing = await prisma.trainerStudent.findUnique({
+    where: { trainerId_studentId: { trainerId, studentId: student.id } },
+  });
+
+  if (existing) {
+    throw new ConflictAppError({
+      message: 'This student is already linked to your account',
+      messageCode: 'student.alreadyLinked',
+    });
+  }
+
+  await prisma.trainerStudent.create({
+    data: { trainerId, studentId: student.id },
+  });
+
+  const avatarUrl = await s3BucketHandler.resolveUrl(student.avatarUrl);
+
+  return {
+    id: student.id,
+    email: student.email,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    avatarUrl,
+  };
+}
+
+/**
+ * List all students linked to a trainer.
+ *
+ * Contract:
+ * - Input: trainerId (Trainer.id)
+ * - Output: array of student basic profiles { id, email, firstName, lastName, avatarUrl }
+ */
+export async function listStudents({ trainerId }) {
+  const links = await prisma.trainerStudent.findMany({
+    where: { trainerId },
+    include: {
+      student: {
+        select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return Promise.all(
+    links.map(async ({ student }) => ({
+      id: student.id,
+      email: student.email,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      avatarUrl: await s3BucketHandler.resolveUrl(student.avatarUrl),
+    })),
+  );
+}
+
+/**
+ * Unlink a student from the authenticated trainer.
+ *
+ * Contract:
+ * - Input: trainerId (Trainer.id), studentId (User.id of the student)
+ * - Throws NotFoundAppError if no link exists between trainer and student
+ * - Returns nothing (caller should respond with 204)
+ */
+export async function unlinkStudent({ trainerId, studentId }) {
+  const existing = await prisma.trainerStudent.findUnique({
+    where: { trainerId_studentId: { trainerId, studentId } },
+  });
+
+  if (!existing) {
+    throw new NotFoundAppError({
+      message: 'No link found between this trainer and student',
+      messageCode: 'student.notLinked',
+    });
+  }
+
+  await prisma.trainerStudent.delete({
+    where: { trainerId_studentId: { trainerId, studentId } },
+  });
+}
 
 /**
  * Get the trainer profile (and related 1:1 resources) for a given userId.

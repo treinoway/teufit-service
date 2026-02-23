@@ -80,3 +80,123 @@ export const patchTrainerSchema = {
     500: errorResponseSchema,
   },
 };
+
+export const listStudentsSchema = {
+  tags: ['trainer'],
+  summary: 'List students linked to the authenticated trainer',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          firstName: { type: 'string', nullable: true },
+          lastName: { type: 'string', nullable: true },
+          avatarUrl: { type: 'string', nullable: true },
+        },
+      },
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const unlinkStudentSchema = {
+  tags: ['trainer'],
+  summary: 'Unlink a student from the authenticated trainer',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  params: {
+    type: 'object',
+    required: ['studentId'],
+    properties: {
+      studentId: {
+        type: 'string',
+        format: 'uuid',
+        description: 'UUID of the student to unlink',
+      },
+    },
+  },
+  response: {
+    204: { type: 'null', description: 'Student successfully unlinked' },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const linkStudentSchema = {
+  tags: ['trainer'],
+  summary: 'Link a student to the trainer by email',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['email'],
+    additionalProperties: false,
+    properties: {
+      email: {
+        type: 'string',
+        format: 'email',
+        description: 'Email of the student to link',
+      },
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        email: { type: 'string', format: 'email' },
+        firstName: { type: 'string', nullable: true },
+        lastName: { type: 'string', nullable: true },
+        avatarUrl: { type: 'string', nullable: true },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    422: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
