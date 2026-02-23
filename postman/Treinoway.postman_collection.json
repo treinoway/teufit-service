@@ -768,6 +768,38 @@
           "response": []
         },
         {
+          "name": "Search Linked Students",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/search?q=carol&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "carol",
+                  "description": "Search text for fuzzy match over linked student name/email"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of students to return (1-50)"
+                }
+              ]
+            },
+            "description": "Search linked students by name or email using fuzzy matching. Requires TRAINER role."
+          },
+          "response": []
+        },
+        {
           "name": "Link Student by Email",
           "request": {
             "method": "POST",

@@ -345,6 +345,88 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     });
   });
 
+  describe('GET /trainer/students/search', () => {
+    it('returns linked students that match by name or email', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail1, userId: studentId1 } = await createStudent();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const { email: studentEmail2, userId: studentId2 } = await createStudent();
+
+      await prisma.user.update({
+        where: { id: studentId1 },
+        data: { firstName: 'Carolina', lastName: 'Almeida' },
+      });
+      await prisma.user.update({
+        where: { id: studentId2 },
+        data: { firstName: 'Bruno', lastName: 'Silva' },
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email: studentEmail1 },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email: studentEmail2 },
+      });
+
+      const byName = await app.inject({
+        method: 'GET',
+        url: '/trainer/students/search?q=carol',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+      expect(byName.statusCode).toBe(200);
+      expect(byName.json().map(s => s.id)).toContain(studentId1);
+
+      const byEmail = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/search?q=${encodeURIComponent(studentEmail2.slice(0, 8))}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+      expect(byEmail.statusCode).toBe(200);
+      expect(byEmail.json().map(s => s.id)).toContain(studentId2);
+    });
+
+    it('only returns students linked to the requesting trainer', async () => {
+      const { accessToken: trainerToken1 } = await createTrainerWithToken();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const { accessToken: trainerToken2 } = await createTrainerWithToken();
+      const { email: studentEmail } = await createStudent();
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken2}` },
+        payload: { email: studentEmail },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/search?q=${encodeURIComponent(studentEmail.slice(0, 8))}`,
+        headers: { authorization: `Bearer ${trainerToken1}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual([]);
+    });
+
+    it('returns 400 when q is missing', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students/search',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   describe('DELETE /trainer/students/:studentId', () => {
     it('unlinks a student and returns 204, verifying the link is removed from the DB', async () => {
       const { accessToken: trainerToken, userId: trainerUserId } = await createTrainerWithToken();

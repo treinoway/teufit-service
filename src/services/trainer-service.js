@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { Prisma } from '@prisma/client';
 import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
@@ -230,6 +231,104 @@ export async function listStudents({ trainerId }) {
 
   return Promise.all(
     links.map(async ({ student }) => ({
+      id: student.id,
+      email: student.email,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      avatarUrl: await s3BucketHandler.resolveUrl(student.avatarUrl),
+    })),
+  );
+}
+
+/**
+ * Search students linked to a trainer by fuzzy name/email.
+ *
+ * Contract:
+ * - Input: trainerId (Trainer.id), query (string), limit (number)
+ * - Output: array of student basic profiles { id, email, firstName, lastName, avatarUrl }
+ */
+export async function searchStudents({ trainerId, query, limit = 10 }) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedLimit = Math.min(Math.max(Number(limit) || 10, 1), 50);
+  const wildcardQuery = `%${normalizedQuery}%`;
+  const fullNameExpr = "lower((COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')))";
+
+  let students;
+  try {
+    students = await prisma.$queryRaw(
+      Prisma.sql`
+        SELECT
+          u.id,
+          u.email,
+          u.first_name AS "firstName",
+          u.last_name AS "lastName",
+          u.avatar_url AS "avatarUrl"
+        FROM trainer_students ts
+        INNER JOIN users u ON u.id = ts.student_id
+        WHERE ts.trainer_id = ${trainerId}::uuid
+          AND u.deleted_at IS NULL
+          AND (
+            lower(COALESCE(u.email, '')) % ${normalizedQuery}
+            OR ${Prisma.raw(fullNameExpr)} % ${normalizedQuery}
+            OR lower(COALESCE(u.email, '')) LIKE ${wildcardQuery}
+            OR ${Prisma.raw(fullNameExpr)} LIKE ${wildcardQuery}
+          )
+        ORDER BY
+          GREATEST(
+            similarity(lower(COALESCE(u.email, '')), ${normalizedQuery}),
+            similarity(${Prisma.raw(fullNameExpr)}, ${normalizedQuery})
+          ) DESC,
+          u.created_at DESC
+        LIMIT ${normalizedLimit}
+      `,
+    );
+  } catch (error) {
+    const errorMessage = String(error?.message || '').toLowerCase();
+    const pgTrgmUnavailable =
+      error?.code === 'P2010'
+      || error?.code === '42883'
+      || error?.code === '42704'
+      || errorMessage.includes('function similarity')
+      || errorMessage.includes('operator does not exist: text %')
+      || errorMessage.includes('pg_trgm')
+      || errorMessage.includes('42883');
+
+    if (!pgTrgmUnavailable) {
+      throw error;
+    }
+
+    students = await prisma.$queryRaw(
+      Prisma.sql`
+        SELECT
+          u.id,
+          u.email,
+          u.first_name AS "firstName",
+          u.last_name AS "lastName",
+          u.avatar_url AS "avatarUrl"
+        FROM trainer_students ts
+        INNER JOIN users u ON u.id = ts.student_id
+        WHERE ts.trainer_id = ${trainerId}::uuid
+          AND u.deleted_at IS NULL
+          AND (
+            lower(COALESCE(u.email, '')) LIKE ${wildcardQuery}
+            OR ${Prisma.raw(fullNameExpr)} LIKE ${wildcardQuery}
+          )
+        ORDER BY
+          CASE
+            WHEN lower(COALESCE(u.email, '')) = ${normalizedQuery} THEN 3
+            WHEN ${Prisma.raw(fullNameExpr)} = ${normalizedQuery} THEN 3
+            WHEN lower(COALESCE(u.email, '')) LIKE ${`${normalizedQuery}%`} THEN 2
+            WHEN ${Prisma.raw(fullNameExpr)} LIKE ${`${normalizedQuery}%`} THEN 2
+            ELSE 1
+          END DESC,
+          u.created_at DESC
+        LIMIT ${normalizedLimit}
+      `,
+    );
+  }
+
+  return Promise.all(
+    students.map(async (student) => ({
       id: student.id,
       email: student.email,
       firstName: student.firstName,

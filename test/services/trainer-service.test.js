@@ -5,6 +5,7 @@ vi.mock('../../src/db.js', () => {
   return {
     prisma: {
       $transaction: vi.fn(),
+      $queryRaw: vi.fn(),
       user: {
         findUnique: vi.fn(),
       },
@@ -26,7 +27,7 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
 
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import { updateMyTrainerProfile, linkStudentByEmail, listStudents, unlinkStudent } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -321,6 +322,84 @@ describe('listStudents', () => {
       { id: 's1', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', avatarUrl: 'https://cdn.example.com/alice.jpg' },
       { id: 's2', email: 'bob@example.com', firstName: 'Bob', lastName: 'B', avatarUrl: null },
     ]);
+  });
+});
+
+describe('searchStudents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+  });
+
+  it('returns an empty array when no student matches', async () => {
+    prisma.$queryRaw.mockResolvedValue([]);
+
+    const result = await searchStudents({
+      trainerId: 'trainer1',
+      query: 'nomatch',
+      limit: 10,
+    });
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([]);
+  });
+
+  it('maps database rows and resolves avatar urls', async () => {
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        id: 's1',
+        email: 'alice@example.com',
+        firstName: 'Alice',
+        lastName: 'Silva',
+        avatarUrl: 's3://alice',
+      },
+      {
+        id: 's2',
+        email: 'bruno@example.com',
+        firstName: 'Bruno',
+        lastName: 'Costa',
+        avatarUrl: null,
+      },
+    ]);
+    s3BucketHandler.resolveUrl
+      .mockResolvedValueOnce('https://cdn.example.com/alice.jpg')
+      .mockResolvedValueOnce(null);
+
+    const result = await searchStudents({
+      trainerId: 'trainer1',
+      query: 'ali',
+      limit: 5,
+    });
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        id: 's1',
+        email: 'alice@example.com',
+        firstName: 'Alice',
+        lastName: 'Silva',
+        avatarUrl: 'https://cdn.example.com/alice.jpg',
+      },
+      {
+        id: 's2',
+        email: 'bruno@example.com',
+        firstName: 'Bruno',
+        lastName: 'Costa',
+        avatarUrl: null,
+      },
+    ]);
+  });
+
+  it('caps result limit to a safe maximum', async () => {
+    prisma.$queryRaw.mockResolvedValue([]);
+
+    await searchStudents({
+      trainerId: 'trainer1',
+      query: 'alice',
+      limit: 999,
+    });
+
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 });
 

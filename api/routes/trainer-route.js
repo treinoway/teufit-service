@@ -1,8 +1,15 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch, linkStudentByEmail, listStudents, unlinkStudent } from '../../src/services/trainer-service.js';
+import { patch, linkStudentByEmail, listStudents, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
-import { patchTrainerSchema, linkStudentSchema, listStudentsSchema, unlinkStudentSchema } from '../schemas/trainer-route.schema.js';
+import {
+  patchTrainerSchema,
+  linkStudentSchema,
+  listStudentsSchema,
+  searchStudentsSchema,
+  unlinkStudentSchema,
+} from '../schemas/trainer-route.schema.js';
 import { prisma } from '../../src/db.js';
+import config from '../../config/index.js';
 
 /**
  * Rest-ish trainer resource routes.
@@ -68,6 +75,38 @@ export async function trainerRoutes(fastify) {
       }
 
       const students = await listStudents({ trainerId: trainerRecord.id });
+      return reply.send(students);
+    },
+  );
+
+  fastify.get(
+    '/trainer/students/search',
+    {
+      config: { rateLimit: config.rateLimit.trainer.searchStudents },
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: searchStudentsSchema,
+    },
+    async (request, reply) => {
+      const trainerRecord = await prisma.trainer.findUnique({
+        where: { userId: request.user.id },
+        select: { id: true },
+      });
+
+      if (!trainerRecord) {
+        return reply.status(409).send({
+          error: 'TRAINER_PROFILE_MISSING',
+          messageCode: 'trainer.profileMissing',
+          message: 'Trainer profile not found',
+        });
+      }
+
+      const { q, limit } = request.query;
+      const students = await searchStudents({
+        trainerId: trainerRecord.id,
+        query: q,
+        limit,
+      });
+
       return reply.send(students);
     },
   );

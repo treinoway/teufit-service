@@ -1,5 +1,16 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
+const studentItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    email: { type: 'string', format: 'email' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    avatarUrl: { type: 'string', nullable: true },
+  },
+};
+
 export const patchTrainerSchema = {
   tags: ['trainer'],
   summary: 'Update trainer profile',
@@ -98,17 +109,56 @@ export const listStudentsSchema = {
   response: {
     200: {
       type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          email: { type: 'string', format: 'email' },
-          firstName: { type: 'string', nullable: true },
-          lastName: { type: 'string', nullable: true },
-          avatarUrl: { type: 'string', nullable: true },
-        },
+      items: studentItemSchema,
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const searchStudentsSchema = {
+  tags: ['trainer'],
+  summary: 'Search linked students by name or email',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
       },
     },
+  },
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['q'],
+    properties: {
+      q: {
+        type: 'string',
+        minLength: 2,
+        maxLength: 100,
+        description: 'Search text used for fuzzy match over student name and email',
+      },
+      limit: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 50,
+        default: 10,
+        description: 'Maximum number of students returned',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'array',
+      items: studentItemSchema,
+    },
+    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     409: errorResponseSchema,
@@ -181,14 +231,7 @@ export const linkStudentSchema = {
   },
   response: {
     201: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', format: 'uuid' },
-        email: { type: 'string', format: 'email' },
-        firstName: { type: 'string', nullable: true },
-        lastName: { type: 'string', nullable: true },
-        avatarUrl: { type: 'string', nullable: true },
-      },
+      ...studentItemSchema,
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,

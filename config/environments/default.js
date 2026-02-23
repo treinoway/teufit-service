@@ -26,6 +26,12 @@ export default {
         timeWindow: '1 minute',
       },
     },
+    trainer: {
+      searchStudents: {
+        max: 60,
+        timeWindow: '1 minute',
+      },
+    },
     trainingProtocol: {
       create: {
         max: 20,
