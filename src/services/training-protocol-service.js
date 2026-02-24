@@ -541,6 +541,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
           where: { deletedAt: null },
           include: {
             schedules: { orderBy: { order: 'asc' } },
+            trainingTemplate: true,
           },
           orderBy: { order: 'asc' },
         },

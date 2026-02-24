@@ -1,5 +1,12 @@
 export default {
     rateLimit: {
+        global: { max: 10000, timeWindow: '1 minute' },
+        globalPerUser: { max: 10000, timeWindow: '1 minute' },
+        auth: {
+          waitlist: { max: 1000, timeWindow: '1 minute' },
+          login: { max: 1000, timeWindow: '1 minute' },
+          changePassword: { max: 1000, timeWindow: '1 minute' },
+        },
         postalCode: {
           max: 1000,
           timeWindow: '1 minute',

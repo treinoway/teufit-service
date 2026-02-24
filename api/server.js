@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import config from '../config/index.js';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
 import fastifySession from '@fastify/session';
@@ -168,10 +169,7 @@ export async function buildServer(options = {}) {
 
   // Register Rate Limiting (disabled in test environment)
   if (process.env.NODE_ENV !== 'test') {
-    await fastify.register(fastifyRateLimit, {
-      max: 100, // Global limit: 100 req/min
-      timeWindow: '1 minute',
-    });
+    await fastify.register(fastifyRateLimit, config.rateLimit.global);
   }
   
   // Register Multipart support for file uploads
@@ -199,8 +197,7 @@ export async function buildServer(options = {}) {
     // Configure per-user rate limit for this context (disabled in test environment)
     if (process.env.NODE_ENV !== 'test') {
       await fastify.register(fastifyRateLimit, {
-        max: 20,
-        timeWindow: '1 minute',
+        ...config.rateLimit.globalPerUser,
         keyGenerator: (request) => `user:${request.user.id}`,
       });
     }

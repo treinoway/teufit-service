@@ -4,6 +4,28 @@ export default {
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
   },
   rateLimit: {
+    global: {
+      max: 100,
+      timeWindow: '1 minute',
+    },
+    globalPerUser: {
+      max: 20,
+      timeWindow: '1 minute',
+    },
+    auth: {
+      waitlist: {
+        max: 3,
+        timeWindow: '1 hour',
+      },
+      login: {
+        max: 5,
+        timeWindow: '1 minute',
+      },
+      changePassword: {
+        max: 5,
+        timeWindow: '1 minute',
+      },
+    },
     postalCode: {
       max: 10,
       timeWindow: '1 minute',

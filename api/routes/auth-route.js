@@ -1,5 +1,6 @@
 import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
+import config from '../../config/index.js';
 import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import {
@@ -98,12 +99,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/signup/waitlist',
     {
-      config: {
-        rateLimit: {
-          max: 3,
-          timeWindow: '1 hour',
-        },
-      },
+      config: { rateLimit: config.rateLimit.auth.waitlist },
       schema: waitlistSchema,
     },
     async (request, reply) => {
@@ -131,12 +127,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/login',
     {
-      config: {
-        rateLimit: {
-          max: 5,
-          timeWindow: '1 minute',
-        },
-      },
+      config: { rateLimit: config.rateLimit.auth.login },
       schema: loginSchema,
     },
     async (request, reply) => {
@@ -534,12 +525,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/change-password',
     {
-      config: {
-        rateLimit: {
-          max: 5,
-          timeWindow: '1 minute',
-        },
-      },
+      config: { rateLimit: config.rateLimit.auth.changePassword },
       schema: changePasswordSchema,
       onRequest: [authenticate],
     },
