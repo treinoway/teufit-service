@@ -12,7 +12,6 @@ vi.mock('../../src/db.js', () => ({
     },
     trainingProtocolTemplate: { findUnique: vi.fn() },
     training: { create: vi.fn() },
-    trainingSchedule: { create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -84,24 +83,6 @@ describe('training-protocol-service', () => {
       ).rejects.toMatchObject({
         code: 'ASSIGNEE_NOT_FOUND',
         statusCode: 404,
-      });
-
-      expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
-    });
-
-    it('throws INVALID_WEEK_DAYS when availableWeekDays contains invalid values', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
-
-      await expect(
-        createProtocol('u1', {
-          assigneeId: 'assignee-1',
-          name: 'Protocol A',
-          startDate: '2025-01-01',
-          availableWeekDays: ['monday', 'invalid-day'],
-        }),
-      ).rejects.toMatchObject({
-        code: 'INVALID_WEEK_DAYS',
       });
 
       expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
@@ -520,14 +501,14 @@ describe('training-protocol-service', () => {
       });
     });
 
-    it('creates protocol from template with assignee (no schedule templates)', async () => {
+    it('creates protocol from template with assignee (no trainings)', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
         id: 'tmpl-1',
         trainerId: 't1',
         name: 'Template A',
         deletedAt: null,
-        scheduleTemplates: [],
+        trainings: [],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
       const created = { id: 'p1', assigneeId: 'assignee-1' };
@@ -545,19 +526,18 @@ describe('training-protocol-service', () => {
       expect(result.assignee).toMatchObject({ id: 'assignee-1', firstName: 'Jane' });
       expect(result.trainings).toHaveLength(0);
       expect(prisma.training.create).not.toHaveBeenCalled();
-      expect(prisma.trainingSchedule.create).not.toHaveBeenCalled();
     });
 
-    it('creates trainings and schedules from schedule templates', async () => {
+    it('creates trainings with weekDay from template trainings', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
         id: 'tmpl-1',
         trainerId: 't1',
         name: 'Template A',
         deletedAt: null,
-        scheduleTemplates: [
+        trainings: [
           {
-            id: 'st-1',
+            id: 'pt-1',
             weekDay: 'monday',
             order: 0,
             trainingTemplate: {
@@ -576,12 +556,11 @@ describe('training-protocol-service', () => {
       const fullProtocol = {
         id: 'p1',
         assigneeId: 'assignee-1',
-        trainings: [{ id: 'tr-1', name: 'Bench Press', schedules: [{ weekDay: 'monday' }] }],
+        trainings: [{ id: 'tr-1', name: 'Bench Press', weekDay: 'monday' }],
         assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
       };
       prisma.trainingProtocol.create.mockResolvedValue(createdProtocol);
       prisma.training.create.mockResolvedValue(createdTraining);
-      prisma.trainingSchedule.create.mockResolvedValue({ id: 'ts-1' });
       prisma.trainingProtocol.findUnique.mockResolvedValue(fullProtocol);
 
       const result = await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
@@ -593,15 +572,6 @@ describe('training-protocol-service', () => {
             trainingTemplateId: 'tt-1',
             name: 'Bench Press',
             category: 'strength',
-            order: 0,
-          }),
-        }),
-      );
-      expect(prisma.trainingSchedule.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            trainingProtocolId: 'p1',
-            trainingId: 'tr-1',
             weekDay: 'monday',
             order: 0,
           }),
@@ -618,9 +588,8 @@ describe('training-protocol-service', () => {
         name: 'Template A',
         genderOrdination: 'female',
         trainingLevel: 'intermediate',
-        availableWeekDays: [],
         deletedAt: null,
-        scheduleTemplates: [],
+        trainings: [],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
       const created = { id: 'p1', assigneeId: 'assignee-1' };
@@ -647,9 +616,8 @@ describe('training-protocol-service', () => {
         name: 'Template A',
         genderOrdination: 'female',
         trainingLevel: 'intermediate',
-        availableWeekDays: [],
         deletedAt: null,
-        scheduleTemplates: [],
+        trainings: [],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
       const created = { id: 'p1', assigneeId: 'assignee-1' };

@@ -24,7 +24,7 @@ export async function trainingRoutes(fastify) {
         if (error.code === 'FORBIDDEN_NOT_PROTOCOL_OWNER') {
           return reply.status(403).send({ error: error.message });
         }
-        if (error.code === 'INVALID_CATEGORY' || error.code === 'INVALID_BODY_SEGMENT') {
+        if (error.code === 'INVALID_CATEGORY' || error.code === 'INVALID_BODY_SEGMENT' || error.code === 'INVALID_WEEK_DAY') {
           return reply.status(400).send({ error: error.message });
         }
         fastify.log.error(error);
@@ -99,7 +99,7 @@ export async function trainingRoutes(fastify) {
         if (error.code === 'FORBIDDEN_NOT_PROTOCOL_OWNER') {
           return reply.status(403).send({ error: error.message });
         }
-        if (error.code === 'INVALID_CATEGORY' || error.code === 'INVALID_BODY_SEGMENT') {
+        if (error.code === 'INVALID_CATEGORY' || error.code === 'INVALID_BODY_SEGMENT' || error.code === 'INVALID_WEEK_DAY') {
           return reply.status(400).send({ error: error.message });
         }
         fastify.log.error(error);
@@ -153,34 +153,6 @@ export async function trainingRoutes(fastify) {
         }
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to import training from template' });
-      }
-    },
-  );
-
-  // Schedule training
-  fastify.post(
-    '/trainer/trainings/:id/schedule',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: schema.scheduleTrainingSchema,
-    },
-    async (request, reply) => {
-      try {
-        const { weekDays, order } = request.body;
-        const schedules = await service.scheduleTraining(request.user.id, request.params.id, weekDays, order);
-        return reply.status(201).send(schedules);
-      } catch (error) {
-        if (error.code === 'TRAINING_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
-          return reply.status(404).send({ error: error.message });
-        }
-        if (error.code === 'FORBIDDEN_NOT_PROTOCOL_OWNER') {
-          return reply.status(403).send({ error: error.message });
-        }
-        if (error.code === 'INVALID_WEEK_DAYS') {
-          return reply.status(400).send({ error: error.message });
-        }
-        fastify.log.error(error);
-        return reply.status(500).send({ error: 'Failed to schedule training' });
       }
     },
   );

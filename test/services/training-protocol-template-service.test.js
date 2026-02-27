@@ -10,7 +10,7 @@ vi.mock('../../src/db.js', () => ({
       update: vi.fn(),
     },
     trainingTemplate: { findMany: vi.fn() },
-    trainingScheduleTemplate: {
+    protocolTemplateTraining: {
       createMany: vi.fn(),
       deleteMany: vi.fn(),
     },
@@ -32,21 +32,19 @@ const baseTemplate = {
   trainerId: 'trainer-1',
   name: 'Test Template',
   description: null,
-  availableWeekDays: ['monday', 'wednesday'],
   defaultDurationWeeks: null,
   genderOrdination: null,
   trainingLevel: null,
   deletedAt: null,
   createdAt: new Date(),
   updatedAt: null,
-  scheduleTemplates: [],
-  scheduleTemplatesCount: 0,
+  trainings: [],
+  trainingsCount: 0,
 };
 
 describe('training-protocol-template-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default $transaction passthrough
     prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
   });
 
@@ -61,14 +59,6 @@ describe('training-protocol-template-service', () => {
         statusCode: 404,
       });
       expect(prisma.trainingProtocolTemplate.create).not.toHaveBeenCalled();
-    });
-
-    it('throws INVALID_WEEK_DAYS when availableWeekDays contains invalid values', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
-
-      await expect(
-        createProtocolTemplate('u1', { name: 'T', availableWeekDays: ['monday', 'funday'] }),
-      ).rejects.toMatchObject({ code: 'INVALID_WEEK_DAYS' });
     });
 
     it('throws INVALID_GENDER_ORDINATION when genderOrdination is invalid', async () => {
@@ -94,7 +84,7 @@ describe('training-protocol-template-service', () => {
 
       const result = await createProtocolTemplate('u1', { name: 'Test Template' });
 
-      expect(result).toEqual(baseTemplate);
+      expect(result.trainingsCount).toBe(0);
       expect(prisma.trainingProtocolTemplate.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -103,7 +93,7 @@ describe('training-protocol-template-service', () => {
           }),
         }),
       );
-      expect(prisma.trainingScheduleTemplate.createMany).not.toHaveBeenCalled();
+      expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
     });
 
     it('throws TRAINING_TEMPLATE_NOT_FOUND when a training template in trainings does not exist', async () => {
@@ -113,7 +103,6 @@ describe('training-protocol-template-service', () => {
       await expect(
         createProtocolTemplate('u1', {
           name: 'T',
-          availableWeekDays: ['monday'],
           trainings: [{ trainingTemplateId: 'tt-nonexistent', weekDay: 'monday', order: 0 }],
         }),
       ).rejects.toMatchObject({ code: 'TRAINING_TEMPLATE_NOT_FOUND', statusCode: 404 });
@@ -128,7 +117,6 @@ describe('training-protocol-template-service', () => {
       await expect(
         createProtocolTemplate('u1', {
           name: 'T',
-          availableWeekDays: ['monday'],
           trainings: [{ trainingTemplateId: 'tt-1', weekDay: 'monday', order: 0 }],
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN_TRAINING_TEMPLATE_ACCESS', statusCode: 403 });
@@ -140,57 +128,64 @@ describe('training-protocol-template-service', () => {
         { id: 'tt-1', trainerId: 'other-trainer', isPublic: true },
       ]);
       prisma.trainingProtocolTemplate.create.mockResolvedValue({ id: 'tmpl-1' });
-      const resultTemplate = { ...baseTemplate, scheduleTemplates: [{ id: 'st-1', weekDay: 'monday' }] };
+      const resultTemplate = { ...baseTemplate, trainings: [{ id: 'pt-1', weekDay: 'monday' }] };
       prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(resultTemplate);
 
       const result = await createProtocolTemplate('u1', {
         name: 'T',
-        availableWeekDays: ['monday'],
         trainings: [{ trainingTemplateId: 'tt-1', weekDay: 'monday', order: 0 }],
       });
 
-      expect(prisma.trainingScheduleTemplate.createMany).toHaveBeenCalledWith(
+      expect(prisma.protocolTemplateTraining.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.arrayContaining([
             expect.objectContaining({ trainingTemplateId: 'tt-1', weekDay: 'monday' }),
           ]),
         }),
       );
-      expect(result.scheduleTemplates).toHaveLength(1);
+      expect(result.trainings).toHaveLength(1);
     });
 
-    it('throws INVALID_WEEK_DAY_FOR_SCHEDULE when training weekDay is not in availableWeekDays', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
-      prisma.trainingTemplate.findMany.mockResolvedValue([
-        { id: 'tt-1', trainerId: 'trainer-1', isPublic: false },
-      ]);
-
-      await expect(
-        createProtocolTemplate('u1', {
-          name: 'T',
-          availableWeekDays: ['monday'],
-          trainings: [{ trainingTemplateId: 'tt-1', weekDay: 'friday', order: 0 }],
-        }),
-      ).rejects.toMatchObject({ code: 'INVALID_WEEK_DAY_FOR_SCHEDULE', statusCode: 400 });
-    });
-
-    it('creates schedule templates when trainings are provided', async () => {
+    it('creates protocol template trainings when trainings are provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingTemplate.findMany.mockResolvedValue([
         { id: 'tt-1', trainerId: 'trainer-1', isPublic: false },
       ]);
       prisma.trainingProtocolTemplate.create.mockResolvedValue({ id: 'tmpl-1' });
-      const resultTemplate = { ...baseTemplate, scheduleTemplates: [{ id: 'st-1', weekDay: 'monday', order: 0, trainingTemplate: { id: 'tt-1', name: 'Bench Press', category: 'strength', bodySegment: 'upper' } }] };
+      const resultTemplate = {
+        ...baseTemplate,
+        trainings: [{ id: 'pt-1', weekDay: 'monday', order: 0, trainingTemplate: { id: 'tt-1', name: 'Bench Press', category: 'strength', bodySegment: 'upper' } }],
+      };
       prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(resultTemplate);
 
       await createProtocolTemplate('u1', {
         name: 'T',
-        availableWeekDays: ['monday'],
         trainings: [{ trainingTemplateId: 'tt-1', weekDay: 'monday', order: 0 }],
       });
 
-      expect(prisma.trainingScheduleTemplate.createMany).toHaveBeenCalledWith({
+      expect(prisma.protocolTemplateTraining.createMany).toHaveBeenCalledWith({
         data: [{ protocolTemplateId: 'tmpl-1', trainingTemplateId: 'tt-1', weekDay: 'monday', order: 0 }],
+      });
+    });
+
+    it('allows trainings without weekDay (nullable)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([
+        { id: 'tt-1', trainerId: 'trainer-1', isPublic: false },
+      ]);
+      prisma.trainingProtocolTemplate.create.mockResolvedValue({ id: 'tmpl-1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        ...baseTemplate,
+        trainings: [{ id: 'pt-1', weekDay: null, order: 0 }],
+      });
+
+      await createProtocolTemplate('u1', {
+        name: 'T',
+        trainings: [{ trainingTemplateId: 'tt-1', order: 0 }],
+      });
+
+      expect(prisma.protocolTemplateTraining.createMany).toHaveBeenCalledWith({
+        data: [{ protocolTemplateId: 'tmpl-1', trainingTemplateId: 'tt-1', weekDay: null, order: 0 }],
       });
     });
   });
@@ -207,16 +202,16 @@ describe('training-protocol-template-service', () => {
       });
     });
 
-    it('returns templates with scheduleTemplatesCount', async () => {
+    it('returns templates with trainingsCount', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findMany.mockResolvedValue([
-        { ...baseTemplate, _count: { scheduleTemplates: 3 } },
+        { ...baseTemplate, _count: { trainings: 3 } },
       ]);
 
       const result = await getProtocolTemplatesByTrainer('u1');
 
       expect(result).toHaveLength(1);
-      expect(result[0].scheduleTemplatesCount).toBe(3);
+      expect(result[0].trainingsCount).toBe(3);
       expect(result[0]._count).toBeUndefined();
     });
 
@@ -278,26 +273,26 @@ describe('training-protocol-template-service', () => {
       });
     });
 
-    it('returns template with scheduleTemplates', async () => {
+    it('returns template with trainings', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
-      const templateWithSchedules = {
+      const templateWithTrainings = {
         ...baseTemplate,
-        scheduleTemplates: [
+        trainings: [
           {
-            id: 'st-1',
+            id: 'pt-1',
             weekDay: 'monday',
             order: 0,
             trainingTemplate: { id: 'tt-1', name: 'Bench Press', category: 'strength', bodySegment: 'upper' },
           },
         ],
       };
-      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(templateWithSchedules);
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(templateWithTrainings);
 
       const result = await getProtocolTemplateById('u1', 'tmpl-1');
 
-      expect(result).toEqual(templateWithSchedules);
-      expect(result.scheduleTemplates).toHaveLength(1);
-      expect(result.scheduleTemplates[0].trainingTemplate).toMatchObject({ name: 'Bench Press' });
+      expect(result).toEqual(templateWithTrainings);
+      expect(result.trainings).toHaveLength(1);
+      expect(result.trainings[0].trainingTemplate).toMatchObject({ name: 'Bench Press' });
     });
   });
 
@@ -336,58 +331,58 @@ describe('training-protocol-template-service', () => {
       });
     });
 
-    it('updates name without touching schedule templates', async () => {
+    it('updates name without touching protocol template trainings', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findUnique
         .mockResolvedValueOnce(baseTemplate)
-        .mockResolvedValueOnce({ ...baseTemplate, name: 'Updated', scheduleTemplates: [] });
+        .mockResolvedValueOnce({ ...baseTemplate, name: 'Updated', trainings: [] });
       prisma.trainingProtocolTemplate.update.mockResolvedValue({ ...baseTemplate, name: 'Updated' });
 
       const result = await updateProtocolTemplate('u1', 'tmpl-1', { name: 'Updated' });
 
       expect(result.name).toBe('Updated');
-      expect(prisma.trainingScheduleTemplate.deleteMany).not.toHaveBeenCalled();
-      expect(prisma.trainingScheduleTemplate.createMany).not.toHaveBeenCalled();
+      expect(prisma.protocolTemplateTraining.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
     });
 
-    it('replaces schedule templates atomically when trainings array is provided', async () => {
+    it('replaces protocol template trainings atomically when trainings array is provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findUnique
         .mockResolvedValueOnce(baseTemplate)
-        .mockResolvedValueOnce({ ...baseTemplate, scheduleTemplates: [{ id: 'st-2', weekDay: 'monday' }] });
+        .mockResolvedValueOnce({ ...baseTemplate, trainings: [{ id: 'pt-2', weekDay: 'monday' }] });
       prisma.trainingTemplate.findMany.mockResolvedValue([
         { id: 'tt-2', trainerId: 'trainer-1', isPublic: false },
       ]);
       prisma.trainingProtocolTemplate.update.mockResolvedValue(baseTemplate);
-      prisma.trainingScheduleTemplate.deleteMany.mockResolvedValue({ count: 1 });
-      prisma.trainingScheduleTemplate.createMany.mockResolvedValue({ count: 1 });
+      prisma.protocolTemplateTraining.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.protocolTemplateTraining.createMany.mockResolvedValue({ count: 1 });
 
       await updateProtocolTemplate('u1', 'tmpl-1', {
         trainings: [{ trainingTemplateId: 'tt-2', weekDay: 'monday', order: 1 }],
       });
 
-      expect(prisma.trainingScheduleTemplate.deleteMany).toHaveBeenCalledWith({
+      expect(prisma.protocolTemplateTraining.deleteMany).toHaveBeenCalledWith({
         where: { protocolTemplateId: 'tmpl-1' },
       });
-      expect(prisma.trainingScheduleTemplate.createMany).toHaveBeenCalledWith({
+      expect(prisma.protocolTemplateTraining.createMany).toHaveBeenCalledWith({
         data: [{ protocolTemplateId: 'tmpl-1', trainingTemplateId: 'tt-2', weekDay: 'monday', order: 1 }],
       });
     });
 
-    it('clears all schedule templates when trainings is an empty array', async () => {
+    it('clears all protocol template trainings when trainings is an empty array', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findUnique
         .mockResolvedValueOnce(baseTemplate)
-        .mockResolvedValueOnce({ ...baseTemplate, scheduleTemplates: [] });
+        .mockResolvedValueOnce({ ...baseTemplate, trainings: [] });
       prisma.trainingProtocolTemplate.update.mockResolvedValue(baseTemplate);
-      prisma.trainingScheduleTemplate.deleteMany.mockResolvedValue({ count: 2 });
+      prisma.protocolTemplateTraining.deleteMany.mockResolvedValue({ count: 2 });
 
       await updateProtocolTemplate('u1', 'tmpl-1', { trainings: [] });
 
-      expect(prisma.trainingScheduleTemplate.deleteMany).toHaveBeenCalledWith({
+      expect(prisma.protocolTemplateTraining.deleteMany).toHaveBeenCalledWith({
         where: { protocolTemplateId: 'tmpl-1' },
       });
-      expect(prisma.trainingScheduleTemplate.createMany).not.toHaveBeenCalled();
+      expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
     });
   });
 

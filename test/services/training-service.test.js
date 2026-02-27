@@ -11,7 +11,6 @@ vi.mock('../../src/db.js', () => ({
     },
     trainingProtocol: { findUnique: vi.fn() },
     trainingTemplate: { findUnique: vi.fn() },
-    trainingSchedule: { create: vi.fn(), deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -21,7 +20,6 @@ import {
   getTrainingById,
   updateTraining,
   deleteTraining,
-  scheduleTraining,
 } from '../../src/services/training-service.js';
 
 const makeTraining = (overrides = {}) => ({
@@ -285,95 +283,5 @@ describe('training-service', () => {
     });
   });
 
-  describe('scheduleTraining', () => {
-    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
-      prisma.trainer.findUnique.mockResolvedValue(null);
-
-      await expect(scheduleTraining('u1', 'tr1', ['monday'])).rejects.toMatchObject({
-        code: 'TRAINER_PROFILE_MISSING',
-        statusCode: 404,
-      });
-    });
-
-    it('throws TRAINING_NOT_FOUND when training does not exist', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(null);
-
-      await expect(scheduleTraining('u1', 'tr1', ['monday'])).rejects.toMatchObject({
-        code: 'TRAINING_NOT_FOUND',
-        statusCode: 404,
-      });
-    });
-
-    it('throws TRAINING_NOT_FOUND when training is soft-deleted', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(makeTraining({ deletedAt: new Date() }));
-
-      await expect(scheduleTraining('u1', 'tr1', ['monday'])).rejects.toMatchObject({
-        code: 'TRAINING_NOT_FOUND',
-        statusCode: 404,
-      });
-    });
-
-    it('throws TRAINING_NOT_FOUND when parent protocol is soft-deleted', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(
-        makeTraining({
-          trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: new Date() },
-        }),
-      );
-
-      await expect(scheduleTraining('u1', 'tr1', ['monday'])).rejects.toMatchObject({
-        code: 'TRAINING_NOT_FOUND',
-        statusCode: 404,
-      });
-    });
-
-    it('throws FORBIDDEN_NOT_PROTOCOL_OWNER when trainer does not own training', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(
-        makeTraining({
-          trainingProtocol: { id: 'p1', trainerId: 'other-trainer', deletedAt: null },
-        }),
-      );
-
-      await expect(scheduleTraining('u1', 'tr1', ['monday'])).rejects.toMatchObject({
-        code: 'FORBIDDEN_NOT_PROTOCOL_OWNER',
-        statusCode: 403,
-      });
-    });
-
-    it('throws INVALID_WEEK_DAYS for invalid weekday values', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(makeTraining());
-
-      await expect(scheduleTraining('u1', 'tr1', ['funday'])).rejects.toMatchObject({
-        code: 'INVALID_WEEK_DAYS',
-      });
-    });
-
-    it('replaces schedules atomically (deletes existing, creates new)', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(makeTraining());
-      const schedules = [
-        { id: 's1', weekDay: 'monday' },
-        { id: 's2', weekDay: 'wednesday' },
-      ];
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          trainingSchedule: {
-            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
-            create: vi.fn()
-              .mockResolvedValueOnce(schedules[0])
-              .mockResolvedValueOnce(schedules[1]),
-          },
-        }),
-      );
-
-      const result = await scheduleTraining('u1', 'tr1', ['monday', 'wednesday'], 1);
-
-      expect(result).toEqual(schedules);
-      expect(prisma.$transaction).toHaveBeenCalled();
-    });
-  });
 });
+

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildError,
-  validateWeekDays,
+  validateWeekDay,
   validateCategory,
   validateBodySegment,
 } from '../../src/helpers/training-validators.js';
@@ -29,48 +29,40 @@ describe('training-validators', () => {
     });
   });
 
-  describe('validateWeekDays', () => {
-    it('does not throw for a valid array of week days', () => {
-      expect(() => validateWeekDays(['monday', 'friday'])).not.toThrow();
+  describe('validateWeekDay', () => {
+    it('does not throw when weekDay is undefined or null', () => {
+      expect(() => validateWeekDay(undefined)).not.toThrow();
+      expect(() => validateWeekDay(null)).not.toThrow();
     });
 
-    it('does not throw for an empty array', () => {
-      expect(() => validateWeekDays([])).not.toThrow();
-    });
-
-    it('throws INVALID_WEEK_DAYS when value is not an array', () => {
-      expect(() => validateWeekDays('monday')).toThrow(
-        expect.objectContaining({ code: 'INVALID_WEEK_DAYS', statusCode: 400 }),
-      );
-    });
-
-    it('uses default fieldName in error message when not provided', () => {
-      expect(() => validateWeekDays(null)).toThrow(
-        expect.objectContaining({ message: 'weekDays must be an array' }),
-      );
-    });
-
-    it('uses custom fieldName in error message when provided', () => {
-      expect(() => validateWeekDays(null, 'availableWeekDays')).toThrow(
-        expect.objectContaining({ message: 'availableWeekDays must be an array' }),
-      );
-    });
-
-    it('throws INVALID_WEEK_DAYS when array contains invalid day values', () => {
-      expect(() => validateWeekDays(['monday', 'funday'])).toThrow(
-        expect.objectContaining({ code: 'INVALID_WEEK_DAYS' }),
-      );
-    });
-
-    it('includes the invalid day in the error message', () => {
-      expect(() => validateWeekDays(['funday'])).toThrow(
-        expect.objectContaining({ message: expect.stringContaining('funday') }),
-      );
+    it('does not throw for a valid week day', () => {
+      expect(() => validateWeekDay('monday')).not.toThrow();
+      expect(() => validateWeekDay('friday')).not.toThrow();
     });
 
     it('accepts all valid week day values', () => {
       const allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      expect(() => validateWeekDays(allDays)).not.toThrow();
+      for (const day of allDays) {
+        expect(() => validateWeekDay(day)).not.toThrow();
+      }
+    });
+
+    it('throws INVALID_WEEK_DAY for an unrecognised value', () => {
+      expect(() => validateWeekDay('funday')).toThrow(
+        expect.objectContaining({ code: 'INVALID_WEEK_DAY', statusCode: 400 }),
+      );
+    });
+
+    it('includes the invalid day in the error message', () => {
+      expect(() => validateWeekDay('funday')).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('funday') }),
+      );
+    });
+
+    it('uses custom fieldName in error message when provided', () => {
+      expect(() => validateWeekDay('funday', 'weekDay')).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('weekDay') }),
+      );
     });
   });
 

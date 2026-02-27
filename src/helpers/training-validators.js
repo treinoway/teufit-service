@@ -10,16 +10,11 @@ export function buildError(code, message, statusCode = 400) {
   });
 }
 
-export function validateWeekDays(weekDays, fieldName = 'weekDays') {
-  if (!Array.isArray(weekDays)) {
-    throw buildError('INVALID_WEEK_DAYS', `${fieldName} must be an array`);
-  }
-
-  const invalidDays = weekDays.filter((day) => !weekDayValues.includes(day));
-  if (invalidDays.length > 0) {
+export function validateWeekDay(weekDay, fieldName = 'weekDay') {
+  if (weekDay && !weekDayValues.includes(weekDay)) {
     throw buildError(
-      'INVALID_WEEK_DAYS',
-      `Invalid week days: ${invalidDays.join(', ')}. Valid values are: ${weekDayValues.join(', ')}`,
+      'INVALID_WEEK_DAY',
+      `Invalid ${fieldName}: ${weekDay}. Valid values are: ${weekDayValues.join(', ')}`,
     );
   }
 }
