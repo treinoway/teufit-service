@@ -3,7 +3,7 @@ import {
   buildError,
   validateCategory,
   validateBodySegment,
-  validateWeekDays,
+  validateWeekDay,
 } from '../helpers/training-validators.js';
 
 /**
@@ -34,7 +34,6 @@ async function verifyProtocolOwnership(protocolId, trainerId) {
  * @returns {Promise<object>} Created training
  */
 export async function createTraining(userId, protocolId, data) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -44,18 +43,18 @@ export async function createTraining(userId, protocolId, data) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify protocol ownership
   await verifyProtocolOwnership(protocolId, trainer.id);
 
-  // 3. Validate category
   validateCategory(data.category);
 
-  // 4. Validate body segment if provided
   if (data.bodySegment) {
     validateBodySegment(data.bodySegment);
   }
 
-  // 5. Create training
+  if (data.weekDay) {
+    validateWeekDay(data.weekDay);
+  }
+
   const training = await prisma.training.create({
     data: {
       trainingProtocolId: protocolId,
@@ -64,6 +63,7 @@ export async function createTraining(userId, protocolId, data) {
       description: data.description || null,
       category: data.category,
       bodySegment: data.bodySegment || null,
+      weekDay: data.weekDay || null,
       order: data.order !== undefined ? data.order : 0,
       notes: data.notes || null,
     },
@@ -82,7 +82,6 @@ export async function createTraining(userId, protocolId, data) {
  */
 export async function getTrainingsByProtocol(userId, protocolId, context) {
   if (context === 'trainer') {
-    // Verify trainer profile and ownership
     const trainer = await prisma.trainer.findUnique({
       where: { userId },
       select: { id: true },
@@ -94,7 +93,6 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
 
     await verifyProtocolOwnership(protocolId, trainer.id);
   } else if (context === 'assignee') {
-    // Verify protocol is assigned to this user
     const protocol = await prisma.trainingProtocol.findUnique({
       where: { id: protocolId },
     });
@@ -110,16 +108,12 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
     throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
-  // Fetch trainings
   const trainings = await prisma.training.findMany({
     where: {
       trainingProtocolId: protocolId,
       deletedAt: null,
     },
     include: {
-      schedules: {
-        orderBy: { order: 'asc' },
-      },
       trainingTemplate: {
         select: {
           id: true,
@@ -142,7 +136,6 @@ export async function getTrainingsByProtocol(userId, protocolId, context) {
  * @returns {Promise<object>} Training
  */
 export async function getTrainingById(userId, trainingId, context) {
-  // Fetch training
   const training = await prisma.training.findUnique({
     where: { id: trainingId },
     include: {
@@ -157,9 +150,6 @@ export async function getTrainingById(userId, trainingId, context) {
           tags: true,
         },
       },
-      schedules: {
-        orderBy: { order: 'asc' },
-      },
     },
   });
 
@@ -167,7 +157,6 @@ export async function getTrainingById(userId, trainingId, context) {
     throw buildError('TRAINING_NOT_FOUND', 'Training not found', 404);
   }
 
-  // Verify access based on context
   if (context === 'trainer') {
     const trainer = await prisma.trainer.findUnique({
       where: { userId },
@@ -201,7 +190,6 @@ export async function getTrainingById(userId, trainingId, context) {
  * @returns {Promise<object>} Updated training
  */
 export async function updateTraining(userId, trainingId, data) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -211,7 +199,6 @@ export async function updateTraining(userId, trainingId, data) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify training exists and protocol ownership
   const training = await prisma.training.findUnique({
     where: { id: trainingId },
     include: {
@@ -227,26 +214,27 @@ export async function updateTraining(userId, trainingId, data) {
     throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this training', 403);
   }
 
-  // 3. Validate category if provided
   if (data.category) {
     validateCategory(data.category);
   }
 
-  // 4. Validate body segment if provided
   if (data.bodySegment) {
     validateBodySegment(data.bodySegment);
   }
 
-  // 5. Build update data
+  if (data.weekDay) {
+    validateWeekDay(data.weekDay);
+  }
+
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.category !== undefined) updateData.category = data.category;
   if (data.bodySegment !== undefined) updateData.bodySegment = data.bodySegment;
+  if (data.weekDay !== undefined) updateData.weekDay = data.weekDay;
   if (data.order !== undefined) updateData.order = data.order;
   if (data.notes !== undefined) updateData.notes = data.notes;
 
-  // 6. Update training
   const updated = await prisma.training.update({
     where: { id: trainingId },
     data: updateData,
@@ -263,7 +251,6 @@ export async function updateTraining(userId, trainingId, data) {
  * @returns {Promise<object>} Deleted training
  */
 export async function deleteTraining(userId, trainingId) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -273,7 +260,6 @@ export async function deleteTraining(userId, trainingId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify training exists and protocol ownership
   const training = await prisma.training.findUnique({
     where: { id: trainingId },
     include: {
@@ -289,7 +275,6 @@ export async function deleteTraining(userId, trainingId) {
     throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this training', 403);
   }
 
-  // 3. Soft delete
   const deleted = await prisma.training.update({
     where: { id: trainingId },
     data: {
@@ -310,7 +295,6 @@ export async function deleteTraining(userId, trainingId) {
  * @returns {Promise<object>} Created training
  */
 export async function importFromTemplate(userId, protocolId, templateId, data = {}) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -320,10 +304,8 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify protocol ownership
   await verifyProtocolOwnership(protocolId, trainer.id);
 
-  // 3. Verify template exists and is accessible
   const template = await prisma.trainingTemplate.findUnique({
     where: { id: templateId },
   });
@@ -332,12 +314,14 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     throw buildError('TEMPLATE_NOT_FOUND', 'Training template not found', 404);
   }
 
-  // Verify access (own template or public)
   if (template.trainerId !== trainer.id && !template.isPublic) {
     throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
   }
 
-  // 4. Create training from template (independent copy)
+  if (data.weekDay) {
+    validateWeekDay(data.weekDay);
+  }
+
   const training = await prisma.training.create({
     data: {
       trainingProtocolId: protocolId,
@@ -346,69 +330,11 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
       description: data.description || template.description,
       category: data.category || template.category,
       bodySegment: data.bodySegment || template.bodySegment,
+      weekDay: data.weekDay || null,
       order: data.order !== undefined ? data.order : 0,
       notes: data.notes || null,
     },
   });
 
   return training;
-}
-
-/**
- * Schedule a training on specific weekdays
- *
- * @param {string} userId - User ID of the trainer
- * @param {string} trainingId - Training ID
- * @param {string[]} weekDays - Array of week days
- * @param {number} order - Order for the schedule
- * @returns {Promise<object[]>} Created schedules
- */
-export async function scheduleTraining(userId, trainingId, weekDays, order = 0) {
-  // 1. Verify trainer profile exists
-  const trainer = await prisma.trainer.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!trainer) {
-    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
-  }
-
-  // 2. Verify training exists and protocol ownership
-  const training = await prisma.training.findUnique({
-    where: { id: trainingId },
-    include: {
-      trainingProtocol: true,
-    },
-  });
-
-  if (!training || training.deletedAt || training.trainingProtocol.deletedAt) {
-    throw buildError('TRAINING_NOT_FOUND', 'Training not found', 404);
-  }
-
-  if (training.trainingProtocol.trainerId !== trainer.id) {
-    throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this training', 403);
-  }
-
-  // 3. Validate week days
-  validateWeekDays(weekDays);
-
-  // 4. Replace schedules atomically: delete existing, then insert new
-  const schedules = await prisma.$transaction(async (tx) => {
-    await tx.trainingSchedule.deleteMany({ where: { trainingId } });
-    return Promise.all(
-      weekDays.map((weekDay) =>
-        tx.trainingSchedule.create({
-          data: {
-            trainingProtocolId: training.trainingProtocolId,
-            trainingId,
-            weekDay,
-            order,
-          },
-        }),
-      ),
-    );
-  });
-
-  return schedules;
 }

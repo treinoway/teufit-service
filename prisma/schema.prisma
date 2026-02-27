@@ -219,7 +219,6 @@ model TrainingProtocolTemplate {
   trainerId            String   @map("trainer_id") @db.Uuid
   name                 String   @db.Text
   description          String?  @db.Text
-  availableWeekDays    String[] @default([]) @map("available_week_days")
   defaultDurationWeeks Int?     @map("default_duration_weeks")
   genderOrdination     String?  @map("gender_ordination") @db.Text
   trainingLevel        String?  @map("training_level") @db.Text
@@ -230,7 +229,7 @@ model TrainingProtocolTemplate {
 
   trainer           Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   protocols         TrainingProtocol[]
-  scheduleTemplates TrainingScheduleTemplate[]
+  trainings         ProtocolTemplateTraining[]
 
   @@map("training_protocol_templates")
 }
@@ -242,7 +241,6 @@ model TrainingProtocol {
   protocolTemplateId String?   @map("protocol_template_id") @db.Uuid
   name               String    @db.Text
   description        String?   @db.Text
-  availableWeekDays  String[]  @default([]) @map("available_week_days")
   status             String    @default("active") @db.Text
   startDate          DateTime  @map("start_date") @db.Date
   expirationDate     DateTime? @map("expiration_date") @db.Date
@@ -253,11 +251,10 @@ model TrainingProtocol {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  assignee          User                    @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
-  trainer           Trainer                 @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  protocolTemplate  TrainingProtocolTemplate? @relation(fields: [protocolTemplateId], references: [id], onDelete: SetNull)
-  trainings         Training[]
-  schedules         TrainingSchedule[]
+  assignee         User                      @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
+  trainer          Trainer                   @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  protocolTemplate TrainingProtocolTemplate? @relation(fields: [protocolTemplateId], references: [id], onDelete: SetNull)
+  trainings        Training[]
 
   @@map("training_protocols")
 }
@@ -276,9 +273,9 @@ model TrainingTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer           Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  trainings         Training[]
-  scheduleTemplates TrainingScheduleTemplate[]
+  trainer                  Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  trainings                Training[]
+  protocolTemplateTrainings ProtocolTemplateTraining[]
 
   @@map("training_templates")
 }
@@ -291,6 +288,7 @@ model Training {
   description        String? @db.Text
   category           String  @db.Text
   bodySegment        String? @map("body_segment") @db.Text
+  weekDay            String? @map("week_day") @db.Text
   order              Int     @default(0)
   notes              String? @db.Text
 
@@ -298,35 +296,18 @@ model Training {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainingProtocol TrainingProtocol   @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
-  trainingTemplate TrainingTemplate?  @relation(fields: [trainingTemplateId], references: [id], onDelete: SetNull)
-  schedules        TrainingSchedule[]
+  trainingProtocol TrainingProtocol  @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
+  trainingTemplate TrainingTemplate? @relation(fields: [trainingTemplateId], references: [id], onDelete: SetNull)
 
   @@map("trainings")
 }
 
-model TrainingSchedule {
-  id                 String @id @default(uuid()) @db.Uuid
-  trainingProtocolId String @map("training_protocol_id") @db.Uuid
-  trainingId         String @map("training_id") @db.Uuid
-  weekDay            String @map("week_day") @db.Text
-  order              Int    @default(0)
-
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  trainingProtocol TrainingProtocol @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
-  training         Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
-
-  @@map("training_schedules")
-}
-
-model TrainingScheduleTemplate {
-  id                 String @id @default(uuid()) @db.Uuid
-  protocolTemplateId String @map("protocol_template_id") @db.Uuid
-  trainingTemplateId String @map("training_template_id") @db.Uuid
-  weekDay            String @map("week_day") @db.Text
-  order              Int    @default(0)
+model ProtocolTemplateTraining {
+  id                 String  @id @default(uuid()) @db.Uuid
+  protocolTemplateId String  @map("protocol_template_id") @db.Uuid
+  trainingTemplateId String  @map("training_template_id") @db.Uuid
+  weekDay            String? @map("week_day") @db.Text
+  order              Int     @default(0)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -334,7 +315,7 @@ model TrainingScheduleTemplate {
   protocolTemplate TrainingProtocolTemplate @relation(fields: [protocolTemplateId], references: [id], onDelete: Cascade)
   trainingTemplate TrainingTemplate         @relation(fields: [trainingTemplateId], references: [id], onDelete: Cascade)
 
-  @@map("training_schedule_templates")
+  @@map("protocol_template_trainings")
 }
 
 model TrainerStudent {

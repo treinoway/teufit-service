@@ -901,7 +901,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assigneeId\": \"uuid-here\",\n  \"name\": \"Full Body Protocol\",\n  \"description\": \"A comprehensive full body training protocol\",\n  \"availableWeekDays\": [\"monday\", \"wednesday\", \"friday\"],\n  \"status\": \"active\",\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-03-01\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"beginner\"\n}"
+              "raw": "{\n  \"assigneeId\": \"uuid-here\",\n  \"name\": \"Full Body Protocol\",\n  \"description\": \"A comprehensive full body training protocol\",\n  \"status\": \"active\",\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-03-01\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"beginner\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols",
@@ -989,7 +989,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Protocol Name\",\n  \"description\": \"Updated description\",\n  \"availableWeekDays\": [\"monday\", \"tuesday\", \"thursday\"],\n  \"status\": \"active\",\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-04-01\",\n  \"genderOrdination\": \"female\",\n  \"trainingLevel\": \"intermediate\"\n}"
+              "raw": "{\n  \"name\": \"Updated Protocol Name\",\n  \"description\": \"Updated description\",\n  \"status\": \"active\",\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-04-01\",\n  \"genderOrdination\": \"female\",\n  \"trainingLevel\": \"intermediate\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:id",
@@ -1052,7 +1052,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"templateId\": \"uuid-here\",\n  \"assigneeId\": \"uuid-here\",\n  \"name\": \"Protocol from Template\",\n  \"description\": \"Custom description\",\n  \"availableWeekDays\": [\"monday\", \"wednesday\", \"friday\"],\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-03-01\",\n  \"genderOrdination\": \"other\",\n  \"trainingLevel\": \"advanced\"\n}"
+              "raw": "{\n  \"templateId\": \"uuid-here\",\n  \"assigneeId\": \"uuid-here\",\n  \"name\": \"Protocol from Template\",\n  \"description\": \"Custom description\",\n  \"startDate\": \"2024-01-01\",\n  \"expirationDate\": \"2024-03-01\",\n  \"genderOrdination\": \"other\",\n  \"trainingLevel\": \"advanced\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/import-from-template",
@@ -1145,7 +1145,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Beginner Full Body\",\n  \"description\": \"A beginner-friendly full body template\",\n  \"availableWeekDays\": [\"monday\", \"wednesday\", \"friday\"],\n  \"defaultDurationWeeks\": 12,\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"beginner\",\n  \"trainings\": [\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"monday\", \"order\": 0 },\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"wednesday\", \"order\": 0 }\n  ]\n}"
+              "raw": "{\n  \"name\": \"Beginner Full Body\",\n  \"description\": \"A beginner-friendly full body template\",\n  \"defaultDurationWeeks\": 12,\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"beginner\",\n  \"trainings\": [\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"monday\", \"order\": 0 },\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"wednesday\", \"order\": 1 },\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"order\": 2 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates",
@@ -1157,7 +1157,7 @@
                 "protocol-templates"
               ]
             },
-            "description": "Create a reusable protocol template. Optionally include a 'trainings' array to pre-populate schedule templates. Each item requires trainingTemplateId (uuid), weekDay, and optional order. Requires TRAINER role."
+            "description": "Create a reusable protocol template. Optionally include a 'trainings' array to link training templates. Each item requires trainingTemplateId (uuid), optional weekDay, and optional order. Requires TRAINER role."
           },
           "response": []
         },
@@ -1176,7 +1176,7 @@
                 "protocol-templates"
               ]
             },
-            "description": "Get all protocol templates created by the authenticated trainer. Each template includes a 'scheduleTemplatesCount' integer showing how many training schedule entries it has."
+            "description": "Get all protocol templates created by the authenticated trainer. Each template includes a 'trainingsCount' integer showing how many training entries it has."
           },
           "response": []
         },
@@ -1203,7 +1203,7 @@
                 }
               ]
             },
-            "description": "Get a specific protocol template by ID. Response includes 'scheduleTemplates' array with nested training template info (id, name, category, bodySegment). Only accessible by the template's trainer."
+            "description": "Get a specific protocol template by ID. Response includes 'trainings' array with nested training template info (id, name, category, bodySegment). Only accessible by the template's trainer."
           },
           "response": []
         },
@@ -1219,7 +1219,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"availableWeekDays\": [\"monday\", \"tuesday\", \"thursday\", \"saturday\"],\n  \"defaultDurationWeeks\": 16,\n  \"genderOrdination\": \"female\",\n  \"trainingLevel\": \"intermediate\",\n  \"trainings\": [\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"monday\", \"order\": 0 }\n  ]\n}"
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"defaultDurationWeeks\": 16,\n  \"genderOrdination\": \"female\",\n  \"trainingLevel\": \"intermediate\",\n  \"trainings\": [\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"weekDay\": \"monday\", \"order\": 0 },\n    { \"trainingTemplateId\": \"{{trainingTemplateId}}\", \"order\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/protocol-templates/:id",
@@ -1239,7 +1239,7 @@
                 }
               ]
             },
-            "description": "Update a protocol template. All fields are optional. If 'trainings' array is provided, it atomically replaces all existing schedule templates. Pass an empty array to clear all schedule templates. Only accessible by the template's trainer."
+            "description": "Update a protocol template. All fields are optional. If 'trainings' array is provided, it atomically replaces all existing trainings. Pass an empty array to clear all trainings. Only accessible by the template's trainer."
           },
           "response": []
         },
@@ -1456,43 +1456,6 @@
               ]
             },
             "description": "Create a training by importing from a template. Can access own templates or public templates."
-          },
-          "response": []
-        },
-        {
-          "name": "Schedule Training",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"weekDays\": [\"monday\", \"wednesday\", \"friday\"],\n  \"order\": 1\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/trainer/trainings/:id/schedule",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "trainer",
-                "trainings",
-                ":id",
-                "schedule"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "",
-                  "description": "Training UUID"
-                }
-              ]
-            },
-            "description": "Schedule a training on specific weekdays. Creates TrainingSchedule entries."
           },
           "response": []
         }

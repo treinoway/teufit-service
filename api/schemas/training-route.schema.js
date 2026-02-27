@@ -5,26 +5,17 @@ const trainingResponseSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
-    protocolId: { type: 'string', format: 'uuid' },
+    trainingProtocolId: { type: 'string', format: 'uuid' },
     trainingTemplateId: { type: 'string', format: 'uuid', nullable: true },
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
     category: { type: 'string' },
     bodySegment: { type: 'string', nullable: true },
+    weekDay: { type: 'string', nullable: true },
     order: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const scheduleResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    trainingId: { type: 'string', format: 'uuid' },
-    weekDay: { type: 'string' },
-    order: { type: 'integer' },
   },
 };
 
@@ -45,6 +36,7 @@ export const createTrainingSchema = {
       description: { type: 'string' },
       category: { type: 'string', enum: trainingCategoryValues },
       bodySegment: { type: 'string', enum: bodySegmentValues },
+      weekDay: { type: 'string', enum: weekDayValues },
       order: { type: 'integer', minimum: 0 },
       notes: { type: 'string' },
       trainingTemplateId: { type: 'string', format: 'uuid' },
@@ -119,6 +111,7 @@ export const updateTrainingSchema = {
       description: { type: 'string' },
       category: { type: 'string', enum: trainingCategoryValues },
       bodySegment: { type: 'string', enum: bodySegmentValues },
+      weekDay: { type: 'string', enum: weekDayValues },
       order: { type: 'integer', minimum: 0 },
       notes: { type: 'string' },
     },
@@ -172,6 +165,7 @@ export const importTrainingFromTemplateSchema = {
       templateId: { type: 'string', format: 'uuid' },
       name: { type: 'string' },
       description: { type: 'string' },
+      weekDay: { type: 'string', enum: weekDayValues },
       order: { type: 'integer', minimum: 0 },
       notes: { type: 'string' },
     },
@@ -179,42 +173,6 @@ export const importTrainingFromTemplateSchema = {
   },
   response: {
     201: trainingResponseSchema,
-    401: errorResponseSchema,
-    403: errorResponseSchema,
-    404: errorResponseSchema,
-    429: errorResponseSchema,
-    500: errorResponseSchema,
-  },
-};
-
-export const scheduleTrainingSchema = {
-  tags: ['Trainings - Trainer'],
-  summary: 'Schedule training on weekdays',
-  security: [{ bearerAuth: [] }],
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: { id: { type: 'string', format: 'uuid' } },
-  },
-  body: {
-    type: 'object',
-    required: ['weekDays'],
-    properties: {
-      weekDays: {
-        type: 'array',
-        items: { type: 'string', enum: weekDayValues },
-        minItems: 1,
-      },
-      order: { type: 'integer', minimum: 0 },
-    },
-    additionalProperties: false,
-  },
-  response: {
-    201: {
-      type: 'array',
-      items: scheduleResponseSchema,
-    },
-    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

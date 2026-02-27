@@ -95,7 +95,6 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       const response = await createProtocolTemplate(accessToken, {
         name: 'Full Body Template',
-        availableWeekDays: ['monday', 'wednesday', 'friday'],
         defaultDurationWeeks: 8,
       });
 
@@ -103,28 +102,27 @@ e2eDescribe('e2e: training protocol templates', () => {
       const body = response.json();
       expect(body).toHaveProperty('id');
       expect(body).toHaveProperty('name', 'Full Body Template');
-      expect(body).toHaveProperty('scheduleTemplates');
-      expect(body.scheduleTemplates).toHaveLength(0);
-      expect(body).toHaveProperty('scheduleTemplatesCount');
+      expect(body).toHaveProperty('trainings');
+      expect(body.trainings).toHaveLength(0);
+      expect(body).toHaveProperty('trainingsCount', 0);
     });
 
-    it('creates template with trainings (schedule templates)', async () => {
+    it('creates template with trainings', async () => {
       const { accessToken } = await createTrainerWithToken();
       const trainingTemplate = await createTrainingTemplate(accessToken);
 
       const response = await createProtocolTemplate(accessToken, {
         name: 'Push Pull Legs',
-        availableWeekDays: ['monday', 'wednesday', 'friday'],
         trainings: [
           { trainingTemplateId: trainingTemplate.id, weekDay: 'monday', order: 0 },
-          { trainingTemplateId: trainingTemplate.id, weekDay: 'wednesday', order: 0 },
+          { trainingTemplateId: trainingTemplate.id, weekDay: 'wednesday', order: 1 },
         ],
       });
 
       expect(response.statusCode).toBe(201);
       const body = response.json();
-      expect(body.scheduleTemplates).toHaveLength(2);
-      expect(body.scheduleTemplates[0]).toMatchObject({
+      expect(body.trainings).toHaveLength(2);
+      expect(body.trainings[0]).toMatchObject({
         weekDay: 'monday',
         order: 0,
         trainingTemplate: expect.objectContaining({
@@ -135,17 +133,21 @@ e2eDescribe('e2e: training protocol templates', () => {
       });
     });
 
-    it('returns 400 when training weekDay is not in availableWeekDays', async () => {
+    it('creates template with trainings without weekDay (nullable)', async () => {
       const { accessToken } = await createTrainerWithToken();
       const trainingTemplate = await createTrainingTemplate(accessToken);
 
       const response = await createProtocolTemplate(accessToken, {
-        name: 'Template',
-        availableWeekDays: ['monday'],
-        trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'friday', order: 0 }],
+        name: 'Flexible Template',
+        trainings: [
+          { trainingTemplateId: trainingTemplate.id, order: 0 },
+        ],
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.trainings).toHaveLength(1);
+      expect(body.trainings[0].weekDay).toBeNull();
     });
 
     it('returns 404 when training template does not exist', async () => {
@@ -153,7 +155,6 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       const response = await createProtocolTemplate(accessToken, {
         name: 'Template',
-        availableWeekDays: ['monday'],
         trainings: [{ trainingTemplateId: '00000000-0000-0000-0000-000000000000', weekDay: 'monday', order: 0 }],
       });
 
@@ -174,13 +175,12 @@ e2eDescribe('e2e: training protocol templates', () => {
   // ==================== GET /trainer/protocol-templates ====================
 
   describe('GET /trainer/protocol-templates', () => {
-    it('returns templates with scheduleTemplatesCount', async () => {
+    it('returns templates with trainingsCount', async () => {
       const { accessToken } = await createTrainerWithToken();
       const trainingTemplate = await createTrainingTemplate(accessToken);
 
       await createProtocolTemplate(accessToken, {
         name: 'Template A',
-        availableWeekDays: ['monday'],
         trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'monday', order: 0 }],
       });
 
@@ -193,10 +193,10 @@ e2eDescribe('e2e: training protocol templates', () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body).toHaveLength(1);
-      expect(body[0]).toHaveProperty('scheduleTemplatesCount', 1);
+      expect(body[0]).toHaveProperty('trainingsCount', 1);
     });
 
-    it('returns 0 for scheduleTemplatesCount when no trainings added', async () => {
+    it('returns 0 for trainingsCount when no trainings added', async () => {
       const { accessToken } = await createTrainerWithToken();
       await createProtocolTemplate(accessToken, { name: 'Empty Template' });
 
@@ -208,20 +208,19 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body[0].scheduleTemplatesCount).toBe(0);
+      expect(body[0].trainingsCount).toBe(0);
     });
   });
 
   // ==================== GET /trainer/protocol-templates/:id ====================
 
   describe('GET /trainer/protocol-templates/:id', () => {
-    it('returns template with scheduleTemplates including nested training template info', async () => {
+    it('returns template with trainings including nested training template info', async () => {
       const { accessToken } = await createTrainerWithToken();
       const trainingTemplate = await createTrainingTemplate(accessToken, { name: 'Squat', category: 'strength', bodySegment: 'lower' });
 
       const createResponse = await createProtocolTemplate(accessToken, {
         name: 'Leg Day Template',
-        availableWeekDays: ['tuesday', 'thursday'],
         trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'tuesday', order: 1 }],
       });
       const { id: templateId } = createResponse.json();
@@ -234,8 +233,8 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.scheduleTemplates).toHaveLength(1);
-      expect(body.scheduleTemplates[0]).toMatchObject({
+      expect(body.trainings).toHaveLength(1);
+      expect(body.trainings[0]).toMatchObject({
         weekDay: 'tuesday',
         order: 1,
         trainingTemplate: expect.objectContaining({
@@ -250,14 +249,13 @@ e2eDescribe('e2e: training protocol templates', () => {
   // ==================== PATCH /trainer/protocol-templates/:id ====================
 
   describe('PATCH /trainer/protocol-templates/:id', () => {
-    it('replaces schedule templates when trainings array is provided', async () => {
+    it('replaces trainings when trainings array is provided', async () => {
       const { accessToken } = await createTrainerWithToken();
       const ttA = await createTrainingTemplate(accessToken, { name: 'Bench Press', category: 'strength' });
       const ttB = await createTrainingTemplate(accessToken, { name: 'Deadlift', category: 'strength', bodySegment: 'lower' });
 
       const createResponse = await createProtocolTemplate(accessToken, {
         name: 'Template',
-        availableWeekDays: ['monday', 'wednesday'],
         trainings: [{ trainingTemplateId: ttA.id, weekDay: 'monday', order: 0 }],
       });
       const { id: templateId } = createResponse.json();
@@ -276,17 +274,16 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       expect(updateResponse.statusCode).toBe(200);
       const body = updateResponse.json();
-      expect(body.scheduleTemplates).toHaveLength(2);
-      expect(body.scheduleTemplates.every((s) => s.trainingTemplate.name === 'Deadlift')).toBe(true);
+      expect(body.trainings).toHaveLength(2);
+      expect(body.trainings.every((s) => s.trainingTemplate.name === 'Deadlift')).toBe(true);
     });
 
-    it('clears all schedule templates when trainings is empty array', async () => {
+    it('clears all trainings when trainings is empty array', async () => {
       const { accessToken } = await createTrainerWithToken();
       const tt = await createTrainingTemplate(accessToken);
 
       const createResponse = await createProtocolTemplate(accessToken, {
         name: 'Template',
-        availableWeekDays: ['monday'],
         trainings: [{ trainingTemplateId: tt.id, weekDay: 'monday', order: 0 }],
       });
       const { id: templateId } = createResponse.json();
@@ -299,24 +296,23 @@ e2eDescribe('e2e: training protocol templates', () => {
       });
 
       expect(updateResponse.statusCode).toBe(200);
-      expect(updateResponse.json().scheduleTemplates).toHaveLength(0);
+      expect(updateResponse.json().trainings).toHaveLength(0);
     });
   });
 
   // ==================== POST /trainer/protocols/import-from-template ====================
 
-  describe('POST /trainer/protocols/import-from-template (with schedule templates)', () => {
-    it('imports protocol and creates trainings+schedules from schedule templates', async () => {
+  describe('POST /trainer/protocols/import-from-template (with trainings)', () => {
+    it('imports protocol and creates trainings with weekDay from template', async () => {
       const { accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
       const tt = await createTrainingTemplate(accessToken, { name: 'Bench Press', category: 'strength' });
 
       const templateResponse = await createProtocolTemplate(accessToken, {
         name: 'Full Body',
-        availableWeekDays: ['monday', 'wednesday'],
         trainings: [
           { trainingTemplateId: tt.id, weekDay: 'monday', order: 0 },
-          { trainingTemplateId: tt.id, weekDay: 'wednesday', order: 0 },
+          { trainingTemplateId: tt.id, weekDay: 'wednesday', order: 1 },
         ],
       });
       const { id: templateId } = templateResponse.json();
@@ -340,18 +336,21 @@ e2eDescribe('e2e: training protocol templates', () => {
       expect(body.trainings[0]).toMatchObject({
         name: 'Bench Press',
         category: 'strength',
+        weekDay: 'monday',
+        order: 0,
       });
-      expect(body.trainings[0]).toHaveProperty('schedules');
-      expect(body.trainings[0].schedules).toHaveLength(1);
+      expect(body.trainings[1]).toMatchObject({
+        weekDay: 'wednesday',
+        order: 1,
+      });
     });
 
-    it('imports protocol with no trainings when template has no schedule templates', async () => {
+    it('imports protocol with no trainings when template has no trainings', async () => {
       const { accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
 
       const templateResponse = await createProtocolTemplate(accessToken, {
         name: 'Empty Template',
-        availableWeekDays: ['monday'],
       });
       const { id: templateId } = templateResponse.json();
 

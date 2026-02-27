@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { trainingStatusValues } from '../constants/training.js';
-import { buildError, validateWeekDays, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
+import { buildError, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 
 /**
@@ -39,7 +39,6 @@ function normalizeProtocolDateFields(protocol) {
  * @returns {Promise<object>} Created protocol
  */
 export async function createProtocol(userId, data) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -49,7 +48,6 @@ export async function createProtocol(userId, data) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify assignee (user) exists and is not soft-deleted
   const assignee = await prisma.user.findUnique({
     where: { id: data.assigneeId },
     select: { id: true, deletedAt: true },
@@ -59,21 +57,13 @@ export async function createProtocol(userId, data) {
     throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
   }
 
-  // 3. Validate week days
-  if (data.availableWeekDays && data.availableWeekDays.length > 0) {
-    validateWeekDays(data.availableWeekDays, 'availableWeekDays');
-  }
-
-  // 4. Validate status if provided
   if (data.status) {
     validateStatus(data.status);
   }
 
-  // 5. Validate new enum fields if provided
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
 
-  // 6. Create protocol
   const protocol = await prisma.trainingProtocol.create({
     data: {
       trainerId: trainer.id,
@@ -81,7 +71,6 @@ export async function createProtocol(userId, data) {
       protocolTemplateId: data.protocolTemplateId || null,
       name: data.name,
       description: data.description || null,
-      availableWeekDays: data.availableWeekDays || [],
       status: data.status || 'active',
       startDate: parseDateOnlyAsUtc(data.startDate),
       expirationDate: parseDateOnlyAsUtc(data.expirationDate),
@@ -113,7 +102,6 @@ export async function createProtocol(userId, data) {
  * @returns {Promise<object[]>} List of protocols
  */
 export async function getProtocolsByTrainer(userId, filters = {}) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -123,7 +111,6 @@ export async function getProtocolsByTrainer(userId, filters = {}) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Build where clause
   const where = {
     trainerId: trainer.id,
     deletedAt: null,
@@ -138,7 +125,6 @@ export async function getProtocolsByTrainer(userId, filters = {}) {
     where.assigneeId = filters.assigneeId;
   }
 
-  // 3. Fetch protocols
   const protocols = await prisma.trainingProtocol.findMany({
     where,
     include: {
@@ -174,13 +160,11 @@ export async function getProtocolsByTrainer(userId, filters = {}) {
  * @returns {Promise<object[]>} List of protocols
  */
 export async function getMyProtocols(userId, filters = {}) {
-  // 1. Build where clause (protocols assigned to this user)
   const where = {
     assigneeId: userId,
     deletedAt: null,
   };
 
-  // Assignees should not see archived protocols by default
   if (filters.status) {
     validateStatus(filters.status);
     where.status = filters.status;
@@ -188,7 +172,6 @@ export async function getMyProtocols(userId, filters = {}) {
     where.status = { in: ['active', 'completed'] };
   }
 
-  // 3. Fetch protocols
   const protocols = await prisma.trainingProtocol.findMany({
     where,
     include: {
@@ -206,11 +189,7 @@ export async function getMyProtocols(userId, filters = {}) {
       },
       trainings: {
         where: { deletedAt: null },
-        include: {
-          schedules: {
-            orderBy: { order: 'asc' },
-          },
-        },
+        orderBy: { order: 'asc' },
       },
     },
     orderBy: {
@@ -218,7 +197,6 @@ export async function getMyProtocols(userId, filters = {}) {
     },
   });
 
-  // Map trainer.user to trainer for cleaner response
   return protocols.map((protocol) => ({
     ...normalizeProtocolDateFields(protocol),
     trainer: protocol.trainer?.user || null,
@@ -234,7 +212,6 @@ export async function getMyProtocols(userId, filters = {}) {
  * @returns {Promise<object>} Protocol
  */
 export async function getProtocolById(userId, protocolId, context) {
-  // 1. Fetch protocol with full details
   const protocol = await prisma.trainingProtocol.findUnique({
     where: { id: protocolId },
     include: {
@@ -266,11 +243,6 @@ export async function getProtocolById(userId, protocolId, context) {
       },
       trainings: {
         where: { deletedAt: null },
-        include: {
-          schedules: {
-            orderBy: { order: 'asc' },
-          },
-        },
         orderBy: { order: 'asc' },
       },
     },
@@ -280,7 +252,6 @@ export async function getProtocolById(userId, protocolId, context) {
     throw buildError('PROTOCOL_NOT_FOUND', 'Protocol not found', 404);
   }
 
-  // 2. Verify access based on context
   if (context === 'trainer') {
     const trainer = await prisma.trainer.findUnique({
       where: { userId },
@@ -299,7 +270,6 @@ export async function getProtocolById(userId, protocolId, context) {
       throw buildError('FORBIDDEN_NOT_YOUR_PROTOCOL', 'This protocol is not assigned to you', 403);
     }
 
-    // Map trainer.user to trainer for cleaner response
     const { trainer, ...rest } = protocol;
     return {
       ...normalizeProtocolDateFields(rest),
@@ -321,7 +291,6 @@ export async function getProtocolById(userId, protocolId, context) {
  * @returns {Promise<object>} Updated protocol
  */
 export async function updateProtocol(userId, protocolId, data) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -331,7 +300,6 @@ export async function updateProtocol(userId, protocolId, data) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify protocol exists and ownership
   const protocol = await prisma.trainingProtocol.findUnique({
     where: { id: protocolId },
   });
@@ -344,25 +312,16 @@ export async function updateProtocol(userId, protocolId, data) {
     throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this protocol', 403);
   }
 
-  // 3. Validate week days if provided
-  if (data.availableWeekDays && data.availableWeekDays.length > 0) {
-    validateWeekDays(data.availableWeekDays, 'availableWeekDays');
-  }
-
-  // 4. Validate status if provided
   if (data.status) {
     validateStatus(data.status);
   }
 
-  // 5. Validate new enum fields if provided
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
 
-  // 6. Build update data
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
-  if (data.availableWeekDays !== undefined) updateData.availableWeekDays = data.availableWeekDays;
   if (data.status !== undefined) updateData.status = data.status;
   if (data.startDate !== undefined) updateData.startDate = parseDateOnlyAsUtc(data.startDate);
   if (data.expirationDate !== undefined) {
@@ -371,7 +330,6 @@ export async function updateProtocol(userId, protocolId, data) {
   if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
   if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
 
-  // 6. Update protocol
   const updated = await prisma.trainingProtocol.update({
     where: { id: protocolId },
     data: updateData,
@@ -398,7 +356,6 @@ export async function updateProtocol(userId, protocolId, data) {
  * @returns {Promise<object>} Deleted protocol
  */
 export async function deleteProtocol(userId, protocolId) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -408,7 +365,6 @@ export async function deleteProtocol(userId, protocolId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify protocol exists and ownership
   const protocol = await prisma.trainingProtocol.findUnique({
     where: { id: protocolId },
   });
@@ -421,7 +377,6 @@ export async function deleteProtocol(userId, protocolId) {
     throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this protocol', 403);
   }
 
-  // 3. Soft delete
   const deleted = await prisma.trainingProtocol.update({
     where: { id: protocolId },
     data: {
@@ -442,7 +397,6 @@ export async function deleteProtocol(userId, protocolId) {
  * @returns {Promise<object>} Created protocol
  */
 export async function importFromTemplate(userId, templateId, assigneeId, data = {}) {
-  // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -452,15 +406,14 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  // 2. Verify template exists and ownership (include schedule templates)
   const template = await prisma.trainingProtocolTemplate.findUnique({
     where: { id: templateId },
     include: {
-      scheduleTemplates: {
+      trainings: {
         include: {
           trainingTemplate: true,
         },
-        orderBy: [{ weekDay: 'asc' }, { order: 'asc' }],
+        orderBy: { order: 'asc' },
       },
     },
   });
@@ -473,7 +426,6 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     throw buildError('FORBIDDEN_NOT_TEMPLATE_OWNER', 'You do not own this template', 403);
   }
 
-  // 3. Verify assignee (user) exists and is not soft-deleted
   const assignee = await prisma.user.findUnique({
     where: { id: assigneeId },
     select: { id: true, deletedAt: true },
@@ -483,7 +435,6 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
   }
 
-  // 4. Create protocol, trainings, and schedules in a transaction
   const protocol = await prisma.$transaction(async (tx) => {
     const created = await tx.trainingProtocol.create({
       data: {
@@ -492,7 +443,6 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
         protocolTemplateId: template.id,
         name: data.name || template.name,
         description: data.description || template.description,
-        availableWeekDays: data.availableWeekDays || template.availableWeekDays,
         status: 'active',
         startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
         expirationDate: parseDateOnlyAsUtc(data.expirationDate),
@@ -501,10 +451,10 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
       },
     });
 
-    for (const scheduleTemplate of template.scheduleTemplates) {
-      const { trainingTemplate } = scheduleTemplate;
+    for (const templateTraining of template.trainings) {
+      const { trainingTemplate } = templateTraining;
 
-      const training = await tx.training.create({
+      await tx.training.create({
         data: {
           trainingProtocolId: created.id,
           trainingTemplateId: trainingTemplate.id,
@@ -512,16 +462,8 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
           description: trainingTemplate.description,
           category: trainingTemplate.category,
           bodySegment: trainingTemplate.bodySegment,
-          order: scheduleTemplate.order,
-        },
-      });
-
-      await tx.trainingSchedule.create({
-        data: {
-          trainingProtocolId: created.id,
-          trainingId: training.id,
-          weekDay: scheduleTemplate.weekDay,
-          order: scheduleTemplate.order,
+          weekDay: templateTraining.weekDay || null,
+          order: templateTraining.order,
         },
       });
     }
@@ -539,10 +481,6 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
         },
         trainings: {
           where: { deletedAt: null },
-          include: {
-            schedules: { orderBy: { order: 'asc' } },
-            trainingTemplate: true,
-          },
           orderBy: { order: 'asc' },
         },
       },

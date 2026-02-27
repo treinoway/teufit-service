@@ -1,7 +1,6 @@
-import { weekDayValues, trainingStatusValues, genderOrdinationValues, trainingLevelValues } from '../../src/constants/training.js';
+import { trainingStatusValues, genderOrdinationValues, trainingLevelValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
-const weekDayEnum = weekDayValues;
 const statusEnum = trainingStatusValues;
 const genderOrdinationEnum = genderOrdinationValues;
 const trainingLevelEnum = trainingLevelValues;
@@ -19,6 +18,19 @@ const assigneeSchema = {
   additionalProperties: false,
 };
 
+const trainingItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    category: { type: 'string' },
+    bodySegment: { type: 'string', nullable: true },
+    weekDay: { type: 'string', nullable: true },
+    order: { type: 'integer' },
+    notes: { type: 'string', nullable: true },
+  },
+};
+
 // Trainer schemas
 export const createProtocolSchema = {
   tags: ['Training Protocols - Trainer'],
@@ -32,10 +44,6 @@ export const createProtocolSchema = {
       protocolTemplateId: { type: 'string', format: 'uuid' },
       name: { type: 'string', minLength: 1 },
       description: { type: 'string' },
-      availableWeekDays: {
-        type: 'array',
-        items: { type: 'string', enum: weekDayEnum },
-      },
       status: { type: 'string', enum: statusEnum },
       startDate: { type: 'string', format: 'date' },
       expirationDate: { type: 'string', format: 'date' },
@@ -54,7 +62,6 @@ export const createProtocolSchema = {
         trainerId: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
         description: { type: 'string', nullable: true },
-        availableWeekDays: { type: 'array', items: { type: 'string' } },
         status: { type: 'string' },
         startDate: { type: 'string', format: 'date' },
         expirationDate: { type: 'string', format: 'date', nullable: true },
@@ -132,7 +139,6 @@ export const getProtocolByIdSchema = {
         trainerId: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
         description: { type: 'string', nullable: true },
-        availableWeekDays: { type: 'array', items: { type: 'string' } },
         status: { type: 'string' },
         startDate: { type: 'string', format: 'date' },
         expirationDate: { type: 'string', format: 'date', nullable: true },
@@ -140,7 +146,7 @@ export const getProtocolByIdSchema = {
         trainingLevel: { type: 'string', nullable: true },
         assignee: assigneeSchema,
         trainer: { type: 'object' },
-        trainings: { type: 'array' },
+        trainings: { type: 'array', items: trainingItemSchema },
       },
     },
     401: errorResponseSchema,
@@ -167,10 +173,6 @@ export const updateProtocolSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       description: { type: 'string' },
-      availableWeekDays: {
-        type: 'array',
-        items: { type: 'string', enum: weekDayEnum },
-      },
       status: { type: 'string', enum: statusEnum },
       startDate: { type: 'string', format: 'date' },
       expirationDate: { type: 'string', format: 'date' },
@@ -189,7 +191,6 @@ export const updateProtocolSchema = {
         trainerId: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
         description: { type: 'string', nullable: true },
-        availableWeekDays: { type: 'array', items: { type: 'string' } },
         status: { type: 'string' },
         startDate: { type: 'string', format: 'date' },
         expirationDate: { type: 'string', format: 'date', nullable: true },
@@ -246,10 +247,6 @@ export const importFromTemplateSchema = {
       assigneeId: { type: 'string', format: 'uuid' },
       name: { type: 'string' },
       description: { type: 'string' },
-      availableWeekDays: {
-        type: 'array',
-        items: { type: 'string', enum: weekDayEnum },
-      },
       startDate: { type: 'string', format: 'date' },
       expirationDate: { type: 'string', format: 'date' },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
@@ -268,7 +265,6 @@ export const importFromTemplateSchema = {
         protocolTemplateId: { type: 'string', format: 'uuid', nullable: true },
         name: { type: 'string' },
         description: { type: 'string', nullable: true },
-        availableWeekDays: { type: 'array', items: { type: 'string' } },
         status: { type: 'string' },
         startDate: { type: 'string', format: 'date' },
         expirationDate: { type: 'string', format: 'date', nullable: true },
@@ -276,38 +272,7 @@ export const importFromTemplateSchema = {
         trainingLevel: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         assignee: assigneeSchema,
-        trainings: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              trainingProtocolId: { type: 'string', format: 'uuid' },
-              trainingTemplateId: { type: 'string', format: 'uuid', nullable: true },
-              name: { type: 'string' },
-              description: { type: 'string', nullable: true },
-              category: { type: 'string' },
-              bodySegment: { type: 'string', nullable: true },
-              order: { type: 'integer' },
-              notes: { type: 'string', nullable: true },
-              createdAt: { type: 'string', format: 'date-time' },
-              schedules: { type: 'array' },
-              trainingTemplate: {
-                nullable: true,
-                type: 'object',
-                properties: {
-                  id: { type: 'string', format: 'uuid' },
-                  name: { type: 'string' },
-                  description: { type: 'string', nullable: true },
-                  category: { type: 'string' },
-                  bodySegment: { type: 'string', nullable: true },
-                  tags: { type: 'array', items: { type: 'string' } },
-                  isPublic: { type: 'boolean' },
-                },
-              },
-            },
-          },
-        },
+        trainings: { type: 'array', items: trainingItemSchema },
       },
     },
     401: errorResponseSchema,
@@ -358,7 +323,7 @@ export const getMyProtocolsSchema = {
           genderOrdination: { type: 'string', nullable: true },
           trainingLevel: { type: 'string', nullable: true },
           trainer: trainerInfoSchema,
-          trainings: { type: 'array' },
+          trainings: { type: 'array', items: trainingItemSchema },
         },
       },
     },
@@ -390,7 +355,6 @@ export const getMyProtocolByIdSchema = {
         protocolTemplateId: { type: 'string', format: 'uuid', nullable: true },
         name: { type: 'string' },
         description: { type: 'string', nullable: true },
-        availableWeekDays: { type: 'array', items: { type: 'string' } },
         status: { type: 'string' },
         startDate: { type: 'string', format: 'date' },
         expirationDate: { type: 'string', format: 'date', nullable: true },
@@ -398,7 +362,7 @@ export const getMyProtocolByIdSchema = {
         trainingLevel: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         trainer: trainerInfoSchema,
-        trainings: { type: 'array' },
+        trainings: { type: 'array', items: trainingItemSchema },
       },
     },
     401: errorResponseSchema,
