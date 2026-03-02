@@ -16,7 +16,7 @@ export async function trainingTemplateRoutes(fastify) {
         const template = await service.createTrainingTemplate(request.user.id, request.body);
         return reply.status(201).send(template);
       } catch (error) {
-        if (error.code === 'TRAINER_PROFILE_MISSING') {
+        if (error.code === 'TRAINER_PROFILE_MISSING' || error.code === 'EXERCISE_TEMPLATE_NOT_FOUND') {
           return reply.status(404).send({ error: error.message });
         }
         if (error.code === 'INVALID_CATEGORY' || error.code === 'INVALID_BODY_SEGMENT') {
@@ -103,7 +103,11 @@ export async function trainingTemplateRoutes(fastify) {
         const updated = await service.updateTrainingTemplate(request.user.id, request.params.id, request.body);
         return reply.send(updated);
       } catch (error) {
-        if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
+        if (
+          error.code === 'TEMPLATE_NOT_FOUND' ||
+          error.code === 'TRAINER_PROFILE_MISSING' ||
+          error.code === 'EXERCISE_TEMPLATE_NOT_FOUND'
+        ) {
           return reply.status(404).send({ error: error.message });
         }
         if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {

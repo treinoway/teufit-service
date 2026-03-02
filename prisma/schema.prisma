@@ -94,6 +94,7 @@ model Trainer {
   trainingProtocols         TrainingProtocol[]
   trainingProtocolTemplates TrainingProtocolTemplate[]
   trainingTemplates         TrainingTemplate[]
+  exerciseTemplates         ExerciseTemplate[]
   students                  TrainerStudent[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -273,9 +274,10 @@ model TrainingTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer                  Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  trainings                Training[]
-  protocolTemplateTrainings ProtocolTemplateTraining[]
+  trainer                           Trainer                              @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  trainings                         Training[]
+  protocolTemplateTrainings        ProtocolTemplateTraining[]
+  trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
   @@map("training_templates")
 }
@@ -298,8 +300,75 @@ model Training {
 
   trainingProtocol TrainingProtocol  @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
   trainingTemplate TrainingTemplate? @relation(fields: [trainingTemplateId], references: [id], onDelete: SetNull)
+  exercises        Exercise[]
 
   @@map("trainings")
+}
+
+model ExerciseTemplate {
+  id        String  @id @default(uuid()) @db.Uuid
+  trainerId String  @map("trainer_id") @db.Uuid
+  name      String  @db.Text
+  type      String  @db.Text
+  videoUrl  String? @map("video_url") @db.Text
+  isPublic  Boolean @default(false) @map("is_public")
+
+  sets          Int?
+  repetitions   Int?
+  duration      Int?
+  hasLoad       Boolean @default(false) @map("has_load")
+  suggestedLoad Float?  @map("suggested_load")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer   @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  exercises Exercise[]
+  trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
+
+  @@map("exercise_templates")
+}
+
+model TrainingTemplateExerciseTemplate {
+  id                 String  @id @default(uuid()) @db.Uuid
+  trainingTemplateId String  @map("training_template_id") @db.Uuid
+  exerciseTemplateId String  @map("exercise_template_id") @db.Uuid
+  order              Int     @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainingTemplate TrainingTemplate @relation(fields: [trainingTemplateId], references: [id], onDelete: Cascade)
+  exerciseTemplate ExerciseTemplate @relation(fields: [exerciseTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingTemplateId, exerciseTemplateId])
+  @@map("training_template_exercise_templates")
+}
+
+model Exercise {
+  id                 String  @id @default(uuid()) @db.Uuid
+  trainingId         String  @map("training_id") @db.Uuid
+  exerciseTemplateId String? @map("exercise_template_id") @db.Uuid
+  name               String  @db.Text
+  type               String  @db.Text
+  videoUrl           String? @map("video_url") @db.Text
+  order              Int     @default(0)
+
+  sets          Int?
+  repetitions   Int?
+  duration      Int?
+  hasLoad       Boolean @default(false) @map("has_load")
+  suggestedLoad Float?  @map("suggested_load")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  training         Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  exerciseTemplate ExerciseTemplate? @relation(fields: [exerciseTemplateId], references: [id], onDelete: SetNull)
+
+  @@map("exercises")
 }
 
 model ProtocolTemplateTraining {

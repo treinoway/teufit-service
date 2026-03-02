@@ -1,6 +1,34 @@
 import { trainingCategoryValues, bodySegmentValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
+const exerciseTemplateRefSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainerId: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    type: { type: 'string' },
+    videoUrl: { type: 'string', nullable: true },
+    isPublic: { type: 'boolean' },
+    sets: { type: 'integer', nullable: true },
+    repetitions: { type: 'integer', nullable: true },
+    duration: { type: 'integer', nullable: true },
+    hasLoad: { type: 'boolean' },
+    suggestedLoad: { type: 'number', nullable: true },
+  },
+};
+
+const trainingTemplateExerciseTemplateSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainingTemplateId: { type: 'string', format: 'uuid' },
+    exerciseTemplateId: { type: 'string', format: 'uuid' },
+    order: { type: 'integer' },
+    exerciseTemplate: exerciseTemplateRefSchema,
+  },
+};
+
 const templateResponseSchema = {
   type: 'object',
   properties: {
@@ -14,6 +42,10 @@ const templateResponseSchema = {
     isPublic: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
+    trainingTemplateExerciseTemplates: {
+      type: 'array',
+      items: trainingTemplateExerciseTemplateSchema,
+    },
   },
 };
 
@@ -30,6 +62,10 @@ const templateWithTrainerSchema = {
     isPublic: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
+    trainingTemplateExerciseTemplates: {
+      type: 'array',
+      items: trainingTemplateExerciseTemplateSchema,
+    },
     trainer: {
       type: 'object',
       properties: {
@@ -61,6 +97,24 @@ export const createTrainingTemplateSchema = {
       bodySegment: { type: 'string', enum: bodySegmentValues },
       tags: { type: 'array', items: { type: 'string' } },
       isPublic: { type: 'boolean' },
+      exerciseTemplateIds: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        description: 'Optional list of exercise template UUIDs (order = array index)',
+      },
+      exerciseTemplates: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['exerciseTemplateId'],
+          properties: {
+            exerciseTemplateId: { type: 'string', format: 'uuid' },
+            order: { type: 'integer' },
+          },
+          additionalProperties: false,
+        },
+        description: 'Optional list of { exerciseTemplateId, order? }; alternative to exerciseTemplateIds',
+      },
     },
     additionalProperties: false,
   },
@@ -142,6 +196,22 @@ export const updateTrainingTemplateSchema = {
       bodySegment: { type: 'string', enum: bodySegmentValues },
       tags: { type: 'array', items: { type: 'string' } },
       isPublic: { type: 'boolean' },
+      exerciseTemplateIds: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+      },
+      exerciseTemplates: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['exerciseTemplateId'],
+          properties: {
+            exerciseTemplateId: { type: 'string', format: 'uuid' },
+            order: { type: 'integer' },
+          },
+          additionalProperties: false,
+        },
+      },
     },
     additionalProperties: false,
   },
