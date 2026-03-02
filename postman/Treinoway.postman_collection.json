@@ -1536,7 +1536,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\"compound\", \"strength\", \"upper body\"],\n  \"isPublic\": false\n}"
+              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\"compound\", \"strength\", \"upper body\"],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    { \"exerciseTemplateId\": \"<exercise-template-uuid>\", \"order\": 0 },\n    { \"exerciseTemplateId\": \"<exercise-template-uuid-2>\", \"order\": 1 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates",
@@ -1548,7 +1548,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional) } to link exercise templates; all must belong to the same trainer."
           },
           "response": []
         },
@@ -1630,7 +1630,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\"cardio\", \"endurance\"],\n  \"isPublic\": true\n}"
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\"cardio\", \"endurance\"],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    { \"exerciseTemplateId\": \"<exercise-template-uuid>\", \"order\": 0 }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/:id",
@@ -1650,7 +1650,7 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Only accessible by the template's trainer."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order). Only accessible by the template's trainer."
           },
           "response": []
         },
@@ -1678,6 +1678,252 @@
               ]
             },
             "description": "Delete a training template. Only accessible by the template's trainer."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exercise Templates",
+      "item": [
+        {
+          "name": "Create Exercise Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"sets\": 4,\n  \"repetitions\": 10,\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates"]
+            },
+            "description": "Create a reusable exercise template. Requires TRAINER role. Type: strength, cardio, mobility, stretching. Duration in seconds."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exercise Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates"]
+            },
+            "description": "Get all exercise templates (own + public)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Exercise Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates/public",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates", "public"]
+            },
+            "description": "Get only public exercise templates."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exercise Template by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+            },
+            "description": "Get exercise template by ID. Accessible if own or public."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Exercise Template",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"sets\": 5,\n  \"repetitions\": 5,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+            },
+            "description": "Update exercise template. Only accessible by owner."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Exercise Template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercise-templates", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+            },
+            "description": "Soft delete exercise template. Only accessible by owner."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exercises - Trainer",
+      "item": [
+        {
+          "name": "Create Exercise",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"sets\": 4,\n  \"repetitions\": 10,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "trainings", ":trainingId", "exercises"],
+              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+            },
+            "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Exercise from Template",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercises/from-template",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercises", "from-template"]
+            },
+            "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exercises by Training",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "trainings", ":trainingId", "exercises"],
+              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+            },
+            "description": "Get all exercises for a training. Requires protocol ownership."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exercise by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercises/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercises", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+            },
+            "description": "Get exercise by ID. Requires protocol ownership."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Exercise",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Front Squat\",\n  \"sets\": 5,\n  \"repetitions\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercises/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercises", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+            },
+            "description": "Update exercise. Requires protocol ownership."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercises/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "exercises", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+            },
+            "description": "Soft delete exercise. Requires protocol ownership."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exercises - My",
+      "item": [
+        {
+          "name": "Get Exercises by Training",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainings/:trainingId/exercises",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "trainings", ":trainingId", "exercises"],
+              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+            },
+            "description": "Get exercises for a training assigned to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exercise by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/my/exercises/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "exercises", ":id"],
+              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+            },
+            "description": "Get exercise by ID. Only if training is in user's assigned protocol."
           },
           "response": []
         }

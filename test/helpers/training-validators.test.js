@@ -4,6 +4,7 @@ import {
   validateWeekDay,
   validateCategory,
   validateBodySegment,
+  validateExerciseType,
 } from '../../src/helpers/training-validators.js';
 
 describe('training-validators', () => {
@@ -117,6 +118,36 @@ describe('training-validators', () => {
       expect(() => validateBodySegment('arms')).toThrow(
         expect.objectContaining({ message: expect.stringContaining('arms') }),
       );
+    });
+  });
+
+  describe('validateExerciseType', () => {
+    it('does not throw for a valid exercise type', () => {
+      expect(() => validateExerciseType('strength')).not.toThrow();
+      expect(() => validateExerciseType('cardio')).not.toThrow();
+    });
+
+    it('accepts all valid exercise type values', () => {
+      const types = ['strength', 'cardio', 'mobility', 'stretching'];
+      for (const type of types) {
+        expect(() => validateExerciseType(type)).not.toThrow();
+      }
+    });
+
+    it('throws INVALID_EXERCISE_TYPE for an unrecognised value', () => {
+      expect(() => validateExerciseType('yoga')).toThrow(
+        expect.objectContaining({ code: 'INVALID_EXERCISE_TYPE', statusCode: 400 }),
+      );
+    });
+
+    it('includes the invalid value in the error message', () => {
+      expect(() => validateExerciseType('yoga')).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('yoga') }),
+      );
+    });
+
+    it('throws when type is empty or undefined (required)', () => {
+      expect(() => validateExerciseType('')).toThrow(expect.objectContaining({ code: 'INVALID_EXERCISE_TYPE' }));
     });
   });
 });

@@ -1,11 +1,20 @@
 import { prisma } from '../db.js';
 import { buildError, validateCategory, validateBodySegment } from '../helpers/training-validators.js';
 
+const exerciseTemplatesInclude = {
+  trainingTemplateExerciseTemplates: {
+    orderBy: { order: 'asc' },
+    include: {
+      exerciseTemplate: true,
+    },
+  },
+};
+
 /**
  * Create a new training template
  *
  * @param {string} userId - User ID of the trainer
- * @param {object} data - Template data
+ * @param {object} data - Template data (optional exerciseTemplates: [{ exerciseTemplateId, order? }])
  * @returns {Promise<object>} Created template
  */
 export async function createTrainingTemplate(userId, data) {
@@ -27,17 +36,51 @@ export async function createTrainingTemplate(userId, data) {
     validateBodySegment(data.bodySegment);
   }
 
-  // 4. Create template
+  // 4. Normalize exercise templates: accept exerciseTemplateIds (array of uuid) or exerciseTemplates (array of { exerciseTemplateId, order? })
+  const rawList = Array.isArray(data.exerciseTemplateIds)
+    ? data.exerciseTemplateIds.map((id) => ({ exerciseTemplateId: id }))
+    : data.exerciseTemplates || [];
+  const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
+
+  if (exerciseTemplatesInput.length > 0) {
+    const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
+    const existing = await prisma.exerciseTemplate.findMany({
+      where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
+      select: { id: true },
+    });
+    const foundIds = new Set(existing.map((e) => e.id));
+    const missing = ids.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      throw buildError(
+        'EXERCISE_TEMPLATE_NOT_FOUND',
+        `Exercise template(s) not found or not owned by trainer: ${missing.join(', ')}`,
+        404,
+      );
+    }
+  }
+
+  // 5. Build create data (omit trainingTemplateExerciseTemplates when empty so Prisma does not receive undefined)
+  const createData = {
+    trainerId: trainer.id,
+    name: data.name,
+    description: data.description || null,
+    category: data.category,
+    bodySegment: data.bodySegment || null,
+    tags: data.tags || [],
+    isPublic: data.isPublic !== undefined ? data.isPublic : false,
+  };
+  if (exerciseTemplatesInput.length > 0) {
+    createData.trainingTemplateExerciseTemplates = {
+      create: exerciseTemplatesInput.map((e, index) => ({
+        exerciseTemplateId: e.exerciseTemplateId,
+        order: e.order !== undefined ? e.order : index,
+      })),
+    };
+  }
+
   const template = await prisma.trainingTemplate.create({
-    data: {
-      trainerId: trainer.id,
-      name: data.name,
-      description: data.description || null,
-      category: data.category,
-      bodySegment: data.bodySegment || null,
-      tags: data.tags || [],
-      isPublic: data.isPublic !== undefined ? data.isPublic : false,
-    },
+    data: createData,
+    include: exerciseTemplatesInclude,
   });
 
   return template;
@@ -81,6 +124,7 @@ export async function getTrainingTemplatesByTrainer(userId) {
           },
         },
       },
+      ...exerciseTemplatesInclude,
     },
     orderBy: {
       createdAt: 'desc',
@@ -113,6 +157,7 @@ export async function getPublicTrainingTemplates() {
           },
         },
       },
+      ...exerciseTemplatesInclude,
     },
     orderBy: {
       createdAt: 'desc',
@@ -155,6 +200,7 @@ export async function getTrainingTemplateById(userId, templateId) {
           },
         },
       },
+      ...exerciseTemplatesInclude,
     },
   });
 
@@ -222,10 +268,44 @@ export async function updateTrainingTemplate(userId, templateId, data) {
   if (data.tags !== undefined) updateData.tags = data.tags;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
-  // 6. Update template
+  // 6. If exercise templates provided (exerciseTemplateIds or exerciseTemplates), validate and prepare relation update
+  const hasExerciseTemplatesUpdate =
+    data.exerciseTemplateIds !== undefined || data.exerciseTemplates !== undefined;
+  if (hasExerciseTemplatesUpdate) {
+    const rawList = Array.isArray(data.exerciseTemplateIds)
+      ? data.exerciseTemplateIds.map((id) => ({ exerciseTemplateId: id }))
+      : data.exerciseTemplates || [];
+    const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
+    if (exerciseTemplatesInput.length > 0) {
+      const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
+      const existing = await prisma.exerciseTemplate.findMany({
+        where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
+        select: { id: true },
+      });
+      const foundIds = new Set(existing.map((e) => e.id));
+      const missing = ids.filter((id) => !foundIds.has(id));
+      if (missing.length > 0) {
+        throw buildError(
+          'EXERCISE_TEMPLATE_NOT_FOUND',
+          `Exercise template(s) not found or not owned by trainer: ${missing.join(', ')}`,
+          404,
+        );
+      }
+    }
+    updateData.trainingTemplateExerciseTemplates = {
+      deleteMany: {},
+      create: exerciseTemplatesInput.map((e, index) => ({
+        exerciseTemplateId: e.exerciseTemplateId,
+        order: e.order !== undefined ? e.order : index,
+      })),
+    };
+  }
+
+  // 7. Update template
   const updated = await prisma.trainingTemplate.update({
     where: { id: templateId },
     data: updateData,
+    include: exerciseTemplatesInclude,
   });
 
   return updated;

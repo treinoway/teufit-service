@@ -47,5 +47,20 @@ export default {
           update: { max: 1000, timeWindow: '1 minute' },
           delete: { max: 1000, timeWindow: '1 minute' },
         },
+        exerciseTemplate: {
+          create: { max: 1000, timeWindow: '1 minute' },
+          list: { max: 1000, timeWindow: '1 minute' },
+          getById: { max: 1000, timeWindow: '1 minute' },
+          update: { max: 1000, timeWindow: '1 minute' },
+          delete: { max: 1000, timeWindow: '1 minute' },
+        },
+        exercise: {
+          create: { max: 1000, timeWindow: '1 minute' },
+          createFromTemplate: { max: 1000, timeWindow: '1 minute' },
+          list: { max: 1000, timeWindow: '1 minute' },
+          getById: { max: 1000, timeWindow: '1 minute' },
+          update: { max: 1000, timeWindow: '1 minute' },
+          delete: { max: 1000, timeWindow: '1 minute' },
+        },
       },
 };

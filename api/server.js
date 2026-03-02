@@ -19,6 +19,8 @@ import { trainingProtocolTemplateRoutes } from './routes/training-protocol-templ
 import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
 import { trainingTemplateRoutes } from './routes/training-template-route.js';
 import { trainingRoutes } from './routes/training-route.js';
+import { exerciseTemplateRoutes } from './routes/exercise-template-route.js';
+import { exerciseRoutes } from './routes/exercise-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
@@ -210,6 +212,8 @@ export async function buildServer(options = {}) {
     await fastify.register(trainingProtocolRoutes);
     await fastify.register(trainingTemplateRoutes);
     await fastify.register(trainingRoutes);
+    await fastify.register(exerciseTemplateRoutes);
+    await fastify.register(exerciseRoutes);
   });
 
   return fastify;

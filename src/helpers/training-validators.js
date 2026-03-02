@@ -1,4 +1,11 @@
-import { trainingCategoryValues, bodySegmentValues, weekDayValues, genderOrdinationValues, trainingLevelValues } from '../constants/training.js';
+import {
+  trainingCategoryValues,
+  bodySegmentValues,
+  weekDayValues,
+  genderOrdinationValues,
+  trainingLevelValues,
+  exerciseTypeValues,
+} from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
 export function buildError(code, message, statusCode = 400) {
@@ -51,6 +58,15 @@ export function validateTrainingLevel(value) {
     throw buildError(
       'INVALID_TRAINING_LEVEL',
       `Invalid training level: ${value}. Valid values are: ${trainingLevelValues.join(', ')}`,
+    );
+  }
+}
+
+export function validateExerciseType(type) {
+  if (!exerciseTypeValues.includes(type)) {
+    throw buildError(
+      'INVALID_EXERCISE_TYPE',
+      `Invalid exercise type: ${type}. Valid values are: ${exerciseTypeValues.join(', ')}`,
     );
   }
 }

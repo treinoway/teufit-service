@@ -48,6 +48,13 @@ export const TrainingLevel = Object.freeze({
   ATHLETE: 'athlete',
 });
 
+export const ExerciseType = Object.freeze({
+  STRENGTH: 'strength',
+  CARDIO: 'cardio',
+  MOBILITY: 'mobility',
+  STRETCHING: 'stretching',
+});
+
 // Export arrays of values for validation
 export const weekDayValues = Object.freeze(Object.values(WeekDays));
 export const trainingCategoryValues = Object.freeze(Object.values(TrainingCategory));
@@ -55,3 +62,4 @@ export const bodySegmentValues = Object.freeze(Object.values(BodySegment));
 export const trainingStatusValues = Object.freeze(Object.values(TrainingStatus));
 export const genderOrdinationValues = Object.freeze(Object.values(GenderOrdination));
 export const trainingLevelValues = Object.freeze(Object.values(TrainingLevel));
+export const exerciseTypeValues = Object.freeze(Object.values(ExerciseType));
