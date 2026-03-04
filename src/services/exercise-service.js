@@ -34,6 +34,7 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
     duration: data.duration ?? null,
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
     suggestedLoad: data.suggestedLoad ?? null,
+    notes: data.notes ?? null,
   };
 }
 
@@ -108,6 +109,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     duration: data.duration !== undefined ? data.duration : template.duration,
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : template.hasLoad,
     suggestedLoad: data.suggestedLoad !== undefined ? data.suggestedLoad : template.suggestedLoad,
+    notes: data.notes !== undefined ? data.notes : template.notes,
   };
 
   const exercise = await prisma.exercise.create({
@@ -270,6 +272,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.duration !== undefined) updateData.duration = data.duration;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
+  if (data.notes !== undefined) updateData.notes = data.notes;
 
   const updated = await prisma.exercise.update({
     where: { id: exerciseId },

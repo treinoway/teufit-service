@@ -13,6 +13,7 @@ function buildTemplateData(data, trainerId) {
     duration: data.duration ?? null,
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
     suggestedLoad: data.suggestedLoad ?? null,
+    notes: data.notes ?? null,
   };
 }
 
@@ -186,6 +187,7 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.duration !== undefined) updateData.duration = data.duration;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
+  if (data.notes !== undefined) updateData.notes = data.notes;
 
   const updated = await prisma.exerciseTemplate.update({
     where: { id: templateId },
