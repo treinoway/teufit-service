@@ -12,6 +12,7 @@ vi.mock('../../src/db.js', () => ({
     },
     trainingProtocolTemplate: { findUnique: vi.fn() },
     training: { create: vi.fn() },
+    exercise: { create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -546,6 +547,7 @@ describe('training-protocol-service', () => {
               description: null,
               category: 'strength',
               bodySegment: 'upper',
+              trainingTemplateExerciseTemplates: [],
             },
           },
         ],
@@ -578,6 +580,107 @@ describe('training-protocol-service', () => {
         }),
       );
       expect(result.trainings).toHaveLength(1);
+    });
+
+    it('creates exercises from training template exercise templates', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: 'monday',
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Bench Press',
+              description: null,
+              category: 'strength',
+              bodySegment: 'upper',
+              trainingTemplateExerciseTemplates: [
+                {
+                  order: 0,
+                  exerciseTemplate: {
+                    id: 'et-1',
+                    name: 'Supino',
+                    type: 'strength',
+                    videoUrl: null,
+                    sets: 3,
+                    repetitions: 10,
+                    duration: null,
+                    hasLoad: true,
+                    suggestedLoad: 60,
+                  },
+                },
+                {
+                  order: 1,
+                  exerciseTemplate: {
+                    id: 'et-2',
+                    name: 'Crucifixo',
+                    type: 'strength',
+                    videoUrl: 'https://example.com/video',
+                    sets: 3,
+                    repetitions: 12,
+                    duration: null,
+                    hasLoad: false,
+                    suggestedLoad: null,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const createdProtocol = { id: 'p1' };
+      const createdTraining = { id: 'tr-1' };
+      const fullProtocol = {
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [{ id: 'tr-1', name: 'Bench Press', weekDay: 'monday' }],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      };
+      prisma.trainingProtocol.create.mockResolvedValue(createdProtocol);
+      prisma.training.create.mockResolvedValue(createdTraining);
+      prisma.trainingProtocol.findUnique.mockResolvedValue(fullProtocol);
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledTimes(2);
+      expect(prisma.exercise.create).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            trainingId: 'tr-1',
+            exerciseTemplateId: 'et-1',
+            name: 'Supino',
+            type: 'strength',
+            order: 0,
+            sets: 3,
+            repetitions: 10,
+            hasLoad: true,
+            suggestedLoad: 60,
+          }),
+        }),
+      );
+      expect(prisma.exercise.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            trainingId: 'tr-1',
+            exerciseTemplateId: 'et-2',
+            name: 'Crucifixo',
+            type: 'strength',
+            order: 1,
+            videoUrl: 'https://example.com/video',
+            hasLoad: false,
+            suggestedLoad: null,
+          }),
+        }),
+      );
     });
 
     it('inherits genderOrdination and trainingLevel from template when not overridden', async () => {

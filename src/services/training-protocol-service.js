@@ -411,7 +411,16 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     include: {
       trainings: {
         include: {
-          trainingTemplate: true,
+          trainingTemplate: {
+            include: {
+              trainingTemplateExerciseTemplates: {
+                include: {
+                  exerciseTemplate: true,
+                },
+                orderBy: { order: 'asc' },
+              },
+            },
+          },
         },
         orderBy: { order: 'asc' },
       },
@@ -454,7 +463,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
     for (const templateTraining of template.trainings) {
       const { trainingTemplate } = templateTraining;
 
-      await tx.training.create({
+      const createdTraining = await tx.training.create({
         data: {
           trainingProtocolId: created.id,
           trainingTemplateId: trainingTemplate.id,
@@ -466,6 +475,24 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
           order: templateTraining.order,
         },
       });
+
+      for (const { exerciseTemplate, order } of trainingTemplate.trainingTemplateExerciseTemplates) {
+        await tx.exercise.create({
+          data: {
+            trainingId: createdTraining.id,
+            exerciseTemplateId: exerciseTemplate.id,
+            name: exerciseTemplate.name,
+            type: exerciseTemplate.type,
+            videoUrl: exerciseTemplate.videoUrl || null,
+            order,
+            sets: exerciseTemplate.sets ?? null,
+            repetitions: exerciseTemplate.repetitions ?? null,
+            duration: exerciseTemplate.duration ?? null,
+            hasLoad: exerciseTemplate.hasLoad ?? false,
+            suggestedLoad: exerciseTemplate.suggestedLoad ?? null,
+          },
+        });
+      }
     }
 
     return tx.trainingProtocol.findUnique({
