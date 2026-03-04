@@ -318,6 +318,7 @@ model ExerciseTemplate {
   duration      Int?
   hasLoad       Boolean @default(false) @map("has_load")
   suggestedLoad Float?  @map("suggested_load")
+  notes         String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -360,6 +361,7 @@ model Exercise {
   duration      Int?
   hasLoad       Boolean @default(false) @map("has_load")
   suggestedLoad Float?  @map("suggested_load")
+  notes         String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

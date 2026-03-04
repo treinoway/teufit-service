@@ -490,6 +490,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
             duration: exerciseTemplate.duration ?? null,
             hasLoad: exerciseTemplate.hasLoad ?? false,
             suggestedLoad: exerciseTemplate.suggestedLoad ?? null,
+            notes: exerciseTemplate.notes ?? null,
           },
         });
       }
