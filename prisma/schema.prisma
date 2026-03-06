@@ -314,7 +314,7 @@ model ExerciseTemplate {
   isPublic  Boolean @default(false) @map("is_public")
 
   sets          Int?
-  repetitions   Int?
+  repetitions   Json?
   duration      Int?
   hasLoad       Boolean @default(false) @map("has_load")
   suggestedLoad Float?  @map("suggested_load")
@@ -357,7 +357,7 @@ model Exercise {
   order              Int     @default(0)
 
   sets          Int?
-  repetitions   Int?
+  repetitions   Json?
   duration      Int?
   hasLoad       Boolean @default(false) @map("has_load")
   suggestedLoad Float?  @map("suggested_load")

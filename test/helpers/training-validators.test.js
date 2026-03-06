@@ -5,6 +5,7 @@ import {
   validateCategory,
   validateBodySegment,
   validateExerciseType,
+  validateRepetitions,
 } from '../../src/helpers/training-validators.js';
 
 describe('training-validators', () => {
@@ -148,6 +149,72 @@ describe('training-validators', () => {
 
     it('throws when type is empty or undefined (required)', () => {
       expect(() => validateExerciseType('')).toThrow(expect.objectContaining({ code: 'INVALID_EXERCISE_TYPE' }));
+    });
+  });
+
+  describe('validateRepetitions', () => {
+    it('does not throw when called with null', () => {
+      expect(() => validateRepetitions(null)).not.toThrow();
+    });
+
+    it('does not throw when called with undefined', () => {
+      expect(() => validateRepetitions(undefined)).not.toThrow();
+    });
+
+    it('does not throw for a valid { min, max } object', () => {
+      expect(() => validateRepetitions({ min: 8, max: 12 })).not.toThrow();
+    });
+
+    it('does not throw when min equals max (fixed rep count)', () => {
+      expect(() => validateRepetitions({ min: 10, max: 10 })).not.toThrow();
+    });
+
+    it('throws INVALID_REPETITIONS when min is 0', () => {
+      expect(() => validateRepetitions({ min: 0, max: 10 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('throws INVALID_REPETITIONS when min is a float', () => {
+      expect(() => validateRepetitions({ min: 1.5, max: 10 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('throws INVALID_REPETITIONS when min is undefined', () => {
+      expect(() => validateRepetitions({ min: undefined, max: 10 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('throws INVALID_REPETITIONS when max is 0', () => {
+      expect(() => validateRepetitions({ min: 1, max: 0 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('throws INVALID_REPETITIONS when max is a float', () => {
+      expect(() => validateRepetitions({ min: 1, max: 12.5 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('throws INVALID_REPETITIONS when max is undefined', () => {
+      expect(() => validateRepetitions({ min: 1, max: undefined })).toThrow(
+        expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),
+      );
+    });
+
+    it('error message mentions repetitions.min when min is invalid', () => {
+      expect(() => validateRepetitions({ min: -1, max: 10 })).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('repetitions.min') }),
+      );
+    });
+
+    it('error message mentions repetitions.max when max is invalid', () => {
+      expect(() => validateRepetitions({ min: 1, max: -1 })).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('repetitions.max') }),
+      );
     });
   });
 });

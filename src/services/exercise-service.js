@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { buildError, validateExerciseType } from '../helpers/training-validators.js';
+import { buildError, validateExerciseType, validateRepetitions } from '../helpers/training-validators.js';
 
 /**
  * Verify training ownership (trainer context)
@@ -58,6 +58,7 @@ export async function createExercise(userId, trainingId, data) {
 
   await verifyTrainingOwnership(trainingId, trainer.id);
   validateExerciseType(data.type);
+  validateRepetitions(data.repetitions);
 
   const exercise = await prisma.exercise.create({
     data: buildExerciseData(data, trainingId),
@@ -261,6 +262,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.type) {
     validateExerciseType(data.type);
   }
+  validateRepetitions(data.repetitions);
 
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;

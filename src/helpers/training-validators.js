@@ -70,3 +70,14 @@ export function validateExerciseType(type) {
     );
   }
 }
+
+export function validateRepetitions(repetitions) {
+  if (repetitions === undefined || repetitions === null) return;
+  const { min, max } = repetitions;
+  if (!Number.isInteger(min) || min < 1) {
+    throw buildError('INVALID_REPETITIONS', 'repetitions.min must be a positive integer');
+  }
+  if (!Number.isInteger(max) || max < 1) {
+    throw buildError('INVALID_REPETITIONS', 'repetitions.max must be a positive integer');
+  }
+}

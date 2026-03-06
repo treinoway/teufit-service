@@ -40,9 +40,61 @@ const makeExercise = (overrides = {}) => ({
   ...overrides,
 });
 
+const makeTraining = (overrides = {}) => ({
+  id: 'tr1',
+  deletedAt: null,
+  trainingProtocol: {
+    id: 'p1',
+    trainerId: 't1',
+    assigneeId: 'u-student',
+    deletedAt: null,
+  },
+  ...overrides,
+});
+
 describe('exercise-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('createExercise', () => {
+    it('throws INVALID_REPETITIONS when repetitions.min is 0', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+
+      await expect(
+        createExercise('u1', 'tr1', { name: 'Squat', type: 'strength', repetitions: { min: 0, max: 10 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+
+      expect(prisma.exercise.create).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.max is a float', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+
+      await expect(
+        createExercise('u1', 'tr1', { name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12.5 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+    });
+
+    it('creates exercise with valid repetitions object', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', name: 'Squat', repetitions: { min: 8, max: 12 } };
+      prisma.exercise.create.mockResolvedValue(created);
+
+      const result = await createExercise('u1', 'tr1', {
+        name: 'Squat',
+        type: 'strength',
+        repetitions: { min: 8, max: 12 },
+      });
+
+      expect(result).toEqual(created);
+      expect(prisma.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ repetitions: { min: 8, max: 12 } }),
+      });
+    });
   });
 
   describe('getExerciseById', () => {
@@ -215,6 +267,26 @@ describe('exercise-service', () => {
 
       const callData = prisma.exercise.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('notes');
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.min is not a positive integer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+
+      await expect(
+        updateExercise('u1', 'ex1', { repetitions: { min: -1, max: 10 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+
+      expect(prisma.exercise.update).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.max is 0', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+
+      await expect(
+        updateExercise('u1', 'ex1', { repetitions: { min: 8, max: 0 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
     });
   });
 
