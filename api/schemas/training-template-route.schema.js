@@ -11,7 +11,14 @@ const exerciseTemplateRefSchema = {
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
     sets: { type: 'integer', nullable: true },
-    repetitions: { type: 'integer', nullable: true },
+    repetitions: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        min: { type: 'integer', minimum: 1 },
+        max: { type: 'integer', minimum: 1 },
+      },
+    },
     duration: { type: 'integer', nullable: true },
     hasLoad: { type: 'boolean' },
     suggestedLoad: { type: 'number', nullable: true },

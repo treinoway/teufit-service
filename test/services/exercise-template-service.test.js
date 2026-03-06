@@ -44,12 +44,30 @@ describe('exercise-template-service', () => {
       ).rejects.toMatchObject({ code: 'INVALID_EXERCISE_TYPE', statusCode: 400 });
     });
 
-    it('creates template with valid data', async () => {
+    it('throws INVALID_REPETITIONS when repetitions.min is 0', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength' };
+
+      await expect(
+        createExerciseTemplate('u1', { name: 'Squat', type: 'strength', repetitions: { min: 0, max: 12 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+
+      expect(prisma.exerciseTemplate.create).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.max is a float', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+
+      await expect(
+        createExerciseTemplate('u1', { name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12.7 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+    });
+
+    it('creates template with valid repetitions object', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12 } };
       prisma.exerciseTemplate.create.mockResolvedValue(created);
 
-      const result = await createExerciseTemplate('u1', { name: 'Squat', type: 'strength' });
+      const result = await createExerciseTemplate('u1', { name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12 } });
 
       expect(result).toEqual(created);
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
@@ -57,6 +75,7 @@ describe('exercise-template-service', () => {
           trainerId: 't1',
           name: 'Squat',
           type: 'strength',
+          repetitions: { min: 8, max: 12 },
         }),
       });
     });
@@ -87,6 +106,19 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ notes: null }),
+      });
+    });
+
+    it('creates template with no repetitions (repetitions stored as null)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: null };
+      prisma.exerciseTemplate.create.mockResolvedValue(created);
+
+      const result = await createExerciseTemplate('u1', { name: 'Squat', type: 'strength' });
+
+      expect(result).toEqual(created);
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ trainerId: 't1', name: 'Squat', type: 'strength' }),
       });
     });
   });
@@ -187,6 +219,26 @@ describe('exercise-template-service', () => {
 
       const callData = prisma.exerciseTemplate.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('notes');
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.min is not a positive integer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({ id: 'et1', trainerId: 't1', deletedAt: null });
+
+      await expect(
+        updateExerciseTemplate('u1', 'et1', { repetitions: { min: 0, max: 12 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
+
+      expect(prisma.exerciseTemplate.update).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_REPETITIONS when repetitions.max is a float', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({ id: 'et1', trainerId: 't1', deletedAt: null });
+
+      await expect(
+        updateExerciseTemplate('u1', 'et1', { repetitions: { min: 8, max: 1.5 } }),
+      ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
     });
   });
 

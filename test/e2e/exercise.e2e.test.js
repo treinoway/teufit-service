@@ -110,7 +110,7 @@ e2eDescribe('e2e: exercises', () => {
             name: 'Barbell Squat',
             type: 'strength',
             sets: 4,
-            repetitions: 10,
+            repetitions: { min: 10, max: 10 },
             hasLoad: true,
             suggestedLoad: 60,
           },
@@ -122,7 +122,7 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('name', 'Barbell Squat');
         expect(body).toHaveProperty('type', 'strength');
         expect(body).toHaveProperty('sets', 4);
-        expect(body).toHaveProperty('repetitions', 10);
+        expect(body).toHaveProperty('repetitions', { min: 10, max: 10 });
         expect(body).toHaveProperty('hasLoad', true);
         expect(body).toHaveProperty('suggestedLoad', 60);
       });
@@ -194,7 +194,7 @@ e2eDescribe('e2e: exercises', () => {
             name: 'Bench Press',
             type: 'strength',
             sets: 4,
-            repetitions: 8,
+            repetitions: { min: 8, max: 8 },
             hasLoad: true,
             suggestedLoad: 80,
           },
@@ -207,7 +207,7 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('name', 'Bench Press');
         expect(body).toHaveProperty('type', 'strength');
         expect(body).toHaveProperty('sets', 4);
-        expect(body).toHaveProperty('repetitions', 8);
+        expect(body).toHaveProperty('repetitions', { min: 8, max: 8 });
       });
 
       it('returns 404 when training does not exist', async () => {
@@ -239,7 +239,7 @@ e2eDescribe('e2e: exercises', () => {
             name: 'Template Squat',
             type: 'strength',
             sets: 5,
-            repetitions: 5,
+            repetitions: { min: 5, max: 5 },
           },
         });
         expect(templateResponse.statusCode).toBe(201);
@@ -262,7 +262,7 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('exerciseTemplateId', templateId);
         expect(body).toHaveProperty('name', 'Template Squat');
         expect(body).toHaveProperty('sets', 5);
-        expect(body).toHaveProperty('repetitions', 5);
+        expect(body).toHaveProperty('repetitions', { min: 5, max: 5 });
       });
     });
 
