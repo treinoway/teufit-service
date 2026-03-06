@@ -39,3 +39,5 @@ tmp/
 temp/
 
 .eslintcache
+
+.claude/action-log.md
