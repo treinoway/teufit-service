@@ -141,6 +141,54 @@ describe('training-protocol-service', () => {
       expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
     });
 
+    it('throws INVALID_PROTOCOL_TYPE when type is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+
+      await expect(
+        createProtocol('u1', {
+          assigneeId: 'assignee-1',
+          name: 'Protocol A',
+          startDate: '2025-01-01',
+          type: 'invalid-type',
+        }),
+      ).rejects.toMatchObject({
+        code: 'INVALID_PROTOCOL_TYPE',
+      });
+
+      expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
+    });
+
+    it('creates protocol with type included', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const created = {
+        id: 'p1',
+        trainerId: 't1',
+        assigneeId: 'assignee-1',
+        name: 'Protocol A',
+        status: 'active',
+        type: 'strength',
+        startDate: new Date('2025-01-01'),
+        assignee: { id: 'assignee-1', firstName: 'John', lastName: 'Doe', avatarUrl: null },
+      };
+      prisma.trainingProtocol.create.mockResolvedValue(created);
+
+      const result = await createProtocol('u1', {
+        assigneeId: 'assignee-1',
+        name: 'Protocol A',
+        startDate: '2025-01-01',
+        type: 'strength',
+      });
+
+      expect(result.type).toBe('strength');
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'strength' }),
+        }),
+      );
+    });
+
     it('creates protocol with assignee included', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
@@ -402,6 +450,41 @@ describe('training-protocol-service', () => {
         firstName: 'John',
         lastName: 'Doe',
       });
+    });
+
+    it('throws INVALID_PROTOCOL_TYPE when type is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({
+        id: 'p1',
+        trainerId: 't1',
+        deletedAt: null,
+      });
+
+      await expect(
+        updateProtocol('u1', 'p1', { type: 'invalid-type' }),
+      ).rejects.toMatchObject({ code: 'INVALID_PROTOCOL_TYPE' });
+
+      expect(prisma.trainingProtocol.update).not.toHaveBeenCalled();
+    });
+
+    it('updates protocol type', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({
+        id: 'p1',
+        trainerId: 't1',
+        deletedAt: null,
+      });
+      const updated = { id: 'p1', type: 'cardio', assignee: null };
+      prisma.trainingProtocol.update.mockResolvedValue(updated);
+
+      const result = await updateProtocol('u1', 'p1', { type: 'cardio' });
+
+      expect(result.type).toBe('cardio');
+      expect(prisma.trainingProtocol.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'cardio' }),
+        }),
+      );
     });
   });
 
@@ -738,6 +821,54 @@ describe('training-protocol-service', () => {
             genderOrdination: 'male',
             trainingLevel: 'athlete',
           }),
+        }),
+      );
+    });
+
+    it('inherits type from template when not provided in data', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        type: 'cardio',
+        deletedAt: null,
+        trainings: [],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const created = { id: 'p1', assigneeId: 'assignee-1' };
+      prisma.trainingProtocol.create.mockResolvedValue(created);
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ ...created, trainings: [], assignee: null });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'cardio' }),
+        }),
+      );
+    });
+
+    it('overrides type from template when explicitly provided in data', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        type: 'cardio',
+        deletedAt: null,
+        trainings: [],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      const created = { id: 'p1', assigneeId: 'assignee-1' };
+      prisma.trainingProtocol.create.mockResolvedValue(created);
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ ...created, trainings: [], assignee: null });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1', { type: 'strength' });
+
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'strength' }),
         }),
       );
     });

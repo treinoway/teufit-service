@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { buildError, validateWeekDay, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
+import { buildError, validateWeekDay, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 
 /**
  * Validate that each training item in the trainings array is accessible by the trainer
@@ -62,6 +62,7 @@ export async function createProtocolTemplate(userId, data) {
 
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
+  validateProtocolType(data.type);
 
   if (data.trainings && data.trainings.length > 0) {
     await validateAndResolveTrainings(data.trainings, trainer.id);
@@ -76,6 +77,7 @@ export async function createProtocolTemplate(userId, data) {
         defaultDurationWeeks: data.defaultDurationWeeks || null,
         genderOrdination: data.genderOrdination || null,
         trainingLevel: data.trainingLevel || null,
+        type: data.type || null,
       },
     });
 
@@ -221,6 +223,7 @@ export async function updateProtocolTemplate(userId, templateId, data) {
 
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
+  validateProtocolType(data.type);
 
   if (data.trainings !== undefined) {
     await validateAndResolveTrainings(data.trainings, trainer.id);
@@ -232,6 +235,7 @@ export async function updateProtocolTemplate(userId, templateId, data) {
   if (data.defaultDurationWeeks !== undefined) updateData.defaultDurationWeeks = data.defaultDurationWeeks;
   if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
   if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
+  if (data.type !== undefined) updateData.type = data.type;
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.trainingProtocolTemplate.update({

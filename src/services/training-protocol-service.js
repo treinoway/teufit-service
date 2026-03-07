@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { trainingStatusValues } from '../constants/training.js';
-import { buildError, validateGenderOrdination, validateTrainingLevel } from '../helpers/training-validators.js';
+import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 
 /**
@@ -63,6 +63,7 @@ export async function createProtocol(userId, data) {
 
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
+  validateProtocolType(data.type);
 
   const protocol = await prisma.trainingProtocol.create({
     data: {
@@ -76,6 +77,7 @@ export async function createProtocol(userId, data) {
       expirationDate: parseDateOnlyAsUtc(data.expirationDate),
       genderOrdination: data.genderOrdination || null,
       trainingLevel: data.trainingLevel || null,
+      type: data.type || null,
     },
     include: {
       assignee: {
@@ -318,6 +320,7 @@ export async function updateProtocol(userId, protocolId, data) {
 
   validateGenderOrdination(data.genderOrdination);
   validateTrainingLevel(data.trainingLevel);
+  validateProtocolType(data.type);
 
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -329,6 +332,7 @@ export async function updateProtocol(userId, protocolId, data) {
   }
   if (data.genderOrdination !== undefined) updateData.genderOrdination = data.genderOrdination;
   if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
+  if (data.type !== undefined) updateData.type = data.type;
 
   const updated = await prisma.trainingProtocol.update({
     where: { id: protocolId },
@@ -457,6 +461,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
         expirationDate: parseDateOnlyAsUtc(data.expirationDate),
         genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
         trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
+        type: data.type !== undefined ? data.type : template.type,
       },
     });
 

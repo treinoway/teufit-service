@@ -5,6 +5,7 @@ import {
   genderOrdinationValues,
   trainingLevelValues,
   exerciseTypeValues,
+  protocolTypeValues,
 } from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
@@ -79,5 +80,14 @@ export function validateRepetitions(repetitions) {
   }
   if (!Number.isInteger(max) || max < 1) {
     throw buildError('INVALID_REPETITIONS', 'repetitions.max must be a positive integer');
+  }
+}
+
+export function validateProtocolType(type) {
+  if (type && !protocolTypeValues.includes(type)) {
+    throw buildError(
+      'INVALID_PROTOCOL_TYPE',
+      `Invalid protocol type: ${type}. Valid values are: ${protocolTypeValues.join(', ')}`,
+    );
   }
 }
