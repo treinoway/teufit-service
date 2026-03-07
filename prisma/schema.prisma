@@ -223,6 +223,7 @@ model TrainingProtocolTemplate {
   defaultDurationWeeks Int?     @map("default_duration_weeks")
   genderOrdination     String?  @map("gender_ordination") @db.Text
   trainingLevel        String?  @map("training_level") @db.Text
+  type                 String?  @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -247,6 +248,7 @@ model TrainingProtocol {
   expirationDate     DateTime? @map("expiration_date") @db.Date
   genderOrdination   String?   @map("gender_ordination") @db.Text
   trainingLevel      String?   @map("training_level") @db.Text
+  type               String?   @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

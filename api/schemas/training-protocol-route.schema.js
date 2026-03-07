@@ -1,9 +1,10 @@
-import { trainingStatusValues, genderOrdinationValues, trainingLevelValues } from '../../src/constants/training.js';
+import { trainingStatusValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const statusEnum = trainingStatusValues;
 const genderOrdinationEnum = genderOrdinationValues;
 const trainingLevelEnum = trainingLevelValues;
+const protocolTypeEnum = protocolTypeValues;
 
 const assigneeSchema = {
   type: 'object',
@@ -49,6 +50,7 @@ export const createProtocolSchema = {
       expirationDate: { type: 'string', format: 'date' },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
+      type: { type: 'string', enum: protocolTypeEnum },
     },
     additionalProperties: false,
   },
@@ -67,6 +69,7 @@ export const createProtocolSchema = {
         expirationDate: { type: 'string', format: 'date', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         assignee: assigneeSchema,
       },
@@ -106,6 +109,7 @@ export const getTrainerProtocolsSchema = {
           expirationDate: { type: 'string', format: 'date', nullable: true },
           genderOrdination: { type: 'string', nullable: true },
           trainingLevel: { type: 'string', nullable: true },
+          type: { type: 'string', nullable: true },
           assignee: assigneeSchema,
           protocolTemplate: { type: 'object', nullable: true },
         },
@@ -144,6 +148,7 @@ export const getProtocolByIdSchema = {
         expirationDate: { type: 'string', format: 'date', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
         assignee: assigneeSchema,
         trainer: { type: 'object' },
         trainings: { type: 'array', items: trainingItemSchema },
@@ -178,6 +183,7 @@ export const updateProtocolSchema = {
       expirationDate: { type: 'string', format: 'date' },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
+      type: { type: 'string', enum: protocolTypeEnum },
     },
     additionalProperties: false,
   },
@@ -196,6 +202,7 @@ export const updateProtocolSchema = {
         expirationDate: { type: 'string', format: 'date', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
         assignee: assigneeSchema,
       },
     },
@@ -251,6 +258,7 @@ export const importFromTemplateSchema = {
       expirationDate: { type: 'string', format: 'date' },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
+      type: { type: 'string', enum: protocolTypeEnum },
     },
     additionalProperties: false,
   },
@@ -270,6 +278,7 @@ export const importFromTemplateSchema = {
         expirationDate: { type: 'string', format: 'date', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         assignee: assigneeSchema,
         trainings: { type: 'array', items: trainingItemSchema },
@@ -322,6 +331,7 @@ export const getMyProtocolsSchema = {
           expirationDate: { type: 'string', format: 'date', nullable: true },
           genderOrdination: { type: 'string', nullable: true },
           trainingLevel: { type: 'string', nullable: true },
+          type: { type: 'string', nullable: true },
           trainer: trainerInfoSchema,
           trainings: { type: 'array', items: trainingItemSchema },
         },
@@ -360,6 +370,7 @@ export const getMyProtocolByIdSchema = {
         expirationDate: { type: 'string', format: 'date', nullable: true },
         genderOrdination: { type: 'string', nullable: true },
         trainingLevel: { type: 'string', nullable: true },
+        type: { type: 'string', nullable: true },
         createdAt: { type: 'string', format: 'date-time' },
         trainer: trainerInfoSchema,
         trainings: { type: 'array', items: trainingItemSchema },

@@ -6,6 +6,7 @@ import {
   validateBodySegment,
   validateExerciseType,
   validateRepetitions,
+  validateProtocolType,
 } from '../../src/helpers/training-validators.js';
 
 describe('training-validators', () => {
@@ -214,6 +215,37 @@ describe('training-validators', () => {
     it('error message mentions repetitions.max when max is invalid', () => {
       expect(() => validateRepetitions({ min: 1, max: -1 })).toThrow(
         expect.objectContaining({ message: expect.stringContaining('repetitions.max') }),
+      );
+    });
+  });
+
+  describe('validateProtocolType', () => {
+    it('does not throw when type is undefined or null', () => {
+      expect(() => validateProtocolType(undefined)).not.toThrow();
+      expect(() => validateProtocolType(null)).not.toThrow();
+    });
+
+    it('does not throw for a valid protocol type', () => {
+      expect(() => validateProtocolType('strength')).not.toThrow();
+      expect(() => validateProtocolType('cardio')).not.toThrow();
+    });
+
+    it('accepts all valid protocol type values', () => {
+      const types = ['strength', 'cardio', 'stretching', 'mobility', 'activation'];
+      for (const type of types) {
+        expect(() => validateProtocolType(type)).not.toThrow();
+      }
+    });
+
+    it('throws INVALID_PROTOCOL_TYPE for an unrecognised value', () => {
+      expect(() => validateProtocolType('yoga')).toThrow(
+        expect.objectContaining({ code: 'INVALID_PROTOCOL_TYPE', statusCode: 400 }),
+      );
+    });
+
+    it('includes the invalid value in the error message', () => {
+      expect(() => validateProtocolType('pilates')).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('pilates') }),
       );
     });
   });

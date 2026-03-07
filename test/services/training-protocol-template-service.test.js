@@ -35,6 +35,7 @@ const baseTemplate = {
   defaultDurationWeeks: null,
   genderOrdination: null,
   trainingLevel: null,
+  type: null,
   deletedAt: null,
   createdAt: new Date(),
   updatedAt: null,
@@ -75,6 +76,31 @@ describe('training-protocol-template-service', () => {
       await expect(
         createProtocolTemplate('u1', { name: 'T', trainingLevel: 'expert' }),
       ).rejects.toMatchObject({ code: 'INVALID_TRAINING_LEVEL' });
+    });
+
+    it('throws INVALID_PROTOCOL_TYPE when type is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+
+      await expect(
+        createProtocolTemplate('u1', { name: 'T', type: 'yoga' }),
+      ).rejects.toMatchObject({ code: 'INVALID_PROTOCOL_TYPE' });
+
+      expect(prisma.trainingProtocolTemplate.create).not.toHaveBeenCalled();
+    });
+
+    it('creates template with type', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.create.mockResolvedValue({ id: 'tmpl-1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({ ...baseTemplate, type: 'mobility' });
+
+      const result = await createProtocolTemplate('u1', { name: 'Test Template', type: 'mobility' });
+
+      expect(result.type).toBe('mobility');
+      expect(prisma.trainingProtocolTemplate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'mobility' }),
+        }),
+      );
     });
 
     it('creates template without trainings', async () => {
@@ -343,6 +369,33 @@ describe('training-protocol-template-service', () => {
       expect(result.name).toBe('Updated');
       expect(prisma.protocolTemplateTraining.deleteMany).not.toHaveBeenCalled();
       expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
+    });
+
+    it('throws INVALID_PROTOCOL_TYPE when type is invalid', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(baseTemplate);
+
+      await expect(
+        updateProtocolTemplate('u1', 'tmpl-1', { type: 'pilates' }),
+      ).rejects.toMatchObject({ code: 'INVALID_PROTOCOL_TYPE' });
+
+      expect(prisma.trainingProtocolTemplate.update).not.toHaveBeenCalled();
+    });
+
+    it('updates template type', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findUnique
+        .mockResolvedValueOnce(baseTemplate)
+        .mockResolvedValueOnce({ ...baseTemplate, type: 'stretching', trainings: [] });
+      prisma.trainingProtocolTemplate.update.mockResolvedValue({ ...baseTemplate, type: 'stretching' });
+
+      await updateProtocolTemplate('u1', 'tmpl-1', { type: 'stretching' });
+
+      expect(prisma.trainingProtocolTemplate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'stretching' }),
+        }),
+      );
     });
 
     it('replaces protocol template trainings atomically when trainings array is provided', async () => {
