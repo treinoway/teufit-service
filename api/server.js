@@ -21,6 +21,7 @@ import { trainingTemplateRoutes } from './routes/training-template-route.js';
 import { trainingRoutes } from './routes/training-route.js';
 import { exerciseTemplateRoutes } from './routes/exercise-template-route.js';
 import { exerciseRoutes } from './routes/exercise-route.js';
+import { workoutSessionRoutes } from './routes/workout-session-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
@@ -214,6 +215,7 @@ export async function buildServer(options = {}) {
     await fastify.register(trainingRoutes);
     await fastify.register(exerciseTemplateRoutes);
     await fastify.register(exerciseRoutes);
+    await fastify.register(workoutSessionRoutes);
   });
 
   return fastify;

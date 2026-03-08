@@ -1928,6 +1928,267 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Workout Sessions",
+      "description": "Workout session logging — start, track, and finish workout sessions in real time.",
+      "item": [
+        {
+          "name": "Start Workout Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainings/:trainingId/workout-sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "trainings", ":trainingId", "workout-sessions"],
+              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Feeling strong today\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "description": "Start a new workout session for the given training. Auto-creates one ExerciseLog per exercise. Returns 409 if user already has an in_progress session (includes activeSessionId in details)."
+          },
+          "response": []
+        },
+        {
+          "name": "List My Workout Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions"],
+              "query": [
+                {"key": "trainingId", "value": null, "disabled": true, "description": "Filter by training UUID"},
+                {"key": "status", "value": null, "disabled": true, "description": "in_progress | completed | abandoned"},
+                {"key": "dateFrom", "value": null, "disabled": true, "description": "ISO date-time lower bound"},
+                {"key": "dateTo", "value": null, "disabled": true, "description": "ISO date-time upper bound"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            },
+            "description": "List the authenticated user's workout sessions with optional filters and pagination."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Workout Session Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId"],
+              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+            },
+            "description": "Get full detail for a workout session including all exercise logs and set logs."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Workout Session",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId"],
+              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Great session!\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "description": "Finish (status=completed), abandon (status=abandoned), or update notes. finishedAt and durationSeconds are auto-calculated on completion/abandonment."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Workout Session",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId"],
+              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+            },
+            "description": "Soft-delete a workout session."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Exercise Log",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId"],
+              "variable": [
+                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
+                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"}
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Felt strong\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "description": "Update the status (pending/completed/skipped) or notes of an exercise log."
+          },
+          "response": []
+        },
+        {
+          "name": "Log a Set",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets"],
+              "variable": [
+                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
+                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"}
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"setNumber\": 1,\n  \"repetitions\": 10,\n  \"load\": 60.0,\n  \"rpe\": 7,\n  \"restSeconds\": 90,\n  \"completed\": true,\n  \"notes\": null\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "description": "Log an individual set for an exercise. setNumber is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Set Log",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets/:setLogId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets", ":setLogId"],
+              "variable": [
+                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
+                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"},
+                {"key": "setLogId", "value": "", "description": "SetLog UUID"}
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"load\": 65.0,\n  \"rpe\": 8,\n  \"notes\": \"Added weight\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "description": "Update any field on a set log."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Set Log",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets/:setLogId",
+              "host": ["{{baseUrl}}"],
+              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets", ":setLogId"],
+              "variable": [
+                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
+                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"},
+                {"key": "setLogId", "value": "", "description": "SetLog UUID"}
+              ]
+            },
+            "description": "Permanently delete a set log."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Workout Sessions - Trainer",
+      "description": "Trainer-facing routes for viewing student workout sessions.",
+      "item": [
+        {
+          "name": "List Student Workout Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/workout-sessions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "workout-sessions"],
+              "query": [
+                {"key": "trainingId", "value": null, "disabled": true, "description": "Filter by training UUID"},
+                {"key": "status", "value": null, "disabled": true, "description": "in_progress | completed | abandoned"},
+                {"key": "dateFrom", "value": null, "disabled": true, "description": "ISO date-time lower bound"},
+                {"key": "dateTo", "value": null, "disabled": true, "description": "ISO date-time upper bound"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ],
+              "variable": [{"key": "studentId", "value": "", "description": "Student User UUID"}]
+            },
+            "description": "List all workout sessions for a student. Trainer must have a trainer-student relationship with the student."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Student Workout Session Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/workout-sessions/:sessionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "workout-sessions", ":sessionId"],
+              "variable": [
+                {"key": "studentId", "value": "", "description": "Student User UUID"},
+                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}
+              ]
+            },
+            "description": "Get full detail of a student's workout session including exercise logs and set logs."
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

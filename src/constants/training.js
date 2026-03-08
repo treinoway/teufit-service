@@ -63,6 +63,18 @@ export const ProtocolType = Object.freeze({
   ACTIVATION: 'activation',
 });
 
+export const WorkoutSessionStatus = Object.freeze({
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  ABANDONED: 'abandoned',
+});
+
+export const ExerciseLogStatus = Object.freeze({
+  PENDING: 'pending',
+  COMPLETED: 'completed',
+  SKIPPED: 'skipped',
+});
+
 // Export arrays of values for validation
 export const weekDayValues = Object.freeze(Object.values(WeekDays));
 export const trainingCategoryValues = Object.freeze(Object.values(TrainingCategory));
@@ -72,3 +84,5 @@ export const genderOrdinationValues = Object.freeze(Object.values(GenderOrdinati
 export const trainingLevelValues = Object.freeze(Object.values(TrainingLevel));
 export const exerciseTypeValues = Object.freeze(Object.values(ExerciseType));
 export const protocolTypeValues = Object.freeze(Object.values(ProtocolType));
+export const workoutSessionStatusValues = Object.freeze(Object.values(WorkoutSessionStatus));
+export const exerciseLogStatusValues = Object.freeze(Object.values(ExerciseLogStatus));
