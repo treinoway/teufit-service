@@ -41,6 +41,7 @@ model User {
   preferences         UserPreferences?
   protocolsAsAssignee TrainingProtocol[]
   trainers            TrainerStudent[]
+  workoutSessions     WorkoutSession[]
 
   @@map("users")
 }
@@ -303,6 +304,7 @@ model Training {
   trainingProtocol TrainingProtocol  @relation(fields: [trainingProtocolId], references: [id], onDelete: Cascade)
   trainingTemplate TrainingTemplate? @relation(fields: [trainingTemplateId], references: [id], onDelete: SetNull)
   exercises        Exercise[]
+  workoutSessions  WorkoutSession[]
 
   @@map("trainings")
 }
@@ -369,8 +371,9 @@ model Exercise {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  training         Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  training         Training          @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   exerciseTemplate ExerciseTemplate? @relation(fields: [exerciseTemplateId], references: [id], onDelete: SetNull)
+  exerciseLogs     ExerciseLog[]
 
   @@map("exercises")
 }
@@ -403,4 +406,63 @@ model TrainerStudent {
 
   @@unique([trainerId, studentId])
   @@map("trainer_students")
+}
+
+model WorkoutSession {
+  id              String    @id @default(uuid()) @db.Uuid
+  trainingId      String    @map("training_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  status          String    @default("in_progress") @db.Text
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt      DateTime? @map("finished_at") @db.Timestamptz(6)
+  durationSeconds Int?      @map("duration_seconds")
+  notes           String?   @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  training     Training      @relation(fields: [trainingId], references: [id], onDelete: Restrict)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  exerciseLogs ExerciseLog[]
+
+  @@map("workout_sessions")
+}
+
+model ExerciseLog {
+  id               String  @id @default(uuid()) @db.Uuid
+  workoutSessionId String  @map("workout_session_id") @db.Uuid
+  exerciseId       String  @map("exercise_id") @db.Uuid
+  status           String  @default("pending") @db.Text
+  order            Int     @default(0)
+  notes            String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workoutSession WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  setLogs        SetLog[]
+
+  @@map("exercise_logs")
+}
+
+model SetLog {
+  id            String  @id @default(uuid()) @db.Uuid
+  exerciseLogId String  @map("exercise_log_id") @db.Uuid
+  setNumber     Int     @map("set_number")
+  repetitions   Int?
+  load          Float?
+  duration      Int?
+  rpe           Int?
+  restSeconds   Int?    @map("rest_seconds")
+  completed     Boolean @default(true)
+  notes         String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  exerciseLog ExerciseLog @relation(fields: [exerciseLogId], references: [id], onDelete: Cascade)
+
+  @@map("set_logs")
 }

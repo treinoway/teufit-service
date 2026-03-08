@@ -6,6 +6,8 @@ import {
   trainingLevelValues,
   exerciseTypeValues,
   protocolTypeValues,
+  workoutSessionStatusValues,
+  exerciseLogStatusValues,
 } from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
@@ -88,6 +90,24 @@ export function validateProtocolType(type) {
     throw buildError(
       'INVALID_PROTOCOL_TYPE',
       `Invalid protocol type: ${type}. Valid values are: ${protocolTypeValues.join(', ')}`,
+    );
+  }
+}
+
+export function validateWorkoutSessionStatus(status) {
+  if (status && !workoutSessionStatusValues.includes(status)) {
+    throw buildError(
+      'INVALID_WORKOUT_SESSION_STATUS',
+      `Invalid workout session status: ${status}. Valid values are: ${workoutSessionStatusValues.join(', ')}`,
+    );
+  }
+}
+
+export function validateExerciseLogStatus(status) {
+  if (status && !exerciseLogStatusValues.includes(status)) {
+    throw buildError(
+      'INVALID_EXERCISE_LOG_STATUS',
+      `Invalid exercise log status: ${status}. Valid values are: ${exerciseLogStatusValues.join(', ')}`,
     );
   }
 }
