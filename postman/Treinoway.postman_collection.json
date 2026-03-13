@@ -1702,8 +1702,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates"
+              ]
             },
             "description": "Create a reusable exercise template. Requires TRAINER role. Type: strength, cardio, mobility, stretching. Duration in seconds."
           },
@@ -1716,8 +1721,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates"
+              ]
             },
             "description": "Get all exercise templates (own + public)."
           },
@@ -1730,8 +1740,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/public",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates", "public"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates",
+                "public"
+              ]
             },
             "description": "Get only public exercise templates."
           },
@@ -1744,9 +1760,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
             },
             "description": "Get exercise template by ID. Accessible if own or public."
           },
@@ -1756,16 +1784,33 @@
           "name": "Update Exercise Template",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
             },
             "description": "Update exercise template. Only accessible by owner."
           },
@@ -1778,9 +1823,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercise-templates", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Template UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
             },
             "description": "Soft delete exercise template. Only accessible by owner."
           },
@@ -1795,16 +1852,34 @@
           "name": "Create Exercise",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":trainingId", "exercises"],
-              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":trainingId",
+                "exercises"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                }
+              ]
             },
             "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching."
           },
@@ -1814,15 +1889,26 @@
           "name": "Create Exercise from Template",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/from-template",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercises", "from-template"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercises",
+                "from-template"
+              ]
             },
             "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc."
           },
@@ -1835,9 +1921,22 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "trainings", ":trainingId", "exercises"],
-              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":trainingId",
+                "exercises"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                }
+              ]
             },
             "description": "Get all exercises for a training. Requires protocol ownership."
           },
@@ -1850,9 +1949,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercises", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercises",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Exercise UUID"
+                }
+              ]
             },
             "description": "Get exercise by ID. Requires protocol ownership."
           },
@@ -1862,16 +1973,33 @@
           "name": "Update Exercise",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Front Squat\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5}\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercises", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercises",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Exercise UUID"
+                }
+              ]
             },
             "description": "Update exercise. Requires protocol ownership."
           },
@@ -1884,9 +2012,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "exercises", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercises",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Exercise UUID"
+                }
+              ]
             },
             "description": "Soft delete exercise. Requires protocol ownership."
           },
@@ -1904,9 +2044,22 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/trainings/:trainingId/exercises",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "trainings", ":trainingId", "exercises"],
-              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainings",
+                ":trainingId",
+                "exercises"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                }
+              ]
             },
             "description": "Get exercises for a training assigned to the authenticated user."
           },
@@ -1919,9 +2072,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/my/exercises/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "exercises", ":id"],
-              "variable": [{"key": "id", "value": "", "description": "Exercise UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "exercises",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Exercise UUID"
+                }
+              ]
             },
             "description": "Get exercise by ID. Only if training is in user's assigned protocol."
           },
@@ -1938,19 +2103,42 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/trainings/:trainingId/workout-sessions",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "trainings", ":trainingId", "workout-sessions"],
-              "variable": [{"key": "trainingId", "value": "", "description": "Training UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainings",
+                ":trainingId",
+                "workout-sessions"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"notes\": \"Feeling strong today\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Start a new workout session for the given training. Auto-creates one ExerciseLog per exercise. Returns 409 if user already has an in_progress session (includes activeSessionId in details)."
           },
@@ -1961,19 +2149,53 @@
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions"
+              ],
               "query": [
-                {"key": "trainingId", "value": null, "disabled": true, "description": "Filter by training UUID"},
-                {"key": "status", "value": null, "disabled": true, "description": "in_progress | completed | abandoned"},
-                {"key": "dateFrom", "value": null, "disabled": true, "description": "ISO date-time lower bound"},
-                {"key": "dateTo", "value": null, "disabled": true, "description": "ISO date-time upper bound"},
-                {"key": "page", "value": "1"},
-                {"key": "limit", "value": "20"}
+                {
+                  "key": "trainingId",
+                  "value": null,
+                  "disabled": true,
+                  "description": "Filter by training UUID"
+                },
+                {
+                  "key": "status",
+                  "value": null,
+                  "disabled": true,
+                  "description": "in_progress | completed | abandoned"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO date-time lower bound"
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO date-time upper bound"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             },
             "description": "List the authenticated user's workout sessions with optional filters and pagination."
@@ -1985,13 +2207,28 @@
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId"],
-              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                }
+              ]
             },
             "description": "Get full detail for a workout session including all exercise logs and set logs."
           },
@@ -2002,19 +2239,41 @@
           "request": {
             "method": "PATCH",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId"],
-              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Great session!\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Finish (status=completed), abandon (status=abandoned), or update notes. finishedAt and durationSeconds are auto-calculated on completion/abandonment."
           },
@@ -2025,13 +2284,28 @@
           "request": {
             "method": "DELETE",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId"],
-              "variable": [{"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                }
+              ]
             },
             "description": "Soft-delete a workout session."
           },
@@ -2042,22 +2316,48 @@
           "request": {
             "method": "PATCH",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId",
+                "exercise-logs",
+                ":exerciseLogId"
+              ],
               "variable": [
-                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
-                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"}
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                },
+                {
+                  "key": "exerciseLogId",
+                  "value": "",
+                  "description": "ExerciseLog UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Felt strong\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Update the status (pending/completed/skipped) or notes of an exercise log."
           },
@@ -2068,22 +2368,49 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId",
+                "exercise-logs",
+                ":exerciseLogId",
+                "sets"
+              ],
               "variable": [
-                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
-                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"}
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                },
+                {
+                  "key": "exerciseLogId",
+                  "value": "",
+                  "description": "ExerciseLog UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"setNumber\": 1,\n  \"repetitions\": 10,\n  \"load\": 60.0,\n  \"rpe\": 7,\n  \"restSeconds\": 90,\n  \"completed\": true,\n  \"notes\": null\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Log an individual set for an exercise. setNumber is required."
           },
@@ -2094,23 +2421,55 @@
           "request": {
             "method": "PATCH",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets/:setLogId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets", ":setLogId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId",
+                "exercise-logs",
+                ":exerciseLogId",
+                "sets",
+                ":setLogId"
+              ],
               "variable": [
-                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
-                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"},
-                {"key": "setLogId", "value": "", "description": "SetLog UUID"}
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                },
+                {
+                  "key": "exerciseLogId",
+                  "value": "",
+                  "description": "ExerciseLog UUID"
+                },
+                {
+                  "key": "setLogId",
+                  "value": "",
+                  "description": "SetLog UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"load\": 65.0,\n  \"rpe\": 8,\n  \"notes\": \"Added weight\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Update any field on a set log."
           },
@@ -2121,16 +2480,41 @@
           "request": {
             "method": "DELETE",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/sets/:setLogId",
-              "host": ["{{baseUrl}}"],
-              "path": ["my", "workout-sessions", ":sessionId", "exercise-logs", ":exerciseLogId", "sets", ":setLogId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId",
+                "exercise-logs",
+                ":exerciseLogId",
+                "sets",
+                ":setLogId"
+              ],
               "variable": [
-                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"},
-                {"key": "exerciseLogId", "value": "", "description": "ExerciseLog UUID"},
-                {"key": "setLogId", "value": "", "description": "SetLog UUID"}
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                },
+                {
+                  "key": "exerciseLogId",
+                  "value": "",
+                  "description": "ExerciseLog UUID"
+                },
+                {
+                  "key": "setLogId",
+                  "value": "",
+                  "description": "SetLog UUID"
+                }
               ]
             },
             "description": "Permanently delete a set log."
@@ -2148,21 +2532,63 @@
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/trainer/students/:studentId/workout-sessions?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "students", ":studentId", "workout-sessions"],
-              "query": [
-                {"key": "trainingId", "value": null, "disabled": true, "description": "Filter by training UUID"},
-                {"key": "status", "value": null, "disabled": true, "description": "in_progress | completed | abandoned"},
-                {"key": "dateFrom", "value": null, "disabled": true, "description": "ISO date-time lower bound"},
-                {"key": "dateTo", "value": null, "disabled": true, "description": "ISO date-time upper bound"},
-                {"key": "page", "value": "1"},
-                {"key": "limit", "value": "20"}
+              "host": [
+                "{{baseUrl}}"
               ],
-              "variable": [{"key": "studentId", "value": "", "description": "Student User UUID"}]
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "workout-sessions"
+              ],
+              "query": [
+                {
+                  "key": "trainingId",
+                  "value": null,
+                  "disabled": true,
+                  "description": "Filter by training UUID"
+                },
+                {
+                  "key": "status",
+                  "value": null,
+                  "disabled": true,
+                  "description": "in_progress | completed | abandoned"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO date-time lower bound"
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO date-time upper bound"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student User UUID"
+                }
+              ]
             },
             "description": "List all workout sessions for a student. Trainer must have a trainer-student relationship with the student."
           },
@@ -2173,18 +2599,716 @@
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/trainer/students/:studentId/workout-sessions/:sessionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "students", ":studentId", "workout-sessions", ":sessionId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "workout-sessions",
+                ":sessionId"
+              ],
               "variable": [
-                {"key": "studentId", "value": "", "description": "Student User UUID"},
-                {"key": "sessionId", "value": "", "description": "WorkoutSession UUID"}
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student User UUID"
+                },
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                }
               ]
             },
             "description": "Get full detail of a student's workout session including exercise logs and set logs."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Trainer",
+      "item": [
+        {
+          "name": "Create Anamnesis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Health Questionnaire\",\n  \"description\": \"Basic health assessment for new students\",\n  \"sections\": [\n    {\n      \"title\": \"Physical Activity\",\n      \"questions\": [\n        {\n          \"text\": \"Do you exercise regularly?\",\n          \"type\": \"dichotomous\",\n          \"required\": true\n        },\n        {\n          \"text\": \"Which sports do you practice?\",\n          \"type\": \"multiple_choice\",\n          \"options\": [\n            {\n              \"text\": \"Running\"\n            },\n            {\n              \"text\": \"Swimming\"\n            },\n            {\n              \"text\": \"Cycling\"\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Create a new private anamnesis (questionnaire) with optional nested sections, questions, and options. Always creates with isGeneral: false."
+          },
+          "response": []
+        },
+        {
+          "name": "List Anamneses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses"
+              ]
+            },
+            "description": "List all anamneses visible to the trainer: their own private ones + all general (platform) anamneses."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Anamnesis Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Get full nested detail (sections, questions, options) of an anamnesis. Accessible if it is general or owned by the trainer."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Anamnesis",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Update anamnesis title/description. Blocked for general anamneses (returns 403)."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Anamnesis",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete an anamnesis with cascade to all sections and questions. Blocked for general anamneses."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Sections",
+      "item": [
+        {
+          "name": "Add Section",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Medical History\",\n  \"description\": \"Past conditions and surgeries\",\n  \"order\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Add a new section to an anamnesis. Optionally include questions and options."
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Sections",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                "reorder"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderedIds\": [\n    \"section-uuid-1\",\n    \"section-uuid-2\",\n    \"section-uuid-3\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Reorder sections by providing section UUIDs in desired order. Each gets an order value equal to its index."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Section",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/:sectionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Section Title\",\n  \"description\": \"Updated description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Update section title, description, or order."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Section",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/:sectionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a section and cascade soft-delete to all its questions."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Questions",
+      "item": [
+        {
+          "name": "Add Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/:sectionId/questions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"How many hours do you sleep per night?\",\n  \"type\": \"numeric\",\n  \"required\": true,\n  \"config\": {\n    \"min\": 0,\n    \"max\": 24,\n    \"unit\": \"hours\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Add a question to a section. Types: free_text, dichotomous, multiple_choice, numeric, single_choice, matrix. Types with options: multiple_choice, single_choice, matrix."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Question",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions",
+                ":questionId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                },
+                {
+                  "key": "questionId",
+                  "value": "",
+                  "description": "Question UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false,\n  \"options\": [\n    {\n      \"text\": \"New Option A\"\n    },\n    {\n      \"text\": \"New Option B\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Update a question. If options array is provided, it completely replaces existing options."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Question",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions",
+                ":questionId"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                },
+                {
+                  "key": "questionId",
+                  "value": "",
+                  "description": "Question UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a question."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Student Linking",
+      "item": [
+        {
+          "name": "Link Anamnesis to Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"anamnesisId\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Link an anamnesis to a student. Trainer must own the student relationship and have access to the anamnesis (own it or it is general). Returns 409 if already linked."
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Anamneses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ]
+            },
+            "description": "List all anamneses linked to a student by this trainer."
+          },
+          "response": []
+        },
+        {
+          "name": "Unlink Anamnesis from Student",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses",
+                ":anamnesisId"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Remove the link between an anamnesis and a student (hard delete of the junction record)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - My",
+      "item": [
+        {
+          "name": "Get My Anamneses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/anamneses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "anamneses"
+              ]
+            },
+            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info."
           },
           "response": []
         }

@@ -42,6 +42,7 @@ model User {
   protocolsAsAssignee TrainingProtocol[]
   trainers            TrainerStudent[]
   workoutSessions     WorkoutSession[]
+  studentAnamneses    StudentAnamnesis[]
 
   @@map("users")
 }
@@ -97,6 +98,8 @@ model Trainer {
   trainingTemplates         TrainingTemplate[]
   exerciseTemplates         ExerciseTemplate[]
   students                  TrainerStudent[]
+  anamneses                 Anamnesis[]
+  studentAnamneses          StudentAnamnesis[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -465,4 +468,90 @@ model SetLog {
   exerciseLog ExerciseLog @relation(fields: [exerciseLogId], references: [id], onDelete: Cascade)
 
   @@map("set_logs")
+}
+
+// ─── Anamnesis models ─────────────────────────────────────────────────────────
+
+model Anamnesis {
+  id          String  @id @default(uuid()) @db.Uuid
+  trainerId   String? @map("trainer_id") @db.Uuid
+  title       String  @db.Text
+  description String? @db.Text
+  isGeneral   Boolean @default(false) @map("is_general")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer          Trainer?           @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  sections         AnamnesisSection[]
+  studentAnamneses StudentAnamnesis[]
+
+  @@map("anamneses")
+}
+
+model AnamnesisSection {
+  id          String  @id @default(uuid()) @db.Uuid
+  anamnesisId String  @map("anamnesis_id") @db.Uuid
+  title       String  @db.Text
+  description String? @db.Text
+  order       Int     @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  anamnesis Anamnesis           @relation(fields: [anamnesisId], references: [id], onDelete: Cascade)
+  questions AnamnesisQuestion[]
+
+  @@map("anamnesis_sections")
+}
+
+model AnamnesisQuestion {
+  id        String  @id @default(uuid()) @db.Uuid
+  sectionId String  @map("section_id") @db.Uuid
+  text      String  @db.Text
+  type      String  @db.Text
+  required  Boolean @default(false)
+  order     Int     @default(0)
+  config    Json?
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  section AnamnesisSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options AnamnesisQuestionOption[]
+
+  @@map("anamnesis_questions")
+}
+
+model AnamnesisQuestionOption {
+  id         String @id @default(uuid()) @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  text       String @db.Text
+  order      Int    @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  question AnamnesisQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("anamnesis_question_options")
+}
+
+model StudentAnamnesis {
+  id          String @id @default(uuid()) @db.Uuid
+  anamnesisId String @map("anamnesis_id") @db.Uuid
+  studentId   String @map("student_id") @db.Uuid
+  trainerId   String @map("trainer_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  anamnesis Anamnesis @relation(fields: [anamnesisId], references: [id], onDelete: Restrict)
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  trainer   Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@unique([anamnesisId, studentId, trainerId])
+  @@map("student_anamneses")
 }

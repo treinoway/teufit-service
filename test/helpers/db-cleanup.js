@@ -11,6 +11,11 @@ import { prisma } from '../../src/db.js';
  */
 export async function cleanDatabase() {
   const tables = [
+    'student_anamneses',
+    'anamnesis_question_options',
+    'anamnesis_questions',
+    'anamnesis_sections',
+    'anamneses',
     'protocol_template_trainings',
     'trainings',
     'training_protocols',

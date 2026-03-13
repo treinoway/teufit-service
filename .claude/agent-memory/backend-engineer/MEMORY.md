@@ -31,10 +31,47 @@ Not the `??` operator, because `??` does not distinguish between "not provided" 
 
 ## File Map
 
-- Constants: `src/constants/training.js`
+- Constants: `src/constants/training.js`, `src/constants/anamnesis.js`
 - Validators: `src/helpers/training-validators.js`
 - Protocol service: `src/services/training-protocol-service.js`
 - Template service: `src/services/training-protocol-template-service.js`
 - Protocol schemas: `api/schemas/training-protocol-route.schema.js`
 - Template schemas: `api/schemas/training-protocol-template-route.schema.js`
 - Action log: `.claude/action-log.md`
+- DB cleanup helper: `test/helpers/db-cleanup.js`
+
+## AppError subclass behavior — CRITICAL for tests
+`NotFoundAppError`, `ForbiddenAppError`, `ConflictAppError` **hardcode their `error` field** (`NOT_FOUND`, `FORBIDDEN`, `CONFLICT`) and do NOT expose an `error` override. Passing `error: 'CUSTOM_CODE'` to them is silently ignored.
+
+Always assert on `messageCode` and `httpStatus` in tests, NOT on `error`:
+```js
+// CORRECT
+await expect(fn()).rejects.toMatchObject({ httpStatus: 404, messageCode: 'anamnesis.notFound' });
+// WRONG — fails even when the error is thrown correctly
+await expect(fn()).rejects.toMatchObject({ error: 'ANAMNESIS_NOT_FOUND' });
+```
+
+## Fastify route registration order
+Static segments must be registered **before** dynamic ones sharing the same prefix:
+```js
+// CORRECT ORDER:
+fastify.patch('/anamneses/:id/sections/reorder', ...); // static "reorder" first
+fastify.patch('/anamneses/:id/sections/:sectionId', ...); // then dynamic
+```
+
+## Prisma P2002 (unique constraint) handling
+```js
+catch (error) {
+  if (error.code === 'P2002') throw new ConflictAppError({ messageCode: '...', message: '...' });
+  throw error;
+}
+```
+
+## Server route registration location
+All protected routes are inside `buildServer()` in `api/server.js`, inside the block:
+```js
+await fastify.register(async (fastify) => {
+  // ...existing routes...
+  await fastify.register(newRoutes); // add here
+});
+```

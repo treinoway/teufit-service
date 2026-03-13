@@ -1,0 +1,284 @@
+import { Roles } from '../../src/constants/roles.js';
+import { authenticate, requireRole } from '../middleware/auth.js';
+import * as service from '../../src/services/anamnesis-service.js';
+import * as schema from '../schemas/anamnesis-route.schema.js';
+
+export async function anamnesisRoutes(fastify) {
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Anamnesis CRUD
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/anamneses — Create anamnesis with nested sections/questions/options
+  fastify.post(
+    '/trainer/anamneses',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const anamnesis = await service.createAnamnesis(request.user.id, request.body);
+      return reply.status(201).send(anamnesis);
+    },
+  );
+
+  // GET /trainer/anamneses — List anamneses (private + general)
+  fastify.get(
+    '/trainer/anamneses',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.listAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const anamneses = await service.listAnamneses(request.user.id);
+      return reply.send(anamneses);
+    },
+  );
+
+  // GET /trainer/anamneses/:anamnesisId — Get full detail
+  fastify.get(
+    '/trainer/anamneses/:anamnesisId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.getAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const anamnesis = await service.getAnamnesisById(request.user.id, request.params.anamnesisId);
+      return reply.send(anamnesis);
+    },
+  );
+
+  // PATCH /trainer/anamneses/:anamnesisId — Update metadata
+  fastify.patch(
+    '/trainer/anamneses/:anamnesisId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const anamnesis = await service.updateAnamnesis(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.send(anamnesis);
+    },
+  );
+
+  // DELETE /trainer/anamneses/:anamnesisId — Soft delete
+  fastify.delete(
+    '/trainer/anamneses/:anamnesisId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.deleteAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const result = await service.deleteAnamnesis(request.user.id, request.params.anamnesisId);
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Section CRUD
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/anamneses/:anamnesisId/sections — Add section
+  fastify.post(
+    '/trainer/anamneses/:anamnesisId/sections',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.addSectionSchema,
+    },
+    async (request, reply) => {
+      const section = await service.addSection(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.status(201).send(section);
+    },
+  );
+
+  // PATCH /trainer/anamneses/:anamnesisId/sections/reorder — Reorder sections
+  // IMPORTANT: must be registered BEFORE :sectionId to avoid Fastify treating
+  // "reorder" as a sectionId param value.
+  fastify.patch(
+    '/trainer/anamneses/:anamnesisId/sections/reorder',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.reorderSectionsSchema,
+    },
+    async (request, reply) => {
+      const sections = await service.reorderSections(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body.orderedIds,
+      );
+      return reply.send(sections);
+    },
+  );
+
+  // PATCH /trainer/anamneses/:anamnesisId/sections/:sectionId — Update section
+  fastify.patch(
+    '/trainer/anamneses/:anamnesisId/sections/:sectionId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateSectionSchema,
+    },
+    async (request, reply) => {
+      const section = await service.updateSection(
+        request.user.id,
+        request.params.anamnesisId,
+        request.params.sectionId,
+        request.body,
+      );
+      return reply.send(section);
+    },
+  );
+
+  // DELETE /trainer/anamneses/:anamnesisId/sections/:sectionId — Soft delete section
+  fastify.delete(
+    '/trainer/anamneses/:anamnesisId/sections/:sectionId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.deleteSectionSchema,
+    },
+    async (request, reply) => {
+      const result = await service.deleteSection(
+        request.user.id,
+        request.params.anamnesisId,
+        request.params.sectionId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Question CRUD
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/anamneses/:anamnesisId/sections/:sectionId/questions — Add question
+  fastify.post(
+    '/trainer/anamneses/:anamnesisId/sections/:sectionId/questions',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.addQuestionSchema,
+    },
+    async (request, reply) => {
+      const question = await service.addQuestion(
+        request.user.id,
+        request.params.anamnesisId,
+        request.params.sectionId,
+        request.body,
+      );
+      return reply.status(201).send(question);
+    },
+  );
+
+  // PATCH /trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId — Update question
+  fastify.patch(
+    '/trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateQuestionSchema,
+    },
+    async (request, reply) => {
+      const question = await service.updateQuestion(
+        request.user.id,
+        request.params.anamnesisId,
+        request.params.sectionId,
+        request.params.questionId,
+        request.body,
+      );
+      return reply.send(question);
+    },
+  );
+
+  // DELETE /trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId — Soft delete question
+  fastify.delete(
+    '/trainer/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.deleteQuestionSchema,
+    },
+    async (request, reply) => {
+      const result = await service.deleteQuestion(
+        request.user.id,
+        request.params.anamnesisId,
+        request.params.sectionId,
+        request.params.questionId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Student linking
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/students/:studentId/anamneses — Link anamnesis to student
+  fastify.post(
+    '/trainer/students/:studentId/anamneses',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.linkAnamnesisToStudentSchema,
+    },
+    async (request, reply) => {
+      const link = await service.linkAnamnesisToStudent(
+        request.user.id,
+        request.params.studentId,
+        request.body,
+      );
+      return reply.status(201).send(link);
+    },
+  );
+
+  // GET /trainer/students/:studentId/anamneses — List student anamneses
+  fastify.get(
+    '/trainer/students/:studentId/anamneses',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.listStudentAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const links = await service.listStudentAnamneses(
+        request.user.id,
+        request.params.studentId,
+      );
+      return reply.send(links);
+    },
+  );
+
+  // DELETE /trainer/students/:studentId/anamneses/:anamnesisId — Unlink anamnesis from student
+  fastify.delete(
+    '/trainer/students/:studentId/anamneses/:anamnesisId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.unlinkAnamnesisFromStudentSchema,
+    },
+    async (request, reply) => {
+      const result = await service.unlinkAnamnesisFromStudent(
+        request.user.id,
+        request.params.studentId,
+        request.params.anamnesisId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // STUDENT ROUTES — /my/
+  // ═══════════════════════════════════════════════════════════
+
+  // GET /my/anamneses — Get my linked anamneses
+  fastify.get(
+    '/my/anamneses',
+    {
+      preHandler: [authenticate],
+      schema: schema.getMyAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const anamneses = await service.getMyAnamneses(request.user.id);
+      return reply.send(anamneses);
+    },
+  );
+}
