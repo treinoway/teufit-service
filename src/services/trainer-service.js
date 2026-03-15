@@ -364,6 +364,47 @@ export async function unlinkStudent({ trainerId, studentId }) {
 }
 
 /**
+ * List all active trainers visible to any authenticated user.
+ *
+ * Contract:
+ * - No input required (public listing within authenticated scope)
+ * - Filters out soft-deleted trainers and users with inactive/deleted accounts
+ * - Output: array of public trainer profiles { id, firstName, lastName, avatarUrl, serviceMode, address, socialNetworks }
+ */
+export async function listTrainers() {
+  const trainers = await prisma.trainer.findMany({
+    where: {
+      deletedAt: null,
+      user: { deletedAt: null },
+    },
+    include: {
+      user: {
+        select: {
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          address: { select: { city: true, state: true, country: true } },
+          socials: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return Promise.all(
+    trainers.map(async (trainer) => ({
+      id: trainer.id,
+      firstName: trainer.user.firstName,
+      lastName: trainer.user.lastName,
+      avatarUrl: await s3BucketHandler.resolveUrl(trainer.user.avatarUrl),
+      serviceMode: trainer.serviceMode,
+      address: trainer.user.address ?? null,
+      socialNetworks: trainer.user.socials ?? null,
+    })),
+  );
+}
+
+/**
  * Get the trainer profile (and related 1:1 resources) for a given userId.
  *
  * Contract:

@@ -1,10 +1,11 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch, linkStudentByEmail, listStudents, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
+import { patch, linkStudentByEmail, listStudents, searchStudents, unlinkStudent, listTrainers } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import {
   patchTrainerSchema,
   linkStudentSchema,
   listStudentsSchema,
+  listTrainersSchema,
   searchStudentsSchema,
   unlinkStudentSchema,
 } from '../schemas/trainer-route.schema.js';
@@ -19,6 +20,18 @@ import config from '../../config/index.js';
  * - POST /trainer/students: link a student to the trainer by email.
  */
 export async function trainerRoutes(fastify) {
+
+  fastify.get(
+    '/trainers',
+    {
+      preHandler: [authenticate],
+      schema: listTrainersSchema,
+    },
+    async (_request, reply) => {
+      const trainers = await listTrainers();
+      return reply.send(trainers);
+    },
+  );
 
   fastify.patch(
     '/trainer',

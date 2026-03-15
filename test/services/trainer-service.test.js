@@ -6,6 +6,9 @@ vi.mock('../../src/db.js', () => {
     prisma: {
       $transaction: vi.fn(),
       $queryRaw: vi.fn(),
+      trainer: {
+        findMany: vi.fn(),
+      },
       user: {
         findUnique: vi.fn(),
       },
@@ -27,7 +30,7 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
 
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import { updateMyTrainerProfile, linkStudentByEmail, listStudents, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -283,6 +286,115 @@ describe('linkStudentByEmail', () => {
       lastName: 'Doe',
       avatarUrl: 'https://cdn.example.com/avatar.jpg',
     });
+  });
+});
+
+describe('listTrainers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+  });
+
+  it('returns an empty array when no active trainers exist', async () => {
+    prisma.trainer.findMany.mockResolvedValue([]);
+
+    const result = await listTrainers();
+
+    expect(prisma.trainer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          user: { status: 'active', deletedAt: null },
+        },
+      }),
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('maps trainer rows to public profile shape', async () => {
+    prisma.trainer.findMany.mockResolvedValue([
+      {
+        id: 'trainer-1',
+        serviceMode: 'online',
+        createdAt: new Date('2024-01-01'),
+        user: {
+          firstName: 'Jane',
+          lastName: 'Doe',
+          avatarUrl: 's3://jane-avatar',
+          address: { city: 'São Paulo', state: 'SP', country: 'Brazil' },
+          socials: { instagram: '@jane', whatsapp: '+55119' },
+        },
+      },
+    ]);
+    s3BucketHandler.resolveUrl.mockResolvedValue('https://cdn.example.com/jane.jpg');
+
+    const result = await listTrainers();
+
+    expect(result).toEqual([
+      {
+        id: 'trainer-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: 'https://cdn.example.com/jane.jpg',
+        serviceMode: 'online',
+        address: { city: 'São Paulo', state: 'SP', country: 'Brazil' },
+        socialNetworks: { instagram: '@jane', whatsapp: '+55119' },
+      },
+    ]);
+    expect(s3BucketHandler.resolveUrl).toHaveBeenCalledWith('s3://jane-avatar');
+  });
+
+  it('resolves avatar URLs for all trainers via s3BucketHandler', async () => {
+    prisma.trainer.findMany.mockResolvedValue([
+      {
+        id: 't1',
+        serviceMode: null,
+        user: { firstName: 'A', lastName: 'B', avatarUrl: 's3://a', address: null, socials: null },
+      },
+      {
+        id: 't2',
+        serviceMode: 'in_person',
+        user: { firstName: 'C', lastName: 'D', avatarUrl: 's3://c', address: null, socials: null },
+      },
+    ]);
+    s3BucketHandler.resolveUrl
+      .mockResolvedValueOnce('https://cdn.example.com/a.jpg')
+      .mockResolvedValueOnce('https://cdn.example.com/c.jpg');
+
+    const result = await listTrainers();
+
+    expect(s3BucketHandler.resolveUrl).toHaveBeenCalledTimes(2);
+    expect(result[0].avatarUrl).toBe('https://cdn.example.com/a.jpg');
+    expect(result[1].avatarUrl).toBe('https://cdn.example.com/c.jpg');
+  });
+
+  it('returns null for address and socialNetworks when trainer user has none', async () => {
+    prisma.trainer.findMany.mockResolvedValue([
+      {
+        id: 'trainer-no-extras',
+        serviceMode: null,
+        user: { firstName: 'Solo', lastName: 'Trainer', avatarUrl: null, address: null, socials: null },
+      },
+    ]);
+
+    const result = await listTrainers();
+
+    expect(result[0].address).toBeNull();
+    expect(result[0].socialNetworks).toBeNull();
+    expect(result[0].serviceMode).toBeNull();
+  });
+
+  it('queries with correct filters and ordering', async () => {
+    prisma.trainer.findMany.mockResolvedValue([]);
+
+    await listTrainers();
+
+    expect(prisma.trainer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deletedAt: null, user: { status: 'active', deletedAt: null } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
   });
 });
 

@@ -722,6 +722,63 @@
       "name": "Trainer",
       "item": [
         {
+          "name": "List Trainers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainers"
+              ]
+            },
+            "description": "Returns all active trainers visible to any authenticated user. No role restriction required — both students and trainers can call this endpoint."
+          },
+          "response": [
+            {
+              "name": "List Trainers - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainers",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainers"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/jane.jpg\",\n    \"serviceMode\": \"online\",\n    \"address\": {\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"Brazil\"\n    },\n    \"socialNetworks\": {\n      \"instagram\": \"@janedoe\",\n      \"whatsapp\": \"+5511999999999\"\n    }\n  }\n]"
+            }
+          ]
+        },
+        {
           "name": "Update Trainer Profile",
           "request": {
             "method": "PATCH",

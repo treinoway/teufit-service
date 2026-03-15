@@ -1,5 +1,59 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
+const trainerListItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    avatarUrl: { type: 'string', nullable: true },
+    serviceMode: {
+      type: 'string',
+      nullable: true,
+      enum: ['online', 'in_person', 'hybrid', null],
+    },
+    address: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        city: { type: 'string', nullable: true },
+        state: { type: 'string', nullable: true },
+        country: { type: 'string', nullable: true },
+      },
+    },
+    socialNetworks: {
+      type: 'object',
+      nullable: true,
+      additionalProperties: true,
+    },
+  },
+};
+
+export const listTrainersSchema = {
+  tags: ['trainer'],
+  summary: 'List all active trainers',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'array',
+      items: trainerListItemSchema,
+    },
+    401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 const studentItemSchema = {
   type: 'object',
   properties: {
