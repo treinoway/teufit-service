@@ -266,6 +266,61 @@ export async function anamnesisRoutes(fastify) {
   );
 
   // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Fork
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/anamneses/:anamnesisId/fork — Fork into a new version
+  fastify.post(
+    '/trainer/anamneses/:anamnesisId/fork',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.forkAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const forked = await service.forkAnamnesis(request.user.id, request.params.anamnesisId);
+      return reply.status(201).send(forked);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Copy
+  // ═══════════════════════════════════════════════════════════
+
+  // POST /trainer/anamneses/:anamnesisId/copy — Copy into a new independent private copy
+  fastify.post(
+    '/trainer/anamneses/:anamnesisId/copy',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.copyAnamnesisSchema,
+    },
+    async (request, reply) => {
+      const copied = await service.copyAnamnesis(request.user.id, request.params.anamnesisId);
+      return reply.status(201).send(copied);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Student response (view)
+  // ═══════════════════════════════════════════════════════════
+
+  // GET /trainer/students/:studentId/anamneses/:anamnesisId/response — View student response
+  fastify.get(
+    '/trainer/students/:studentId/anamneses/:anamnesisId/response',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.getStudentAnamnesisResponseSchema,
+    },
+    async (request, reply) => {
+      const result = await service.getStudentAnamnesisResponse(
+        request.user.id,
+        request.params.studentId,
+        request.params.anamnesisId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
   // STUDENT ROUTES — /my/
   // ═══════════════════════════════════════════════════════════
 
@@ -279,6 +334,39 @@ export async function anamnesisRoutes(fastify) {
     async (request, reply) => {
       const anamneses = await service.getMyAnamneses(request.user.id);
       return reply.send(anamneses);
+    },
+  );
+
+  // POST /my/anamneses/:anamnesisId/response — Submit response to an anamnesis
+  fastify.post(
+    '/my/anamneses/:anamnesisId/response',
+    {
+      preHandler: [authenticate],
+      schema: schema.submitAnamnesisResponseSchema,
+    },
+    async (request, reply) => {
+      const result = await service.submitAnamnesisResponse(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // GET /my/anamneses/:anamnesisId/response — Get my response to an anamnesis
+  fastify.get(
+    '/my/anamneses/:anamnesisId/response',
+    {
+      preHandler: [authenticate],
+      schema: schema.getMyAnamnesisResponseSchema,
+    },
+    async (request, reply) => {
+      const result = await service.getMyAnamnesisResponse(
+        request.user.id,
+        request.params.anamnesisId,
+      );
+      return reply.send(result);
     },
   );
 }

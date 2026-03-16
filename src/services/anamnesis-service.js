@@ -54,6 +54,23 @@ async function findAnamnesisOrThrow(anamnesisId) {
 }
 
 /**
+ * Assert the anamnesis has no linked students.
+ * Throws 409 if any StudentAnamnesis record references this anamnesis.
+ * Must be called before any structural mutation (add/update/delete section or question).
+ */
+async function assertAnamnesisNotLinked(anamnesisId) {
+  const count = await prisma.studentAnamnesis.count({ where: { anamnesisId } });
+  if (count > 0) {
+    throw new AppError({
+      httpStatus: 409,
+      error: AnamnesisErrorCode.ANAMNESIS_HAS_STUDENT_LINKS,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_HAS_STUDENT_LINKS,
+      message: 'This anamnesis is linked to students. Fork it first before editing.',
+    });
+  }
+}
+
+/**
  * Assert the trainer owns the anamnesis. Throws 403 for general anamneses
  * (no owner) and for anamneses owned by another trainer.
  */
@@ -325,6 +342,7 @@ export async function deleteAnamnesis(userId, anamnesisId) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
 
   const now = new Date();
 
@@ -372,6 +390,7 @@ export async function addSection(userId, anamnesisId, data) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
 
   const section = await prisma.anamnesisSection.create({
     data: {
@@ -409,6 +428,7 @@ export async function updateSection(userId, anamnesisId, sectionId, data) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
 
   const updated = await prisma.anamnesisSection.update({
@@ -443,6 +463,7 @@ export async function deleteSection(userId, anamnesisId, sectionId) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
 
   const now = new Date();
@@ -476,6 +497,7 @@ export async function reorderSections(userId, anamnesisId, orderedIds) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
 
   await prisma.$transaction(
     orderedIds.map((sectionId, index) =>
@@ -517,6 +539,7 @@ export async function addQuestion(userId, anamnesisId, sectionId, data) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
   validateQuestionType(data.type);
 
@@ -558,6 +581,7 @@ export async function updateQuestion(userId, anamnesisId, sectionId, questionId,
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
   await findQuestionOrThrow(sectionId, questionId);
 
@@ -612,6 +636,7 @@ export async function deleteQuestion(userId, anamnesisId, sectionId, questionId)
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
+  await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
   await findQuestionOrThrow(sectionId, questionId);
 
@@ -792,4 +817,366 @@ export async function getMyAnamneses(userId) {
   });
 
   return links;
+}
+
+// ─── Versioning ───────────────────────────────────────────────────────────────
+
+/**
+ * Fork an anamnesis into a new version.
+ * Creates a deep copy of all non-deleted sections, questions, and options.
+ * Sets version = source.version + 1 and parentId = source.id.
+ *
+ * @param {string} userId - Trainer's user ID
+ * @param {string} anamnesisId - The anamnesis to fork
+ * @returns {Promise<object>} The newly forked anamnesis with full nested structure
+ */
+export async function forkAnamnesis(userId, anamnesisId) {
+  const trainer = await findTrainerOrThrow(userId);
+  const source = await findAnamnesisOrThrow(anamnesisId);
+
+  verifyAnamnesisOwnership(source, trainer.id);
+
+  const sourceWithContent = await prisma.anamnesis.findUnique({
+    where: { id: anamnesisId },
+    include: {
+      sections: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+        include: {
+          questions: {
+            where: { deletedAt: null },
+            orderBy: { order: 'asc' },
+            include: { options: { orderBy: { order: 'asc' } } },
+          },
+        },
+      },
+    },
+  });
+
+  const forked = await prisma.$transaction(async (tx) => {
+    const newAnamnesis = await tx.anamnesis.create({
+      data: {
+        trainerId: source.trainerId,
+        title: source.title,
+        description: source.description,
+        isGeneral: false,
+        version: source.version + 1,
+        parentId: source.id,
+      },
+    });
+
+    for (const section of sourceWithContent.sections) {
+      const newSection = await tx.anamnesisSection.create({
+        data: {
+          anamnesisId: newAnamnesis.id,
+          title: section.title,
+          description: section.description,
+          order: section.order,
+        },
+      });
+
+      for (const question of section.questions) {
+        const newQuestion = await tx.anamnesisQuestion.create({
+          data: {
+            sectionId: newSection.id,
+            text: question.text,
+            type: question.type,
+            required: question.required,
+            order: question.order,
+            config: question.config,
+          },
+        });
+
+        if (question.options.length > 0) {
+          await tx.anamnesisQuestionOption.createMany({
+            data: question.options.map((opt) => ({
+              questionId: newQuestion.id,
+              text: opt.text,
+              order: opt.order,
+            })),
+          });
+        }
+      }
+    }
+
+    return tx.anamnesis.findUnique({
+      where: { id: newAnamnesis.id },
+      include: fullAnamnesisInclude,
+    });
+  });
+
+  return forked;
+}
+
+/**
+ * Copy an anamnesis into a new independent private copy owned by the trainer.
+ * Works for public anamneses (isGeneral: true) and the trainer's own private ones.
+ * Unlike forkAnamnesis, the copy starts fresh: parentId = null, version = 1.
+ *
+ * @param {string} userId - Trainer's user ID
+ * @param {string} anamnesisId - The anamnesis to copy
+ * @returns {Promise<object>} The newly copied anamnesis with full nested structure
+ */
+export async function copyAnamnesis(userId, anamnesisId) {
+  const trainer = await findTrainerOrThrow(userId);
+  const source = await findAnamnesisOrThrow(anamnesisId);
+
+  if (!source.isGeneral && source.trainerId !== trainer.id) {
+    throw new ForbiddenAppError({
+      error: AnamnesisErrorCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
+      messageCode: AnamnesisMessageCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
+      message: 'You do not have access to this anamnesis',
+    });
+  }
+
+  const sourceWithContent = await prisma.anamnesis.findUnique({
+    where: { id: anamnesisId },
+    include: {
+      sections: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+        include: {
+          questions: {
+            where: { deletedAt: null },
+            orderBy: { order: 'asc' },
+            include: { options: { orderBy: { order: 'asc' } } },
+          },
+        },
+      },
+    },
+  });
+
+  const copied = await prisma.$transaction(async (tx) => {
+    const newAnamnesis = await tx.anamnesis.create({
+      data: {
+        trainerId: trainer.id,
+        title: source.title,
+        description: source.description,
+        isGeneral: false,
+        version: 1,
+        parentId: null,
+      },
+    });
+
+    for (const section of sourceWithContent.sections) {
+      const newSection = await tx.anamnesisSection.create({
+        data: {
+          anamnesisId: newAnamnesis.id,
+          title: section.title,
+          description: section.description,
+          order: section.order,
+        },
+      });
+
+      for (const question of section.questions) {
+        const newQuestion = await tx.anamnesisQuestion.create({
+          data: {
+            sectionId: newSection.id,
+            text: question.text,
+            type: question.type,
+            required: question.required,
+            order: question.order,
+            config: question.config,
+          },
+        });
+
+        if (question.options.length > 0) {
+          await tx.anamnesisQuestionOption.createMany({
+            data: question.options.map((opt) => ({
+              questionId: newQuestion.id,
+              text: opt.text,
+              order: opt.order,
+            })),
+          });
+        }
+      }
+    }
+
+    return tx.anamnesis.findUnique({
+      where: { id: newAnamnesis.id },
+      include: fullAnamnesisInclude,
+    });
+  });
+
+  return copied;
+}
+
+// ─── Student responses ────────────────────────────────────────────────────────
+
+/**
+ * Submit a student's response to an anamnesis.
+ * Validates required questions, then upserts the AnamnesisResponse record and
+ * replaces all AnamnesisAnswer records atomically.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @returns {Promise<object>} The response with answers
+ */
+export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) {
+  const link = await prisma.studentAnamnesis.findFirst({
+    where: { studentId: userId, anamnesisId },
+  });
+
+  if (!link) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      message: 'This anamnesis is not linked to your account',
+    });
+  }
+
+  const anamnesisWithQuestions = await prisma.anamnesis.findUnique({
+    where: { id: anamnesisId },
+    include: {
+      sections: {
+        where: { deletedAt: null },
+        include: {
+          questions: {
+            where: { deletedAt: null },
+          },
+        },
+      },
+    },
+  });
+
+  const allQuestions = anamnesisWithQuestions.sections.flatMap((s) => s.questions);
+  const knownQuestionIds = new Set(allQuestions.map((q) => q.id));
+  const answeredQuestionIds = new Set(answers.map((a) => a.questionId));
+
+  const missingRequiredQuestions = allQuestions.filter(
+    (q) => q.required && !answeredQuestionIds.has(q.id),
+  );
+
+  if (missingRequiredQuestions.length > 0) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      message: 'Required questions were not answered',
+      details: missingRequiredQuestions.map((q) => ({
+        questionId: q.id,
+        message: 'Required question not answered',
+      })),
+    });
+  }
+
+  const unknownAnswer = answers.find((a) => !knownQuestionIds.has(a.questionId));
+  if (unknownAnswer) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+      message: `Question not found: ${unknownAnswer.questionId}`,
+    });
+  }
+
+  const response = await prisma.$transaction(async (tx) => {
+    const upsertedResponse = await tx.anamnesisResponse.upsert({
+      where: { anamnesisId_studentId: { anamnesisId, studentId: userId } },
+      create: { anamnesisId, studentId: userId, submittedAt: new Date() },
+      update: { submittedAt: new Date() },
+    });
+
+    await tx.anamnesisAnswer.deleteMany({ where: { responseId: upsertedResponse.id } });
+
+    if (answers.length > 0) {
+      await tx.anamnesisAnswer.createMany({
+        data: answers.map((a) => ({
+          responseId: upsertedResponse.id,
+          questionId: a.questionId,
+          value: a.value,
+        })),
+      });
+    }
+
+    return tx.anamnesisResponse.findUnique({
+      where: { id: upsertedResponse.id },
+      include: { answers: true },
+    });
+  });
+
+  return response;
+}
+
+/**
+ * Get the authenticated student's response to an anamnesis.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @returns {Promise<object>}
+ */
+export async function getMyAnamnesisResponse(userId, anamnesisId) {
+  const link = await prisma.studentAnamnesis.findFirst({
+    where: { studentId: userId, anamnesisId },
+  });
+
+  if (!link) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      message: 'This anamnesis is not linked to your account',
+    });
+  }
+
+  const response = await prisma.anamnesisResponse.findUnique({
+    where: { anamnesisId_studentId: { anamnesisId, studentId: userId } },
+    include: { answers: true },
+  });
+
+  if (!response) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      message: 'No response found for this anamnesis',
+    });
+  }
+
+  return response;
+}
+
+/**
+ * Get a student's response to an anamnesis (trainer view).
+ * Verifies the trainer owns the student relationship and that this trainer
+ * linked the anamnesis to the student.
+ *
+ * @param {string} trainerUserId - Trainer's user ID
+ * @param {string} studentId - Student's user ID
+ * @param {string} anamnesisId
+ * @returns {Promise<object>}
+ */
+export async function getStudentAnamnesisResponse(trainerUserId, studentId, anamnesisId) {
+  const trainer = await verifyTrainerStudentLink(trainerUserId, studentId);
+
+  const studentAnamnesisLink = await prisma.studentAnamnesis.findFirst({
+    where: { anamnesisId, studentId, trainerId: trainer.id },
+  });
+
+  if (!studentAnamnesisLink) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      message: 'This anamnesis is not linked to this student',
+    });
+  }
+
+  const response = await prisma.anamnesisResponse.findUnique({
+    where: { anamnesisId_studentId: { anamnesisId, studentId } },
+    include: { answers: true },
+  });
+
+  if (!response) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      message: 'The student has not submitted a response for this anamnesis',
+    });
+  }
+
+  return response;
 }

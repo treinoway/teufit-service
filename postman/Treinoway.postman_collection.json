@@ -19,6 +19,12 @@
       "key": "refreshToken",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT token for admin user (role: admin)"
     }
   ],
   "auth": {
@@ -2864,6 +2870,39 @@
             "description": "Soft-delete an anamnesis with cascade to all sections and questions. Blocked for general anamneses."
           },
           "response": []
+        },
+        {
+          "name": "Fork Anamnesis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/fork",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "fork"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID to fork"
+                }
+              ]
+            },
+            "description": "Fork an anamnesis into a new version. Deep copies all non-deleted sections, questions, and options. Sets version = source.version + 1 and parentId = source.id. Blocked for general anamneses."
+          },
+          "response": []
         }
       ]
     },
@@ -3339,6 +3378,46 @@
             "description": "Remove the link between an anamnesis and a student (hard delete of the junction record)."
           },
           "response": []
+        },
+        {
+          "name": "Get Student Anamnesis Response (Trainer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses",
+                ":anamnesisId",
+                "response"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Get a student's response to a specific anamnesis. Trainer must own the trainer-student relationship and have linked the anamnesis to the student. Returns 404 if the student has not submitted a response yet."
+          },
+          "response": []
         }
       ]
     },
@@ -3366,6 +3445,385 @@
               ]
             },
             "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Anamnesis Response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "anamneses",
+                ":anamnesisId",
+                "response"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"\",\n      \"value\": \"yes\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Submit or re-submit a response to an anamnesis. All required questions must be answered. Subsequent submissions fully replace all previous answers. The anamnesis must be linked to the student's account."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Anamnesis Response",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "anamneses",
+                ":anamnesisId",
+                "response"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Get the authenticated student's previously submitted response to an anamnesis, including all answers. Returns 404 if not linked or not yet submitted."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Admin",
+      "item": [
+        {
+          "name": "Create Public Anamnesis",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Platform Health Questionnaire\",\n  \"description\": \"Standard health assessment for all students\",\n  \"sections\": [\n    {\n      \"title\": \"Physical Activity\",\n      \"questions\": [\n        {\n          \"text\": \"Do you exercise regularly?\",\n          \"type\": \"dichotomous\",\n          \"required\": true\n        }\n      ]\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students."
+          },
+          "response": []
+        },
+        {
+          "name": "List Public Anamneses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses"]
+            },
+            "description": "List all public (isGeneral: true) anamneses. Includes sections summary (id, title, order) for each. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Anamnesis Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+              ]
+            },
+            "description": "Get full nested detail (sections, questions, options) of a public anamnesis. Returns 404 if not found, deleted, or not public. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Public Anamnesis",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Public Questionnaire\",\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update title and/or description of a public anamnesis. No student-link guard — admins can edit freely. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Public Anamnesis",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+              ]
+            },
+            "description": "Soft-delete a public anamnesis. Cascades to sections and questions (sets deletedAt). Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Section to Public Anamnesis",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Mental Health\",\n  \"description\": \"Questions about mental wellbeing\",\n  \"order\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add a section (with optional nested questions) to a public anamnesis. No student-link guard. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Sections (Public Anamnesis)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/reorder",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", "reorder"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderedIds\": [\"section-uuid-1\", \"section-uuid-2\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Reorder sections in a public anamnesis by providing an array of section UUIDs in the desired order. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Section (Public Anamnesis)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
+                { "key": "sectionId", "value": "", "description": "Section UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Section Title\",\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update title, description, or order of a section in a public anamnesis. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Section (Public Anamnesis)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
+                { "key": "sectionId", "value": "", "description": "Section UUID" }
+              ]
+            },
+            "description": "Soft-delete a section in a public anamnesis. Cascades to all questions in that section. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Question to Public Anamnesis Section",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
+                { "key": "sectionId", "value": "", "description": "Section UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Do you have any chronic conditions?\",\n  \"type\": \"dichotomous\",\n  \"required\": true,\n  \"order\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Add a question (with optional options) to a section on a public anamnesis. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Question (Public Anamnesis)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions", ":questionId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
+                { "key": "sectionId", "value": "", "description": "Section UUID" },
+                { "key": "questionId", "value": "", "description": "Question UUID" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Requires ADMIN role."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Question (Public Anamnesis)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions", ":questionId"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
+                { "key": "sectionId", "value": "", "description": "Section UUID" },
+                { "key": "questionId", "value": "", "description": "Question UUID" }
+              ]
+            },
+            "description": "Soft-delete a question on a public anamnesis (sets deletedAt). Requires ADMIN role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Copy",
+      "item": [
+        {
+          "name": "Copy Anamnesis",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/copy",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "anamneses", ":anamnesisId", "copy"],
+              "variable": [
+                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID (public or own private)" }
+              ]
+            },
+            "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. Requires TRAINER role."
           },
           "response": []
         }

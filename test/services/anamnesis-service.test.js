@@ -22,9 +22,19 @@ vi.mock('../../src/db.js', () => ({
       create: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
     trainerStudent: { findUnique: vi.fn() },
+    anamnesisResponse: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
+    anamnesisAnswer: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -47,6 +57,11 @@ import {
   listStudentAnamneses,
   unlinkAnamnesisFromStudent,
   getMyAnamneses,
+  forkAnamnesis,
+  copyAnamnesis,
+  submitAnamnesisResponse,
+  getMyAnamnesisResponse,
+  getStudentAnamnesisResponse,
 } from '../../src/services/anamnesis-service.js';
 import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
 
@@ -827,6 +842,606 @@ describe('anamnesis-service', () => {
       const result = await getMyAnamneses('student-1');
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // ── assertAnamnesisNotLinked guard ───────────────────────────────────────
+
+  describe('assertAnamnesisNotLinked guard', () => {
+    const linkedCount = 1;
+
+    function setupOwnedAnamnesis() {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(linkedCount);
+    }
+
+    it('deleteAnamnesis — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(deleteAnamnesis('user-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+        messageCode: 'anamnesis.hasStudentLinks',
+      });
+    });
+
+    it('addSection — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(addSection('user-1', 'anamnesis-1', { title: 'X' })).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('updateSection — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        updateSection('user-1', 'anamnesis-1', 'section-1', { title: 'X' }),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('deleteSection — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        deleteSection('user-1', 'anamnesis-1', 'section-1'),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('reorderSections — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        reorderSections('user-1', 'anamnesis-1', ['section-1', 'section-2']),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('addQuestion — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        addQuestion('user-1', 'anamnesis-1', 'section-1', {
+          text: 'Q?',
+          type: AnamnesisQuestionType.FREE_TEXT,
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('updateQuestion — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', { text: 'Updated?' }),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+
+    it('deleteQuestion — throws 409 when linked', async () => {
+      setupOwnedAnamnesis();
+
+      await expect(
+        deleteQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1'),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+      });
+    });
+  });
+
+  // ── forkAnamnesis ────────────────────────────────────────────────────────
+
+  describe('forkAnamnesis', () => {
+    it('throws 404 when anamnesis does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(null);
+
+      await expect(forkAnamnesis('user-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.notFound',
+      });
+    });
+
+    it('throws 403 when trying to fork a general anamnesis', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(
+        makeAnamnesis({ trainerId: null, isGeneral: true }),
+      );
+
+      await expect(forkAnamnesis('user-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 403,
+        messageCode: 'anamnesis.forbidden.general',
+      });
+    });
+
+    it("throws 403 when forking another trainer's anamnesis", async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: 'trainer-2' }));
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis({ trainerId: 'trainer-1' }));
+
+      await expect(forkAnamnesis('user-2', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 403,
+        messageCode: 'anamnesis.forbidden.notOwner',
+      });
+    });
+
+    it('creates fork with version+1 and parentId set', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1 });
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source) // findAnamnesisOrThrow
+        .mockResolvedValueOnce({ ...source, sections: [] }); // load with sections
+
+      const forkedAnamnesis = makeAnamnesis({
+        id: 'forked-1',
+        version: 2,
+        parentId: 'anamnesis-1',
+        sections: [],
+      });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesis: {
+            create: vi.fn().mockResolvedValue({ id: 'forked-1' }),
+            findUnique: vi.fn().mockResolvedValue(forkedAnamnesis),
+          },
+          anamnesisSection: { create: vi.fn() },
+          anamnesisQuestion: { create: vi.fn() },
+          anamnesisQuestionOption: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      const result = await forkAnamnesis('user-1', 'anamnesis-1');
+
+      expect(result).toMatchObject({ id: 'forked-1', version: 2, parentId: 'anamnesis-1' });
+    });
+
+    it('deep copies sections and questions in transaction', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1 });
+      const sourceSection = makeSection();
+      const sourceQuestion = makeQuestion({ options: [{ id: 'opt-1', text: 'Yes', order: 0 }] });
+      const sourceWithContent = {
+        ...source,
+        sections: [{ ...sourceSection, questions: [sourceQuestion] }],
+      };
+
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(sourceWithContent);
+
+      const forkedAnamnesis = makeAnamnesis({ id: 'forked-1', version: 2, parentId: 'anamnesis-1', sections: [] });
+
+      const txAnamnesis = { create: vi.fn().mockResolvedValue({ id: 'forked-1' }), findUnique: vi.fn().mockResolvedValue(forkedAnamnesis) };
+      const txSection = { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) };
+      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }) };
+      const txOption = { createMany: vi.fn().mockResolvedValue({ count: 1 }) };
+
+      prisma.$transaction.mockImplementation(async (fn) => fn({
+        anamnesis: txAnamnesis,
+        anamnesisSection: txSection,
+        anamnesisQuestion: txQuestion,
+        anamnesisQuestionOption: txOption,
+      }));
+
+      await forkAnamnesis('user-1', 'anamnesis-1');
+
+      expect(txSection.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ anamnesisId: 'forked-1' }) }),
+      );
+      expect(txQuestion.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sectionId: 'new-section-1' }) }),
+      );
+      expect(txOption.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([expect.objectContaining({ questionId: 'new-question-1' })]),
+        }),
+      );
+    });
+  });
+
+  // ── copyAnamnesis ────────────────────────────────────────────────────────
+
+  describe('copyAnamnesis', () => {
+    it('throws 404 when trainer profile does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(copyAnamnesis('user-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'trainer.notFound',
+      });
+    });
+
+    it('throws 404 when anamnesis does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(null);
+
+      await expect(copyAnamnesis('user-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.notFound',
+      });
+    });
+
+    it("throws 403 when copying another trainer's private anamnesis", async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: 'trainer-2' }));
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis({ trainerId: 'trainer-1' }));
+
+      await expect(copyAnamnesis('user-2', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 403,
+        messageCode: 'anamnesis.forbidden.notOwner',
+      });
+    });
+
+    it('allows copying a public anamnesis regardless of trainer ownership', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: 'trainer-2' }));
+      const publicAnamnesis = makeAnamnesis({ trainerId: null, isGeneral: true });
+      const sourceWithContent = { ...publicAnamnesis, sections: [] };
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(publicAnamnesis) // findAnamnesisOrThrow
+        .mockResolvedValueOnce(sourceWithContent); // load with sections
+
+      const copiedAnamnesis = makeAnamnesis({
+        id: 'copy-1',
+        trainerId: 'trainer-2',
+        isGeneral: false,
+        version: 1,
+        parentId: null,
+        sections: [],
+      });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesis: {
+            create: vi.fn().mockResolvedValue({ id: 'copy-1' }),
+            findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
+          },
+          anamnesisSection: { create: vi.fn() },
+          anamnesisQuestion: { create: vi.fn() },
+          anamnesisQuestionOption: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      const result = await copyAnamnesis('user-2', 'anamnesis-1');
+
+      expect(result).toMatchObject({
+        id: 'copy-1',
+        trainerId: 'trainer-2',
+        isGeneral: false,
+        version: 1,
+        parentId: null,
+      });
+    });
+
+    it('allows copying own private anamnesis', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 3 });
+      const sourceWithContent = { ...source, sections: [] };
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(sourceWithContent);
+
+      const copiedAnamnesis = makeAnamnesis({
+        id: 'copy-1',
+        trainerId: 'trainer-1',
+        isGeneral: false,
+        version: 1,
+        parentId: null,
+        sections: [],
+      });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesis: {
+            create: vi.fn().mockResolvedValue({ id: 'copy-1' }),
+            findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
+          },
+          anamnesisSection: { create: vi.fn() },
+          anamnesisQuestion: { create: vi.fn() },
+          anamnesisQuestionOption: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      const result = await copyAnamnesis('user-1', 'anamnesis-1');
+
+      expect(result).toMatchObject({ version: 1, parentId: null, isGeneral: false });
+    });
+
+    it('creates copy with version: 1 and parentId: null regardless of source version', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 5 });
+      const sourceWithContent = { ...source, sections: [] };
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(sourceWithContent);
+
+      let capturedCreateData;
+      const copiedAnamnesis = makeAnamnesis({ id: 'copy-1', version: 1, parentId: null, sections: [] });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const txCreate = vi.fn().mockImplementation((args) => {
+          capturedCreateData = args.data;
+          return Promise.resolve({ id: 'copy-1' });
+        });
+        const tx = {
+          anamnesis: {
+            create: txCreate,
+            findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
+          },
+          anamnesisSection: { create: vi.fn() },
+          anamnesisQuestion: { create: vi.fn() },
+          anamnesisQuestionOption: { createMany: vi.fn() },
+        };
+        return fn(tx);
+      });
+
+      await copyAnamnesis('user-1', 'anamnesis-1');
+
+      expect(capturedCreateData).toMatchObject({
+        version: 1,
+        parentId: null,
+        isGeneral: false,
+        trainerId: 'trainer-1',
+      });
+    });
+
+    it('deep copies sections, questions, and options in transaction', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1 });
+      const sourceSection = makeSection();
+      const sourceQuestion = makeQuestion({ options: [{ id: 'opt-1', text: 'Yes', order: 0 }] });
+      const sourceWithContent = {
+        ...source,
+        sections: [{ ...sourceSection, questions: [sourceQuestion] }],
+      };
+
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(sourceWithContent);
+
+      const copiedAnamnesis = makeAnamnesis({ id: 'copy-1', version: 1, parentId: null, sections: [] });
+
+      const txAnamnesis = {
+        create: vi.fn().mockResolvedValue({ id: 'copy-1' }),
+        findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
+      };
+      const txSection = { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) };
+      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }) };
+      const txOption = { createMany: vi.fn().mockResolvedValue({ count: 1 }) };
+
+      prisma.$transaction.mockImplementation(async (fn) => fn({
+        anamnesis: txAnamnesis,
+        anamnesisSection: txSection,
+        anamnesisQuestion: txQuestion,
+        anamnesisQuestionOption: txOption,
+      }));
+
+      await copyAnamnesis('user-1', 'anamnesis-1');
+
+      expect(txSection.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ anamnesisId: 'copy-1' }) }),
+      );
+      expect(txQuestion.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sectionId: 'new-section-1' }) }),
+      );
+      expect(txOption.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([expect.objectContaining({ questionId: 'new-question-1' })]),
+        }),
+      );
+    });
+  });
+
+  // ── submitAnamnesisResponse ──────────────────────────────────────────────
+
+  describe('submitAnamnesisResponse', () => {
+    const makeAnamnesisWithQuestion = (required = false) => ({
+      ...makeAnamnesis(),
+      sections: [
+        {
+          ...makeSection(),
+          questions: [makeQuestion({ id: 'question-1', required })],
+        },
+      ],
+    });
+
+    const makeAnamnesisResponse = (overrides = {}) => ({
+      id: 'response-1',
+      anamnesisId: 'anamnesis-1',
+      studentId: 'student-1',
+      submittedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: null,
+      answers: [],
+      ...overrides,
+    });
+
+    it('throws 404 when anamnesis is not linked to student', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', { answers: [] }),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.notLinkedToStudent',
+      });
+    });
+
+    it('throws 400 when a required question is not answered', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(true));
+
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', { answers: [] }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('throws 404 for unknown questionId in answers', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
+
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'unknown-question-id', value: 'yes' }],
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.question.notFound',
+      });
+    });
+
+    it('upserts response and replaces answers in transaction', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
+
+      const response = makeAnamnesisResponse({ answers: [{ id: 'ans-1', questionId: 'question-1', value: 'yes' }] });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue(response),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+        };
+        return fn(tx);
+      });
+
+      const result = await submitAnamnesisResponse('student-1', 'anamnesis-1', {
+        answers: [{ questionId: 'question-1', value: 'yes' }],
+      });
+
+      expect(result).toMatchObject({ id: 'response-1' });
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+  });
+
+  // ── getMyAnamnesisResponse ───────────────────────────────────────────────
+
+  describe('getMyAnamnesisResponse', () => {
+    it('throws 404 when anamnesis is not linked to student', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+      await expect(getMyAnamnesisResponse('student-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.notLinkedToStudent',
+      });
+    });
+
+    it('throws 404 when no response has been submitted yet', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      await expect(getMyAnamnesisResponse('student-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.response.notFound',
+      });
+    });
+
+    it('returns response with answers', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      const response = {
+        id: 'response-1',
+        anamnesisId: 'anamnesis-1',
+        studentId: 'student-1',
+        submittedAt: new Date(),
+        answers: [{ id: 'ans-1', questionId: 'question-1', value: 'yes' }],
+      };
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(response);
+
+      const result = await getMyAnamnesisResponse('student-1', 'anamnesis-1');
+
+      expect(result).toEqual(response);
+      expect(prisma.anamnesisResponse.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { anamnesisId_studentId: { anamnesisId: 'anamnesis-1', studentId: 'student-1' } },
+        }),
+      );
+    });
+  });
+
+  // ── getStudentAnamnesisResponse ──────────────────────────────────────────
+
+  describe('getStudentAnamnesisResponse', () => {
+    it('throws 404 when trainer-student link is missing', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue(null);
+
+      await expect(
+        getStudentAnamnesisResponse('user-1', 'student-1', 'anamnesis-1'),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'student.notFound',
+      });
+    });
+
+    it('throws 404 when anamnesis is not linked to this student by this trainer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: 'trainer-1', studentId: 'student-1' });
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+      await expect(
+        getStudentAnamnesisResponse('user-1', 'student-1', 'anamnesis-1'),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.notLinkedToStudent',
+      });
+    });
+
+    it('throws 404 when student has not submitted a response', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: 'trainer-1', studentId: 'student-1' });
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      await expect(
+        getStudentAnamnesisResponse('user-1', 'student-1', 'anamnesis-1'),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.response.notFound',
+      });
+    });
+
+    it('returns response when all conditions are met', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: 'trainer-1', studentId: 'student-1' });
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      const response = {
+        id: 'response-1',
+        anamnesisId: 'anamnesis-1',
+        studentId: 'student-1',
+        submittedAt: new Date(),
+        answers: [],
+      };
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(response);
+
+      const result = await getStudentAnamnesisResponse('user-1', 'student-1', 'anamnesis-1');
+
+      expect(result).toEqual(response);
     });
   });
 });

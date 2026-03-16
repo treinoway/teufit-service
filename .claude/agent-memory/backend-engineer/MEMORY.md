@@ -75,3 +75,39 @@ await fastify.register(async (fastify) => {
   await fastify.register(newRoutes); // add here
 });
 ```
+
+## `verifyTrainerStudentLink` in anamnesis-service
+Despite the parameter name `trainerId`, this function actually receives a **userId** (not trainer.id).
+It internally calls `findTrainerOrThrow(userId)`. All callers pass `userId`, not `trainer.id`.
+When adding new service functions that need trainer-student verification, pass the raw `userId`.
+
+## Custom 409 errors (domain-specific conflict codes)
+Use `AppError` directly — NOT `ConflictAppError` — when the error code must be a custom domain code:
+```js
+throw new AppError({
+  httpStatus: 409,
+  error: AnamnesisErrorCode.ANAMNESIS_HAS_STUDENT_LINKS,
+  messageCode: AnamnesisMessageCode.ANAMNESIS_HAS_STUDENT_LINKS,
+  message: '...',
+});
+```
+`ConflictAppError` hardcodes `error: 'CONFLICT'` and ignores the `error` override.
+
+## Prisma mock completeness
+When adding new Prisma models or methods to a service, also add them to the `vi.mock` in the test file.
+Missing mock methods cause `TypeError: prisma.x.y is not a function` at test runtime.
+New methods added for anamnesis: `studentAnamnesis.count`, `studentAnamnesis.findFirst`, `anamnesisResponse.*`, `anamnesisAnswer.*`
+
+## Admin role in E2E tests
+No `become-admin` endpoint. Pattern:
+```js
+const updatedUser = await prisma.user.update({ where: { id: userId }, data: { roles: ['admin'] } });
+const adminToken = app.jwt.sign({ sub: updatedUser.id, email: updatedUser.email, roles: ['admin'], status: updatedUser.status });
+```
+
+## Pre-validate before $transaction (admin service pattern)
+When validation (e.g., `validateQuestionType` inside `buildQuestionsCreateData`) must be testable WITHOUT mocking `$transaction`, pre-compute the sections/questions data structure outside the transaction. This makes validation throw synchronously before entering the transaction.
+
+## copyAnamnesis vs forkAnamnesis distinction
+- **Fork** (`/fork`): only own private anamneses, `version = source.version + 1`, `parentId = source.id`
+- **Copy** (`/copy`): public OR own private, `version: 1`, `parentId: null` — completely independent

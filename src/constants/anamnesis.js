@@ -30,6 +30,9 @@ export const AnamnesisErrorCode = Object.freeze({
   FORBIDDEN_GENERAL_ANAMNESIS: 'FORBIDDEN_GENERAL_ANAMNESIS',
   INVALID_QUESTION_TYPE: 'INVALID_QUESTION_TYPE',
   ANAMNESIS_ALREADY_LINKED: 'ANAMNESIS_ALREADY_LINKED',
+  ANAMNESIS_HAS_STUDENT_LINKS: 'ANAMNESIS_HAS_STUDENT_LINKS',
+  ANAMNESIS_RESPONSE_NOT_FOUND: 'ANAMNESIS_RESPONSE_NOT_FOUND',
+  ANAMNESIS_NOT_LINKED_TO_STUDENT: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
 });
 
 export const AnamnesisMessageCode = Object.freeze({
@@ -40,4 +43,7 @@ export const AnamnesisMessageCode = Object.freeze({
   FORBIDDEN_GENERAL_ANAMNESIS: 'anamnesis.forbidden.general',
   INVALID_QUESTION_TYPE: 'anamnesis.invalidQuestionType',
   ANAMNESIS_ALREADY_LINKED: 'anamnesis.alreadyLinked',
+  ANAMNESIS_HAS_STUDENT_LINKS: 'anamnesis.hasStudentLinks',
+  ANAMNESIS_RESPONSE_NOT_FOUND: 'anamnesis.response.notFound',
+  ANAMNESIS_NOT_LINKED_TO_STUDENT: 'anamnesis.notLinkedToStudent',
 });

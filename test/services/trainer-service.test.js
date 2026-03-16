@@ -304,7 +304,7 @@ describe('listTrainers', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
-          user: { status: 'active', deletedAt: null },
+          user: { deletedAt: null },
         },
       }),
     );
@@ -391,7 +391,7 @@ describe('listTrainers', () => {
 
     expect(prisma.trainer.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { deletedAt: null, user: { status: 'active', deletedAt: null } },
+        where: { deletedAt: null, user: { deletedAt: null } },
         orderBy: { createdAt: 'asc' },
       }),
     );

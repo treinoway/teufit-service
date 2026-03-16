@@ -2,7 +2,9 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { prisma } from '../../src/db.js';
 import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
+import { Roles } from '../../src/constants/roles.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -975,6 +977,439 @@ e2eDescribe('e2e: anamnesis', () => {
     it('returns 401 without authentication', async () => {
       const response = await app.inject({ method: 'GET', url: '/my/anamneses' });
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ─── Fork flow ────────────────────────────────────────────────────────────
+
+  describe('POST /trainer/anamneses/:anamnesisId/fork', () => {
+    it('forks anamnesis with version+1 and parentId set', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const anamnesisId = (
+        await createAnamnesis(trainerToken, {
+          title: 'Original',
+          sections: [{ title: 'Section 1' }],
+        })
+      ).json().id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${anamnesisId}/fork`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.version).toBe(2);
+      expect(body.parentId).toBe(anamnesisId);
+      expect(body.title).toBe('Original');
+      expect(body.isGeneral).toBe(false);
+      expect(body.sections).toHaveLength(1);
+    });
+
+    it('blocks editing linked anamnesis (section mutation returns 409), then fork allows edit', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const anamnesisId = (await createAnamnesis(trainerToken)).json().id;
+      const sectionId = (
+        await app.inject({
+          method: 'POST',
+          url: `/trainer/anamneses/${anamnesisId}/sections`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { title: 'Section A' },
+        })
+      ).json().id;
+
+      // Link anamnesis to student
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { anamnesisId },
+      });
+
+      // Try to edit section on linked anamnesis — expect 409
+      const editResponse = await app.inject({
+        method: 'PATCH',
+        url: `/trainer/anamneses/${anamnesisId}/sections/${sectionId}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { title: 'Updated' },
+      });
+      expect(editResponse.statusCode).toBe(409);
+      expect(editResponse.json()).toMatchObject({ messageCode: 'anamnesis.hasStudentLinks' });
+
+      // Fork the anamnesis
+      const forkResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${anamnesisId}/fork`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+      expect(forkResponse.statusCode).toBe(201);
+      const forkedAnamnesisId = forkResponse.json().id;
+      const forkedSectionId = forkResponse.json().sections[0].id;
+
+      // Edit section on forked anamnesis — should succeed
+      const editForkedResponse = await app.inject({
+        method: 'PATCH',
+        url: `/trainer/anamneses/${forkedAnamnesisId}/sections/${forkedSectionId}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { title: 'Updated' },
+      });
+      expect(editForkedResponse.statusCode).toBe(200);
+      expect(editForkedResponse.json().title).toBe('Updated');
+    });
+
+    it('returns 404 for unknown anamnesis', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses/00000000-0000-0000-0000-000000000099/fork',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses/00000000-0000-0000-0000-000000000099/fork',
+      });
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ─── Response flow ────────────────────────────────────────────────────────
+
+  describe('POST /my/anamneses/:anamnesisId/response and GET responses', () => {
+    async function setupAnamnesisWithRequiredQuestion(trainerToken, studentId) {
+      const createResponse = await createAnamnesis(trainerToken, {
+        title: 'Health Form',
+        sections: [
+          {
+            title: 'Section A',
+            questions: [
+              { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true },
+            ],
+          },
+        ],
+      });
+      const anamnesisId = createResponse.json().id;
+      const questionId = createResponse.json().sections[0].questions[0].id;
+
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { anamnesisId },
+      });
+
+      return { anamnesisId, questionId };
+    }
+
+    it('student submits response and trainer views it', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const { anamnesisId, questionId } = await setupAnamnesisWithRequiredQuestion(
+        trainerToken,
+        studentId,
+      );
+
+      // Submit response
+      const submitResponse = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { answers: [{ questionId, value: 'yes' }] },
+      });
+      expect(submitResponse.statusCode).toBe(200);
+      const submitBody = submitResponse.json();
+      expect(submitBody.anamnesisId).toBe(anamnesisId);
+      expect(submitBody.studentId).toBe(studentId);
+      expect(submitBody.submittedAt).toBeDefined();
+      expect(submitBody.answers).toHaveLength(1);
+      expect(submitBody.answers[0].value).toBe('yes');
+
+      // Student gets own response
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.json().answers).toHaveLength(1);
+
+      // Trainer views student response
+      const trainerResponse = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+      expect(trainerResponse.statusCode).toBe(200);
+      expect(trainerResponse.json().studentId).toBe(studentId);
+      expect(trainerResponse.json().answers).toHaveLength(1);
+    });
+
+    it('returns 400 when required question is not answered', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const { anamnesisId } = await setupAnamnesisWithRequiredQuestion(trainerToken, studentId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { answers: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('returns 404 when anamnesis is not linked to student', async () => {
+      const { accessToken: studentToken } = await createStudentWithToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/my/anamneses/00000000-0000-0000-0000-000000000099/response',
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { answers: [] },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when getting response for unlinked anamnesis', async () => {
+      const { accessToken: studentToken } = await createStudentWithToken();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/my/anamneses/00000000-0000-0000-0000-000000000099/response',
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when trainer views response for non-linked anamnesis', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/anamneses/00000000-0000-0000-0000-000000000099/response`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('second submission replaces answers', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const { anamnesisId, questionId } = await setupAnamnesisWithRequiredQuestion(
+        trainerToken,
+        studentId,
+      );
+
+      await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { answers: [{ questionId, value: 'yes' }] },
+      });
+
+      const secondSubmit = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { answers: [{ questionId, value: 'no' }] },
+      });
+
+      expect(secondSubmit.statusCode).toBe(200);
+      expect(secondSubmit.json().answers[0].value).toBe('no');
+    });
+  });
+
+  // ─── POST /trainer/anamneses/:anamnesisId/copy ─────────────────────────────
+
+  async function createAdminToken() {
+    const email = `e2e+admin-${Date.now()}@example.com`;
+    const signupResponse = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email, password: 'StrongPassw0rd!' },
+    });
+    expect(signupResponse.statusCode).toBe(201);
+    const userId = signupResponse.json().user.id;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { roles: [Roles.ADMIN] },
+    });
+
+    return app.jwt.sign({
+      sub: updatedUser.id,
+      email: updatedUser.email,
+      roles: [Roles.ADMIN],
+      status: updatedUser.status,
+    });
+  }
+
+  async function createPublicAnamnesisViaAdmin(title = 'Public Health Questionnaire') {
+    const adminToken = await createAdminToken();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/admin/anamneses',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { title },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json();
+  }
+
+  describe('POST /trainer/anamneses/:anamnesisId/copy', () => {
+    it('trainer can copy a public anamnesis into a private independent copy', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const publicAnamnesis = await createPublicAnamnesisViaAdmin('Public Template');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${publicAnamnesis.id}/copy`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toMatchObject({
+        id: expect.any(String),
+        isGeneral: false,
+        parentId: null,
+        version: 1,
+      });
+      // Copy must be a different record than the source
+      expect(body.id).not.toBe(publicAnamnesis.id);
+    });
+
+    it('trainer can copy their own private anamnesis', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      // Create a private anamnesis
+      const createResp = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { title: 'My Private Template' },
+      });
+      expect(createResp.statusCode).toBe(201);
+      const { id: sourceId } = createResp.json();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${sourceId}/copy`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toMatchObject({ isGeneral: false, parentId: null, version: 1 });
+      expect(body.id).not.toBe(sourceId);
+    });
+
+    it('copy preserves sections and questions from the source', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      const createResp = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: {
+          title: 'Template with Content',
+          sections: [
+            {
+              title: 'Section 1',
+              questions: [
+                { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS },
+              ],
+            },
+          ],
+        },
+      });
+      expect(createResp.statusCode).toBe(201);
+      const { id: sourceId } = createResp.json();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${sourceId}/copy`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.sections).toHaveLength(1);
+      expect(body.sections[0].title).toBe('Section 1');
+      expect(body.sections[0].questions).toHaveLength(1);
+    });
+
+    it("returns 403 when trying to copy another trainer's private anamnesis", async () => {
+      const { accessToken: trainer1Token } = await createTrainerWithToken();
+      const { accessToken: trainer2Token } = await createTrainerWithToken();
+
+      // Trainer 1 creates a private anamnesis
+      const createResp = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses',
+        headers: { authorization: `Bearer ${trainer1Token}` },
+        payload: { title: 'Trainer 1 Private Anamnesis' },
+      });
+      expect(createResp.statusCode).toBe(201);
+      const { id: sourceId } = createResp.json();
+
+      // Trainer 2 tries to copy it
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${sourceId}/copy`,
+        headers: { authorization: `Bearer ${trainer2Token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses/00000000-0000-0000-0000-000000000099/copy',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when anamnesis does not exist', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/anamneses/00000000-0000-0000-0000-000000000099/copy',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 });

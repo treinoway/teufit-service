@@ -1,5 +1,10 @@
 # Treinoway Service
 
+## MUST FOLLOW RULES
+- NEVER ignore CLAUDE.md. Always read and respect its content, this is not a suggestion.
+- NEVER accept my plans or suggestions blindly. You MUST be skeptic and always try to find flaws or non-covered edge cases. Avoid Sycophancy.
+
+
 ## Error Handling
 
 All error responses follow this contract — never deviate:

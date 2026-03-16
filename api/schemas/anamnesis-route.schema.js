@@ -53,6 +53,8 @@ const anamnesisSchema = {
     title: { type: 'string' },
     description: { type: 'string', nullable: true },
     isGeneral: { type: 'boolean' },
+    version: { type: 'integer' },
+    parentId: { type: 'string', format: 'uuid', nullable: true },
     sections: { type: 'array', items: sectionSchema },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -67,6 +69,8 @@ const anamnesisListItemSchema = {
     title: { type: 'string' },
     description: { type: 'string', nullable: true },
     isGeneral: { type: 'boolean' },
+    version: { type: 'integer' },
+    parentId: { type: 'string', format: 'uuid', nullable: true },
     sections: {
       type: 'array',
       items: {
@@ -231,6 +235,7 @@ export const deleteAnamnesisSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -601,6 +606,153 @@ export const getMyAnamnesisSchema = {
   response: {
     200: { type: 'array', items: myAnamnesisItemSchema },
     401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── Versioning schemas ───────────────────────────────────────────────────────
+
+export const forkAnamnesisSchema = {
+  tags: ['Anamnesis - Trainer'],
+  summary: 'Fork an anamnesis into a new version',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    201: anamnesisSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const copyAnamnesisSchema = {
+  tags: ['Anamnesis - Trainer'],
+  summary: 'Copy an anamnesis into a new independent private copy (parentId: null, version: 1)',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    201: anamnesisSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── Response schemas ─────────────────────────────────────────────────────────
+
+const anamnesisAnswerSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    responseId: { type: 'string', format: 'uuid' },
+    questionId: { type: 'string', format: 'uuid' },
+    value: {},
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
+const anamnesisResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    anamnesisId: { type: 'string', format: 'uuid' },
+    studentId: { type: 'string', format: 'uuid' },
+    submittedAt: { type: 'string', format: 'date-time', nullable: true },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+    answers: { type: 'array', items: anamnesisAnswerSchema },
+  },
+};
+
+const answerBodySchema = {
+  type: 'object',
+  required: ['questionId', 'value'],
+  properties: {
+    questionId: { type: 'string', format: 'uuid' },
+    value: {},
+  },
+  additionalProperties: false,
+};
+
+export const submitAnamnesisResponseSchema = {
+  tags: ['Anamnesis - My'],
+  summary: 'Submit a response to an anamnesis',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  body: {
+    type: 'object',
+    required: ['answers'],
+    properties: {
+      answers: {
+        type: 'array',
+        items: answerBodySchema,
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const getMyAnamnesisResponseSchema = {
+  tags: ['Anamnesis - My'],
+  summary: 'Get my response to an anamnesis',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const getStudentAnamnesisResponseSchema = {
+  tags: ['Anamnesis - Student Linking'],
+  summary: "Get a student's response to an anamnesis (trainer view)",
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['studentId', 'anamnesisId'],
+    properties: {
+      studentId: { type: 'string', format: 'uuid' },
+      anamnesisId: { type: 'string', format: 'uuid' },
+    },
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
