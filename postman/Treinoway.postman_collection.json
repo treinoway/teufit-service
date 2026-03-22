@@ -1761,7 +1761,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60\n}"
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates",
@@ -1855,7 +1855,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70\n}"
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70,\n  \"restInterval\": 120\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -1923,7 +1923,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60\n}"
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",

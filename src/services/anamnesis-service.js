@@ -1,16 +1,18 @@
 import { prisma } from '../db.js';
-import {
-  NotFoundAppError,
-  ForbiddenAppError,
-  ConflictAppError,
-  AppError,
-} from '../errors/app-error.js';
+import { AppError } from '../errors/app-error.js';
 import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
-  anamnesisQuestionTypeValues,
   questionTypesWithOptions,
 } from '../constants/anamnesis.js';
+import {
+  fullAnamnesisInclude,
+  findSectionOrThrow,
+  findQuestionOrThrow,
+  validateQuestionType,
+  buildQuestionsCreateData,
+  validateSectionIds,
+} from './anamnesis-shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -24,9 +26,10 @@ async function findTrainerOrThrow(userId) {
   });
 
   if (!trainer) {
-    throw new NotFoundAppError({
-      error: 'TRAINER_PROFILE_MISSING',
-      messageCode: 'trainer.notFound',
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.TRAINER_PROFILE_MISSING,
+      messageCode: AnamnesisMessageCode.TRAINER_PROFILE_MISSING,
       message: 'Trainer profile not found',
     });
   }
@@ -43,7 +46,8 @@ async function findAnamnesisOrThrow(anamnesisId) {
   });
 
   if (!anamnesis || anamnesis.deletedAt) {
-    throw new NotFoundAppError({
+    throw new AppError({
+      httpStatus: 404,
       error: AnamnesisErrorCode.ANAMNESIS_NOT_FOUND,
       messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_FOUND,
       message: 'Anamnesis not found',
@@ -76,7 +80,8 @@ async function assertAnamnesisNotLinked(anamnesisId) {
  */
 function verifyAnamnesisOwnership(anamnesis, trainerId) {
   if (anamnesis.isGeneral) {
-    throw new ForbiddenAppError({
+    throw new AppError({
+      httpStatus: 403,
       error: AnamnesisErrorCode.FORBIDDEN_GENERAL_ANAMNESIS,
       messageCode: AnamnesisMessageCode.FORBIDDEN_GENERAL_ANAMNESIS,
       message: 'General anamneses cannot be modified',
@@ -84,7 +89,8 @@ function verifyAnamnesisOwnership(anamnesis, trainerId) {
   }
 
   if (anamnesis.trainerId !== trainerId) {
-    throw new ForbiddenAppError({
+    throw new AppError({
+      httpStatus: 403,
       error: AnamnesisErrorCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       messageCode: AnamnesisMessageCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       message: 'You do not own this anamnesis',
@@ -96,119 +102,24 @@ function verifyAnamnesisOwnership(anamnesis, trainerId) {
  * Verify the trainer-student link exists.
  * Returns the Trainer record.
  */
-async function verifyTrainerStudentLink(trainerId, studentId) {
-  const trainer = await findTrainerOrThrow(trainerId);
+async function verifyTrainerStudentLink(trainerUserId, studentId) {
+  const trainer = await findTrainerOrThrow(trainerUserId);
 
   const link = await prisma.trainerStudent.findUnique({
     where: { trainerId_studentId: { trainerId: trainer.id, studentId } },
   });
 
   if (!link) {
-    throw new NotFoundAppError({
-      error: 'STUDENT_NOT_FOUND',
-      messageCode: 'student.notFound',
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.STUDENT_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.STUDENT_NOT_FOUND,
       message: 'Student not found or not assigned to you',
     });
   }
 
   return trainer;
 }
-
-/**
- * Load a section that belongs to a given anamnesis (excluding soft-deleted).
- */
-async function findSectionOrThrow(anamnesisId, sectionId) {
-  const section = await prisma.anamnesisSection.findUnique({
-    where: { id: sectionId },
-  });
-
-  if (!section || section.deletedAt || section.anamnesisId !== anamnesisId) {
-    throw new NotFoundAppError({
-      error: AnamnesisErrorCode.ANAMNESIS_SECTION_NOT_FOUND,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_SECTION_NOT_FOUND,
-      message: 'Anamnesis section not found',
-    });
-  }
-
-  return section;
-}
-
-/**
- * Load a question that belongs to a given section (excluding soft-deleted).
- */
-async function findQuestionOrThrow(sectionId, questionId) {
-  const question = await prisma.anamnesisQuestion.findUnique({
-    where: { id: questionId },
-    include: { options: { orderBy: { order: 'asc' } } },
-  });
-
-  if (!question || question.deletedAt || question.sectionId !== sectionId) {
-    throw new NotFoundAppError({
-      error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
-      message: 'Anamnesis question not found',
-    });
-  }
-
-  return question;
-}
-
-/**
- * Validate that the question type is a known value.
- */
-function validateQuestionType(type) {
-  if (!anamnesisQuestionTypeValues.includes(type)) {
-    throw new AppError({
-      httpStatus: 400,
-      error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
-      messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
-      message: `Invalid question type: ${type}. Valid values are: ${anamnesisQuestionTypeValues.join(', ')}`,
-    });
-  }
-}
-
-/**
- * Build Prisma create data for a set of questions (with options).
- */
-function buildQuestionsCreateData(questions) {
-  return questions.map((q, index) => {
-    validateQuestionType(q.type);
-    return {
-      text: q.text,
-      type: q.type,
-      required: q.required ?? false,
-      order: q.order ?? index,
-      config: q.config ?? null,
-      options: questionTypesWithOptions.includes(q.type) && q.options?.length
-        ? {
-            create: q.options.map((opt, optIndex) => ({
-              text: opt.text,
-              order: opt.order ?? optIndex,
-            })),
-          }
-        : undefined,
-    };
-  });
-}
-
-/**
- * Build the full nested include for a complete anamnesis response.
- */
-const fullAnamnesisInclude = {
-  sections: {
-    where: { deletedAt: null },
-    orderBy: { order: 'asc' },
-    include: {
-      questions: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        include: {
-          options: { orderBy: { order: 'asc' } },
-        },
-      },
-    },
-  },
-};
 
 // ─── Anamnesis CRUD ───────────────────────────────────────────────────────────
 
@@ -291,7 +202,8 @@ export async function getAnamnesisById(userId, anamnesisId) {
   const anamnesis = await findAnamnesisOrThrow(anamnesisId);
 
   if (!anamnesis.isGeneral && anamnesis.trainerId !== trainer.id) {
-    throw new ForbiddenAppError({
+    throw new AppError({
+      httpStatus: 403,
       error: AnamnesisErrorCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       messageCode: AnamnesisMessageCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       message: 'You do not have access to this anamnesis',
@@ -485,6 +397,7 @@ export async function deleteSection(userId, anamnesisId, sectionId) {
 
 /**
  * Reorder sections by providing an ordered array of section IDs.
+ * Validates that all IDs belong to the anamnesis before updating.
  * Each section receives an `order` value equal to its index in the array.
  *
  * @param {string} userId
@@ -498,6 +411,7 @@ export async function reorderSections(userId, anamnesisId, orderedIds) {
 
   verifyAnamnesisOwnership(anamnesis, trainer.id);
   await assertAnamnesisNotLinked(anamnesisId);
+  await validateSectionIds(anamnesisId, orderedIds);
 
   await prisma.$transaction(
     orderedIds.map((sectionId, index) =>
@@ -666,7 +580,8 @@ export async function linkAnamnesisToStudent(userId, studentId, data) {
   const anamnesis = await findAnamnesisOrThrow(data.anamnesisId);
 
   if (!anamnesis.isGeneral && anamnesis.trainerId !== trainer.id) {
-    throw new ForbiddenAppError({
+    throw new AppError({
+      httpStatus: 403,
       error: AnamnesisErrorCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       messageCode: AnamnesisMessageCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       message: 'You do not have access to this anamnesis',
@@ -688,7 +603,8 @@ export async function linkAnamnesisToStudent(userId, studentId, data) {
     return link;
   } catch (error) {
     if (error.code === 'P2002') {
-      throw new ConflictAppError({
+      throw new AppError({
+        httpStatus: 409,
         error: AnamnesisErrorCode.ANAMNESIS_ALREADY_LINKED,
         messageCode: AnamnesisMessageCode.ANAMNESIS_ALREADY_LINKED,
         message: 'This anamnesis is already linked to the student',
@@ -754,7 +670,8 @@ export async function unlinkAnamnesisFromStudent(userId, studentId, anamnesisId)
   });
 
   if (!link) {
-    throw new NotFoundAppError({
+    throw new AppError({
+      httpStatus: 404,
       error: AnamnesisErrorCode.ANAMNESIS_NOT_FOUND,
       messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_FOUND,
       message: 'Anamnesis link not found for this student',
@@ -922,7 +839,8 @@ export async function copyAnamnesis(userId, anamnesisId) {
   const source = await findAnamnesisOrThrow(anamnesisId);
 
   if (!source.isGeneral && source.trainerId !== trainer.id) {
-    throw new ForbiddenAppError({
+    throw new AppError({
+      httpStatus: 403,
       error: AnamnesisErrorCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       messageCode: AnamnesisMessageCode.FORBIDDEN_NOT_ANAMNESIS_OWNER,
       message: 'You do not have access to this anamnesis',
@@ -1007,6 +925,7 @@ export async function copyAnamnesis(userId, anamnesisId) {
  * Submit a student's response to an anamnesis.
  * Validates required questions, then upserts the AnamnesisResponse record and
  * replaces all AnamnesisAnswer records atomically.
+ * This is an idempotent upsert — repeated calls replace the previous response.
  *
  * @param {string} userId - Student's user ID
  * @param {string} anamnesisId

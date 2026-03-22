@@ -1,11 +1,18 @@
 import { prisma } from '../db.js';
-import { NotFoundAppError, AppError } from '../errors/app-error.js';
+import { AppError } from '../errors/app-error.js';
 import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
-  anamnesisQuestionTypeValues,
   questionTypesWithOptions,
 } from '../constants/anamnesis.js';
+import {
+  fullAnamnesisInclude,
+  findSectionOrThrow,
+  findQuestionOrThrow,
+  validateQuestionType,
+  buildQuestionsCreateData,
+  validateSectionIds,
+} from './anamnesis-shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -19,7 +26,8 @@ async function findPublicAnamnesisOrThrow(anamnesisId) {
   });
 
   if (!anamnesis || anamnesis.deletedAt || !anamnesis.isGeneral) {
-    throw new NotFoundAppError({
+    throw new AppError({
+      httpStatus: 404,
       error: AnamnesisErrorCode.ANAMNESIS_NOT_FOUND,
       messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_FOUND,
       message: 'Public anamnesis not found',
@@ -30,100 +38,21 @@ async function findPublicAnamnesisOrThrow(anamnesisId) {
 }
 
 /**
- * Load a section that belongs to a given anamnesis (excluding soft-deleted).
+ * Assert the anamnesis has no linked students.
+ * Throws 409 if any StudentAnamnesis record references this anamnesis.
+ * Must be called before any structural mutation.
  */
-async function findSectionOrThrow(anamnesisId, sectionId) {
-  const section = await prisma.anamnesisSection.findUnique({
-    where: { id: sectionId },
-  });
-
-  if (!section || section.deletedAt || section.anamnesisId !== anamnesisId) {
-    throw new NotFoundAppError({
-      error: AnamnesisErrorCode.ANAMNESIS_SECTION_NOT_FOUND,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_SECTION_NOT_FOUND,
-      message: 'Anamnesis section not found',
-    });
-  }
-
-  return section;
-}
-
-/**
- * Load a question that belongs to a given section (excluding soft-deleted).
- */
-async function findQuestionOrThrow(sectionId, questionId) {
-  const question = await prisma.anamnesisQuestion.findUnique({
-    where: { id: questionId },
-    include: { options: { orderBy: { order: 'asc' } } },
-  });
-
-  if (!question || question.deletedAt || question.sectionId !== sectionId) {
-    throw new NotFoundAppError({
-      error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
-      message: 'Anamnesis question not found',
-    });
-  }
-
-  return question;
-}
-
-/**
- * Validate that the question type is a known value.
- */
-function validateQuestionType(type) {
-  if (!anamnesisQuestionTypeValues.includes(type)) {
+async function assertAnamnesisNotLinked(anamnesisId) {
+  const count = await prisma.studentAnamnesis.count({ where: { anamnesisId } });
+  if (count > 0) {
     throw new AppError({
-      httpStatus: 400,
-      error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
-      messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
-      message: `Invalid question type: ${type}. Valid values are: ${anamnesisQuestionTypeValues.join(', ')}`,
+      httpStatus: 409,
+      error: AnamnesisErrorCode.ANAMNESIS_HAS_STUDENT_LINKS,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_HAS_STUDENT_LINKS,
+      message: 'This anamnesis is linked to students and cannot be modified.',
     });
   }
 }
-
-/**
- * Build Prisma create data for a set of questions (with options).
- */
-function buildQuestionsCreateData(questions) {
-  return questions.map((q, index) => {
-    validateQuestionType(q.type);
-    return {
-      text: q.text,
-      type: q.type,
-      required: q.required ?? false,
-      order: q.order ?? index,
-      config: q.config ?? null,
-      options: questionTypesWithOptions.includes(q.type) && q.options?.length
-        ? {
-            create: q.options.map((opt, optIndex) => ({
-              text: opt.text,
-              order: opt.order ?? optIndex,
-            })),
-          }
-        : undefined,
-    };
-  });
-}
-
-/**
- * Build the full nested include for a complete anamnesis response.
- */
-const fullAnamnesisInclude = {
-  sections: {
-    where: { deletedAt: null },
-    orderBy: { order: 'asc' },
-    include: {
-      questions: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        include: {
-          options: { orderBy: { order: 'asc' } },
-        },
-      },
-    },
-  },
-};
 
 // ─── Public Anamnesis CRUD ────────────────────────────────────────────────────
 
@@ -206,6 +135,7 @@ export async function getPublicAnamnesisById(anamnesisId) {
 
 /**
  * Update a public anamnesis title/description.
+ * Blocks update if the anamnesis is linked to students.
  *
  * @param {string} anamnesisId
  * @param {object} data - { title, description }
@@ -213,6 +143,7 @@ export async function getPublicAnamnesisById(anamnesisId) {
  */
 export async function updatePublicAnamnesis(anamnesisId, data) {
   await findPublicAnamnesisOrThrow(anamnesisId);
+  await assertAnamnesisNotLinked(anamnesisId);
 
   const updated = await prisma.anamnesis.update({
     where: { id: anamnesisId },
@@ -228,12 +159,14 @@ export async function updatePublicAnamnesis(anamnesisId, data) {
 
 /**
  * Soft-delete a public anamnesis with cascade to sections and questions.
+ * Blocks deletion if the anamnesis is linked to students.
  *
  * @param {string} anamnesisId
  * @returns {Promise<object>}
  */
 export async function deletePublicAnamnesis(anamnesisId) {
   await findPublicAnamnesisOrThrow(anamnesisId);
+  await assertAnamnesisNotLinked(anamnesisId);
 
   const now = new Date();
 
@@ -361,6 +294,7 @@ export async function deletePublicSection(anamnesisId, sectionId) {
 
 /**
  * Reorder sections on a public anamnesis.
+ * Validates that all provided IDs belong to the anamnesis before updating.
  *
  * @param {string} anamnesisId
  * @param {string[]} orderedIds - Section IDs in the desired order
@@ -368,6 +302,7 @@ export async function deletePublicSection(anamnesisId, sectionId) {
  */
 export async function reorderPublicSections(anamnesisId, orderedIds) {
   await findPublicAnamnesisOrThrow(anamnesisId);
+  await validateSectionIds(anamnesisId, orderedIds);
 
   await prisma.$transaction(
     orderedIds.map((sectionId, index) =>

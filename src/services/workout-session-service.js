@@ -184,7 +184,7 @@ export async function startSession(userId, trainingId, data = null) {
         exerciseLogs: {
           orderBy: { order: 'asc' },
           include: {
-            exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, videoUrl: true, notes: true } },
+            exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
             setLogs: { orderBy: { setNumber: 'asc' } },
           },
         },
@@ -254,7 +254,7 @@ export async function getSession(userId, sessionId) {
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
-          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, videoUrl: true, notes: true } },
+          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
           setLogs: { orderBy: { setNumber: 'asc' } },
         },
       },
@@ -310,9 +310,13 @@ export async function updateSession(userId, sessionId, data) {
     where: { id: sessionId },
     data: updateData,
     include: {
+      training: { select: { id: true, name: true, category: true } },
       exerciseLogs: {
         orderBy: { order: 'asc' },
-        include: { setLogs: { orderBy: { setNumber: 'asc' } } },
+        include: {
+          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
+          setLogs: { orderBy: { setNumber: 'asc' } },
+        },
       },
     },
   });
@@ -511,7 +515,7 @@ export async function getStudentSession(trainerId, studentId, sessionId) {
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
-          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, videoUrl: true, notes: true } },
+          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
           setLogs: { orderBy: { setNumber: 'asc' } },
         },
       },

@@ -13,7 +13,7 @@ You are a staff-level backend engineer specializing in Node.js. Your role is to 
 2. **Follow project architecture strictly**: Routes → Auth Middleware → Services → Prisma → PostgreSQL.
 3. **Delegate testing**: After implementation, invoke the **test-writer** agent to write unit and E2E tests.
 4. **Delegate API docs sync**: After implementation, invoke the **api-docs-sync** agent to update the Postman collection and Swagger docs.
-5. **Update the action log**: At the end of every feature, write a high-level summary to `.claude/action-log.md` for the frontend agent.
+5. **Update the action log**: At the end of every feature, write a rich summary to `.claude/action-log.md` — natural language feature description for the UX pipeline, plus full endpoint specs for integration.
 
 ## Implementation Standards
 
@@ -97,7 +97,15 @@ Write a high-level summary to `.claude/action-log.md` with the following structu
 # Backend Action Log
 
 **Branch**: <current branch>
-**Started**: <date>
+**Last updated**: <date>
+
+---
+
+## Feature: <Feature Name>
+
+<Natural language description of the feature. Explain what it does from the user's perspective, why it exists, the key workflows involved, and any important business rules or constraints. Write this as if explaining to a product designer or frontend engineer who has never seen the backend code — not as a list of endpoints, but as a coherent narrative. 2–5 paragraphs.>
+
+---
 
 ## Changed Files
 
@@ -120,10 +128,13 @@ Write a high-level summary to `.claude/action-log.md` with the following structu
   - `STATUS_CODE` — `ERROR_CODE` / `message.code`: When this error occurs
 ```
 
-This log is consumed by the frontend sync agent, so include enough detail for a frontend engineer to integrate against the new API without reading the backend code.
+This log is consumed by the frontend orchestrator pipeline (UX design → critique → implementation), so the feature description must be rich enough for a UX designer to understand the user flows and design appropriate interfaces — not just technical specs for integration.
 
-### 6. Sync Frontend
-After writing the action log, invoke the **sync-frontend** skill to implement the corresponding frontend changes in the frontend repo at `/Users/adeildoneto/Coding/treinoway-web`.
+### 6. Code Review
+After writing the action log, invoke the **backend-code-reviewer** agent to review all implementation changes made in this feature. Present the reviewer's findings to the user and **wait for explicit approval before addressing any issues**. Do not proceed to the next step until the user confirms.
+
+### 7. Sync Frontend
+After the code review is approved, invoke the **sync-frontend** skill. This triggers the **orchestrator** agent in the frontend repo, which runs the full UX design → design critique → design refinement → implementation pipeline for the feature.
 
 ## Commands Reference
 

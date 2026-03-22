@@ -41,6 +41,7 @@ const exerciseLogSchema = {
         repetitions: { nullable: true },
         hasLoad: { type: 'boolean' },
         suggestedLoad: { type: 'number', nullable: true },
+        restInterval: { type: 'integer', nullable: true },
         videoUrl: { type: 'string', nullable: true },
         notes: { type: 'string', nullable: true },
       },

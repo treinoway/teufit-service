@@ -17,6 +17,7 @@ vi.mock('../../src/db.js', () => ({
       updateMany: vi.fn(),
     },
     anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn() },
+    studentAnamnesis: { count: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -232,8 +233,9 @@ describe('admin-anamnesis-service', () => {
       });
     });
 
-    it('updates title and description without ownership check', async () => {
+    it('updates title and description when anamnesis has no student links', async () => {
       prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(0);
       const updated = makeAnamnesis({ title: 'Updated Title' });
       prisma.anamnesis.update.mockResolvedValue({ ...updated, sections: [] });
 
@@ -248,17 +250,17 @@ describe('admin-anamnesis-service', () => {
       expect(result.title).toBe('Updated Title');
     });
 
-    it('updates even when the anamnesis is linked to students (no 409 guard)', async () => {
-      // Admin service does NOT check assertAnamnesisNotLinked — this test confirms it
+    it('throws 409 when the anamnesis is linked to students', async () => {
       prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
-      const updated = makeAnamnesis({ description: 'Updated description' });
-      prisma.anamnesis.update.mockResolvedValue({ ...updated, sections: [] });
+      prisma.studentAnamnesis.count.mockResolvedValue(1);
 
-      // If there were a link guard, it would need prisma.studentAnamnesis.count — we do NOT mock it
-      // If the function tries to call count, the test would fail because the mock is not set up
       await expect(
         updatePublicAnamnesis('anamnesis-1', { description: 'Updated description' }),
-      ).resolves.not.toThrow();
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'ANAMNESIS_HAS_STUDENT_LINKS',
+        messageCode: 'anamnesis.hasStudentLinks',
+      });
     });
   });
 
@@ -287,6 +289,7 @@ describe('admin-anamnesis-service', () => {
 
     it('soft-deletes anamnesis, sections, and questions in $transaction', async () => {
       prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(0);
 
       const sections = [{ id: 'section-1' }, { id: 'section-2' }];
 

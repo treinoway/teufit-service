@@ -33,6 +33,9 @@ export const AnamnesisErrorCode = Object.freeze({
   ANAMNESIS_HAS_STUDENT_LINKS: 'ANAMNESIS_HAS_STUDENT_LINKS',
   ANAMNESIS_RESPONSE_NOT_FOUND: 'ANAMNESIS_RESPONSE_NOT_FOUND',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
+  // Dependency errors (trainer/student context within anamnesis flows)
+  TRAINER_PROFILE_MISSING: 'TRAINER_PROFILE_MISSING',
+  STUDENT_NOT_FOUND: 'STUDENT_NOT_FOUND',
 });
 
 export const AnamnesisMessageCode = Object.freeze({
@@ -46,4 +49,7 @@ export const AnamnesisMessageCode = Object.freeze({
   ANAMNESIS_HAS_STUDENT_LINKS: 'anamnesis.hasStudentLinks',
   ANAMNESIS_RESPONSE_NOT_FOUND: 'anamnesis.response.notFound',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'anamnesis.notLinkedToStudent',
+  // Dependency errors
+  TRAINER_PROFILE_MISSING: 'trainer.notFound',
+  STUDENT_NOT_FOUND: 'student.notFound',
 });

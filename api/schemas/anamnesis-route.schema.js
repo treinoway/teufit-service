@@ -1,136 +1,25 @@
 import { anamnesisQuestionTypeValues } from '../../src/constants/anamnesis.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
+import {
+  questionOptionSchema,
+  questionSchema,
+  sectionSchema,
+  anamnesisSchema,
+  anamnesisListItemSchema,
+  deletedAtResponseSchema,
+  questionOptionBodySchema,
+  questionBodySchema,
+  sectionBodySchema,
+} from './anamnesis-shared.schema.js';
 
-// ─── Shared sub-schemas ───────────────────────────────────────────────────────
-
-const questionOptionSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    questionId: { type: 'string', format: 'uuid' },
-    text: { type: 'string' },
-    order: { type: 'integer' },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const questionSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    sectionId: { type: 'string', format: 'uuid' },
-    text: { type: 'string' },
-    type: { type: 'string', enum: anamnesisQuestionTypeValues },
-    required: { type: 'boolean' },
-    order: { type: 'integer' },
-    config: { nullable: true },
-    options: { type: 'array', items: questionOptionSchema },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const sectionSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    anamnesisId: { type: 'string', format: 'uuid' },
-    title: { type: 'string' },
-    description: { type: 'string', nullable: true },
-    order: { type: 'integer' },
-    questions: { type: 'array', items: questionSchema },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const anamnesisSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    trainerId: { type: 'string', format: 'uuid', nullable: true },
-    title: { type: 'string' },
-    description: { type: 'string', nullable: true },
-    isGeneral: { type: 'boolean' },
-    version: { type: 'integer' },
-    parentId: { type: 'string', format: 'uuid', nullable: true },
-    sections: { type: 'array', items: sectionSchema },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const anamnesisListItemSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    trainerId: { type: 'string', format: 'uuid', nullable: true },
-    title: { type: 'string' },
-    description: { type: 'string', nullable: true },
-    isGeneral: { type: 'boolean' },
-    version: { type: 'integer' },
-    parentId: { type: 'string', format: 'uuid', nullable: true },
-    sections: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          title: { type: 'string' },
-          order: { type: 'integer' },
-        },
-      },
-    },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time', nullable: true },
-  },
-};
-
-const deletedAtResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    deletedAt: { type: 'string', format: 'date-time' },
-  },
-};
-
-// ─── Question body sub-schemas for request validation ─────────────────────────
-
-const questionOptionBodySchema = {
-  type: 'object',
-  required: ['text'],
-  properties: {
-    text: { type: 'string', minLength: 1 },
-    order: { type: 'integer', minimum: 0 },
-  },
-  additionalProperties: false,
-};
-
-const questionBodySchema = {
-  type: 'object',
-  required: ['text', 'type'],
-  properties: {
-    text: { type: 'string', minLength: 1 },
-    type: { type: 'string', enum: anamnesisQuestionTypeValues },
-    required: { type: 'boolean' },
-    order: { type: 'integer', minimum: 0 },
-    config: { type: 'object', nullable: true },
-    options: { type: 'array', items: questionOptionBodySchema },
-  },
-  additionalProperties: false,
-};
-
-const sectionBodySchema = {
-  type: 'object',
-  required: ['title'],
-  properties: {
-    title: { type: 'string', minLength: 1 },
-    description: { type: 'string', nullable: true },
-    order: { type: 'integer', minimum: 0 },
-    questions: { type: 'array', items: questionBodySchema },
-  },
-  additionalProperties: false,
+// Re-export shared sub-schemas for use by other modules if needed
+export {
+  questionOptionSchema,
+  questionSchema,
+  sectionSchema,
+  anamnesisSchema,
+  anamnesisListItemSchema,
+  deletedAtResponseSchema,
 };
 
 // ─── Anamnesis CRUD schemas ───────────────────────────────────────────────────
@@ -396,7 +285,7 @@ export const updateQuestionSchema = {
       type: { type: 'string', enum: anamnesisQuestionTypeValues },
       required: { type: 'boolean' },
       order: { type: 'integer', minimum: 0 },
-      config: { type: 'object', nullable: true },
+      config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       options: { type: 'array', items: questionOptionBodySchema },
     },
     additionalProperties: false,
@@ -659,7 +548,16 @@ const anamnesisAnswerSchema = {
     id: { type: 'string', format: 'uuid' },
     responseId: { type: 'string', format: 'uuid' },
     questionId: { type: 'string', format: 'uuid' },
-    value: {},
+    value: {
+      anyOf: [
+        { type: 'string' },
+        { type: 'number' },
+        { type: 'boolean' },
+        { type: 'array' },
+        { type: 'object' },
+        { type: 'null' },
+      ],
+    },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -683,14 +581,23 @@ const answerBodySchema = {
   required: ['questionId', 'value'],
   properties: {
     questionId: { type: 'string', format: 'uuid' },
-    value: {},
+    value: {
+      anyOf: [
+        { type: 'string' },
+        { type: 'number' },
+        { type: 'boolean' },
+        { type: 'array' },
+        { type: 'object' },
+        { type: 'null' },
+      ],
+    },
   },
   additionalProperties: false,
 };
 
 export const submitAnamnesisResponseSchema = {
   tags: ['Anamnesis - My'],
-  summary: 'Submit a response to an anamnesis',
+  summary: 'Submit (or resubmit) a response to an anamnesis — idempotent upsert, always returns 200',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',

@@ -216,6 +216,37 @@ describe('exercise-service', () => {
         data: expect.objectContaining({ notes: null }),
       });
     });
+
+    it('persists restInterval when provided on create', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', trainingId: 'tr1', name: 'Squat', type: 'strength', restInterval: 90 };
+      prisma.exercise.create.mockResolvedValue(created);
+
+      const result = await createExercise('u1', 'tr1', {
+        name: 'Squat',
+        type: 'strength',
+        restInterval: 90,
+      });
+
+      expect(result).toEqual(created);
+      expect(prisma.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ restInterval: 90 }),
+      });
+    });
+
+    it('sets restInterval to null when not provided on create', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', trainingId: 'tr1', name: 'Squat', type: 'strength', restInterval: null };
+      prisma.exercise.create.mockResolvedValue(created);
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ restInterval: null }),
+      });
+    });
   });
 
   describe('updateExercise', () => {
@@ -267,6 +298,46 @@ describe('exercise-service', () => {
 
       const callData = prisma.exercise.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('notes');
+    });
+
+    it('updates restInterval when provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      const updated = { id: 'ex1', restInterval: 60 };
+      prisma.exercise.update.mockResolvedValue(updated);
+
+      const result = await updateExercise('u1', 'ex1', { restInterval: 60 });
+
+      expect(result).toEqual(updated);
+      expect(prisma.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ restInterval: 60 }),
+      });
+    });
+
+    it('sets restInterval to null when explicitly null', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      const updated = { id: 'ex1', restInterval: null };
+      prisma.exercise.update.mockResolvedValue(updated);
+
+      await updateExercise('u1', 'ex1', { restInterval: null });
+
+      expect(prisma.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ restInterval: null }),
+      });
+    });
+
+    it('does not include restInterval in update payload when not provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      prisma.exercise.update.mockResolvedValue({ id: 'ex1', name: 'Lunge' });
+
+      await updateExercise('u1', 'ex1', { name: 'Lunge' });
+
+      const callData = prisma.exercise.update.mock.calls[0][0].data;
+      expect(callData).not.toHaveProperty('restInterval');
     });
 
     it('throws INVALID_REPETITIONS when repetitions.min is not a positive integer', async () => {

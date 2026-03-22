@@ -223,6 +223,49 @@ e2eDescribe('e2e: exercises', () => {
 
         expect(response.statusCode).toBe(404);
       });
+
+      it('includes restInterval in response when provided', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Deadlift',
+            type: 'strength',
+            sets: 3,
+            restInterval: 90,
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('restInterval', 90);
+      });
+
+      it('returns null for restInterval when not provided', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Pull Up',
+            type: 'strength',
+            sets: 3,
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('restInterval', null);
+      });
     });
 
     describe('POST /trainer/exercises/from-template', () => {
@@ -263,6 +306,37 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('name', 'Template Squat');
         expect(body).toHaveProperty('sets', 5);
         expect(body).toHaveProperty('repetitions', { min: 5, max: 5 });
+      });
+
+      it('inherits restInterval from template when not overridden', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const templateResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Rest Interval Template',
+            type: 'strength',
+            sets: 4,
+            restInterval: 60,
+          },
+        });
+        expect(templateResponse.statusCode).toBe(201);
+        const { id: templateId } = templateResponse.json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercises/from-template',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { trainingId, templateId },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('restInterval', 60);
       });
     });
 
@@ -315,6 +389,39 @@ e2eDescribe('e2e: exercises', () => {
         const exercises = response.json();
         expect(exercises).toHaveLength(1);
         expect(exercises[0]).toHaveProperty('name', 'Squat');
+      });
+    });
+
+    describe('PATCH /trainer/exercises/:id', () => {
+      it('updates restInterval on an existing exercise', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Romanian Deadlift',
+            type: 'strength',
+            sets: 3,
+          },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+        expect(createResponse.json()).toHaveProperty('restInterval', null);
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { restInterval: 120 },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('restInterval', 120);
       });
     });
   });

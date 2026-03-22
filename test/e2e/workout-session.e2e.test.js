@@ -104,6 +104,17 @@ e2eDescribe('e2e: workout-sessions', () => {
     return response.json().id;
   }
 
+  async function createExerciseWithRestInterval(trainerToken, trainingId, restInterval) {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/trainer/trainings/${trainingId}/exercises`,
+      headers: { authorization: `Bearer ${trainerToken}` },
+      payload: { name: 'Squat', type: 'strength', sets: 3, hasLoad: true, restInterval },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json().id;
+  }
+
   async function startSession(studentToken, trainingId, payload = {}) {
     const response = await app.inject({
       method: 'POST',
@@ -215,6 +226,20 @@ e2eDescribe('e2e: workout-sessions', () => {
       const response = await startSession(otherStudentToken, trainingId);
 
       expect(response.statusCode).toBe(403);
+    });
+
+    it('includes restInterval in exercise data in the created session response', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExerciseWithRestInterval(trainerToken, trainingId, 120);
+
+      const response = await startSession(studentToken, trainingId);
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0].exercise.restInterval).toBe(120);
     });
   });
 
@@ -330,6 +355,45 @@ e2eDescribe('e2e: workout-sessions', () => {
 
       expect(response.statusCode).toBe(403);
     });
+
+    it('includes restInterval in exercise data when set on the exercise', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExerciseWithRestInterval(trainerToken, trainingId, 90);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0].exercise.restInterval).toBe(90);
+    });
+
+    it('includes restInterval as null when not set on the exercise', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs[0].exercise.restInterval).toBeNull();
+    });
   });
 
   // ─── PATCH /my/workout-sessions/:sessionId ────────────────────────────────
@@ -388,6 +452,49 @@ e2eDescribe('e2e: workout-sessions', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('includes exercise relation inside exerciseLogs when updating notes', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { notes: 'Updated notes' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0].exercise).toMatchObject({ name: 'Bench Press' });
+    });
+
+    it('includes training and exercise relations when completing a session', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExerciseWithRestInterval(trainerToken, trainingId, 60);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.training).toMatchObject({ id: trainingId, name: 'Chest Day' });
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0].exercise).toMatchObject({ name: 'Squat', restInterval: 60 });
     });
   });
 
@@ -693,6 +800,26 @@ e2eDescribe('e2e: workout-sessions', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('includes restInterval in exercise data for trainer view', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExerciseWithRestInterval(trainerToken, trainingId, 60);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs[0].exercise.restInterval).toBe(60);
     });
   });
 });

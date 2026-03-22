@@ -35,21 +35,30 @@ Not the `??` operator, because `??` does not distinguish between "not provided" 
 - Validators: `src/helpers/training-validators.js`
 - Protocol service: `src/services/training-protocol-service.js`
 - Template service: `src/services/training-protocol-template-service.js`
+- Anamnesis shared helpers: `src/services/anamnesis-shared.js`
+- Anamnesis services: `src/services/anamnesis-service.js`, `src/services/admin-anamnesis-service.js`
+- Anamnesis shared schemas: `api/schemas/anamnesis-shared.schema.js`
 - Protocol schemas: `api/schemas/training-protocol-route.schema.js`
 - Template schemas: `api/schemas/training-protocol-template-route.schema.js`
 - Action log: `.claude/action-log.md`
 - DB cleanup helper: `test/helpers/db-cleanup.js`
 
-## AppError subclass behavior — CRITICAL for tests
+## db-cleanup.js: add new tables before their parents (Restrict FK)
+When adding models with `onDelete: Restrict`, always add them to `test/helpers/db-cleanup.js` BEFORE the parent table. Current order for anamnesis: `anamnesis_answers` → `anamnesis_responses` → `student_anamneses` → `anamnesis_question_options` → `anamnesis_questions` → `anamnesis_sections` → `anamneses`.
+
+## Reorder endpoints: validate IDs belong to the target entity
+Any endpoint that accepts a list of IDs for reordering MUST verify those IDs belong to the parent entity before updating. Otherwise callers can update records across entity boundaries. See `validateSectionIds` in `src/services/anamnesis-shared.js` as the canonical implementation.
+
+## AppError subclass behavior — CRITICAL
 `NotFoundAppError`, `ForbiddenAppError`, `ConflictAppError` **hardcode their `error` field** (`NOT_FOUND`, `FORBIDDEN`, `CONFLICT`) and do NOT expose an `error` override. Passing `error: 'CUSTOM_CODE'` to them is silently ignored.
 
-Always assert on `messageCode` and `httpStatus` in tests, NOT on `error`:
+In the anamnesis services, we always use `new AppError({ httpStatus, error, messageCode, message })` directly. This means you CAN and SHOULD assert on `error` in tests for anamnesis domain errors:
 ```js
-// CORRECT
-await expect(fn()).rejects.toMatchObject({ httpStatus: 404, messageCode: 'anamnesis.notFound' });
-// WRONG — fails even when the error is thrown correctly
-await expect(fn()).rejects.toMatchObject({ error: 'ANAMNESIS_NOT_FOUND' });
+// CORRECT (anamnesis services use AppError directly)
+await expect(fn()).rejects.toMatchObject({ httpStatus: 404, error: 'ANAMNESIS_NOT_FOUND', messageCode: 'anamnesis.notFound' });
 ```
+
+For OTHER services that still use subclasses without overriding `error`, only assert on `httpStatus` and `messageCode`.
 
 ## Fastify route registration order
 Static segments must be registered **before** dynamic ones sharing the same prefix:
