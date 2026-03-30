@@ -3537,18 +3537,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses"
+              ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Platform Health Questionnaire\",\n  \"description\": \"Standard health assessment for all students\",\n  \"sections\": [\n    {\n      \"title\": \"Physical Activity\",\n      \"questions\": [\n        {\n          \"text\": \"Do you exercise regularly?\",\n          \"type\": \"dichotomous\",\n          \"required\": true\n        }\n      ]\n    }\n  ]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students."
           },
@@ -3559,12 +3574,20 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses"
+              ]
             },
             "description": "List all public (isGeneral: true) anamneses. Includes sections summary (id, title, order) for each. Requires ADMIN role."
           },
@@ -3575,14 +3598,27 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
               ]
             },
             "description": "Get full nested detail (sections, questions, options) of a public anamnesis. Returns 404 if not found, deleted, or not public. Requires ADMIN role."
@@ -3594,21 +3630,41 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Updated Public Questionnaire\",\n  \"description\": \"Updated description\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Update title and/or description of a public anamnesis. No student-link guard — admins can edit freely. Requires ADMIN role."
           },
@@ -3619,14 +3675,27 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
               ]
             },
             "description": "Soft-delete a public anamnesis. Cascades to sections and questions (sets deletedAt). Requires ADMIN role."
@@ -3638,21 +3707,42 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Mental Health\",\n  \"description\": \"Questions about mental wellbeing\",\n  \"order\": 1\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Add a section (with optional nested questions) to a public anamnesis. No student-link guard. Requires ADMIN role."
           },
@@ -3663,21 +3753,43 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/reorder",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", "reorder"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                "reorder"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderedIds\": [\"section-uuid-1\", \"section-uuid-2\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Reorder sections in a public anamnesis by providing an array of section UUIDs in the desired order. Requires ADMIN role."
           },
@@ -3688,22 +3800,48 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
-                { "key": "sectionId", "value": "", "description": "Section UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Updated Section Title\",\n  \"description\": \"Updated description\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Update title, description, or order of a section in a public anamnesis. Requires ADMIN role."
           },
@@ -3714,15 +3852,34 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
-                { "key": "sectionId", "value": "", "description": "Section UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
               ]
             },
             "description": "Soft-delete a section in a public anamnesis. Cascades to all questions in that section. Requires ADMIN role."
@@ -3734,22 +3891,49 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
-                { "key": "sectionId", "value": "", "description": "Section UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"text\": \"Do you have any chronic conditions?\",\n  \"type\": \"dichotomous\",\n  \"required\": true,\n  \"order\": 0\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Add a question (with optional options) to a section on a public anamnesis. Requires ADMIN role."
           },
@@ -3760,23 +3944,55 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions", ":questionId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions",
+                ":questionId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
-                { "key": "sectionId", "value": "", "description": "Section UUID" },
-                { "key": "questionId", "value": "", "description": "Question UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                },
+                {
+                  "key": "questionId",
+                  "value": "",
+                  "description": "Question UUID"
+                }
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Requires ADMIN role."
           },
@@ -3787,16 +4003,41 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/anamneses/:anamnesisId/sections/:sectionId/questions/:questionId",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "anamneses", ":anamnesisId", "sections", ":sectionId", "questions", ":questionId"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "anamneses",
+                ":anamnesisId",
+                "sections",
+                ":sectionId",
+                "questions",
+                ":questionId"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID" },
-                { "key": "sectionId", "value": "", "description": "Section UUID" },
-                { "key": "questionId", "value": "", "description": "Question UUID" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "",
+                  "description": "Section UUID"
+                },
+                {
+                  "key": "questionId",
+                  "value": "",
+                  "description": "Question UUID"
+                }
               ]
             },
             "description": "Soft-delete a question on a public anamnesis (sets deletedAt). Requires ADMIN role."
@@ -3813,19 +4054,205 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/copy",
-              "host": ["{{baseUrl}}"],
-              "path": ["trainer", "anamneses", ":anamnesisId", "copy"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "anamneses",
+                ":anamnesisId",
+                "copy"
+              ],
               "variable": [
-                { "key": "anamnesisId", "value": "", "description": "Anamnesis UUID (public or own private)" }
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID (public or own private)"
+                }
               ]
             },
             "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. Requires TRAINER role."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Import",
+      "item": [
+        {
+          "name": "Preview PrimeCoaching Students",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "PrimeCoaching active customers XLSX export"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/import/primecoaching/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "import",
+                "primecoaching",
+                "preview"
+              ]
+            },
+            "description": "Accepts a PrimeCoaching active customers XLSX export uploaded as multipart/form-data, parses it, and returns a preview student list. Nothing is saved to the Treinoway database.\n\nRequires TRAINER role. Rate limited: 3 requests/minute."
+          },
+          "response": [
+            {
+              "name": "Preview PrimeCoaching Students - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "description": "PrimeCoaching active customers XLSX export"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/import/primecoaching/preview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "import",
+                    "primecoaching",
+                    "preview"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"students\": [\n    {\n      \"fullName\": \"Nicolle Costa\",\n      \"firstName\": \"Nicolle\",\n      \"lastName\": \"Costa\",\n      \"email\": \"nicolle_lange@hotmail.com\",\n      \"plan\": \"Caveira Team - Semestral\",\n      \"status\": \"Entregue\",\n      \"expirationDate\": \"01/10/2026\",\n      \"daysRemaining\": 190,\n      \"anamnesis\": \"Enviado\",\n      \"photos\": \"Enviado\",\n      \"training\": \"Prescrito\",\n      \"diet\": \"Prescrito\",\n      \"cardio\": \"Prescrito\",\n      \"duplicateEmail\": false\n    }\n  ],\n  \"summary\": {\n    \"total\": 71,\n    \"withEmail\": 68,\n    \"withoutEmail\": 3,\n    \"duplicateEmails\": 1\n  }\n}"
+            },
+            {
+              "name": "Preview PrimeCoaching Students - 400 Missing File",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": []
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/import/primecoaching/preview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "import",
+                    "primecoaching",
+                    "preview"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"A file field is required\"\n}"
+            },
+            {
+              "name": "Preview PrimeCoaching Students - 400 Format Changed",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "description": "XLSX file with unrecognised columns"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/import/primecoaching/preview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "import",
+                    "primecoaching",
+                    "preview"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"IMPORT_FORMAT_CHANGED\",\n  \"messageCode\": \"import.primecoaching.formatChanged\",\n  \"message\": \"The uploaded file does not match the expected PrimeCoaching export format\"\n}"
+            }
+          ]
         }
       ]
     }
