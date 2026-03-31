@@ -1032,10 +1032,44 @@ async function loadConversationHistory(conversationId, userId) {
     });
   }
 
-  const history = conversation.messages.map((msg) => ({
-    role: msg.role,
-    content: msg.content,
-  }));
+  const provider = getLlmProvider();
+  const history = [];
+  // Tracks the rawContent of the last assistant message that had tool calls,
+  // so the immediately following tool_result record can reconstruct the pair.
+  let pendingAssistantRawContent = null;
+
+  for (const msg of conversation.messages) {
+    if (msg.role === "tool_result") {
+      if (pendingAssistantRawContent !== null) {
+        // Replace the plain assistant entry that was just pushed with the
+        // proper provider-specific tool_use + tool_result message pair.
+        history.pop();
+        const toolResults = Array.isArray(msg.rawContent) ? msg.rawContent : [];
+        const pair = provider.buildToolResultMessages(
+          pendingAssistantRawContent,
+          toolResults,
+        );
+        history.push(...pair);
+        pendingAssistantRawContent = null;
+      }
+      // No matching assistant rawContent (e.g., legacy records) — skip silently
+      continue;
+    }
+
+    // Reset pending state on any non-tool_result message
+    pendingAssistantRawContent = null;
+
+    if (msg.role === "assistant" && msg.rawContent) {
+      // Push the assistant message with plain text content for now.
+      // If the next message is a tool_result, this entry will be replaced by
+      // the reconstructed pair via pendingAssistantRawContent above.
+      history.push({ role: msg.role, content: msg.content });
+      pendingAssistantRawContent = msg.rawContent;
+    } else {
+      history.push({ role: msg.role, content: msg.content });
+    }
+  }
+
   return { conversation, history };
 }
 
@@ -1059,13 +1093,33 @@ async function saveUserMessage(conversationId, content) {
   });
 }
 
-async function saveAssistantMessage(conversationId, content, toolCalls) {
+async function saveAssistantMessage(conversationId, content, toolCalls, rawContent) {
   return prisma.aiMessage.create({
     data: {
       conversationId,
       role: "assistant",
       content,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      rawContent: rawContent ?? undefined,
+    },
+  });
+}
+
+/**
+ * Save a tool_result turn as a synthetic DB record.
+ * role "tool_result" is a project-internal marker — it is never sent directly to
+ * the LLM. loadConversationHistory() uses it together with the preceding
+ * assistant rawContent to rebuild the proper provider-specific message pair via
+ * buildToolResultMessages().
+ */
+async function saveToolResultMessage(conversationId, toolResults) {
+  return prisma.aiMessage.create({
+    data: {
+      conversationId,
+      role: "tool_result",
+      // Human-readable summary stored in content so the DB record is inspectable
+      content: toolResults.map((r) => r.content).join("\n"),
+      rawContent: toolResults,
     },
   });
 }
@@ -1237,11 +1291,20 @@ export async function processAiChat(userId, { message, conversationId }) {
     // Generate response locally — avoids a second LLM call that often fails
     // with empty text on free-tier models when the context is large.
     const finalText = buildToolResultMessage(toolCall.name, toolResult);
-    await saveAssistantMessage(
-      resolvedConversationId,
-      finalText,
-      actionsExecuted,
-    );
+
+    // Save the assistant turn (with rawContent) and the tool_result turn in
+    // parallel — both are independent writes needed for multi-turn history.
+    await Promise.all([
+      saveAssistantMessage(
+        resolvedConversationId,
+        finalText,
+        actionsExecuted,
+        response.rawContent,
+      ),
+      saveToolResultMessage(resolvedConversationId, [
+        { toolCallId: toolCall.id, content: JSON.stringify(summarizeToolResult(toolResult)) },
+      ]),
+    ]);
 
     if (isNewConversation) {
       await setConversationTitle(resolvedConversationId, message);
@@ -1395,11 +1458,20 @@ export async function* processAiChatStream(
     // Generate response locally — avoids a second LLM call that often fails
     // with empty text on free-tier models when the context is large.
     const finalText = buildToolResultMessage(toolCall.name, toolResult);
-    await saveAssistantMessage(
-      resolvedConversationId,
-      finalText,
-      actionsExecuted,
-    );
+
+    // Save the assistant turn (with rawContent) and the tool_result turn in
+    // parallel — both are independent writes needed for multi-turn history.
+    await Promise.all([
+      saveAssistantMessage(
+        resolvedConversationId,
+        finalText,
+        actionsExecuted,
+        firstResponse.rawContent,
+      ),
+      saveToolResultMessage(resolvedConversationId, [
+        { toolCallId: toolCall.id, content: JSON.stringify(summarizeToolResult(toolResult)) },
+      ]),
+    ]);
 
     if (isNewConversation) {
       await setConversationTitle(resolvedConversationId, message);

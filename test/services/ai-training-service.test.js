@@ -683,6 +683,207 @@ describe('ai-training-service', () => {
   })
 
   // ---------------------------------------------------------------------------
+  // Multi-turn conversation history reconstruction
+  // ---------------------------------------------------------------------------
+
+  describe('multi-turn conversation history reconstruction', () => {
+    function stubTrainerContext() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    }
+
+    it('saves rawContent on the assistant message after tool execution', async () => {
+      stubTrainerContext()
+
+      const rawContent = [
+        { type: 'text', text: 'Vou criar...' },
+        { type: 'tool_use', id: 'tc-1', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: {} },
+      ]
+
+      prisma.aiConversation.findUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        title: 'Test',
+        messages: [
+          { role: 'user', content: 'Cria o protocolo' },
+          { role: 'assistant', content: 'Confirma?' },
+        ],
+      })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-new' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: rawContent,
+      })
+
+      importFromTemplate.mockResolvedValue({ id: 'proto-1', name: 'Protocolo Teste' })
+
+      await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      // First aiMessage.create call is the user message, second is the assistant message
+      const assistantCreateCall = prisma.aiMessage.create.mock.calls.find(
+        (call) => call[0].data.role === 'assistant',
+      )
+      expect(assistantCreateCall).toBeDefined()
+      expect(assistantCreateCall[0].data.rawContent).toEqual(rawContent)
+    })
+
+    it('saves a tool_result message after tool execution', async () => {
+      stubTrainerContext()
+
+      prisma.aiConversation.findUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        title: 'Test',
+        messages: [
+          { role: 'user', content: 'Cria o protocolo' },
+          { role: 'assistant', content: 'Confirma?' },
+        ],
+      })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-new' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'tc-1', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: {} },
+        ],
+      })
+
+      importFromTemplate.mockResolvedValue({ id: 'proto-1', name: 'Protocolo Teste' })
+
+      await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      const toolResultCreateCall = prisma.aiMessage.create.mock.calls.find(
+        (call) => call[0].data.role === 'tool_result',
+      )
+      expect(toolResultCreateCall).toBeDefined()
+      expect(toolResultCreateCall[0].data.rawContent).toBeDefined()
+      expect(Array.isArray(toolResultCreateCall[0].data.rawContent)).toBe(true)
+    })
+
+    it('does not save rawContent for blocked tool calls (enforcement)', async () => {
+      stubTrainerContext()
+
+      // New conversation — enforcement will block the tool call
+      prisma.aiConversation.create.mockResolvedValue({ id: 'new-conv', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-1' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'text', text: 'Vou criar o protocolo. Confirma?' },
+          { type: 'tool_use', id: 'tc-1', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: {} },
+        ],
+      })
+
+      await processAiChat('user-1', { message: 'Cria o protocolo agora' })
+
+      // Tool was blocked — no tool_result message should be saved
+      const toolResultCreateCall = prisma.aiMessage.create.mock.calls.find(
+        (call) => call[0].data.role === 'tool_result',
+      )
+      expect(toolResultCreateCall).toBeUndefined()
+
+      // Assistant message saved for the blocked response should have no rawContent
+      const assistantCreateCall = prisma.aiMessage.create.mock.calls.find(
+        (call) => call[0].data.role === 'assistant',
+      )
+      expect(assistantCreateCall).toBeDefined()
+      expect(assistantCreateCall[0].data.rawContent).toBeUndefined()
+    })
+
+    it('reconstructs multi-turn history correctly when history contains tool_result records', async () => {
+      stubTrainerContext()
+
+      const rawAssistantContent = [
+        { type: 'text', text: 'Criando...' },
+        { type: 'tool_use', id: 'tc-1', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: { templateId: 'tmpl-1', assigneeId: 'student-1', startDate: '2026-01-01', expirationDate: '2026-06-01' } },
+      ]
+      const toolResultData = [{ toolCallId: 'tc-1', content: '{"success":true,"name":"Protocolo Teste"}' }]
+
+      // Conversation history includes a prior tool_use/tool_result exchange
+      prisma.aiConversation.findUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        title: 'Test',
+        messages: [
+          { role: 'user', content: 'Cria usando template A', rawContent: null },
+          { role: 'assistant', content: 'Protocolo criado!', rawContent: rawAssistantContent },
+          { role: 'tool_result', content: '{"success":true}', rawContent: toolResultData },
+          { role: 'user', content: 'E agora, cria outro?', rawContent: null },
+          { role: 'assistant', content: 'Claro, confirma?', rawContent: null },
+        ],
+      })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-new' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Pode confirmar a criação?' }],
+      })
+
+      const result = await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      expect(result.message).toBe('Pode confirmar a criação?')
+
+      // Verify the messages sent to Anthropic include the reconstructed tool pair
+      const llmCallArgs = anthropicCreate.mock.calls[0][0]
+      const messages = llmCallArgs.messages
+
+      // The reconstructed pair should appear: assistant (with rawContent) + user (tool_result)
+      const assistantToolUseMsg = messages.find(
+        (m) => m.role === 'assistant' && Array.isArray(m.content),
+      )
+      expect(assistantToolUseMsg).toBeDefined()
+      expect(assistantToolUseMsg.content).toEqual(rawAssistantContent)
+
+      // A user message with tool_result content should follow
+      const toolResultUserMsg = messages.find(
+        (m) => m.role === 'user' && Array.isArray(m.content) && m.content[0]?.type === 'tool_result',
+      )
+      expect(toolResultUserMsg).toBeDefined()
+    })
+
+    it('falls back to plain text for assistant messages without rawContent in history', async () => {
+      stubTrainerContext()
+
+      // Legacy messages (before rawContent was added) — no rawContent field
+      prisma.aiConversation.findUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        title: 'Test',
+        messages: [
+          { role: 'user', content: 'Olá', rawContent: null },
+          { role: 'assistant', content: 'Olá! Como posso ajudar?', rawContent: null },
+        ],
+      })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-new' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Claro!' }],
+      })
+
+      const result = await processAiChat('user-1', { message: 'Continue', conversationId: 'conv-1' })
+
+      expect(result.message).toBe('Claro!')
+
+      // History sent to LLM should use plain string content for legacy messages
+      const llmCallArgs = anthropicCreate.mock.calls[0][0]
+      const assistantMsg = llmCallArgs.messages.find((m) => m.role === 'assistant')
+      expect(assistantMsg.content).toBe('Olá! Como posso ajudar?')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
   // deleteConversation
   // ---------------------------------------------------------------------------
 

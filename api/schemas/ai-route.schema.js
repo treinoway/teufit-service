@@ -125,9 +125,10 @@ export const getConversationSchema = {
             properties: {
               id: { type: 'string', format: 'uuid' },
               conversationId: { type: 'string', format: 'uuid' },
-              role: { type: 'string', enum: ['user', 'assistant'] },
+              role: { type: 'string', enum: ['user', 'assistant', 'tool_result'] },
               content: { type: 'string' },
               toolCalls: {},
+              rawContent: {},
               createdAt: { type: 'string' },
             },
           },

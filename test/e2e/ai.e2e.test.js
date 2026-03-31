@@ -477,4 +477,192 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       expect(res.statusCode).toBe(404)
     })
   })
+
+  // ---------------------------------------------------------------------------
+  // Multi-turn conversation persistence (rawContent + tool_result)
+  // ---------------------------------------------------------------------------
+  describe('multi-turn conversation persistence', () => {
+    /**
+     * Builds a conversation with 2 prior text turns so the enforcement gate
+     * (requires >= 2 messages in history) allows tool execution on the next turn.
+     */
+    async function buildConversationWithTwoTurns(accessToken) {
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Como posso ajudar?' }],
+      })
+      const turn1Res = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Olá' },
+      })
+      const { conversationId } = turn1Res.json()
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok, confirma a criação?' }],
+      })
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Cria um protocolo', conversationId },
+      })
+
+      return conversationId
+    }
+
+    it('conversation includes tool_result and rawContent messages after tool execution', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const conversationId = await buildConversationWithTwoTurns(accessToken)
+
+      // Turn 3: tool execution — enforcement gate is cleared (2 messages in history)
+      // The tool will fail gracefully (no template found) — that is still a valid tool execution path
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tc-e2e-1',
+            name: 'import_from_template',
+            // Use a valid UUID that does not exist in DB — service returns AppError 404 gracefully
+            input: {
+              templateId: '00000000-0000-0000-0000-000000000001',
+              assigneeId: '00000000-0000-0000-0000-000000000002',
+              startDate: '2026-01-01',
+              expirationDate: '2026-06-01',
+            },
+          },
+        ],
+      })
+
+      const turn3Res = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Confirmo', conversationId },
+      })
+
+      // Tool execution result returned even on failure (graceful AppError catch)
+      expect(turn3Res.statusCode).toBe(200)
+      expect(turn3Res.json().actionsExecuted).toHaveLength(1)
+
+      // Fetch conversation and check that tool_result and rawContent were persisted
+      const convRes = await app.inject({
+        method: 'GET',
+        url: `/trainer/ai/conversations/${conversationId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      })
+      expect(convRes.statusCode).toBe(200)
+
+      const { messages } = convRes.json()
+
+      // A tool_result message should exist
+      const toolResultMsg = messages.find((m) => m.role === 'tool_result')
+      expect(toolResultMsg).toBeDefined()
+
+      // The assistant message that triggered the tool should have rawContent
+      const assistantMsgWithRaw = messages.find(
+        (m) => m.role === 'assistant' && m.rawContent != null,
+      )
+      expect(assistantMsgWithRaw).toBeDefined()
+    })
+
+    it('allows a 4th turn after a completed tool execution (no history reconstruction error)', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const conversationId = await buildConversationWithTwoTurns(accessToken)
+
+      // Turn 3: tool execution
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tc-e2e-3',
+            name: 'import_from_template',
+            input: {
+              templateId: '00000000-0000-0000-0000-000000000001',
+              assigneeId: '00000000-0000-0000-0000-000000000002',
+              startDate: '2026-01-01',
+              expirationDate: '2026-06-01',
+            },
+          },
+        ],
+      })
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Confirmo', conversationId },
+      })
+
+      // Turn 4: follow-up message — history reconstruction must succeed without throwing
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Claro! O que mais você precisa?' }],
+      })
+      const turn4Res = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'E outro protocolo?', conversationId },
+      })
+
+      expect(turn4Res.statusCode).toBe(200)
+      expect(turn4Res.json().message).toBe('Claro! O que mais você precisa?')
+    })
+
+    it('does not expose tool_result messages to the LLM as plain text in history', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const conversationId = await buildConversationWithTwoTurns(accessToken)
+
+      // Turn 3: tool execution
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tc-e2e-4',
+            name: 'import_from_template',
+            input: {
+              templateId: '00000000-0000-0000-0000-000000000001',
+              assigneeId: '00000000-0000-0000-0000-000000000002',
+              startDate: '2026-01-01',
+              expirationDate: '2026-06-01',
+            },
+          },
+        ],
+      })
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Confirmo', conversationId },
+      })
+
+      // Turn 4: capture what messages were sent to the LLM
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Aqui está o que posso fazer.' }],
+      })
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'O que mais posso fazer?', conversationId },
+      })
+
+      // The last Anthropic call should have messages that include the reconstructed
+      // tool_use/tool_result pair — NOT plain text for the tool result
+      const lastCallMessages = anthropicCreate.mock.calls.at(-1)[0].messages
+
+      // There must be no message with role 'user' that has a plain-string tool_result content
+      // (tool results should be structured content blocks, not plain text)
+      const suspectUserMessages = lastCallMessages.filter(
+        (m) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('success'),
+      )
+      expect(suspectUserMessages).toHaveLength(0)
+    })
+  })
 })
