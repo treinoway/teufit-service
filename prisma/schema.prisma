@@ -44,6 +44,7 @@ model User {
   workoutSessions     WorkoutSession[]
   studentAnamneses    StudentAnamnesis[]
   anamnesisResponses  AnamnesisResponse[]
+  aiConversations     AiConversation[]
 
   @@map("users")
 }
@@ -595,4 +596,32 @@ model AnamnesisAnswer {
 
   @@unique([responseId, questionId])
   @@map("anamnesis_answers")
+}
+
+// ─── AI Conversation models ───────────────────────────────────────────────────
+
+model AiConversation {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  title     String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User        @relation(fields: [userId], references: [id])
+  messages AiMessage[]
+
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String   @db.Text
+  content        String   @db.Text
+  toolCalls      Json?    @map("tool_calls")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id])
+
+  @@map("ai_messages")
 }

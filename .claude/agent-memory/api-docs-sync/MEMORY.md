@@ -6,7 +6,7 @@
 - Collection-level variables: `{{baseUrl}}` (http://localhost:3000), `{{accessToken}}`, `{{refreshToken}}`
 - Collection-level auth: `bearer` using `{{accessToken}}`
 - **Response arrays**: almost all requests use `"response": []` — only the Refresh Token request has inline examples. Do NOT add example responses unless the endpoint is as complex as Refresh Token.
-- Auth headers: all protected routes add `{"key": "Authorization", "value": "Bearer {{accessToken}}"}` explicitly in the request headers even though collection-level bearer auth is set. This is the established pattern.
+- Auth headers: **inconsistent across folders** — some (Import, Anamnesis - Copy) add `{"key": "Authorization", "value": "Bearer {{accessToken}}"}` explicitly; others (Training Protocols - Trainer, AI Assistant) rely on collection-level bearer auth and only set `Content-Type`. Follow the pattern of the nearest similar folder when adding new requests.
 - Body requests always include `"options": {"raw": {"language": "json"}}` alongside `"mode": "raw"`.
 - Disabled query params use `"value": null` (not empty string) and should always include a `"description"` field for clarity.
 
@@ -30,11 +30,21 @@
 | Exercises - My | /my/trainings/:id/exercises, /my/exercises | bearer |
 | Workout Sessions | /my/trainings/:id/workout-sessions, /my/workout-sessions | bearer |
 | Workout Sessions - Trainer | /trainer/students/:studentId/workout-sessions | bearer + TRAINER |
+| Anamnesis - Trainer | /trainer/anamneses | bearer + TRAINER |
+| Anamnesis - Sections | /trainer/anamneses/:id/sections | bearer + TRAINER |
+| Anamnesis - Questions | /trainer/anamneses/:id/sections/:id/questions | bearer + TRAINER |
+| Anamnesis - Student Linking | /trainer/students/:studentId/anamneses | bearer + TRAINER |
+| Anamnesis - My | /my/anamneses | bearer |
+| Anamnesis - Admin | /admin/anamneses | bearer + ADMIN role |
+| Anamnesis - Copy | /trainer/anamneses/:id/copy | bearer + TRAINER |
+| Import | /trainer/import/primecoaching | bearer + TRAINER |
+| AI Assistant | /trainer/ai/chat | bearer + TRAINER |
 
 ## Swagger Tag Names
 
 - `"Workout Sessions"` — all student workout session routes
 - `"Workout Sessions - Trainer"` — all trainer-facing session routes
+- `"AI Assistant"` — trainer AI chat route (`/trainer/ai/chat`)
 - These match the Postman folder names exactly.
 
 ## Status Enum Values

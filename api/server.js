@@ -25,9 +25,18 @@ import { workoutSessionRoutes } from './routes/workout-session-route.js';
 import { anamnesisRoutes } from './routes/anamnesis-route.js';
 import { adminAnamnesisRoutes } from './routes/admin-anamnesis-route.js';
 import { importPrimeCoachingRoutes } from './routes/import-primecoaching-route.js';
+import { aiRoutes } from './routes/ai-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
+  const llmProvider = process.env.LLM_PROVIDER || 'anthropic';
+  if (llmProvider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+    console.warn('ANTHROPIC_API_KEY not set — AI assistant feature will be unavailable');
+  }
+  if (llmProvider === 'gemini' && !process.env.GEMINI_API_KEY) {
+    console.warn('GEMINI_API_KEY not set — AI assistant feature will be unavailable');
+  }
+
   const fastify = Fastify({
     logger: options.logger ?? true,
     // Railway runs behind a reverse proxy. Trust it so Fastify correctly detects HTTPS,
@@ -222,6 +231,7 @@ export async function buildServer(options = {}) {
     await fastify.register(anamnesisRoutes);
     await fastify.register(adminAnamnesisRoutes);
     await fastify.register(importPrimeCoachingRoutes);
+    await fastify.register(aiRoutes);
   });
 
   return fastify;

@@ -4255,6 +4255,79 @@
           ]
         }
       ]
+    },
+    {
+      "name": "AI Assistant",
+      "item": [
+        {
+          "name": "Chat with AI Assistant (Turn 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"conversationHistory\": [],\n  \"historySignature\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/ai/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "ai",
+                "chat"
+              ]
+            },
+            "description": "Send a message to the AI training assistant. The assistant can create and manage protocols, trainings, and exercises on behalf of the trainer.\n\nRequires TRAINER role. Rate limited: 10 requests/minute.\n\nThe `historySignature` field is an HMAC returned by the server in each response — pass it back with subsequent turns to allow the server to verify the conversation history has not been tampered with."
+          },
+          "response": []
+        },
+        {
+          "name": "Chat with AI Assistant (Turn 2 - Confirmation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Sim, pode criar\",\n  \"conversationHistory\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Cria um protocolo para o João usando o template Hipertrofia\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Vou criar um protocolo de Hipertrofia para o João...\"\n    }\n  ],\n  \"historySignature\": \"abc123...\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/ai/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "ai",
+                "chat"
+              ]
+            },
+            "description": "Confirmation turn in a multi-turn conversation. The trainer confirms a pending action proposed by the assistant in the previous turn.\n\nThe `conversationHistory` must contain the prior turns, and the `historySignature` must match the value returned by the server at the end of the previous turn — otherwise the request is rejected with 400.\n\nRequires TRAINER role. Rate limited: 10 requests/minute."
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

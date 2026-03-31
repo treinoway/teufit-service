@@ -314,26 +314,33 @@ const TOOLS = [
 ```js
 import crypto from 'node:crypto'
 
-const HMAC_SECRET = process.env.AI_HISTORY_HMAC_SECRET || process.env.SESSION_SECRET
+function getHmacSecret() {
+  const secret = process.env.AI_HISTORY_HMAC_SECRET || process.env.SESSION_SECRET
+  if (!secret) throw new Error('AI_HISTORY_HMAC_SECRET or SESSION_SECRET must be set')
+  return secret
+}
 
 function signHistory(history) {
   const payload = JSON.stringify(history)
-  return crypto.createHmac('sha256', HMAC_SECRET).update(payload).digest('hex')
+  return crypto.createHmac('sha256', getHmacSecret()).update(payload).digest('hex')
 }
 
 function verifyHistorySignature(history, signature) {
   if (!history.length) return true // primeiro turno, sem historico
   if (!signature) return false
   const expected = signHistory(history)
+  if (expected.length !== signature.length) return false // previne RangeError no timingSafeEqual
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
 }
 ```
+
+> **Nota:** O secret e avaliado via funcao (nao no module scope) para evitar `undefined` caso o module seja importado antes do dotenv carregar as env vars.
 
 ### executeTool
 
 Faz a ponte entre a decisao do modelo e os services existentes. Captura `AppError` e devolve como resultado de tool (nao estoura HTTP 500).
 
-**IMPORTANTE:** Operacoes compostas (criar treinos + exercicios) devem usar `prisma.$transaction` para garantir atomicidade.
+**IMPORTANTE:** Operacoes compostas (criar treinos + exercicios) devem usar `prisma.$transaction` com operacoes diretas via `tx` (nao via service functions, que usam o prisma singleton e ignoram o `tx`). Este e o mesmo padrao usado por `importFromTemplate` em `training-protocol-service.js`.
 
 ```js
 async function executeTool(userId, toolName, toolInput) {
@@ -358,16 +365,60 @@ async function executeTool(userId, toolName, toolInput) {
       }
 
       case AI_TOOLS.ADD_TRAINING_TO_PROTOCOL: {
+        // IMPORTANTE: NÃO chamar createTraining/createExercise (usam prisma singleton).
+        // Usar tx diretamente para garantir atomicidade real, igual ao importFromTemplate.
+        const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } })
+        if (!trainer) {
+          throw new AppError({ httpStatus: 404, error: 'TRAINER_PROFILE_MISSING', messageCode: 'legacy.TRAINER_PROFILE_MISSING', message: 'Trainer profile not found' })
+        }
+
+        const protocol = await prisma.trainingProtocol.findUnique({ where: { id: toolInput.protocolId }, select: { id: true, trainerId: true } })
+        if (!protocol || protocol.trainerId !== trainer.id) {
+          throw new AppError({ httpStatus: 403, error: 'FORBIDDEN_NOT_PROTOCOL_OWNER', messageCode: 'legacy.FORBIDDEN_NOT_PROTOCOL_OWNER', message: 'You do not own this protocol' })
+        }
+
         result = await prisma.$transaction(async (tx) => {
           const results = []
           for (const training of toolInput.trainings) {
-            const created = await createTraining(userId, toolInput.protocolId, training)
+            validateCategory(training.category)
+            if (training.weekDay) validateWeekDay(training.weekDay)
+            if (training.bodySegment) validateBodySegment(training.bodySegment)
+
+            const createdTraining = await tx.training.create({
+              data: {
+                name: training.name,
+                category: training.category,
+                bodySegment: training.bodySegment,
+                description: training.description,
+                weekDay: training.weekDay,
+                order: training.order,
+                notes: training.notes,
+                trainingProtocolId: toolInput.protocolId,
+              },
+            })
+
             if (training.exercises?.length) {
               for (const exercise of training.exercises) {
-                await createExercise(userId, created.id, exercise)
+                validateExerciseType(exercise.type)
+                if (exercise.repetitions) validateRepetitions(exercise.repetitions)
+
+                await tx.exercise.create({
+                  data: {
+                    name: exercise.name,
+                    type: exercise.type,
+                    sets: exercise.sets,
+                    repetitions: exercise.repetitions,
+                    duration: exercise.duration,
+                    hasLoad: exercise.hasLoad,
+                    suggestedLoad: exercise.suggestedLoad,
+                    restInterval: exercise.restInterval,
+                    notes: exercise.notes,
+                    trainingId: createdTraining.id,
+                  },
+                })
               }
             }
-            results.push(created)
+            results.push(createdTraining)
           }
           return results
         })
@@ -454,7 +505,42 @@ export async function processAiChat(userId, { message, conversationHistory = [],
 
   // Modelo quer executar uma tool
   if (response.stop_reason === 'tool_use') {
-    const toolUseBlock = response.content.find(b => b.type === 'tool_use')
+    // ENFORCEMENT SERVER-SIDE: exigir pelo menos 2 mensagens no historico
+    // (1 assistant descrevendo a acao + 1 user confirmando) antes de executar qualquer tool.
+    // Sem isso, o modelo poderia executar tools no primeiro turno se o usuario
+    // incluir "sim" ou "confirma" na mensagem inicial.
+    if (conversationHistory.length < 2) {
+      const textBlock = response.content.find(b => b.type === 'text')
+      const finalHistory = [
+        ...updatedHistory,
+        { role: 'assistant', content: textBlock?.text ?? '' },
+      ]
+      return {
+        message: textBlock?.text ?? 'Por favor, confirme a acao descrita acima.',
+        actionsExecuted: [],
+        pendingConfirmation: null,
+        historySignature: signHistory(finalHistory),
+      }
+    }
+
+    // Validar que ha apenas um tool_use block (previne execucao parcial silenciosa)
+    const toolUseBlocks = response.content.filter(b => b.type === 'tool_use')
+    if (toolUseBlocks.length > 1) {
+      // Forcar o modelo a executar uma tool por vez
+      const textBlock = response.content.find(b => b.type === 'text')
+      const finalHistory = [
+        ...updatedHistory,
+        { role: 'assistant', content: textBlock?.text ?? '' },
+      ]
+      return {
+        message: textBlock?.text ?? 'Vou executar uma acao por vez. Confirme a primeira acao.',
+        actionsExecuted: [],
+        pendingConfirmation: null,
+        historySignature: signHistory(finalHistory),
+      }
+    }
+
+    const toolUseBlock = toolUseBlocks[0]
     const toolResult = await executeTool(userId, toolUseBlock.name, toolUseBlock.input)
 
     // Devolve resultado ao modelo para gerar resposta final em PT-BR
@@ -522,9 +608,14 @@ export async function processAiChat(userId, { message, conversationHistory = [],
 
 **Criterios de conclusao:**
 - [ ] `verifyHistorySignature` valida HMAC antes de processar (previne prompt injection via historico manipulado)
+- [ ] `verifyHistorySignature` verifica tamanho do signature antes de `timingSafeEqual` (previne `RangeError`)
+- [ ] `getHmacSecret()` avaliado por chamada, nao no module scope (previne `undefined` por import order)
 - [ ] `signHistory` retorna HMAC em cada resposta para o cliente reenviar
 - [ ] `executeTool` captura `AppError` e retorna `{ success: false }` sem estourar 500
-- [ ] `ADD_TRAINING_TO_PROTOCOL` usa `prisma.$transaction` para atomicidade
+- [ ] `ADD_TRAINING_TO_PROTOCOL` usa `tx` diretamente (nao chama `createTraining`/`createExercise` que usam prisma singleton)
+- [ ] `ADD_TRAINING_TO_PROTOCOL` valida ownership do protocolo e executa validacoes de enum antes de criar
+- [ ] Enforcement server-side: tools so executam se `conversationHistory.length >= 2` (confirmacao obrigatoria)
+- [ ] Multiplos `tool_use` blocks sao rejeitados (forca execucao uma tool por vez)
 - [ ] Erros da Anthropic API (429, 401, 500) sao capturados e mapeados para `AppError` com codigos semanticos
 - [ ] Log de auditoria em cada execucao de tool (userId, tool, input, resultado, duracao)
 - [ ] Loop retorna ao modelo apos execucao da tool
@@ -693,10 +784,16 @@ Casos obrigatorios:
 | `processAiChat` — modelo responde com `tool_use` | Chama `executeTool` e retorna `actionsExecuted` preenchido |
 | `processAiChat` — Anthropic API retorna 429 | Lanca `AppError` com `httpStatus: 429` e `error: AI_RATE_LIMITED` |
 | `processAiChat` — Anthropic API retorna 500 | Lanca `AppError` com `httpStatus: 502` e `error: AI_MODEL_ERROR` |
+| `processAiChat` — modelo retorna tool_use com history.length < 2 | NAO executa tool, retorna texto pedindo confirmacao |
+| `processAiChat` — modelo retorna multiplos tool_use blocks | NAO executa nenhuma, retorna texto pedindo uma por vez |
+| `executeTool` — ADD_TRAINING_TO_PROTOCOL valida ownership do protocolo | Lanca AppError 403 se trainer nao e dono |
+| `executeTool` — ADD_TRAINING_TO_PROTOCOL usa tx direto (nao service functions) | Operacoes dentro de `$transaction` usam `tx`, nao `prisma` |
 | `verifyHistorySignature` — historico valido | Retorna true |
 | `verifyHistorySignature` — historico manipulado | Retorna false |
 | `verifyHistorySignature` — historico vazio (primeiro turno) | Retorna true |
+| `verifyHistorySignature` — signature com tamanho diferente | Retorna false (sem RangeError) |
 | `signHistory` — retorna HMAC consistente | Mesmo input produz mesmo output |
+| `getHmacSecret` — sem env vars | Lanca Error |
 
 ### E2E — `test/e2e/ai.e2e.test.js`
 
@@ -711,6 +808,7 @@ Casos obrigatorios:
 | POST com `conversationHistory` com mais de 20 items | 400 |
 | POST com `conversationHistory.content` como array (nao string) | 400 |
 | POST com `historySignature` invalida e historico nao-vazio | 400 |
+| POST com `historySignature` com tamanho invalido (ex: 10 chars) | 400 (nao 500) |
 | POST com `message` valida | 200 com `message` string, `actionsExecuted` array, `historySignature` string |
 
 > **Nota:** os testes E2E da rota devem mockar o `ai-training-service` para nao fazer chamadas reais a Anthropic API.
@@ -726,6 +824,16 @@ Casos obrigatorios:
 
 ---
 
+## Nota sobre LGPD
+
+O `buildTrainerContext` envia nomes de alunos e IDs para a Anthropic API. Nomes sao dados pessoais sob a LGPD. Mitigacoes necessarias:
+
+1. **Termo de uso:** Documentar que dados sao processados por IA externa (Anthropic). O treinador deve consentir ao usar a feature.
+2. **Minimizacao:** Ja removemos email dos alunos do contexto. Manter apenas `firstName`, `lastName` e `id` (minimo necessario para o modelo identificar alunos por nome).
+3. **Fase futura (opcional):** Anonimizar nomes com aliases ("Aluno 1", "Aluno 2") e manter mapeamento server-side. Tradeoff: piora a UX porque o treinador digita o nome real.
+
+---
+
 ## Decisoes de design registradas
 
 | Decisao | Alternativa rejeitada | Motivo |
@@ -737,7 +845,10 @@ Casos obrigatorios:
 | `claude-sonnet-4-6` para tool calling | `claude-opus-4-6` (plano original) | Sonnet e suficiente para interpretacao + function calling, significativamente mais barato e rapido |
 | `content` como string only no schema | `content` como `string \| array` | Aceitar arrays permite tool_use blocks fabricados — vetor de prompt injection |
 | `take: 50` no buildTrainerContext | Sem limite | Previne system prompts enormes e custos excessivos de tokens |
-| `prisma.$transaction` no executeTool | Loop sequencial sem transacao | Garantir atomicidade — se exercicio 3 falhar, treinos 1 e 2 nao ficam orfaos |
+| `tx` direto no executeTool (nao service functions) | Chamar `createTraining`/`createExercise` dentro de `$transaction` | Services usam prisma singleton e ignoram o `tx` — transacao seria placebo |
+| Enforcement `history.length >= 2` para tools | Confiar apenas no system prompt | Prompt-only e bypassavel; server-side garante que houve turno de confirmacao |
+| Rejeitar multiplos `tool_use` blocks | Executar todos em paralelo | Execucao parcial silenciosa e perigosa; forcar uma tool por vez |
+| `getHmacSecret()` por chamada | `const` no module scope | Previne `undefined` por import order antes do dotenv |
 
 ---
 
