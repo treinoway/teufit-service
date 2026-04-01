@@ -128,7 +128,6 @@ export const getConversationSchema = {
               role: { type: 'string', enum: ['user', 'assistant', 'tool_result'] },
               content: { type: 'string' },
               toolCalls: {},
-              rawContent: {},
               createdAt: { type: 'string' },
             },
           },

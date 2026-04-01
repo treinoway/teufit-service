@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { LlmProvider } from './llm-provider.js'
-
-const DEFAULT_MODEL = 'claude-sonnet-4-6'
+import { AI_MODELS } from '../constants/ai.js'
 
 /**
  * Anthropic adapter for the LLM facade.
@@ -25,7 +24,7 @@ export class AnthropicProvider extends LlmProvider {
   }
 
   _resolveModel() {
-    return process.env.ANTHROPIC_MODEL || DEFAULT_MODEL
+    return process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC
   }
 
   _normalizeProviderError(err) {

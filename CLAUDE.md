@@ -57,3 +57,16 @@ newField: data.newField !== undefined ? data.newField : template.newField,
 
 - Unit tests for services/business logic (`test/services/`)
 - E2E tests for API endpoints (`test/e2e/`)
+
+## AI Flow Engineer Agent (`ai-flow-engineer`)
+
+Use the `ai-flow-engineer` agent for any task involving AI/LLM integrations. Activate it when:
+
+- **Designing or implementing** AI-powered features (e.g., workout suggestions, exercise generation, meal plans)
+- **Writing or reviewing prompts** — prompt engineering, injection defense, output format design
+- **Optimizing token usage** or reducing AI-related costs
+- **Implementing structured output parsing** with validation (Zod, JSON Schema)
+- **Building agentic pipelines** or multi-step LLM workflows
+- **Reviewing AI flow code** for security, reliability, or cost issues
+
+Do **not** use it for general backend work that doesn't involve LLM calls or prompt logic — use `backend-engineer` for those.

@@ -1,7 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { LlmProvider } from "./llm-provider.js";
-
-const DEFAULT_MODEL = "gemini-2.5-flash";
+import { AI_MODELS } from "../constants/ai.js";
 
 /**
  * Google Gemini adapter for the LLM facade.
@@ -31,7 +30,7 @@ export class GeminiProvider extends LlmProvider {
   }
 
   _resolveModel() {
-    return process.env.GEMINI_MODEL || DEFAULT_MODEL;
+    return process.env.GEMINI_MODEL || AI_MODELS.GEMINI;
   }
 
   _normalizeProviderError(err) {

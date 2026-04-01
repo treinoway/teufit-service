@@ -13,6 +13,7 @@ export async function aiRoutes(fastify) {
         rateLimit: {
           max: AI_LIMITS.RATE_LIMIT_MAX,
           timeWindow: AI_LIMITS.RATE_LIMIT_WINDOW,
+          keyGenerator: (request) => `ai:${request.user.id}`,
         },
       },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
@@ -31,6 +32,7 @@ export async function aiRoutes(fastify) {
         rateLimit: {
           max: AI_LIMITS.RATE_LIMIT_MAX,
           timeWindow: AI_LIMITS.RATE_LIMIT_WINDOW,
+          keyGenerator: (request) => `ai:${request.user.id}`,
         },
       },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
@@ -49,29 +51,46 @@ export async function aiRoutes(fastify) {
         }),
       })
 
+      let clientDisconnected = false
+
       // Heartbeat: send SSE comments every 3s to keep the connection alive
       // and signal to the frontend that the server is still working.
       // SSE comments (lines starting with ':') are ignored by EventSource
       // but keep proxies/browsers from timing out the connection.
       let heartbeatCount = 0
       const heartbeat = setInterval(() => {
+        if (clientDisconnected) return
         heartbeatCount++
-        reply.raw.write(`event: heartbeat\ndata: {"tick":${heartbeatCount}}\n\n`)
+        try {
+          reply.raw.write(`event: heartbeat\ndata: {"tick":${heartbeatCount}}\n\n`)
+        } catch {
+          // Socket already closed — the 'close' listener will clear this interval
+        }
       }, 3000)
+
+      request.raw.on('close', () => {
+        clientDisconnected = true
+        clearInterval(heartbeat)
+      })
 
       try {
         for await (const event of processAiChatStream(request.user.id, request.body)) {
+          if (clientDisconnected) break
           reply.raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`)
         }
       } catch (err) {
-        const errorData = err instanceof AppError
-          ? { error: err.error, messageCode: err.messageCode, message: err.message }
-          : { error: 'AI_MODEL_ERROR', messageCode: 'ai.modelError', message: 'AI service error' }
-        reply.raw.write(`event: error\ndata: ${JSON.stringify(errorData)}\n\n`)
+        if (!clientDisconnected) {
+          const errorData = err instanceof AppError
+            ? { error: err.error, messageCode: err.messageCode, message: err.message }
+            : { error: 'AI_MODEL_ERROR', messageCode: 'ai.modelError', message: 'AI service error' }
+          reply.raw.write(`event: error\ndata: ${JSON.stringify(errorData)}\n\n`)
+        }
       }
 
       clearInterval(heartbeat)
-      reply.raw.end()
+      if (!clientDisconnected) {
+        reply.raw.end()
+      }
     },
   )
 
