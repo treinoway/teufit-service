@@ -102,11 +102,29 @@ model Trainer {
   students                  TrainerStudent[]
   anamneses                 Anamnesis[]
   studentAnamneses          StudentAnamnesis[]
+  branding                  TrainerBranding?
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([userId])
   @@map("trainers")
+}
+
+model TrainerBranding {
+  id              String  @id @default(uuid()) @db.Uuid
+  trainerId       String  @unique @map("trainer_id") @db.Uuid
+  primaryColor    String  @map("primary_color") @db.Text
+  secondaryColor  String? @map("secondary_color") @db.Text
+  logoUrl         String? @map("logo_url") @db.Text
+  coverImageUrl   String? @map("cover_image_url") @db.Text
+  welcomeMessage  String? @map("welcome_message") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@map("trainer_brandings")
 }
 
 model Address {

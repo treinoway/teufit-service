@@ -120,3 +120,12 @@ When validation (e.g., `validateQuestionType` inside `buildQuestionsCreateData`)
 ## copyAnamnesis vs forkAnamnesis distinction
 - **Fork** (`/fork`): only own private anamneses, `version = source.version + 1`, `parentId = source.id`
 - **Copy** (`/copy`): public OR own private, `version: 1`, `parentId: null` — completely independent
+
+## S3 image upload — do NOT wrap in try/catch
+Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch that catches generic errors and re-throws as a new AppError. The global error handler deals with unexpected errors. Only catch to handle specific expected cases. Fire-and-forget `deleteFile` should always be outside any try/catch.
+
+## Pre-existing failing E2E tests (as of 2026-03-31)
+- `test/e2e/admin-anamnesis.e2e.test.js` — 1 test failing
+- `test/e2e/anamnesis.e2e.test.js` — 1 test failing
+- `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
+These are NOT caused by new features. Do not investigate unless specifically asked.

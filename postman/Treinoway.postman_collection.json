@@ -4328,6 +4328,323 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Trainer Branding",
+      "item": [
+        {
+          "name": "Upsert Branding",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"primaryColor\": \"#FF5733\",\n  \"secondaryColor\": \"#33A1FF\",\n  \"welcomeMessage\": \"Welcome to my gym!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/branding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "branding"
+              ]
+            },
+            "description": "Create or update the trainer branding configuration. Requires TRAINER role. primaryColor must be a valid hex color (#RRGGBB). secondaryColor is optional and must also be a valid hex color when provided. On success returns the branding record."
+          },
+          "response": [
+            {
+              "name": "Upsert Branding - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"primaryColor\": \"#FF5733\",\n  \"secondaryColor\": \"#33A1FF\",\n  \"welcomeMessage\": \"Welcome!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/branding",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "branding"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"trainerId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"primaryColor\": \"#FF5733\",\n  \"secondaryColor\": \"#33A1FF\",\n  \"logoUrl\": null,\n  \"coverImageUrl\": null,\n  \"welcomeMessage\": \"Welcome!\",\n  \"createdAt\": \"2026-03-31T00:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Branding",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/branding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "branding"
+              ]
+            },
+            "description": "Get the authenticated trainer branding configuration. Returns null if not configured. Requires TRAINER role."
+          },
+          "response": [
+            {
+              "name": "Get Branding - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/branding",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "branding"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"trainerId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"primaryColor\": \"#FF5733\",\n  \"secondaryColor\": null,\n  \"logoUrl\": \"https://cdn.example.com/branding/logos/trainer.jpg\",\n  \"coverImageUrl\": null,\n  \"welcomeMessage\": \"Welcome!\",\n  \"createdAt\": \"2026-03-31T00:00:00.000Z\",\n  \"updatedAt\": \"2026-03-31T01:00:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Upload Logo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Logo image (JPEG, PNG, or WebP, max 5MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/branding/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "branding",
+                "logo"
+              ]
+            },
+            "description": "Upload a logo image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP — max 5MB. Requires TRAINER role."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Cover Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Cover image (JPEG, PNG, or WebP, max 5MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/branding/cover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "branding",
+                "cover"
+              ]
+            },
+            "description": "Upload a cover image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP — max 5MB. Requires TRAINER role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Trainer Branding (Student)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer-branding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer-branding"
+              ]
+            },
+            "description": "Resolve the active trainer for the authenticated student and return their branding. Resolution order: (1) trainer with most recent active protocol, (2) most recently linked trainer. Returns null if no trainer found."
+          },
+          "response": [
+            {
+              "name": "Get My Trainer Branding - 200 OK (with branding)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer-branding",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer-branding"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"gymName\": \"FitGym\",\n  \"trainerName\": \"John Doe\",\n  \"trainerAvatarUrl\": \"https://cdn.example.com/avatars/john.jpg\",\n  \"branding\": {\n    \"primaryColor\": \"#FF5733\",\n    \"secondaryColor\": null,\n    \"logoUrl\": \"https://cdn.example.com/branding/logos/john.jpg\",\n    \"coverImageUrl\": null,\n    \"welcomeMessage\": \"Welcome to FitGym!\"\n  }\n}"
+            },
+            {
+              "name": "Get My Trainer Branding - 200 OK (no trainer)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer-branding",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer-branding"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "null"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
