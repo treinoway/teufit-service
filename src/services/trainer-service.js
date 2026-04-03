@@ -413,10 +413,12 @@ export async function listTrainers() {
  */
 export async function getOneByUserId(userId) {
   if (!userId) {
-    const err = new Error('userId is required');
-    err.code = 'USER_ID_REQUIRED';
-    err.statusCode = 400;
-    throw err;
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      message: 'userId is required',
+    });
   }
 
   const trainer = await prisma.trainer.findUnique({
@@ -432,10 +434,10 @@ export async function getOneByUserId(userId) {
   });
 
   if (!trainer) {
-    const err = new Error('Trainer profile missing');
-    err.code = 'TRAINER_PROFILE_MISSING';
-    err.statusCode = 404;
-    throw err;
+    throw new NotFoundAppError({
+      message: 'Trainer profile not found',
+      messageCode: 'trainer.notFound',
+    });
   }
 
   const responseTrainer = _.omit(trainer, ['user', 'userId']);

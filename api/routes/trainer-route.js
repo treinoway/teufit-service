@@ -1,7 +1,8 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch, linkStudentByEmail, listStudents, searchStudents, unlinkStudent, listTrainers } from '../../src/services/trainer-service.js';
+import { patch, getOneByUserId, linkStudentByEmail, listStudents, searchStudents, unlinkStudent, listTrainers } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import {
+  getTrainerSchema,
   patchTrainerSchema,
   linkStudentSchema,
   listStudentsSchema,
@@ -30,6 +31,18 @@ export async function trainerRoutes(fastify) {
     async (_request, reply) => {
       const trainers = await listTrainers();
       return reply.send(trainers);
+    },
+  );
+
+  fastify.get(
+    '/trainer',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: getTrainerSchema,
+    },
+    async (request, reply) => {
+      const profile = await getOneByUserId(request.user.id);
+      return reply.send(profile);
     },
   );
 

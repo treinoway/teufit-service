@@ -1,5 +1,82 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
+const trainerProfileResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    birthDate: { type: 'string', nullable: true, description: 'Date-only string (YYYY-MM-DD)' },
+    avatarUrl: { type: 'string', nullable: true },
+    professionalDocument: { type: 'string', nullable: true },
+    gymName: { type: 'string', nullable: true },
+    notes: { type: 'string', nullable: true },
+    serviceMode: {
+      type: 'string',
+      nullable: true,
+      enum: ['online', 'in_person', 'hybrid', null],
+    },
+    address: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        line1: { type: 'string', nullable: true },
+        line2: { type: 'string', nullable: true },
+        neighborhood: { type: 'string', nullable: true },
+        city: { type: 'string', nullable: true },
+        state: { type: 'string', nullable: true },
+        stateCode: { type: 'string', nullable: true },
+        country: { type: 'string', nullable: true },
+        countryCode: { type: 'string', nullable: true },
+        postalCode: { type: 'string', nullable: true },
+      },
+      additionalProperties: true,
+    },
+    socialNetworks: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        instagram: { type: 'string', nullable: true },
+        whatsapp: { type: 'string', nullable: true },
+        x: { type: 'string', nullable: true },
+        threads: { type: 'string', nullable: true },
+        youtube: { type: 'string', nullable: true },
+        linkedin: { type: 'string', nullable: true },
+        facebook: { type: 'string', nullable: true },
+      },
+      additionalProperties: true,
+    },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: true,
+};
+
+export const getTrainerSchema = {
+  tags: ['trainer'],
+  summary: 'Get the authenticated trainer profile',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: trainerProfileResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 const trainerListItemSchema = {
   type: 'object',
   properties: {

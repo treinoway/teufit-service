@@ -8,6 +8,7 @@ vi.mock('../../src/db.js', () => {
       $queryRaw: vi.fn(),
       trainer: {
         findMany: vi.fn(),
+        findUnique: vi.fn(),
       },
       user: {
         findUnique: vi.fn(),
@@ -30,7 +31,7 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
 
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId } from '../../src/services/trainer-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -547,5 +548,152 @@ describe('unlinkStudent', () => {
     expect(prisma.trainerStudent.delete).toHaveBeenCalledWith({
       where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
     });
+  });
+});
+
+describe('getOneByUserId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+  });
+
+  it('throws VALIDATION_ERROR when userId is falsy', async () => {
+    await expect(getOneByUserId('')).rejects.toMatchObject({
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      httpStatus: 400,
+    });
+
+    expect(prisma.trainer.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('throws trainer.notFound when no trainer exists for the given userId', async () => {
+    prisma.trainer.findUnique.mockResolvedValue(null);
+
+    await expect(getOneByUserId('user-1')).rejects.toMatchObject({
+      error: 'NOT_FOUND',
+      messageCode: 'trainer.notFound',
+      httpStatus: 404,
+    });
+
+    expect(prisma.trainer.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'user-1' } }),
+    );
+  });
+
+  it('returns the flattened trainer profile shape when trainer is found', async () => {
+    const trainerRow = {
+      id: 'trainer-1',
+      userId: 'user-1',
+      professionalDocument: 'CREF-123',
+      gymName: 'Iron Gym',
+      notes: null,
+      serviceMode: 'online',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2024-06-01T00:00:00.000Z'),
+      deletedAt: null,
+      user: {
+        firstName: 'Ana',
+        lastName: 'Lima',
+        birthDate: new Date('1990-12-18T00:00:00.000Z'),
+        avatarUrl: 's3://trainer-avatar',
+        address: { id: 'addr-1', city: 'São Paulo', country: 'Brazil' },
+        socials: { id: 'soc-1', instagram: '@ana' },
+      },
+    };
+
+    prisma.trainer.findUnique.mockResolvedValue(trainerRow);
+    s3BucketHandler.resolveUrl.mockResolvedValue('https://cdn.example.com/avatar.jpg');
+
+    const result = await getOneByUserId('user-1');
+
+    expect(prisma.trainer.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      include: {
+        user: {
+          include: {
+            address: true,
+            socials: true,
+          },
+        },
+      },
+    });
+
+    expect(s3BucketHandler.resolveUrl).toHaveBeenCalledWith('s3://trainer-avatar');
+
+    expect(result).toMatchObject({
+      id: 'trainer-1',
+      firstName: 'Ana',
+      lastName: 'Lima',
+      avatarUrl: 'https://cdn.example.com/avatar.jpg',
+      professionalDocument: 'CREF-123',
+      gymName: 'Iron Gym',
+      serviceMode: 'online',
+      address: { id: 'addr-1', city: 'São Paulo', country: 'Brazil' },
+      socialNetworks: { id: 'soc-1', instagram: '@ana' },
+    });
+
+    // userId must not be present in the response
+    expect(result).not.toHaveProperty('userId');
+    // user sub-object must not be present (it is flattened)
+    expect(result).not.toHaveProperty('user');
+  });
+
+  it('formats birthDate as YYYY-MM-DD string', async () => {
+    prisma.trainer.findUnique.mockResolvedValue({
+      id: 'trainer-1',
+      userId: 'user-1',
+      user: {
+        firstName: 'Ana',
+        lastName: 'Lima',
+        birthDate: new Date('1990-12-18T03:00:00.000Z'),
+        avatarUrl: null,
+        address: null,
+        socials: null,
+      },
+    });
+
+    const result = await getOneByUserId('user-1');
+
+    expect(result.birthDate).toBe('1990-12-18');
+  });
+
+  it('returns null for birthDate when the user has no birthDate set', async () => {
+    prisma.trainer.findUnique.mockResolvedValue({
+      id: 'trainer-1',
+      userId: 'user-1',
+      user: {
+        firstName: 'Bob',
+        lastName: 'Smith',
+        birthDate: null,
+        avatarUrl: null,
+        address: null,
+        socials: null,
+      },
+    });
+
+    const result = await getOneByUserId('user-1');
+
+    expect(result.birthDate).toBeNull();
+  });
+
+  it('returns null for address and socialNetworks when the user has neither', async () => {
+    prisma.trainer.findUnique.mockResolvedValue({
+      id: 'trainer-1',
+      userId: 'user-1',
+      user: {
+        firstName: 'Solo',
+        lastName: 'Trainer',
+        birthDate: null,
+        avatarUrl: null,
+        address: null,
+        socials: null,
+      },
+    });
+
+    const result = await getOneByUserId('user-1');
+
+    expect(result.address).toBeNull();
+    expect(result.socialNetworks).toBeNull();
   });
 });
