@@ -27,6 +27,8 @@ import { adminAnamnesisRoutes } from './routes/admin-anamnesis-route.js';
 import { importPrimeCoachingRoutes } from './routes/import-primecoaching-route.js';
 import { aiRoutes } from './routes/ai-route.js';
 import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
+import { gamificationRoutes } from './routes/gamification-route.js';
+import { challengeRoutes } from './routes/challenge-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 
 export async function buildServer(options = {}) {
@@ -234,6 +236,8 @@ export async function buildServer(options = {}) {
     await fastify.register(importPrimeCoachingRoutes);
     await fastify.register(aiRoutes);
     await fastify.register(trainerBrandingRoutes);
+    await fastify.register(gamificationRoutes);
+    await fastify.register(challengeRoutes);
   });
 
   return fastify;

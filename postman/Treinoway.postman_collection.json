@@ -4645,6 +4645,826 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Gamification - Trainer",
+      "item": [
+        {
+          "name": "Upsert Gamification Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"ptsWorkoutCompleted\": 10,\n  \"ptsStreak7Days\": 30,\n  \"ptsStreak30Days\": 100,\n  \"ptsDailyCheckin\": 5,\n  \"ptsEvolutionRecord\": 20,\n  \"ptsWorkoutFeedback\": 3,\n  \"dailyPointsCap\": 50,\n  \"anonymousRanking\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/gamification/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "gamification",
+                "config"
+              ]
+            },
+            "description": "Create or update gamification configuration for the trainer. These values are snapshotted into challenges at create-time. rankingMode has been removed — rankings are now per-challenge."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Gamification Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/gamification/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "gamification",
+                "config"
+              ]
+            },
+            "description": "Get gamification config with defaults applied"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Student Point History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/points?challengeId=&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "points"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "UUID of the student"
+                }
+              ],
+              "query": [
+                {
+                  "key": "challengeId",
+                  "value": "",
+                  "description": "Required. UUID of the challenge to scope transactions to."
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get paginated point transaction history for a student scoped to a specific challenge. challengeId is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Award Manual Bonus (per challenge)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"points\": 50,\n  \"reason\": \"Excellent performance this week\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:challengeId/students/:studentId/bonus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":challengeId",
+                "students",
+                ":studentId",
+                "bonus"
+              ],
+              "variable": [
+                {
+                  "key": "challengeId",
+                  "value": "",
+                  "description": "UUID of the active challenge"
+                },
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "UUID of the student (must be enrolled in the challenge)"
+                }
+              ]
+            },
+            "description": "Award a manual point bonus to a student within a specific active challenge. The challenge must be ACTIVE (not scheduled, completed, or cancelled). Bonus points bypass the daily cap."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trainer Ranking [GONE — 410]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "ranking"
+              ]
+            },
+            "description": "DEPRECATED — returns 410 Gone. The global ranking has been removed. Use GET /trainer/challenges/:id/ranking for per-challenge rankings."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gamification - My",
+      "item": [
+        {
+          "name": "Get My Point History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/points?challengeId=&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "points"
+              ],
+              "query": [
+                {
+                  "key": "challengeId",
+                  "value": "",
+                  "description": "Required. UUID of the challenge to scope transactions to."
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get own point transaction history scoped to a specific challenge. challengeId is required. Returns 404 if student is not a participant in the challenge."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Point Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/points/summary?challengeId=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "points",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "challengeId",
+                  "value": "",
+                  "description": "Required. UUID of the challenge."
+                }
+              ]
+            },
+            "description": "Get own total points and per-action breakdown for a specific challenge. challengeId is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Ranking [GONE — 410]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "ranking"
+              ]
+            },
+            "description": "DEPRECATED — returns 410 Gone. The global ranking has been removed. Use GET /my/challenges/:id/ranking for per-challenge rankings."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Challenges - Trainer",
+      "item": [
+        {
+          "name": "Create Challenge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summer Challenge\",\n  \"startDate\": \"2026-06-01\",\n  \"endDate\": \"2026-06-30\",\n  \"participantMode\": \"explicit\",\n  \"studentIds\": [],\n  \"ptsWorkoutCompleted\": 10,\n  \"ptsStreak7Days\": 30,\n  \"ptsStreak30Days\": 100,\n  \"ptsDailyCheckin\": 5,\n  \"ptsEvolutionRecord\": 20,\n  \"ptsWorkoutFeedback\": 3,\n  \"dailyPointsCap\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges"
+              ]
+            },
+            "description": "Create a challenge. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, etc.) are snapshotted from the trainer's GamificationConfig at create-time; provide them in the body to override the defaults. dailyPointsCap is also per-challenge."
+          },
+          "response": []
+        },
+        {
+          "name": "List Challenges",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges?status=scheduled",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "scheduled",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List trainer challenges with optional ?status filter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Challenge",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get challenge detail"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Challenge",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"endDate\": \"2026-07-15\",\n  \"ptsWorkoutCompleted\": 15,\n  \"ptsStreak7Days\": 30,\n  \"ptsStreak30Days\": 100,\n  \"ptsDailyCheckin\": 5,\n  \"ptsEvolutionRecord\": 20,\n  \"ptsWorkoutFeedback\": 3,\n  \"dailyPointsCap\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Challenge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Cancel a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Challenge",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Hard-delete a challenge (only scheduled challenges can be deleted)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Challenge Ranking",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "ranking"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get challenge leaderboard"
+          },
+          "response": []
+        },
+        {
+          "name": "List Challenge Participants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/participants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "participants"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "List participants in a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Challenge Participants",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentIds\": [\n    \"<student-uuid>\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/participants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "participants"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Bulk-add participants to a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Challenge Participant",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/participants/:studentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "participants",
+                ":studentId"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                },
+                {
+                  "key": "studentId",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Remove a participant from a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Challenge Participants",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"filter\",\n  \"filter\": {\n    \"gender\": \"M\",\n    \"minAge\": 18,\n    \"maxAge\": 35\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/preview-participants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                "preview-participants"
+              ]
+            },
+            "description": "Dry-run participant filter — preview which students would be selected"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Challenges - My",
+      "item": [
+        {
+          "name": "List My Challenges",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/challenges?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "challenges"
+              ],
+              "query": [
+                {
+                  "key": "trainerId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List challenges the student participates in"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Challenge",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/challenges/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "challenges",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get challenge detail as a participant (403 if not participant)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Challenge Ranking",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/challenges/:id/ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "challenges",
+                ":id",
+                "ranking"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Get challenge leaderboard with own position highlighted"
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

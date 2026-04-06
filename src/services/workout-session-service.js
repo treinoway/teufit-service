@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import { WorkoutSessionStatus, ExerciseLogStatus } from '../constants/training.js';
 import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
+import { awardWorkoutCompletionPoints } from './gamification-service.js';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -320,6 +321,13 @@ export async function updateSession(userId, sessionId, data) {
       },
     },
   });
+
+  // Fire-and-forget: award points for workout completion.
+  // This must never block or fail the session update.
+  if (data.status === WorkoutSessionStatus.COMPLETED) {
+    awardWorkoutCompletionPoints({ prisma, userId, workoutSession: updated })
+      .catch((err) => console.error('Failed to award workout completion points', err));
+  }
 
   return updated;
 }

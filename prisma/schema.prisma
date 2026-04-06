@@ -30,21 +30,24 @@ model User {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  accounts            Account[]
-  healthDetail        UserHealthDetail?
-  trainer             Trainer?
-  address             Address?
-  socials             SocialNetwork?
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  nutritionist        Nutritionist?
-  preferences         UserPreferences?
-  protocolsAsAssignee TrainingProtocol[]
-  trainers            TrainerStudent[]
-  workoutSessions     WorkoutSession[]
-  studentAnamneses    StudentAnamnesis[]
-  anamnesisResponses  AnamnesisResponse[]
-  aiConversations     AiConversation[]
+  accounts               Account[]
+  healthDetail           UserHealthDetail?
+  trainer                Trainer?
+  address                Address?
+  socials                SocialNetwork?
+  refreshTokens          RefreshToken[]
+  passwordResetTokens    PasswordResetToken[]
+  nutritionist           Nutritionist?
+  preferences            UserPreferences?
+  protocolsAsAssignee    TrainingProtocol[]
+  trainers               TrainerStudent[]
+  workoutSessions        WorkoutSession[]
+  studentAnamneses       StudentAnamnesis[]
+  anamnesisResponses     AnamnesisResponse[]
+  aiConversations        AiConversation[]
+  challengeParticipants  ChallengeParticipant[]
+  pointTransactions      PointTransaction[]
+  pointBalances          PointBalance[]
 
   @@map("users")
 }
@@ -103,6 +106,10 @@ model Trainer {
   anamneses                 Anamnesis[]
   studentAnamneses          StudentAnamnesis[]
   branding                  TrainerBranding?
+  gamificationConfig        GamificationConfig?
+  pointTransactions         PointTransaction[]
+  pointBalances             PointBalance[]
+  challenges                Challenge[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -643,4 +650,118 @@ model AiMessage {
   conversation AiConversation @relation(fields: [conversationId], references: [id])
 
   @@map("ai_messages")
+}
+
+// ─── Gamification models ──────────────────────────────────────────────────────
+
+model GamificationConfig {
+  id        String  @id @default(uuid()) @db.Uuid
+  trainerId String  @unique @map("trainer_id") @db.Uuid
+  enabled   Boolean @default(true)
+
+  ptsWorkoutCompleted  Int? @map("pts_workout_completed")
+  ptsStreak7Days       Int? @map("pts_streak_7_days")
+  ptsStreak30Days      Int? @map("pts_streak_30_days")
+  ptsDailyCheckin      Int? @map("pts_daily_checkin")
+  ptsEvolutionRecord   Int? @map("pts_evolution_record")
+  ptsWorkoutFeedback   Int? @map("pts_workout_feedback")
+
+  dailyPointsCap       Int?    @map("daily_points_cap")
+  streakToleranceHours Int     @default(24) @map("streak_tolerance_hours")
+
+  anonymousRanking Boolean @default(false) @map("anonymous_ranking")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@map("gamification_configs")
+}
+
+model PointTransaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  trainerId   String   @map("trainer_id") @db.Uuid
+  challengeId String   @map("challenge_id") @db.Uuid
+  action      String   @db.Text
+  points      Int
+  referenceId String?  @map("reference_id") @db.Uuid
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  trainer   Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([action, referenceId, challengeId])
+  @@index([challengeId, studentId])
+  @@index([challengeId, createdAt])
+  @@index([studentId, trainerId])
+  @@map("point_transactions")
+}
+
+model PointBalance {
+  id          String @id @default(uuid()) @db.Uuid
+  studentId   String @map("student_id") @db.Uuid
+  trainerId   String @map("trainer_id") @db.Uuid
+  totalPoints Int    @default(0) @map("total_points")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, trainerId])
+  @@index([trainerId, totalPoints])
+  @@map("point_balances")
+}
+
+// ─── Challenge models ─────────────────────────────────────────────────────────
+
+model Challenge {
+  id              String    @id @default(uuid()) @db.Uuid
+  trainerId       String    @map("trainer_id") @db.Uuid
+  name            String    @db.Text
+  startDate       DateTime  @map("start_date") @db.Date
+  endDate         DateTime  @map("end_date") @db.Date
+  cancelledAt     DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  participantMode String    @map("participant_mode") @db.Text
+  filterCriteria  Json?     @map("filter_criteria")
+
+  // Per-challenge gamification config (snapshotted from trainer template at create-time)
+  ptsWorkoutCompleted  Int?     @map("pts_workout_completed")
+  ptsStreak7Days       Int?     @map("pts_streak_7_days")
+  ptsStreak30Days      Int?     @map("pts_streak_30_days")
+  ptsDailyCheckin      Int?     @map("pts_daily_checkin")
+  ptsEvolutionRecord   Int?     @map("pts_evolution_record")
+  ptsWorkoutFeedback   Int?     @map("pts_workout_feedback")
+  dailyPointsCap       Int?     @map("daily_points_cap")
+  anonymousRanking     Boolean  @default(false) @map("anonymous_ranking")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer           Trainer                @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  participants      ChallengeParticipant[]
+  pointTransactions PointTransaction[]
+
+  @@index([trainerId, startDate])
+  @@index([trainerId, endDate])
+  @@map("challenges")
+}
+
+model ChallengeParticipant {
+  id          String   @id @default(uuid()) @db.Uuid
+  challengeId String   @map("challenge_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, studentId])
+  @@index([studentId])
+  @@map("challenge_participants")
 }

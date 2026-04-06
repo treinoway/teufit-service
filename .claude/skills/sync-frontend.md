@@ -1,21 +1,37 @@
-# Backend Action Log
+# Sync Frontend
 
-Launch a **general-purpose** Agent (subagent_type: `general-purpose`) with this prompt:
+Orchestrate the full UX pipeline for frontend delivery of the latest backend feature.
 
----
+## What this skill does
 
-You are the Orchestrator. Read your full instructions at `/Users/adeildoneto/Coding/treinoway-web/.claude/agents/orchestrator.md` and follow them exactly.
+When invoked, you become the **orchestrator** and execute a 4-stage pipeline at the top level:
 
-Your task: implement frontend changes in `/Users/adeildoneto/Coding/treinoway-web` to match the latest backend API changes.
+1. **Product Design** — spawn `product-design` sub-agent with the frontend brief
+2. **Design Critique** — spawn `design-critic` with Stage 1 output
+3. **Design Refinement** — spawn `product-design` again with design + critique
+4. **Implementation** — spawn `frontend-engineer` with refined design + brief
 
-1. Read the backend action log at `/Users/adeildoneto/Coding/treinoway-service/.claude/action-log.md`
-2. Run `git diff` in `/Users/adeildoneto/Coding/treinoway-service` to see the full backend changes
-3. Execute the full orchestrator pipeline (UX design → critique → refinement → implementation)
+Each stage runs sequentially. Full output is passed between stages (no summarization).
 
-## Additional context from user:
+## Steps to execute
 
-$ARGUMENTS
+1. Read the frontend brief: `/Users/adeildoneto/Coding/treinoway-service/.claude/frontend-brief.md`
+2. If needed for ambiguity, reference backend diff: `cd /Users/adeildoneto/Coding/treinoway-service && git diff master...HEAD`
+3. Execute Stages 1–4 as described in `.claude/commands/sync-frontend.md` (same prompt templates)
+4. Final implementation happens in `/Users/adeildoneto/Coding/treinoway-web`
 
----
+## Agent availability check
 
-**IMPORTANT:** Do NOT use `frontend-engineer` as the subagent_type. Use `general-purpose` so the orchestrator can spawn its own sub-agents (product-design, design-critic, frontend-engineer) as defined in its pipeline.
+All four agents must be accessible at top level:
+- `product-design` (symlinked from treinoway-web to `~/.claude/agents/`)
+- `design-critic` (symlinked from treinoway-web to `~/.claude/agents/`)
+- `frontend-engineer` (user-level at `~/.claude/agents/`)
+
+If any is missing, the pipeline cannot run — report the missing agent to the user.
+
+## Rules
+
+- Never skip a stage
+- Never merge stages
+- Pass full output between stages — do not summarize
+- You coordinate; you do not design, critique, or implement yourself

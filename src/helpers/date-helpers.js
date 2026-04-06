@@ -34,3 +34,33 @@ export function parseDateOnlyAsUtc(value) {
 
 	return new Date(value);
 }
+
+/**
+ * Parses a YYYY-MM-DD string (or Date) to exactly midnight UTC.
+ * Used for time-boundary calculations (ranking windows, challenge date fences)
+ * where the precise start/end of a calendar day matters.
+ *
+ * Do NOT use this to store @db.Date fields — use parseDateOnlyAsUtc() for that.
+ *
+ * @param {string|Date|null|undefined} value
+ * @returns {Date|null}
+ */
+export function getDateOnlyAsMidnightUtc(value) {
+	if (!value) return null;
+
+	if (value instanceof Date) {
+		return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate(), 0, 0, 0));
+	}
+
+	const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (dateOnlyMatch) {
+		const year = Number(dateOnlyMatch[1]);
+		const month = Number(dateOnlyMatch[2]);
+		const day = Number(dateOnlyMatch[3]);
+		return new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+	}
+
+	// Fallback: parse and floor to midnight UTC
+	const d = new Date(value);
+	return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
+}

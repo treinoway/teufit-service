@@ -40,7 +40,7 @@ Not the `??` operator, because `??` does not distinguish between "not provided" 
 - Anamnesis shared schemas: `api/schemas/anamnesis-shared.schema.js`
 - Protocol schemas: `api/schemas/training-protocol-route.schema.js`
 - Template schemas: `api/schemas/training-protocol-template-route.schema.js`
-- Action log: `.claude/action-log.md`
+- Frontend brief: `.claude/frontend-brief.md`
 - DB cleanup helper: `test/helpers/db-cleanup.js`
 
 ## db-cleanup.js: add new tables before their parents (Restrict FK)
@@ -129,3 +129,28 @@ Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch 
 - `test/e2e/anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
 These are NOT caused by new features. Do not investigate unless specifically asked.
+
+## Date helpers: two distinct functions for two purposes
+- `parseDateOnlyAsUtc(str)` → noon UTC — use for storing `@db.Date` fields (avoids timezone day shift)
+- `getDateOnlyAsMidnightUtc(date|str)` → midnight UTC — use for ranking/challenge window boundary comparisons
+Do NOT use `parseDateOnlyAsUtc` for boundaries — it yields noon, which would be off by 12h.
+
+## Gamification: TRAINER_BONUS uses null referenceId by design
+Multiple bonuses to the same student are intentional. `NULL != NULL` in PostgreSQL so the `@@unique([action, referenceId])` constraint does not block them. Do not upsert bonus transactions.
+
+## Gamification: student-facing endpoints use trainer's userId as query param
+`GET /my/points?trainerId=<uuid>` accepts the trainer's `User.id` (userId), not their `Trainer.id`. Routes resolve internally via `prisma.trainer.findUnique({ where: { userId } })`. This is consistent for all `/my/` gamification endpoints.
+
+## Derived status pattern (not stored)
+Challenge status (`scheduled/active/completed/cancelled`) is computed on read from `cancelledAt`, `startDate`, `endDate`. Not stored in DB. See `deriveStatus()` in `challenge-service.js`.
+
+## PointBalance increment is atomic
+`prisma.pointBalance.upsert({ update: { totalPoints: { increment: N } } })` generates atomic SQL. No race condition under concurrent awards.
+
+## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
+**Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
+**Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.
+**Fix applied in `ranking-service.js`**:
+1. Removed the empty `having: {}` (it was a no-op with a stale comment).
+2. Replaced the second `groupBy` (used to find latest transaction per student for inactivity filter) with `findMany` + JS `reduce` — avoids a second groupBy with a different where + aggregation combination, which is another known panic trigger.
+**Challenge ranking**: unaffected (no `having`, no second `groupBy`).
