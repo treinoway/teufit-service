@@ -50,7 +50,7 @@ export const createProtocolTemplateSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       description: { type: 'string' },
-      defaultDurationWeeks: { type: 'integer', minimum: 1 },
+      defaultDurationWeeks: { type: ['integer', 'null'], minimum: 1 },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
       type: { type: 'string', enum: protocolTypeEnum },
@@ -170,7 +170,7 @@ export const updateProtocolTemplateSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       description: { type: 'string' },
-      defaultDurationWeeks: { type: 'integer', minimum: 1 },
+      defaultDurationWeeks: { type: ['integer', 'null'], minimum: 1 },
       genderOrdination: { type: 'string', enum: genderOrdinationEnum },
       trainingLevel: { type: 'string', enum: trainingLevelEnum },
       type: { type: 'string', enum: protocolTypeEnum },

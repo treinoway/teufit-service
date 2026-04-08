@@ -1875,7 +1875,7 @@
                 }
               ]
             },
-            "description": "Update exercise template. Only accessible by owner."
+            "description": "Update exercise template. Only accessible by owner. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value."
           },
           "response": []
         },
@@ -2044,7 +2044,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Front Squat\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5}\n}"
+              "raw": "{\n  \"name\": \"Front Squat\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
@@ -2064,7 +2064,7 @@
                 }
               ]
             },
-            "description": "Update exercise. Requires protocol ownership."
+            "description": "Update exercise. Requires protocol ownership. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value."
           },
           "response": []
         },

@@ -77,11 +77,11 @@ export function validateExerciseType(type) {
 export function validateRepetitions(repetitions) {
   if (repetitions === undefined || repetitions === null) return;
   const { min, max } = repetitions;
-  if (!Number.isInteger(min) || min < 1) {
-    throw buildError('INVALID_REPETITIONS', 'repetitions.min must be a positive integer');
+  if (min !== null && (!Number.isInteger(min) || min < 1)) {
+    throw buildError('INVALID_REPETITIONS', 'repetitions.min must be a positive integer or null');
   }
-  if (!Number.isInteger(max) || max < 1) {
-    throw buildError('INVALID_REPETITIONS', 'repetitions.max must be a positive integer');
+  if (max !== null && (!Number.isInteger(max) || max < 1)) {
+    throw buildError('INVALID_REPETITIONS', 'repetitions.max must be a positive integer or null');
   }
 }
 

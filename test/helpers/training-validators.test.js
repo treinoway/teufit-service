@@ -170,6 +170,18 @@ describe('training-validators', () => {
       expect(() => validateRepetitions({ min: 10, max: 10 })).not.toThrow();
     });
 
+    it('does not throw when min is null (clearing min)', () => {
+      expect(() => validateRepetitions({ min: null, max: 12 })).not.toThrow();
+    });
+
+    it('does not throw when max is null (clearing max)', () => {
+      expect(() => validateRepetitions({ min: 8, max: null })).not.toThrow();
+    });
+
+    it('does not throw when both min and max are null (clearing both)', () => {
+      expect(() => validateRepetitions({ min: null, max: null })).not.toThrow();
+    });
+
     it('throws INVALID_REPETITIONS when min is 0', () => {
       expect(() => validateRepetitions({ min: 0, max: 10 })).toThrow(
         expect.objectContaining({ code: 'INVALID_REPETITIONS', statusCode: 400 }),

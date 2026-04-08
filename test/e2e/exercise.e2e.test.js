@@ -423,6 +423,250 @@ e2eDescribe('e2e: exercises', () => {
         const body = updateResponse.json();
         expect(body).toHaveProperty('restInterval', 120);
       });
+
+      it('clears sets by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Squat', type: 'strength', sets: 4 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { sets: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('sets', null);
+      });
+
+      it('clears duration by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Plank', type: 'strength', duration: 60 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { duration: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('duration', null);
+      });
+
+      it('clears suggestedLoad by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', hasLoad: true, suggestedLoad: 80 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { suggestedLoad: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('suggestedLoad', null);
+      });
+
+      it('clears restInterval by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Pull Up', type: 'strength', restInterval: 90 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { restInterval: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('restInterval', null);
+      });
+
+      it('clears repetitions by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Curl', type: 'strength', repetitions: { min: 8, max: 12 } },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { repetitions: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('repetitions', null);
+      });
+
+      it('clears only repetitions.min by sending null for min', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Lateral Raise', type: 'strength', repetitions: { min: 10, max: 15 } },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { repetitions: { min: null, max: 15 } },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('repetitions', { min: null, max: 15 });
+      });
+    });
+
+    describe('PATCH /trainer/exercise-templates/:id — nullable fields', () => {
+      it('clears sets on an exercise template by sending null', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Goblet Squat', type: 'strength', sets: 3 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { sets: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('sets', null);
+      });
+
+      it('clears suggestedLoad on an exercise template by sending null', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Overhead Press', type: 'strength', hasLoad: true, suggestedLoad: 40 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { suggestedLoad: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('suggestedLoad', null);
+      });
+
+      it('clears restInterval on an exercise template by sending null', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Dip', type: 'strength', restInterval: 60 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { restInterval: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('restInterval', null);
+      });
+
+      it('clears repetitions on an exercise template by sending null', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Tricep Extension', type: 'strength', repetitions: { min: 10, max: 12 } },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { repetitions: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('repetitions', null);
+      });
     });
   });
 });
