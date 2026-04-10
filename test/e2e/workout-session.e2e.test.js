@@ -822,4 +822,74 @@ e2eDescribe('e2e: workout-sessions', () => {
       expect(body.exerciseLogs[0].exercise.restInterval).toBe(60);
     });
   });
+
+  // ─── i18n labels ──────────────────────────────────────────────────────────
+
+  describe('i18n labels — workout sessions', () => {
+    it('GET /my/workout-sessions/:sessionId returns statusLabel and training.categoryLabel in pt-BR', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('in_progress');
+      expect(body.statusLabel).toBe('Em andamento');
+      expect(body.training.category).toBe('strength');
+      expect(body.training.categoryLabel).toBe('Força');
+      expect(body.exerciseLogs[0].status).toBe('pending');
+      expect(body.exerciseLogs[0].statusLabel).toBe('Pendente');
+    });
+
+    it('GET /my/workout-sessions/:sessionId returns statusLabel in en-US', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('in_progress');
+      expect(body.statusLabel).toBe('In Progress');
+      expect(body.exerciseLogs[0].status).toBe('pending');
+      expect(body.exerciseLogs[0].statusLabel).toBe('Pending');
+    });
+
+    it('GET /my/workout-sessions/:sessionId returns typeLabel for exercise in pt-BR', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { exerciseLogs } = response.json();
+      expect(exerciseLogs[0].exercise.type).toBe('strength');
+      expect(exerciseLogs[0].exercise.typeLabel).toBe('Força');
+    });
+  });
 });

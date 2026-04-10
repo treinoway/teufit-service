@@ -1,4 +1,5 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const trainerProfileResponseSchema = {
   type: 'object',
@@ -11,11 +12,7 @@ const trainerProfileResponseSchema = {
     professionalDocument: { type: 'string', nullable: true },
     gymName: { type: 'string', nullable: true },
     notes: { type: 'string', nullable: true },
-    serviceMode: {
-      type: 'string',
-      nullable: true,
-      enum: ['online', 'in_person', 'hybrid', null],
-    },
+    ...i18nField('serviceMode', 'trainerServiceMode', { nullable: true }),
     address: {
       type: 'object',
       nullable: true,
@@ -84,11 +81,7 @@ const trainerListItemSchema = {
     firstName: { type: 'string', nullable: true },
     lastName: { type: 'string', nullable: true },
     avatarUrl: { type: 'string', nullable: true },
-    serviceMode: {
-      type: 'string',
-      nullable: true,
-      enum: ['online', 'in_person', 'hybrid', null],
-    },
+    ...i18nField('serviceMode', 'trainerServiceMode', { nullable: true }),
     address: {
       type: 'object',
       nullable: true,

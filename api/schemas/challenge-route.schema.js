@@ -1,5 +1,6 @@
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import { challengeParticipantModeValues, challengeStatusValues } from '../../src/constants/challenge.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const authHeaders = {
   type: 'object',
@@ -19,8 +20,8 @@ const challengeSchema = {
     name: { type: 'string' },
     startDate: { type: 'string', format: 'date' },
     endDate: { type: 'string', format: 'date' },
-    status: { type: 'string', enum: challengeStatusValues },
-    participantMode: { type: 'string', enum: challengeParticipantModeValues },
+    ...i18nField('status', 'challengeStatus'),
+    ...i18nField('participantMode', 'challengeParticipantMode'),
     filterCriteria: { type: 'object', additionalProperties: true, nullable: true },
     cancelledAt: { type: 'string', format: 'date-time', nullable: true },
     participantCount: { type: 'integer' },

@@ -212,6 +212,87 @@ e2eDescribe('e2e: training protocol templates', () => {
     });
   });
 
+  // ==================== i18n label fields ====================
+
+  describe('i18n labels on GET /trainer/protocol-templates', () => {
+    it('returns translated labels in pt-BR', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      await createProtocolTemplate(accessToken, {
+        name: 'Template i18n PT',
+        trainingLevel: 'intermediate',
+        type: 'strength',
+        genderOrdination: 'male',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'pt-BR',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [item] = response.json();
+      expect(item).toHaveProperty('trainingLevel', 'intermediate');
+      expect(item).toHaveProperty('trainingLevelLabel', 'Intermediário');
+      expect(item).toHaveProperty('type', 'strength');
+      expect(item).toHaveProperty('typeLabel', 'Força');
+      expect(item).toHaveProperty('genderOrdination', 'male');
+      expect(item).toHaveProperty('genderOrdinationLabel', 'Masculino');
+    });
+
+    it('returns translated labels in en-US', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      await createProtocolTemplate(accessToken, {
+        name: 'Template i18n EN',
+        trainingLevel: 'intermediate',
+        type: 'strength',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'en-US',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [item] = response.json();
+      expect(item).toHaveProperty('trainingLevelLabel', 'Intermediate');
+      expect(item).toHaveProperty('typeLabel', 'Strength');
+    });
+
+    it('returns null label when genderOrdination is null', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      await createProtocolTemplate(accessToken, {
+        name: 'Template No Gender',
+        trainingLevel: 'beginner',
+        type: 'cardio',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'pt-BR',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [item] = response.json();
+      expect(item.genderOrdination).toBeNull();
+      expect(item.genderOrdinationLabel).toBeNull();
+    });
+  });
+
   // ==================== GET /trainer/protocol-templates/:id ====================
 
   describe('GET /trainer/protocol-templates/:id', () => {
@@ -368,6 +449,102 @@ e2eDescribe('e2e: training protocol templates', () => {
       expect(importResponse.statusCode).toBe(201);
       const body = importResponse.json();
       expect(body.trainings).toHaveLength(0);
+    });
+  });
+
+  // ==================== i18n labels ====================
+
+  describe('i18n labels — training protocol template', () => {
+    it('GET /trainer/protocol-templates/:id returns categoryLabel and bodySegmentLabel in pt-BR', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      // training template with category 'strength' and bodySegment 'lower'
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Agachamento',
+        category: 'strength',
+        bodySegment: 'lower',
+      });
+
+      const createResponse = await createProtocolTemplate(accessToken, {
+        name: 'Template Pernas',
+        trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'monday', order: 0 }],
+      });
+      const { id: templateId } = createResponse.json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/protocol-templates/${templateId}`,
+        headers: { authorization: `Bearer ${accessToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings).toHaveLength(1);
+      expect(body.trainings[0].trainingTemplate).toMatchObject({
+        category: 'strength',
+        categoryLabel: 'Força',
+        bodySegment: 'lower',
+        bodySegmentLabel: 'Inferior',
+      });
+    });
+
+    it('GET /trainer/protocol-templates/:id returns categoryLabel in en-US', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Squat',
+        category: 'strength',
+        bodySegment: 'lower',
+      });
+
+      const createResponse = await createProtocolTemplate(accessToken, {
+        name: 'Leg Template',
+        trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'tuesday', order: 0 }],
+      });
+      const { id: templateId } = createResponse.json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/protocol-templates/${templateId}`,
+        headers: { authorization: `Bearer ${accessToken}`, 'app-language': 'en-US' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings[0].trainingTemplate).toMatchObject({
+        category: 'strength',
+        categoryLabel: 'Strength',
+        bodySegment: 'lower',
+        bodySegmentLabel: 'Lower',
+      });
+    });
+
+    it('GET /trainer/protocol-templates/:id sets bodySegmentLabel to null when bodySegment is null', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      // Create training template directly without bodySegment so it remains null
+      const ttResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Cardio Run', category: 'cardio' },
+      });
+      expect(ttResponse.statusCode).toBe(201);
+      const trainingTemplate = ttResponse.json();
+
+      const createResponse = await createProtocolTemplate(accessToken, {
+        name: 'Cardio Template',
+        trainings: [{ trainingTemplateId: trainingTemplate.id, order: 0 }],
+      });
+      const { id: templateId } = createResponse.json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/protocol-templates/${templateId}`,
+        headers: { authorization: `Bearer ${accessToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings[0].trainingTemplate.bodySegment).toBeNull();
+      expect(body.trainings[0].trainingTemplate.bodySegmentLabel).toBeNull();
     });
   });
 });

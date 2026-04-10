@@ -1,5 +1,6 @@
 import { workoutSessionStatusValues, exerciseLogStatusValues } from '../../src/constants/training.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 // ─── Shared sub-schemas ───────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ const exerciseLogSchema = {
     id: { type: 'string', format: 'uuid' },
     workoutSessionId: { type: 'string', format: 'uuid' },
     exerciseId: { type: 'string', format: 'uuid' },
-    status: { type: 'string', enum: exerciseLogStatusValues },
+    ...i18nField('status', 'exerciseLogStatus'),
     order: { type: 'integer' },
     notes: { type: 'string', nullable: true },
     exercise: {
@@ -36,7 +37,7 @@ const exerciseLogSchema = {
       properties: {
         id: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
-        type: { type: 'string' },
+        ...i18nField('type', 'exerciseType'),
         sets: { type: 'integer', nullable: true },
         repetitions: { nullable: true },
         hasLoad: { type: 'boolean' },
@@ -58,7 +59,7 @@ const workoutSessionSchema = {
     id: { type: 'string', format: 'uuid' },
     trainingId: { type: 'string', format: 'uuid' },
     userId: { type: 'string', format: 'uuid' },
-    status: { type: 'string', enum: workoutSessionStatusValues },
+    ...i18nField('status', 'workoutSessionStatus'),
     startedAt: { type: 'string', format: 'date-time' },
     finishedAt: { type: 'string', format: 'date-time', nullable: true },
     durationSeconds: { type: 'integer', nullable: true },
@@ -77,7 +78,7 @@ const workoutSessionDetailSchema = {
       properties: {
         id: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
-        category: { type: 'string' },
+        ...i18nField('category', 'trainingCategory'),
       },
     },
     exerciseLogs: { type: 'array', items: exerciseLogSchema },
@@ -93,7 +94,7 @@ const workoutSessionListItemSchema = {
       properties: {
         id: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
-        category: { type: 'string' },
+        ...i18nField('category', 'trainingCategory'),
       },
     },
   },
@@ -283,7 +284,7 @@ export const updateExerciseLogSchema = {
           properties: {
             id: { type: 'string', format: 'uuid' },
             name: { type: 'string' },
-            type: { type: 'string' },
+            ...i18nField('type', 'exerciseType'),
           },
         },
       },

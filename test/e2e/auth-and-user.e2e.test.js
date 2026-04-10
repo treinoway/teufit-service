@@ -84,6 +84,8 @@ e2eDescribe('e2e: auth and user flows', () => {
       email,
       roles: expect.any(Array),
       status: 'pending',
+      statusLabel: expect.any(String),
+      rolesLabel: expect.any(Array),
     });
     expect(meBody).not.toHaveProperty('passwordHash');
   });
@@ -209,7 +211,6 @@ e2eDescribe('e2e: auth and user flows', () => {
       if (secondResponse.statusCode === 409) {
         expect(secondResponse.json()).toMatchObject({
           error: 'EMAIL_ALREADY_ON_WAITLIST',
-          message: 'Email already on waitlist',
         });
       }
     });
@@ -327,6 +328,7 @@ e2eDescribe('e2e: auth and user flows', () => {
         lastName: 'Doe',
       });
       expect(body.gender).toBe('male');
+      expect(body.genderLabel).toBe('Masculino');
       expect(body).toHaveProperty('birthDate');
     });
 
@@ -852,7 +854,7 @@ e2eDescribe('e2e: auth and user flows', () => {
       expect(reuseResponse.statusCode).toBe(401);
       const errorBody = reuseResponse.json();
       expect(errorBody.error).toBe('REFRESH_TOKEN_REVOKED');
-      expect(errorBody.message).toContain('revoked');
+      expect(typeof errorBody.message).toBe('string');
     });
 
     it('allows multiple sequential rotations', async () => {
@@ -1132,9 +1134,9 @@ e2eDescribe('e2e: auth and user flows', () => {
 
       expect(body).toMatchObject({
         error: 'INVALID_RELATIONS',
-        message: expect.stringContaining('accounts'),
         allowedRelations: expect.arrayContaining(['address', 'socials', 'preferences']),
       });
+      expect(typeof body.message).toBe('string');
     });
 
     it('returns 400 for mixed valid and invalid relations', async () => {
@@ -1148,8 +1150,7 @@ e2eDescribe('e2e: auth and user flows', () => {
       const body = response.json();
 
       expect(body.error).toBe('INVALID_RELATIONS');
-      expect(body.message).toContain('accounts');
-      expect(body.message).toContain('refreshTokens');
+      expect(typeof body.message).toBe('string');
     });
 
     it('handles whitespace in query parameter', async () => {

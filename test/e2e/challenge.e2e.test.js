@@ -649,6 +649,85 @@ e2eDescribe('e2e: challenges', () => {
     });
   });
 
+  // ─── i18n labels ──────────────────────────────────────────────────────────
+
+  describe('i18n labels — challenge', () => {
+    it('GET /trainer/challenges returns statusLabel and participantModeLabel in pt-BR', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      await createChallenge(accessToken, { name: 'i18n PT-BR Challenge' });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/challenges',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'pt-BR',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [challenge] = res.json();
+      expect(challenge.status).toBe(ChallengeStatus.SCHEDULED);
+      expect(challenge.statusLabel).toBe('Agendado');
+      expect(challenge.participantMode).toBe(ChallengeParticipantMode.EXPLICIT);
+      expect(challenge.participantModeLabel).toBe('Explícito');
+    });
+
+    it('GET /trainer/challenges returns statusLabel and participantModeLabel in en-US', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      await createChallenge(accessToken, { name: 'i18n EN-US Challenge' });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/challenges',
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'en-US',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [challenge] = res.json();
+      expect(challenge.status).toBe(ChallengeStatus.SCHEDULED);
+      expect(challenge.statusLabel).toBe('Scheduled');
+      expect(challenge.participantMode).toBe(ChallengeParticipantMode.EXPLICIT);
+      expect(challenge.participantModeLabel).toBe('Explicit');
+    });
+
+    it('GET /trainer/challenges/:id returns statusLabel and participantModeLabel', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const created = await createChallenge(accessToken);
+      const { id } = created.json();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/trainer/challenges/${id}`,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'app-language': 'pt-BR',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.statusLabel).toBe('Agendado');
+      expect(body.participantModeLabel).toBe('Explícito');
+    });
+
+    it('POST /trainer/challenges (201) returns statusLabel and participantModeLabel', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createChallenge(accessToken, { name: 'i18n EN-US Create Challenge' });
+
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.status).toBe(ChallengeStatus.SCHEDULED);
+      expect(body.statusLabel).toBe('Agendado');
+      expect(body.participantMode).toBe(ChallengeParticipantMode.EXPLICIT);
+      expect(body.participantModeLabel).toBe('Explícito');
+    });
+  });
+
   // ─── POST /trainer/challenges/preview-participants ────────────────────────
 
   describe('POST /trainer/challenges/preview-participants', () => {

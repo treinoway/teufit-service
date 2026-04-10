@@ -1,5 +1,6 @@
 import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const trainingResponseSchema = {
   type: 'object',
@@ -9,9 +10,9 @@ const trainingResponseSchema = {
     trainingTemplateId: { type: 'string', format: 'uuid', nullable: true },
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
-    category: { type: 'string' },
-    bodySegment: { type: 'string', nullable: true },
-    weekDay: { type: 'string', nullable: true },
+    ...i18nField('category', 'trainingCategory'),
+    ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
+    ...i18nField('weekDay', 'weekDay', { nullable: true }),
     order: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
     createdAt: { type: 'string', format: 'date-time' },

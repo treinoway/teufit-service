@@ -124,11 +124,26 @@ When validation (e.g., `validateQuestionType` inside `buildQuestionsCreateData`)
 ## S3 image upload — do NOT wrap in try/catch
 Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch that catches generic errors and re-throws as a new AppError. The global error handler deals with unexpected errors. Only catch to handle specific expected cases. Fire-and-forget `deleteFile` should always be outside any try/catch.
 
-## Pre-existing failing E2E tests (as of 2026-03-31)
+## Pre-existing failing E2E tests (updated 2026-04-10)
 - `test/e2e/admin-anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
+- `test/e2e/ai.e2e.test.js` — 1 test failing (multi-turn conversation)
 These are NOT caused by new features. Do not investigate unless specifically asked.
+
+## i18n schema migrations (PR2, 2026-04-10)
+- `protocolStatus` locale namespace is an empty placeholder — `TrainingProtocol.status` uses `TrainingStatus` enum, so map to `trainingStatus` namespace
+- PR1-era unit tests in `test/i18n/` assumed empty namespaces (fallback = raw value) — update those assertions when the namespace is populated
+- When `workoutSessionDetailSchema` and `workoutSessionListItemSchema` spread `workoutSessionSchema.properties`, they automatically inherit any `*Label` fields added to that base schema
+- `exerciseLogSchema.exercise` is `nullable: true` — label-walker handles null gracefully at runtime (`applyAtPath` returns early on null nodes)
+- `anamnesisQuestionType` namespace is now POPULATED (PR3, 2026-04-10). `questionSchema.type` uses `i18nField('type', 'anamnesisQuestionType')` in `anamnesis-shared.schema.js`. The `typeLabel` sibling is present in all question response shapes. Both `questionBodySchema.type` (request) and all non-question `type` fields are intentionally untouched.
+
+## i18n infrastructure (PR1, 2026-04-10)
+- `x-i18n` extension key SURVIVES Fastify 5.7 schema compilation — readable at `request.routeOptions.schema.response[statusCode]` in onRequest hooks. No side-map needed.
+- `buildErrorPayload(error, { language })` — language is optional; no translation when absent (keeps tests backward-compatible).
+- Both the `setErrorHandler` path AND the preSerialization-error path must translate. The preSerialization hook uses a local `translateErrorPayloadMessage` helper in server.js.
+- When adding i18n to a codebase, pre-existing E2E tests that assert specific English message text will break. Fix by removing the fragile `message` assertion and keeping only `error`/`messageCode` checks.
+- Follow PT-BR accents rule in locale files: always `ã`, `é`, `ç`, `õ`, etc.
 
 ## Date helpers: two distinct functions for two purposes
 - `parseDateOnlyAsUtc(str)` → noon UTC — use for storing `@db.Date` fields (avoids timezone day shift)

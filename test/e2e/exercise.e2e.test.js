@@ -669,4 +669,76 @@ e2eDescribe('e2e: exercises', () => {
       });
     });
   });
+
+  // ==================== i18n labels ====================
+
+  describe('i18n labels — exercise templates and exercises', () => {
+    it('GET /trainer/exercise-templates returns typeLabel in pt-BR', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Rosca Direta', type: 'strength' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [template] = response.json();
+      expect(template.type).toBe('strength');
+      expect(template.typeLabel).toBe('Força');
+    });
+
+    it('GET /trainer/exercise-templates returns typeLabel in en-US', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Curl', type: 'strength' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}`, 'app-language': 'en-US' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [template] = response.json();
+      expect(template.type).toBe('strength');
+      expect(template.typeLabel).toBe('Strength');
+    });
+
+    it('GET /trainer/trainings/:trainingId/exercises returns typeLabel in pt-BR', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Flexão', type: 'strength' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [exercise] = response.json();
+      expect(exercise.type).toBe('strength');
+      expect(exercise.typeLabel).toBe('Força');
+    });
+  });
 });

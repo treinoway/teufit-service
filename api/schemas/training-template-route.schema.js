@@ -1,5 +1,6 @@
 import { trainingCategoryValues, bodySegmentValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const exerciseTemplateRefSchema = {
   type: 'object',
@@ -43,8 +44,8 @@ const templateResponseSchema = {
     trainerId: { type: 'string', format: 'uuid' },
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
-    category: { type: 'string' },
-    bodySegment: { type: 'string', nullable: true },
+    ...i18nField('category', 'trainingCategory'),
+    ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
     tags: { type: 'array', items: { type: 'string' } },
     isPublic: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -63,8 +64,8 @@ const templateWithTrainerSchema = {
     trainerId: { type: 'string', format: 'uuid' },
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
-    category: { type: 'string' },
-    bodySegment: { type: 'string', nullable: true },
+    ...i18nField('category', 'trainingCategory'),
+    ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
     tags: { type: 'array', items: { type: 'string' } },
     isPublic: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },

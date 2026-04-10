@@ -127,6 +127,7 @@ e2eDescribe('e2e: GET /trainers', () => {
       expect(trainer).toHaveProperty('lastName');
       expect(trainer).toHaveProperty('avatarUrl');
       expect(trainer).toHaveProperty('serviceMode');
+      expect(trainer).toHaveProperty('serviceModeLabel');
       expect(trainer).toHaveProperty('address');
       expect(trainer).toHaveProperty('socialNetworks');
     });
@@ -228,6 +229,7 @@ e2eDescribe('e2e: GET /trainer', () => {
       expect(body).toHaveProperty('lastName');
       expect(body).toHaveProperty('avatarUrl');
       expect(body).toHaveProperty('serviceMode');
+      expect(body).toHaveProperty('serviceModeLabel');
       expect(body).toHaveProperty('address');
       expect(body).toHaveProperty('socialNetworks');
       expect(body).toHaveProperty('createdAt');

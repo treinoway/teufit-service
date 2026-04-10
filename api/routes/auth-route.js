@@ -152,7 +152,7 @@ export async function authRoutes(fastify) {
           return reply.status(400).send({ error: error.code, message: error.message });
         }
         if (error?.code === 'INVALID_CREDENTIALS') {
-          return reply.status(401).send({ error: 'INVALID_CREDENTIALS' });
+          return reply.status(401).send({ error: 'INVALID_CREDENTIALS', messageCode: 'auth.invalidCredentials', message: 'Invalid email or password.' });
         }
         if (error?.code === 'USER_DELETED') {
           return reply.status(403).send({ error: 'Account deactivated' });

@@ -1,5 +1,6 @@
 import { USER_RELATION_CONFIGS } from '../../src/constants/user-relations.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
 
 // Dynamically generate allowed relations list from USER_RELATION_CONFIGS
 const allowedRelations = Object.keys(USER_RELATION_CONFIGS);
@@ -38,18 +39,11 @@ export const getMeSchema = {
       properties: {
         id: { type: 'string', description: 'User id' },
         email: { type: 'string', format: 'email' },
-        roles: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'User roles (e.g., trainer)',
-        },
-        status: {
-          type: 'string',
-          description: 'Account status (e.g., pending, active)',
-        },
+        ...i18nArrayField('roles', 'userRole'),
+        ...i18nField('status', 'userStatus'),
         firstName: { type: 'string', nullable: true },
         lastName: { type: 'string', nullable: true },
-        gender: { type: 'string', enum: ['male', 'female', 'other', 'prefer_not_to_say'], nullable: true },
+        ...i18nField('gender', 'userGender', { nullable: true }),
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         address: {
@@ -203,11 +197,11 @@ export const updateProfileSchema = {
       properties: {
         id: { type: 'string' },
         email: { type: 'string' },
-        roles: { type: 'array', items: { type: 'string' } },
-        status: { type: 'string' },
+        ...i18nArrayField('roles', 'userRole'),
+        ...i18nField('status', 'userStatus'),
         firstName: { type: 'string', nullable: true },
         lastName: { type: 'string', nullable: true },
-        gender: { type: 'string', enum: ['male', 'female', 'other', 'prefer_not_to_say'], nullable: true },
+        ...i18nField('gender', 'userGender', { nullable: true }),
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         address: { type: 'object', nullable: true, additionalProperties: true },

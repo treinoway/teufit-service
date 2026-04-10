@@ -25,6 +25,12 @@
       "value": "",
       "type": "string",
       "description": "JWT token for admin user (role: admin)"
+    },
+    {
+      "key": "appLanguage",
+      "value": "pt-BR",
+      "type": "string",
+      "description": "Language for response messages and labels. Supported: pt-BR, en-US. Defaults to pt-BR if missing or unknown."
     }
   ],
   "auth": {
@@ -90,6 +96,12 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
               }
             ],
             "body": {
@@ -186,7 +198,39 @@
             },
             "description": "Log in with email and password. Rate limited to 5 requests per minute."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Invalid Credentials",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"INVALID_CREDENTIALS\",\n  \"messageCode\": \"auth.invalidCredentials\",\n  \"message\": \"Invalid email or password.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Forgot Password",
@@ -617,7 +661,14 @@
           "name": "Get Current User",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/me",
               "host": [
@@ -780,7 +831,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/jane.jpg\",\n    \"serviceMode\": \"online\",\n    \"address\": {\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"Brazil\"\n    },\n    \"socialNetworks\": {\n      \"instagram\": \"@janedoe\",\n      \"whatsapp\": \"+5511999999999\"\n    }\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/jane.jpg\",\n    \"serviceMode\": \"online\",\n    \"serviceModeLabel\": \"Online\",\n    \"address\": {\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"Brazil\"\n    },\n    \"socialNetworks\": {\n      \"instagram\": \"@janedoe\",\n      \"whatsapp\": \"+5511999999999\"\n    }\n  }\n]"
             }
           ]
         },
@@ -1379,7 +1430,14 @@
           "name": "Get Trainings by Protocol",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/trainer/protocols/:protocolId/trainings",
               "host": [
@@ -1531,7 +1589,14 @@
           "name": "Get Trainings by Protocol",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/my/protocols/:protocolId/trainings",
               "host": [

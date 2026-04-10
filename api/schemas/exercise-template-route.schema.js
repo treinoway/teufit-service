@@ -1,5 +1,6 @@
 import { exerciseTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const exerciseTemplateResponseSchema = {
   type: 'object',
@@ -7,7 +8,7 @@ const exerciseTemplateResponseSchema = {
     id: { type: 'string', format: 'uuid' },
     trainerId: { type: 'string', format: 'uuid' },
     name: { type: 'string' },
-    type: { type: 'string' },
+    ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
     sets: { type: 'integer', nullable: true },

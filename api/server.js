@@ -11,6 +11,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
+import { translate } from '../src/i18n/index.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { userRoutes } from './routes/user-route.js';
@@ -30,6 +31,23 @@ import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
 import { gamificationRoutes } from './routes/gamification-route.js';
 import { challengeRoutes } from './routes/challenge-route.js';
 import { authenticate } from './hooks/auth-hook.js';
+import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
+
+/**
+ * Translate the `message` field of a normalized error payload in place.
+ * Only translates when a language is available and the payload has a messageCode.
+ * Used in the error-normalizing preSerialization hook to cover the code path where
+ * Fastify's built-in error handlers (e.g. 404) bypass setErrorHandler.
+ *
+ * @param {object} payload
+ * @param {string | undefined} language
+ */
+function translateErrorPayloadMessage(payload, language) {
+  if (!language || !payload?.messageCode) return;
+  payload.message = translate('errors', payload.messageCode, language, {
+    fallbackValue: payload.message,
+  });
+}
 
 export async function buildServer(options = {}) {
   const llmProvider = process.env.LLM_PROVIDER || 'anthropic';
@@ -50,8 +68,12 @@ export async function buildServer(options = {}) {
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
 
+  // 1. Read language header before auth so all handlers see request.language
+  fastify.addHook('onRequest', languageOnRequestHook);
+
   fastify.setErrorHandler((error, request, reply) => {
-    const normalizedError = normalizeError(error);
+    const language = request.language;
+    const normalizedError = normalizeError(error, language);
     const isServerError = normalizedError.httpStatus >= 500;
 
     if (isServerError) {
@@ -66,15 +88,19 @@ export async function buildServer(options = {}) {
       );
     }
 
-    const payload = buildErrorPayload(normalizedError);
+    const payload = buildErrorPayload(normalizedError, { language });
     return reply.status(normalizedError.httpStatus).send(payload);
   });
 
+  // 2. Error-normalizing preSerialization hook — handles statusCode >= 400 paths
+  //    that bypass setErrorHandler (e.g. Fastify's built-in 404 handler, raw strings)
   fastify.addHook('preSerialization', (request, reply, payload, done) => {
     if (reply.statusCode < 400) {
       done(null, payload);
       return;
     }
+
+    const language = request.language;
 
     if (typeof payload === 'string') {
       let parsedPayload;
@@ -86,13 +112,20 @@ export async function buildServer(options = {}) {
       }
 
       const normalizedPayload = normalizeErrorResponsePayload(parsedPayload, reply.statusCode);
+      translateErrorPayloadMessage(normalizedPayload, language);
       done(null, normalizedPayload);
       return;
     }
 
     const normalizedPayload = normalizeErrorResponsePayload(payload, reply.statusCode);
+    translateErrorPayloadMessage(normalizedPayload, language);
     done(null, normalizedPayload);
   });
+
+  // 3. i18n label-applying preSerialization hook — writes *Label siblings for
+  //    data responses on routes that use i18nField() / i18nArrayField() in their schemas.
+  //    Early-returns for statusCode >= 400 (errors are handled above).
+  fastify.addHook('preSerialization', applyLabelsPreSerializationHook);
 
   // Register CORS support
   const isDevelopment = process.env.NODE_ENV === 'development';

@@ -74,6 +74,8 @@ e2eDescribe('e2e: auth flows', () => {
       email,
       roles: expect.any(Array),
       status: 'pending',
+      statusLabel: expect.any(String),
+      rolesLabel: expect.any(Array),
     });
     expect(meBody).not.toHaveProperty('passwordHash');
   });
@@ -157,7 +159,6 @@ e2eDescribe('e2e: auth flows', () => {
       if (secondResponse.statusCode === 409) {
         expect(secondResponse.json()).toMatchObject({
           error: 'EMAIL_ALREADY_ON_WAITLIST',
-          message: 'Email already on waitlist',
         });
       }
     });
@@ -221,6 +222,50 @@ e2eDescribe('e2e: auth flows', () => {
       } finally {
         await freshApp.close();
       }
+    });
+  });
+
+  describe('login', () => {
+    it('returns INVALID_CREDENTIALS with auth.invalidCredentials messageCode for wrong password', async () => {
+      const email = `login-invalid-${Date.now()}@example.com`;
+      const password = 'CorrectPassw0rd!';
+
+      // Sign up the user first
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupResponse.statusCode).toBe(201);
+
+      // Attempt login with wrong password
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'WrongPassw0rd!' },
+      });
+
+      expect(loginResponse.statusCode).toBe(401);
+      expect(loginResponse.json()).toMatchObject({
+        error: 'INVALID_CREDENTIALS',
+        messageCode: 'auth.invalidCredentials',
+        message: 'Invalid email or password.',
+      });
+    });
+
+    it('returns INVALID_CREDENTIALS with auth.invalidCredentials messageCode for unknown email', async () => {
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email: `nonexistent-${Date.now()}@example.com`, password: 'SomePassw0rd!' },
+      });
+
+      expect(loginResponse.statusCode).toBe(401);
+      expect(loginResponse.json()).toMatchObject({
+        error: 'INVALID_CREDENTIALS',
+        messageCode: 'auth.invalidCredentials',
+        message: 'Invalid email or password.',
+      });
     });
   });
 

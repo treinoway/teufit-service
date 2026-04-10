@@ -58,6 +58,54 @@ newField: data.newField !== undefined ? data.newField : template.newField,
 - Unit tests for services/business logic (`test/services/`)
 - E2E tests for API endpoints (`test/e2e/`)
 
+## Internationalization (i18n)
+
+The backend is the source of truth for all user-facing text on the mobile app (which has no client-side i18n).
+
+### `app-language` header
+Mobile clients send `app-language: en-US` (or `pt-BR`). Fastify normalizes header names to lowercase — read it as `request.headers['app-language']`. Missing or unknown values silently default to `pt-BR`. Never return a 400 for an unrecognized language.
+
+### Locale files
+- `src/i18n/locales/pt-BR.js` — canonical (always complete)
+- `src/i18n/locales/en-US.js` — falls back to pt-BR for missing keys
+
+Three top-level namespaces: `categorical.*`, `errors.*`, `validation.*`.
+
+### Adding a new categorical field to a response schema
+Use the helper instead of a raw property declaration:
+
+```js
+import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
+
+// Single categorical value
+properties: {
+  ...i18nField('category', 'trainingCategory'),           // → category + categoryLabel
+  ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
+  ...i18nArrayField('roles', 'userRole'),                  // → roles + rolesLabel (array)
+}
+```
+
+The `*Label` sibling is populated at response time by the `preSerialization` hook — you don't need to return it from the service. The label is always present (never stripped) even when the language is `pt-BR`.
+
+**Dev-mode guardrail**: if you declare `x-i18n` on a field but forget the `*Label` sibling in the schema, the server throws on first request (not at startup). Use `i18nField()` / `i18nArrayField()` to prevent this.
+
+### `messageCode` stability
+Never change existing `messageCode` values. They are the stable contract for i18n clients. Only `message` is translated. `messageCode` is always returned as-is.
+
+### Adding a new error messageCode
+1. Add the new messageCode string to the appropriate `*MessageCode` constant in `src/constants/`.
+2. Add a translation entry in BOTH `src/i18n/locales/pt-BR.js` and `src/i18n/locales/en-US.js` under `errors`.
+3. Follow PT-BR accents rule: always use `ã`, `é`, `ç`, `õ`, etc.
+
+### Known gap: legacy errors
+
+- Legacy errors thrown as `new Error(...)` with a `.code` property (e.g., `EMAIL_ALREADY_ON_WAITLIST`, `REFRESH_TOKEN_REVOKED`) flow through `normalizeLegacyError` in `src/errors/normalize-error.js`.
+- Those produce `messageCode: 'legacy.${code}'`.
+- There are intentionally **no `legacy.*` entries in the locale files**. `translate()` falls back to `appError.message` — the original English string set in the constructor.
+- pt-BR mobile users currently see English for these specific errors.
+- To fix: migrate the legacy throw to `throw new AppError({ error, messageCode, message, ... })` with a stable `messageCode` (e.g., `waitlist.emailInUse`), then add translations under `errors.*` in both locale files.
+- This migration is tracked for follow-up PRs, NOT PR1.
+
 ## AI Flow Engineer Agent (`ai-flow-engineer`)
 
 Use the `ai-flow-engineer` agent for any task involving AI/LLM integrations. Activate it when:

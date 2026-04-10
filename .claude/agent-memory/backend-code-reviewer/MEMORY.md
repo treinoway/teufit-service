@@ -1,0 +1,1 @@
+- [i18n legacy-error translation gap](project_i18n_legacy_error_gap.md) — legacy `.code` errors bypass translation and return English to pt-BR clients until migrated to stable messageCodes

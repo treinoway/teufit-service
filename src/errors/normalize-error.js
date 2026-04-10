@@ -1,4 +1,5 @@
 import { AppError, ConflictAppError, NotFoundAppError, ValidationAppError } from './app-error.js';
+import { translate, translateTemplate } from '../i18n/index.js';
 
 function isFastifyValidationError(error) {
   return Boolean(error?.validation && Array.isArray(error.validation));
@@ -36,15 +37,37 @@ function normalizeFieldName(instancePath, validationError) {
   return instancePath.replace(/^\//, '').replace(/\//g, '.');
 }
 
-function normalizeValidationDetails(validationErrors = []) {
+function buildValidationVars(field, keyword, params = {}) {
+  // AJV uses `limit` for minLength/maxLength/minimum/maximum, and `allowedValues` for enum.
+  // We normalize these into {field}, {min}, {max}, {allowedValues} placeholders.
+  const vars = { field, ...params };
+
+  if (keyword === 'minLength' || keyword === 'minimum') {
+    vars.min = params.limit;
+  }
+  if (keyword === 'maxLength' || keyword === 'maximum') {
+    vars.max = params.limit;
+  }
+  if (keyword === 'enum' && Array.isArray(params.allowedValues)) {
+    vars.allowedValues = params.allowedValues;
+  }
+
+  return vars;
+}
+
+function normalizeValidationDetails(validationErrors = [], language) {
   return validationErrors.map((validationError) => {
     const field = normalizeFieldName(validationError.instancePath, validationError);
     const keyword = validationError.keyword || 'invalid';
+    // Only translate when a language is explicitly provided; otherwise keep the raw AJV message
+    const message = language
+      ? translateTemplate('validation', keyword, language, buildValidationVars(field, keyword, validationError.params ?? {}))
+      : validationError.message;
     return {
       field,
       validations: [keyword],
       messageCode: `validation.${field}.${keyword}`,
-      message: validationError.message,
+      message,
     };
   });
 }
@@ -102,12 +125,12 @@ function normalizePrismaError(error) {
   return null;
 }
 
-export function normalizeError(error) {
+export function normalizeError(error, language) {
   if (error instanceof AppError) return error;
 
   if (isFastifyValidationError(error)) {
     return new ValidationAppError({
-      details: normalizeValidationDetails(error.validation),
+      details: normalizeValidationDetails(error.validation, language),
     });
   }
 
@@ -117,11 +140,18 @@ export function normalizeError(error) {
   return normalizeLegacyError(error);
 }
 
-export function buildErrorPayload(appError, includeStatus = false) {
+export function buildErrorPayload(appError, { language, includeStatus = false } = {}) {
+  // Only translate when a language is explicitly provided (e.g. from request.language).
+  // When called without a language (e.g. in tests or legacy call sites), the AppError's
+  // original message is used as-is — this preserves backward compatibility.
+  const message = language
+    ? translate('errors', appError.messageCode, language, { fallbackValue: appError.message })
+    : appError.message;
+
   const payload = {
     error: appError.error,
     messageCode: appError.messageCode,
-    message: appError.message,
+    message,
   };
 
   if (appError.details !== undefined) {

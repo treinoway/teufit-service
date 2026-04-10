@@ -274,4 +274,87 @@ e2eDescribe('e2e: training protocols', () => {
       expect(protocols[0]).toHaveProperty('trainer');
     });
   });
+
+  // ==================== i18n labels ====================
+
+  describe('i18n labels — training protocol', () => {
+    it('GET /trainer/protocols returns statusLabel in pt-BR', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'Protocolo Força', startDate: '2025-02-01' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [protocol] = response.json();
+      expect(protocol.status).toBe('active');
+      expect(protocol.statusLabel).toBe('Ativo');
+    });
+
+    it('GET /trainer/protocols returns statusLabel in en-US', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'Strength Protocol', startDate: '2025-02-01' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'en-US' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [protocol] = response.json();
+      expect(protocol.status).toBe('active');
+      expect(protocol.statusLabel).toBe('Active');
+    });
+
+    it('GET /my/protocols returns categoryLabel for nested trainings in pt-BR', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'Meu Protocolo', startDate: '2025-02-01' },
+      });
+      const { id: protocolId } = createResponse.json();
+
+      // Create a training inside the protocol
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/protocols/${protocolId}/trainings`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Treino A', category: 'strength' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/my/protocols',
+        headers: { authorization: `Bearer ${assigneeToken}`, 'app-language': 'pt-BR' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const [protocol] = response.json();
+      expect(protocol.trainings).toHaveLength(1);
+      expect(protocol.trainings[0].category).toBe('strength');
+      expect(protocol.trainings[0].categoryLabel).toBe('Força');
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import { anamnesisQuestionTypeValues } from '../../src/constants/anamnesis.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 // ─── Shared sub-schemas used by both anamnesis-route.schema.js and admin-anamnesis-route.schema.js
 
@@ -20,7 +21,7 @@ export const questionSchema = {
     id: { type: 'string', format: 'uuid' },
     sectionId: { type: 'string', format: 'uuid' },
     text: { type: 'string' },
-    type: { type: 'string', enum: anamnesisQuestionTypeValues },
+    ...i18nField('type', 'anamnesisQuestionType'),
     required: { type: 'boolean' },
     order: { type: 'integer' },
     config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
