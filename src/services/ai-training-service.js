@@ -158,7 +158,7 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 8. PROIBIDO exibir IDs, UUIDs, hashes ou tags [REF:...] nas respostas. Use SOMENTE nomes humanos. As tags [REF:...] existem apenas para voce extrair IDs ao preencher parametros de tools.
 
 === REGRAS DE CONTEUDO ===
-9. Valores padrao para exercicios sem especificacao: 3 series, 10-12 repeticoes, descanso de 60s.
+9. OBRIGATORIO: Ao chamar tools que criam exercicios, SEMPRE preencha sets, repetitions (min e max), e restInterval — sem excecao. Defaults quando o treinador nao especificar: 3 series, 10-12 repeticoes (min=10, max=12), 60s de descanso. Para exercicios de forca, preencha hasLoad=true e suggestedLoad quando o treinador indicar peso. Nunca omita esses campos.
 10. Quando o treinador pedir exercicios sem lista especifica (ex: "4 exercicios variados"), use seu conhecimento de musculacao para sugerir exercicios apropriados ao contexto (segmento corporal, nivel, tipo de treino). Nao peca ao treinador para listar cada um — so confirme antes de criar.
 11. Datas: converta qualquer formato em portugues ("amanha", "proxima segunda", "dia 15", "daqui 2 meses", "01/04") para YYYY-MM-DD internamente. NUNCA peca ao treinador para formatar datas. Se nao informar datas, sugira: inicio hoje, expiracao em 8 semanas.
 
@@ -231,21 +231,21 @@ const TOOLS = [
           enum: ["strength", "cardio", "mobility", "stretching"],
           description: "Tipo do exercicio",
         },
-        sets: { type: "integer", description: "Numero de series" },
+        sets: { type: "integer", description: "Numero de series. SEMPRE preencha — use 3 como default se o treinador nao especificar." },
         repetitions: {
           type: "object",
           properties: { min: { type: "integer" }, max: { type: "integer" } },
-          description: "Range de repeticoes (min e max)",
+          description: "Range de repeticoes (min e max). SEMPRE preencha para exercicios de forca — use min=10, max=12 como default se o treinador nao especificar. Para cardio/stretching use duration.",
         },
         duration: {
           type: "integer",
-          description: "Duracao em segundos (para cardio/stretching)",
+          description: "Duracao em segundos (para cardio/stretching). Use no lugar de sets/repetitions quando aplicavel.",
         },
-        hasLoad: { type: "boolean", description: "Se o exercicio usa carga" },
-        suggestedLoad: { type: "number", description: "Carga sugerida em kg" },
+        hasLoad: { type: "boolean", description: "Se o exercicio usa carga. Preencha true para exercicios de forca com peso." },
+        suggestedLoad: { type: "number", description: "Carga sugerida em kg. Preencha quando hasLoad=true e o treinador indicar peso." },
         restInterval: {
           type: "integer",
-          description: "Intervalo de descanso em segundos",
+          description: "Intervalo de descanso em segundos. SEMPRE preencha — use 60 como default se o treinador nao especificar.",
         },
         notes: { type: "string", description: "Observacoes sobre o exercicio" },
       },
@@ -298,24 +298,24 @@ const TOOLS = [
                 enum: ["strength", "cardio", "mobility", "stretching"],
                 description: "Tipo do exercicio",
               },
-              sets: { type: "integer", description: "Numero de series" },
+              sets: { type: "integer", description: "Numero de series. SEMPRE preencha — use 3 como default se o treinador nao especificar." },
               repetitions: {
                 type: "object",
                 properties: {
                   min: { type: "integer" },
                   max: { type: "integer" },
                 },
-                description: "Range de repeticoes",
+                description: "Range de repeticoes (min e max). SEMPRE preencha para exercicios de forca — use min=10, max=12 como default se o treinador nao especificar. Para cardio/stretching use duration.",
               },
-              duration: { type: "integer", description: "Duracao em segundos" },
-              hasLoad: { type: "boolean", description: "Se usa carga" },
+              duration: { type: "integer", description: "Duracao em segundos (para cardio/stretching). Use no lugar de sets/repetitions quando aplicavel." },
+              hasLoad: { type: "boolean", description: "Se o exercicio usa carga. Preencha true para exercicios de forca com peso." },
               suggestedLoad: {
                 type: "number",
-                description: "Carga sugerida em kg",
+                description: "Carga sugerida em kg. Preencha quando hasLoad=true e o treinador indicar peso.",
               },
               restInterval: {
                 type: "integer",
-                description: "Descanso em segundos",
+                description: "Intervalo de descanso em segundos. SEMPRE preencha — use 60 como default se o treinador nao especificar.",
               },
               notes: { type: "string", description: "Observacoes" },
             },
@@ -418,18 +418,22 @@ const TOOLS = [
                       type: "string",
                       enum: ["strength", "cardio", "mobility", "stretching"],
                     },
-                    sets: { type: "integer" },
+                    sets: { type: "integer", description: "Numero de series. SEMPRE preencha — use 3 como default se o treinador nao especificar." },
                     repetitions: {
                       type: "object",
                       properties: {
                         min: { type: "integer" },
                         max: { type: "integer" },
                       },
+                      description: "Range de repeticoes (min e max). SEMPRE preencha para exercicios de forca — use min=10, max=12 como default se o treinador nao especificar. Para cardio/stretching use duration.",
                     },
-                    duration: { type: "integer" },
-                    hasLoad: { type: "boolean" },
-                    suggestedLoad: { type: "number" },
-                    restInterval: { type: "integer" },
+                    duration: { type: "integer", description: "Duracao em segundos (para cardio/stretching). Use no lugar de sets/repetitions quando aplicavel." },
+                    hasLoad: { type: "boolean", description: "Se o exercicio usa carga. Preencha true para exercicios de forca com peso." },
+                    suggestedLoad: { type: "number", description: "Carga sugerida em kg. Preencha quando hasLoad=true e o treinador indicar peso." },
+                    restInterval: {
+                      type: "integer",
+                      description: "Intervalo de descanso em segundos. SEMPRE preencha — use 60 como default se o treinador nao especificar.",
+                    },
                     notes: { type: "string" },
                   },
                 },
@@ -497,24 +501,24 @@ const TOOLS = [
                       type: "string",
                       enum: ["strength", "cardio", "mobility", "stretching"],
                     },
-                    sets: { type: "integer" },
+                    sets: { type: "integer", description: "Numero de series. SEMPRE preencha — use 3 como default se o treinador nao especificar." },
                     repetitions: {
                       type: "object",
                       properties: {
                         min: { type: "integer" },
                         max: { type: "integer" },
                       },
+                      description: "Range de repeticoes (min e max). SEMPRE preencha para exercicios de forca — use min=10, max=12 como default se o treinador nao especificar. Para cardio/stretching use duration.",
                     },
                     duration: {
                       type: "integer",
-                      description:
-                        "Duracao em segundos (para cardio/stretching)",
+                      description: "Duracao em segundos (para cardio/stretching). Use no lugar de sets/repetitions quando aplicavel.",
                     },
-                    hasLoad: { type: "boolean" },
-                    suggestedLoad: { type: "number" },
+                    hasLoad: { type: "boolean", description: "Se o exercicio usa carga. Preencha true para exercicios de forca com peso." },
+                    suggestedLoad: { type: "number", description: "Carga sugerida em kg. Preencha quando hasLoad=true e o treinador indicar peso." },
                     restInterval: {
                       type: "integer",
-                      description: "Intervalo de descanso em segundos",
+                      description: "Intervalo de descanso em segundos. SEMPRE preencha — use 60 como default se o treinador nao especificar.",
                     },
                     notes: { type: "string" },
                   },
@@ -604,6 +608,15 @@ function summarizeToolResult(toolResult) {
       trainings: data.trainings.map((t) => ({
         name: t.trainingTemplate?.name || t.name,
         weekDay: t.weekDay,
+        exercisesCount: t.trainingTemplate?.trainingTemplateExerciseTemplates?.length ?? null,
+        exercises: t.trainingTemplate?.trainingTemplateExerciseTemplates?.map((e) => ({
+          name: e.exerciseTemplate?.name || "exercício",
+          sets: e.exerciseTemplate?.sets ?? null,
+          repetitions: e.exerciseTemplate?.repetitions ?? null,
+          restInterval: e.exerciseTemplate?.restInterval ?? null,
+          hasLoad: e.exerciseTemplate?.hasLoad ?? null,
+          suggestedLoad: e.exerciseTemplate?.suggestedLoad ?? null,
+        })) ?? [],
       })),
     };
   }
@@ -620,6 +633,11 @@ function summarizeToolResult(toolResult) {
       exercisesCount: data.trainingTemplateExerciseTemplates.length,
       exercises: data.trainingTemplateExerciseTemplates.map((e) => ({
         name: e.exerciseTemplate?.name || "exercício",
+        sets: e.exerciseTemplate?.sets ?? null,
+        repetitions: e.exerciseTemplate?.repetitions ?? null,
+        restInterval: e.exerciseTemplate?.restInterval ?? null,
+        hasLoad: e.exerciseTemplate?.hasLoad ?? null,
+        suggestedLoad: e.exerciseTemplate?.suggestedLoad ?? null,
       })),
     };
   }
@@ -800,7 +818,7 @@ async function executeTool(userId, toolName, toolInput) {
               trainingTemplateExerciseTemplates: {
                 include: {
                   exerciseTemplate: {
-                    select: { id: true, name: true, type: true },
+                    select: { id: true, name: true, type: true, sets: true, repetitions: true, restInterval: true, hasLoad: true, suggestedLoad: true },
                   },
                 },
                 orderBy: { order: "asc" },
@@ -946,7 +964,19 @@ async function executeTool(userId, toolName, toolInput) {
               trainings: {
                 include: {
                   trainingTemplate: {
-                    select: { id: true, name: true, category: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      category: true,
+                      trainingTemplateExerciseTemplates: {
+                        select: {
+                          exerciseTemplate: {
+                            select: { id: true, name: true, type: true, sets: true, repetitions: true, restInterval: true, hasLoad: true, suggestedLoad: true },
+                          },
+                        },
+                        orderBy: { order: "asc" },
+                      },
+                    },
                   },
                 },
                 orderBy: { order: "asc" },

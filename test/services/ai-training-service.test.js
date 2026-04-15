@@ -6,9 +6,9 @@ vi.mock('../../src/db.js', () => ({
     trainer: { findUnique: vi.fn() },
     trainingProtocol: { findUnique: vi.fn(), findMany: vi.fn() },
     trainerStudent: { findMany: vi.fn() },
-    trainingProtocolTemplate: { findMany: vi.fn() },
-    trainingTemplate: { findMany: vi.fn() },
-    exerciseTemplate: { findMany: vi.fn() },
+    trainingProtocolTemplate: { findMany: vi.fn(), create: vi.fn() },
+    trainingTemplate: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+    exerciseTemplate: { findMany: vi.fn(), create: vi.fn() },
     training: { create: vi.fn() },
     exercise: { create: vi.fn() },
     aiConversation: {
@@ -880,6 +880,366 @@ describe('ai-training-service', () => {
       const llmCallArgs = anthropicCreate.mock.calls[0][0]
       const assistantMsg = llmCallArgs.messages.find((m) => m.role === 'assistant')
       expect(assistantMsg.content).toBe('Olá! Como posso ajudar?')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // exercise field persistence (regression)
+  // Regression guard: iArnold was dropping restInterval, sets, repetitions,
+  // hasLoad, suggestedLoad on CREATE_TRAINING_TEMPLATE and CREATE_PROTOCOL_TEMPLATE.
+  // ---------------------------------------------------------------------------
+
+  describe('exercise field persistence (regression)', () => {
+    const EXERCISE_INPUT = {
+      name: 'Supino reto',
+      type: 'strength',
+      sets: 4,
+      repetitions: { min: 8, max: 12 },
+      restInterval: 90,
+      hasLoad: true,
+      suggestedLoad: 60,
+      notes: 'Foco na descida controlada',
+    }
+
+    describe(`${AI_TOOLS.CREATE_TRAINING_TEMPLATE}`, () => {
+      it('persists all five exercise fields in exerciseTemplate.create', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+        prisma.trainingTemplate.create.mockResolvedValue({
+          id: 'tt-1',
+          name: 'Treino A',
+          category: 'strength',
+          trainingTemplateExerciseTemplates: [
+            {
+              exerciseTemplate: {
+                id: 'ex-created-1',
+                name: 'Supino reto',
+                type: 'strength',
+                sets: 4,
+                repetitions: { min: 8, max: 12 },
+                restInterval: 90,
+                hasLoad: true,
+                suggestedLoad: 60,
+              },
+            },
+          ],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+          name: 'Treino A',
+          category: 'strength',
+          exercises: [EXERCISE_INPUT],
+        })
+
+        expect(prisma.exerciseTemplate.create).toHaveBeenCalledTimes(1)
+        expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              sets: 4,
+              repetitions: { min: 8, max: 12 },
+              restInterval: 90,
+              hasLoad: true,
+              suggestedLoad: 60,
+            }),
+          }),
+        )
+      })
+
+      it('includes hasLoad and suggestedLoad in the exerciseTemplate select on the follow-up read', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+        prisma.trainingTemplate.create.mockResolvedValue({
+          id: 'tt-1',
+          name: 'Treino A',
+          category: 'strength',
+          trainingTemplateExerciseTemplates: [],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+          name: 'Treino A',
+          category: 'strength',
+          exercises: [EXERCISE_INPUT],
+        })
+
+        const createCall = prisma.trainingTemplate.create.mock.calls[0][0]
+        const exerciseSelect =
+          createCall.include.trainingTemplateExerciseTemplates.include.exerciseTemplate.select
+
+        expect(exerciseSelect).toMatchObject({
+          hasLoad: true,
+          suggestedLoad: true,
+        })
+      })
+
+      it('summarizeToolResult surfaces hasLoad and suggestedLoad in the tool_result message rawContent', async () => {
+        // Drive via processAiChat so summarizeToolResult is exercised end-to-end.
+        // Stub the trainer context queries used by buildTrainerContext.
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.trainerStudent.findMany.mockResolvedValue([])
+        prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+        prisma.trainingTemplate.findMany.mockResolvedValue([])
+        prisma.trainingProtocol.findMany.mockResolvedValue([])
+        prisma.exerciseTemplate.findMany.mockResolvedValue([])
+
+        // Existing conversation with 2+ messages so tool enforcement passes.
+        prisma.aiConversation.findUnique.mockResolvedValue({
+          id: 'conv-tt',
+          userId: 'user-1',
+          title: 'Test',
+          messages: [
+            { role: 'user', content: 'Cria um treino' },
+            { role: 'assistant', content: 'Confirma?' },
+          ],
+        })
+        prisma.aiMessage.create.mockResolvedValue({ id: 'msg-1' })
+        prisma.aiConversation.update.mockResolvedValue({})
+
+        // LLM first call returns a CREATE_TRAINING_TEMPLATE tool_use.
+        anthropicCreate.mockResolvedValueOnce({
+          stop_reason: 'tool_use',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tc-tt-1',
+              name: AI_TOOLS.CREATE_TRAINING_TEMPLATE,
+              input: {
+                name: 'Treino A',
+                category: 'strength',
+                exercises: [EXERCISE_INPUT],
+              },
+            },
+          ],
+        })
+
+        // Mock exerciseTemplate.create (used inside the $transaction)
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+
+        // Mock trainingTemplate.create to return a realistic shape so summarizeToolResult
+        // can pick up hasLoad and suggestedLoad.
+        prisma.trainingTemplate.create.mockResolvedValue({
+          id: 'tt-1',
+          name: 'Treino A',
+          category: 'strength',
+          trainingTemplateExerciseTemplates: [
+            {
+              exerciseTemplate: {
+                id: 'ex-created-1',
+                name: 'Supino reto',
+                type: 'strength',
+                sets: 4,
+                repetitions: { min: 8, max: 12 },
+                restInterval: 90,
+                hasLoad: true,
+                suggestedLoad: 60,
+              },
+            },
+          ],
+        })
+
+        // LLM second call (after tool result is fed back) returns a plain text response.
+        anthropicCreate.mockResolvedValueOnce({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'Treino criado com sucesso!' }],
+        })
+
+        await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-tt' })
+
+        // Find the tool_result message saved to the DB.
+        const toolResultCall = prisma.aiMessage.create.mock.calls.find(
+          (call) => call[0].data.role === 'tool_result',
+        )
+        expect(toolResultCall).toBeDefined()
+
+        const rawContent = toolResultCall[0].data.rawContent
+        expect(Array.isArray(rawContent)).toBe(true)
+
+        // The rawContent for a tool_result is an array of { toolCallId, content } entries.
+        // Parse the JSON content to assert on the summary shape.
+        const resultEntry = rawContent[0]
+        const summary = JSON.parse(resultEntry.content)
+
+        expect(summary.exercises).toBeDefined()
+        expect(summary.exercises[0]).toMatchObject({
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          restInterval: 90,
+          hasLoad: true,
+          suggestedLoad: 60,
+        })
+      })
+    })
+
+    describe(`${AI_TOOLS.CREATE_PROTOCOL_TEMPLATE}`, () => {
+      it('persists all five exercise fields in exerciseTemplate.create for inline exercises', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
+        prisma.trainingProtocolTemplate.create.mockResolvedValue({
+          id: 'pt-1',
+          name: 'Rotina Full Body',
+          type: 'strength',
+          trainings: [],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_PROTOCOL_TEMPLATE, {
+          name: 'Rotina Full Body',
+          trainings: [
+            {
+              name: 'Treino A',
+              category: 'strength',
+              exercises: [EXERCISE_INPUT],
+            },
+          ],
+        })
+
+        expect(prisma.exerciseTemplate.create).toHaveBeenCalledTimes(1)
+        expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              sets: 4,
+              repetitions: { min: 8, max: 12 },
+              restInterval: 90,
+              hasLoad: true,
+              suggestedLoad: 60,
+            }),
+          }),
+        )
+      })
+
+      it('includes hasLoad and suggestedLoad in the exerciseTemplate select on the protocol follow-up read', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
+        prisma.trainingProtocolTemplate.create.mockResolvedValue({
+          id: 'pt-1',
+          name: 'Rotina Full Body',
+          type: 'strength',
+          trainings: [],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_PROTOCOL_TEMPLATE, {
+          name: 'Rotina Full Body',
+          trainings: [
+            {
+              name: 'Treino A',
+              category: 'strength',
+              exercises: [EXERCISE_INPUT],
+            },
+          ],
+        })
+
+        const protocolCreateCall = prisma.trainingProtocolTemplate.create.mock.calls[0][0]
+        const exerciseSelect =
+          protocolCreateCall.include.trainings.include.trainingTemplate.select
+            .trainingTemplateExerciseTemplates.select.exerciseTemplate.select
+
+        expect(exerciseSelect).toMatchObject({
+          hasLoad: true,
+          suggestedLoad: true,
+        })
+      })
+
+      it('summarizeToolResult surfaces hasLoad and suggestedLoad in the tool_result message rawContent', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.trainerStudent.findMany.mockResolvedValue([])
+        prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+        prisma.trainingTemplate.findMany.mockResolvedValue([])
+        prisma.trainingProtocol.findMany.mockResolvedValue([])
+        prisma.exerciseTemplate.findMany.mockResolvedValue([])
+
+        prisma.aiConversation.findUnique.mockResolvedValue({
+          id: 'conv-pt',
+          userId: 'user-1',
+          title: 'Test',
+          messages: [
+            { role: 'user', content: 'Cria uma rotina' },
+            { role: 'assistant', content: 'Confirma?' },
+          ],
+        })
+        prisma.aiMessage.create.mockResolvedValue({ id: 'msg-2' })
+        prisma.aiConversation.update.mockResolvedValue({})
+
+        anthropicCreate.mockResolvedValueOnce({
+          stop_reason: 'tool_use',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tc-pt-1',
+              name: AI_TOOLS.CREATE_PROTOCOL_TEMPLATE,
+              input: {
+                name: 'Rotina Full Body',
+                trainings: [
+                  {
+                    name: 'Treino A',
+                    category: 'strength',
+                    exercises: [EXERCISE_INPUT],
+                  },
+                ],
+              },
+            },
+          ],
+        })
+
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
+
+        // trainingProtocolTemplate.create returns a shape with nested exercises
+        // so summarizeToolResult can surface hasLoad/suggestedLoad.
+        prisma.trainingProtocolTemplate.create.mockResolvedValue({
+          id: 'pt-1',
+          name: 'Rotina Full Body',
+          type: 'strength',
+          trainings: [
+            {
+              weekDay: 'monday',
+              trainingTemplate: {
+                name: 'Treino A',
+                trainingTemplateExerciseTemplates: [
+                  {
+                    exerciseTemplate: {
+                      id: 'ex-created-2',
+                      name: 'Supino reto',
+                      type: 'strength',
+                      sets: 4,
+                      repetitions: { min: 8, max: 12 },
+                      restInterval: 90,
+                      hasLoad: true,
+                      suggestedLoad: 60,
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        })
+
+        anthropicCreate.mockResolvedValueOnce({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'Rotina criada com sucesso!' }],
+        })
+
+        await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-pt' })
+
+        const toolResultCall = prisma.aiMessage.create.mock.calls.find(
+          (call) => call[0].data.role === 'tool_result',
+        )
+        expect(toolResultCall).toBeDefined()
+
+        const rawContent = toolResultCall[0].data.rawContent
+        expect(Array.isArray(rawContent)).toBe(true)
+
+        const resultEntry = rawContent[0]
+        const summary = JSON.parse(resultEntry.content)
+
+        expect(summary.trainings).toBeDefined()
+        expect(summary.trainings[0].exercises[0]).toMatchObject({
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          restInterval: 90,
+          hasLoad: true,
+          suggestedLoad: 60,
+        })
+      })
     })
   })
 
