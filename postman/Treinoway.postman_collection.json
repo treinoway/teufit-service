@@ -680,7 +680,25 @@
             },
             "description": "Get the current authenticated user's profile including address, socials, and preferences."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Get Current User - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["me"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false\n}"
+            }
+          ]
         },
         {
           "name": "Update Profile",
@@ -708,7 +726,25 @@
             },
             "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Update Profile - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": {
+                  "raw": "{{baseUrl}}/me/profile",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["me", "profile"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
+            }
+          ]
         },
         {
           "name": "Upload Avatar",

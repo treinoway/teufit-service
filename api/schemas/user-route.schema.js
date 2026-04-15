@@ -46,6 +46,7 @@ export const getMeSchema = {
         ...i18nField('gender', 'userGender', { nullable: true }),
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
+        hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
         address: {
           type: 'object',
           nullable: true,
@@ -204,6 +205,7 @@ export const updateProfileSchema = {
         ...i18nField('gender', 'userGender', { nullable: true }),
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
+        hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
         address: { type: 'object', nullable: true, additionalProperties: true },
         socials: { type: 'object', nullable: true, additionalProperties: true },
         preferences: { type: 'object', nullable: true, additionalProperties: true },

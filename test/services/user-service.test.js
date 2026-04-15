@@ -14,6 +14,9 @@ vi.mock('../../src/db.js', () => {
         findFirst: vi.fn(),
         create: vi.fn(),
       },
+      trainerStudent: {
+        findFirst: vi.fn(),
+      },
     },
   };
 });
@@ -29,6 +32,8 @@ import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from
 describe('userService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no active trainer link — individual tests override when needed
+    prisma.trainerStudent.findFirst.mockResolvedValue(null);
   });
 
   it('throws USER_ID_REQUIRED when userId is missing', async () => {
@@ -104,6 +109,7 @@ describe('userService', () => {
     gender: null,
     birthDate: null,
     avatarUrl: null,
+    hasActiveTrainer: false,
     address: {
       id: 'a1',
       line1: null,
@@ -603,6 +609,7 @@ describe('userService', () => {
         gender: 'male',
         birthDate: '1990-01-01',
         avatarUrl: 'https://example.com/avatar.jpg',
+        hasActiveTrainer: false,
       });
       expect(result).not.toHaveProperty('address');
       expect(result).not.toHaveProperty('socials');
@@ -739,6 +746,78 @@ describe('userService', () => {
 
       expect(result).toHaveProperty('address', null);
       expect(result).toHaveProperty('socials', null);
+    });
+  });
+
+  describe('hasActiveTrainer flag', () => {
+    const baseUser = {
+      id: 'u1',
+      email: 'test@example.com',
+      roles: ['student'],
+      status: 'active',
+      firstName: 'John',
+      lastName: null,
+      gender: null,
+      birthDate: null,
+      avatarUrl: null,
+    };
+
+    describe('getUserProfileById', () => {
+      it('returns hasActiveTrainer: false when no TrainerStudent record exists for the user', async () => {
+        prisma.user.findUnique.mockResolvedValue(baseUser);
+        prisma.trainerStudent.findFirst.mockResolvedValue(null);
+
+        const result = await getUserProfileById('u1', []);
+
+        expect(result.hasActiveTrainer).toBe(false);
+        expect(prisma.trainerStudent.findFirst).toHaveBeenCalledWith({
+          where: { studentId: 'u1' },
+          select: { id: true },
+        });
+      });
+
+      it('returns hasActiveTrainer: true when at least one TrainerStudent record exists for the user', async () => {
+        prisma.user.findUnique.mockResolvedValue(baseUser);
+        prisma.trainerStudent.findFirst.mockResolvedValue({ id: 'ts1' });
+
+        const result = await getUserProfileById('u1', []);
+
+        expect(result.hasActiveTrainer).toBe(true);
+        expect(prisma.trainerStudent.findFirst).toHaveBeenCalledWith({
+          where: { studentId: 'u1' },
+          select: { id: true },
+        });
+      });
+    });
+
+    describe('updateUserProfile', () => {
+      it('returns hasActiveTrainer: false when no TrainerStudent record exists for the user', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        prisma.user.update.mockResolvedValue({ ...baseUser, address: null, socials: null, preferences: null });
+        prisma.trainerStudent.findFirst.mockResolvedValue(null);
+
+        const result = await updateUserProfile('u1', { firstName: 'John' });
+
+        expect(result.hasActiveTrainer).toBe(false);
+        expect(prisma.trainerStudent.findFirst).toHaveBeenCalledWith({
+          where: { studentId: 'u1' },
+          select: { id: true },
+        });
+      });
+
+      it('returns hasActiveTrainer: true when at least one TrainerStudent record exists for the user', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        prisma.user.update.mockResolvedValue({ ...baseUser, address: null, socials: null, preferences: null });
+        prisma.trainerStudent.findFirst.mockResolvedValue({ id: 'ts1' });
+
+        const result = await updateUserProfile('u1', { firstName: 'John' });
+
+        expect(result.hasActiveTrainer).toBe(true);
+        expect(prisma.trainerStudent.findFirst).toHaveBeenCalledWith({
+          where: { studentId: 'u1' },
+          select: { id: true },
+        });
+      });
     });
   });
 });

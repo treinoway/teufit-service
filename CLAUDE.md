@@ -3,6 +3,7 @@
 ## MUST FOLLOW RULES
 - NEVER ignore CLAUDE.md. Always read and respect its content, this is not a suggestion.
 - NEVER accept my plans or suggestions blindly. You MUST be skeptic and always try to find flaws or non-covered edge cases. Avoid Sycophancy.
+- The `backend-engineer` agent MUST always invoke the `test-writer` agent to write/update tests for any code it changes. No exceptions — implementation is not complete until tests are written.
 
 
 ## Error Handling

@@ -549,4 +549,98 @@ e2eDescribe('e2e: user profile flows', () => {
       expect(response.statusCode).toBe(401);
     });
   });
+
+  describe('hasActiveTrainer flag in GET /me and PATCH /me/profile', () => {
+    async function createAndAuthUser(suffix) {
+      const email = `e2e+has-trainer-${suffix}-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupRes = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupRes.statusCode).toBe(201);
+      const { user: { id: userId }, token: { accessToken } } = signupRes.json();
+      return { userId, accessToken, email };
+    }
+
+    async function createTrainerAndLinkStudent(studentEmail) {
+      // Create a trainer account
+      const { accessToken: trainerRawToken } = await createAndAuthUser('trainer');
+
+      const becomeRes = await app.inject({
+        method: 'PATCH',
+        url: '/become-trainer',
+        headers: { authorization: `Bearer ${trainerRawToken}` },
+      });
+      expect(becomeRes.statusCode).toBe(200);
+      const { token: { accessToken: trainerToken } } = becomeRes.json();
+
+      // Link the student to the trainer
+      const linkRes = await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email: studentEmail },
+      });
+      expect(linkRes.statusCode).toBe(201);
+    }
+
+    it('GET /me returns hasActiveTrainer: false when the user has no trainer link', async () => {
+      const { accessToken } = await createAndAuthUser('no-link');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveProperty('hasActiveTrainer', false);
+    });
+
+    it('GET /me returns hasActiveTrainer: true when the user is linked to a trainer', async () => {
+      const { accessToken, email: studentEmail } = await createAndAuthUser('with-link');
+      await createTrainerAndLinkStudent(studentEmail);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveProperty('hasActiveTrainer', true);
+    });
+
+    it('PATCH /me/profile returns hasActiveTrainer: false when the user has no trainer link', async () => {
+      const { accessToken } = await createAndAuthUser('patch-no-link');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { firstName: 'Alice' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveProperty('hasActiveTrainer', false);
+    });
+
+    it('PATCH /me/profile returns hasActiveTrainer: true when the user is linked to a trainer', async () => {
+      const { accessToken, email: studentEmail } = await createAndAuthUser('patch-with-link');
+      await createTrainerAndLinkStudent(studentEmail);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/me/profile',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { firstName: 'Alice' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveProperty('hasActiveTrainer', true);
+    });
+  });
 });

@@ -6,13 +6,19 @@ import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
 
-async function toUserProfile(user) {
+async function computeHasActiveTrainer(userId) {
+	const link = await prisma.trainerStudent.findFirst({
+		where: { studentId: userId },
+		select: { id: true },
+	});
+	return Boolean(link);
+}
+
+async function toUserProfile(user, { hasActiveTrainer } = {}) {
 	if (!user) return null;
 
-	// Resolve avatar: S3 key → signed URL, external URL → as-is
 	const avatarUrl = await s3BucketHandler.resolveUrl(user.avatarUrl);
 
-	// Start with base user fields
 	const profile = {
 		id: user.id,
 		email: user.email,
@@ -23,6 +29,7 @@ async function toUserProfile(user) {
 		gender: user.gender,
 		birthDate: formatDateOnly(user.birthDate),
 		avatarUrl,
+		hasActiveTrainer: hasActiveTrainer === true,
 	};
 
 	// Only include relations that were loaded (not undefined)
@@ -88,13 +95,12 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		throw err;
 	}
 
-	// Build dynamic select based on requested relations
 	const select = buildUserSelect(includeRelations);
 
-	const user = await prisma.user.findUnique({
-		where: { id: userId },
-		select,
-	});
+	const [user, hasActiveTrainer] = await Promise.all([
+		prisma.user.findUnique({ where: { id: userId }, select }),
+		computeHasActiveTrainer(userId),
+	]);
 
 	if (!user) {
 		const err = new Error('User not found');
@@ -103,7 +109,7 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		throw err;
 	}
 
-	return toUserProfile(user);
+	return toUserProfile(user, { hasActiveTrainer });
 }
 
 export async function setActiveProfileToTrainer(userId) {
@@ -310,7 +316,9 @@ if (!userId) {
 		},
 	});
 
-	return toUserProfile(updatedUser);
+	const hasActiveTrainer = await computeHasActiveTrainer(userId);
+
+	return toUserProfile(updatedUser, { hasActiveTrainer });
 	}catch (err) {
 		console.error('Error in updateUserProfile:', err);
 		throw err;

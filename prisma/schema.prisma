@@ -437,6 +437,7 @@ model TrainerStudent {
   student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([trainerId, studentId])
+  @@index([studentId])
   @@map("trainer_students")
 }
 

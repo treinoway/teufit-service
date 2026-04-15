@@ -1,0 +1,5 @@
+# Test Writer Memory Index
+
+- [Unit test mock patterns](patterns-unit-mocks.md) — Prisma mock structure, beforeEach defaults, toEqual shape pinning
+- [E2E test patterns](patterns-e2e.md) — app bootstrap, cleanDatabase, auth helpers, TrainerStudent setup
+- [Pre-existing E2E failures](known-failures.md) — E2E files with pre-existing failures not related to user-service
