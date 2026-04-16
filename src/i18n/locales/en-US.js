@@ -171,6 +171,9 @@ export default {
     'gamification.ranking.insufficientStudents': 'At least 3 active students (last 14 days) are required to display the ranking.',
     'gamification.globalRankingRemoved': 'The global ranking has been discontinued. Use challenges instead.',
 
+    // Training template exercises
+    'trainingTemplateExercise.notFound': 'Exercise not found in this training template.',
+
     // Challenge
     'challenge.notFound': 'Challenge not found.',
     'challenge.invalidDates': 'Invalid challenge dates. The start date must be today or in the future, and the end date must be equal to or after the start date.',

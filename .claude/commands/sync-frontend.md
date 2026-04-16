@@ -1,16 +1,16 @@
 # Frontend Brief
 
-!`cat /Users/adeildoneto/Coding/treinoway-service/.claude/frontend-brief.md 2>/dev/null || echo "No frontend-brief.md found. Run the backend-engineer agent on a feature first."`
+!`cat /Users/adeildoneto/Coding/treinoway/treinoway-service/.claude/frontend-brief.md 2>/dev/null || echo "No frontend-brief.md found. Run the backend-engineer agent on a feature first."`
 
 # Git Diff (Backend API changes — reference only)
 
-!`cd /Users/adeildoneto/Coding/treinoway-service && git diff master...HEAD -- api/routes/ api/schemas/ src/services/ prisma/schema.prisma 2>/dev/null || echo "No diff available."`
+!`git -C /Users/adeildoneto/Coding/treinoway/treinoway-service diff master...HEAD -- api/routes/ api/schemas/ src/services/ prisma/schema.prisma 2>/dev/null || echo "No diff available."`
 
 # Task — Orchestrate Frontend Delivery
 
 You are now the **orchestrator** for frontend delivery of the feature described in the brief above. Execute this 4-stage pipeline at the top level, spawning specialized sub-agents via the Agent tool. **Never skip a stage. Never merge stages. Pass FULL output between stages — do not summarize.**
 
-The final implementation happens in `/Users/adeildoneto/Coding/treinoway-web`.
+The final implementation happens in `/Users/adeildoneto/Coding/treinoway/treinoway-web`.
 
 ---
 
@@ -105,7 +105,7 @@ Invoke `frontend-engineer` with the refined design (authoritative) plus the full
 **Prompt template:**
 
 ```
-Implement the following feature in the Treinoway web frontend at /Users/adeildoneto/Coding/treinoway-web.
+Implement the following feature in the Treinoway web frontend at /Users/adeildoneto/Coding/treinoway/treinoway-web.
 
 ## Design specification (authoritative)
 [STAGE 3 OUTPUT]
@@ -114,7 +114,7 @@ Implement the following feature in the Treinoway web frontend at /Users/adeildon
 [BRIEF]
 
 ## Requirements
-- Read /Users/adeildoneto/Coding/treinoway-web/CLAUDE.md first for conventions
+- Read /Users/adeildoneto/Coding/treinoway/treinoway-web/CLAUDE.md first for conventions
 - Follow existing patterns (API clients, i18n, components)
 - Update both pt-BR and en locale files
 - Run lint and tests before reporting done

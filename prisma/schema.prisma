@@ -372,13 +372,26 @@ model TrainingTemplateExerciseTemplate {
   exerciseTemplateId String  @map("exercise_template_id") @db.Uuid
   order              Int     @default(0)
 
+  // Snapshot fields — copied from ExerciseTemplate at link time; independent after that
+  name          String  @db.Text
+  type          String  @db.Text
+  videoUrl      String? @map("video_url") @db.Text
+  sets          Int?
+  repetitions   Json?
+  duration      Int?
+  hasLoad       Boolean @default(false) @map("has_load")
+  suggestedLoad Float?  @map("suggested_load")
+  restInterval  Int?    @map("rest_interval")
+  notes         String? @db.Text
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   trainingTemplate TrainingTemplate @relation(fields: [trainingTemplateId], references: [id], onDelete: Cascade)
   exerciseTemplate ExerciseTemplate @relation(fields: [exerciseTemplateId], references: [id], onDelete: Cascade)
 
-  @@unique([trainingTemplateId, exerciseTemplateId])
+  @@index([trainingTemplateId])
+  @@index([exerciseTemplateId])
   @@map("training_template_exercise_templates")
 }
 

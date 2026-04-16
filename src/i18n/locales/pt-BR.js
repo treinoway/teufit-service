@@ -175,6 +175,9 @@ export default {
     'gamification.ranking.insufficientStudents': 'São necessários pelo menos 3 alunos ativos (últimos 14 dias) para exibir o ranking.',
     'gamification.globalRankingRemoved': 'O ranking global foi descontinuado. Use os campeonatos.',
 
+    // Training template exercises
+    'trainingTemplateExercise.notFound': 'Exercício não encontrado neste modelo de treino.',
+
     // Challenge (Campeonato)
     'challenge.notFound': 'Campeonato não encontrado.',
     'challenge.invalidDates': 'Datas do campeonato inválidas. A data de início deve ser hoje ou no futuro, e a data de término deve ser igual ou após a de início.',

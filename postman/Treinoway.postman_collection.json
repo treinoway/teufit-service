@@ -1700,7 +1700,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\"compound\", \"strength\", \"upper body\"],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    { \"exerciseTemplateId\": \"<exercise-template-uuid>\", \"order\": 0 },\n    { \"exerciseTemplateId\": \"<exercise-template-uuid-2>\", \"order\": 1 }\n  ]\n}"
+              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\"compound\", \"strength\", \"upper body\"],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"name\": \"Bench Press\",\n      \"type\": \"strength\",\n      \"sets\": 4,\n      \"repetitions\": { \"min\": 8, \"max\": 12 },\n      \"hasLoad\": true,\n      \"suggestedLoad\": 80,\n      \"restInterval\": 90,\n      \"notes\": \"Keep elbows at 45 degrees\"\n    },\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid-2>\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates",
@@ -1712,7 +1717,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional) } to link exercise templates; all must belong to the same trainer."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
           },
           "response": []
         },
@@ -1794,7 +1799,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\"cardio\", \"endurance\"],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    { \"exerciseTemplateId\": \"<exercise-template-uuid>\", \"order\": 0 }\n  ]\n}"
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\"cardio\", \"endurance\"],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"sets\": 3,\n      \"repetitions\": { \"min\": 12, \"max\": 15 },\n      \"restInterval\": 60,\n      \"notes\": \"Controlled tempo\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/training-templates/:id",
@@ -1814,7 +1824,55 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order). Only accessible by the template's trainer."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Training Template Exercise",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 80,\n  \"restInterval\": 90,\n  \"notes\": \"Keep elbows tucked\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/exercises/:exerciseId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "exercises",
+                ":exerciseId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "exerciseId",
+                  "value": "",
+                  "description": "Junction row UUID (TrainingTemplateExerciseTemplate.id)"
+                }
+              ]
+            },
+            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership."
           },
           "response": []
         },

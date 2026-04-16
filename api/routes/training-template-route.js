@@ -122,6 +122,39 @@ export async function trainingTemplateRoutes(fastify) {
     },
   );
 
+  // Update a single exercise (junction row) inside a training template
+  fastify.patch(
+    '/trainer/training-templates/:templateId/exercises/:exerciseId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateTrainingTemplateExerciseSchema,
+    },
+    async (request, reply) => {
+      try {
+        const updated = await service.updateTrainingTemplateExercise(
+          request.user.id,
+          request.params.templateId,
+          request.params.exerciseId,
+          request.body,
+        );
+        return reply.send(updated);
+      } catch (error) {
+        if (
+          error.code === 'TEMPLATE_NOT_FOUND' ||
+          error.code === 'TRAINER_PROFILE_MISSING' ||
+          error.code === 'TRAINING_TEMPLATE_EXERCISE_NOT_FOUND'
+        ) {
+          return reply.status(404).send({ error: error.message });
+        }
+        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {
+          return reply.status(403).send({ error: error.message });
+        }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to update training template exercise' });
+      }
+    },
+  );
+
   // Delete template
   fastify.delete(
     '/trainer/training-templates/:id',

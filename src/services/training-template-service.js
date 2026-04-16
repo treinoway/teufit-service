@@ -1,6 +1,33 @@
 import { prisma } from '../db.js';
 import { buildError, validateCategory, validateBodySegment } from '../helpers/training-validators.js';
 
+/**
+ * Build junction row create/update data by merging caller overrides with template snapshot.
+ * The input `e` may carry optional override fields (e.g. `{ sets: 5 }`).
+ * Fields not provided by the caller fall back to the fetched template values.
+ *
+ * @param {object} e - Input item (exerciseTemplateId, order?, and any snapshot overrides)
+ * @param {number} index - Fallback order when e.order is not set
+ * @param {object} template - Full ExerciseTemplate row fetched from DB
+ * @returns {object} Junction row create data
+ */
+function buildJunctionCreateData(e, index, template) {
+  return {
+    exerciseTemplateId: e.exerciseTemplateId,
+    order: e.order !== undefined ? e.order : index,
+    name: e.name !== undefined ? e.name : template.name,
+    type: e.type !== undefined ? e.type : template.type,
+    videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
+    sets: e.sets !== undefined ? e.sets : template.sets,
+    repetitions: e.repetitions !== undefined ? e.repetitions : template.repetitions,
+    duration: e.duration !== undefined ? e.duration : template.duration,
+    hasLoad: e.hasLoad !== undefined ? e.hasLoad : template.hasLoad,
+    suggestedLoad: e.suggestedLoad !== undefined ? e.suggestedLoad : template.suggestedLoad,
+    restInterval: e.restInterval !== undefined ? e.restInterval : template.restInterval,
+    notes: e.notes !== undefined ? e.notes : template.notes,
+  };
+}
+
 const exerciseTemplatesInclude = {
   trainingTemplateExerciseTemplates: {
     orderBy: { order: 'asc' },
@@ -42,11 +69,11 @@ export async function createTrainingTemplate(userId, data) {
     : data.exerciseTemplates || [];
   const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
 
+  let existingTemplatesById = {};
   if (exerciseTemplatesInput.length > 0) {
     const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
     const existing = await prisma.exerciseTemplate.findMany({
       where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
-      select: { id: true },
     });
     const foundIds = new Set(existing.map((e) => e.id));
     const missing = ids.filter((id) => !foundIds.has(id));
@@ -57,6 +84,8 @@ export async function createTrainingTemplate(userId, data) {
         404,
       );
     }
+    // Index by id for O(1) lookup when building junction rows
+    existingTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
   }
 
   // 5. Build create data (omit trainingTemplateExerciseTemplates when empty so Prisma does not receive undefined)
@@ -71,10 +100,9 @@ export async function createTrainingTemplate(userId, data) {
   };
   if (exerciseTemplatesInput.length > 0) {
     createData.trainingTemplateExerciseTemplates = {
-      create: exerciseTemplatesInput.map((e, index) => ({
-        exerciseTemplateId: e.exerciseTemplateId,
-        order: e.order !== undefined ? e.order : index,
-      })),
+      create: exerciseTemplatesInput.map((e, index) =>
+        buildJunctionCreateData(e, index, existingTemplatesById[e.exerciseTemplateId]),
+      ),
     };
   }
 
@@ -276,11 +304,11 @@ export async function updateTrainingTemplate(userId, templateId, data) {
       ? data.exerciseTemplateIds.map((id) => ({ exerciseTemplateId: id }))
       : data.exerciseTemplates || [];
     const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
+    let updateTemplatesById = {};
     if (exerciseTemplatesInput.length > 0) {
       const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
       const existing = await prisma.exerciseTemplate.findMany({
         where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
-        select: { id: true },
       });
       const foundIds = new Set(existing.map((e) => e.id));
       const missing = ids.filter((id) => !foundIds.has(id));
@@ -291,13 +319,13 @@ export async function updateTrainingTemplate(userId, templateId, data) {
           404,
         );
       }
+      updateTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
     }
     updateData.trainingTemplateExerciseTemplates = {
       deleteMany: {},
-      create: exerciseTemplatesInput.map((e, index) => ({
-        exerciseTemplateId: e.exerciseTemplateId,
-        order: e.order !== undefined ? e.order : index,
-      })),
+      create: exerciseTemplatesInput.map((e, index) =>
+        buildJunctionCreateData(e, index, updateTemplatesById[e.exerciseTemplateId]),
+      ),
     };
   }
 
@@ -351,4 +379,71 @@ export async function deleteTrainingTemplate(userId, templateId) {
   });
 
   return deleted;
+}
+
+/**
+ * Update a single exercise (junction row) inside a training template.
+ * Only the snapshot fields on the junction row are changed — the global ExerciseTemplate is untouched.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string} templateId - Training template ID
+ * @param {string} exerciseId - Junction row ID (TrainingTemplateExerciseTemplate.id)
+ * @param {object} data - Fields to update (any combination of snapshot fields + order)
+ * @returns {Promise<object>} Updated junction row (includes exerciseTemplate relation)
+ */
+export async function updateTrainingTemplateExercise(userId, templateId, exerciseId, data) {
+  // 1. Verify trainer profile exists
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  // 2. Verify training template exists, is owned by trainer, and is not deleted
+  const template = await prisma.trainingTemplate.findUnique({
+    where: { id: templateId },
+  });
+
+  if (!template || template.deletedAt) {
+    throw buildError('TEMPLATE_NOT_FOUND', 'Training template not found', 404);
+  }
+
+  if (template.trainerId !== trainer.id) {
+    throw buildError('FORBIDDEN_NOT_TEMPLATE_OWNER', 'You do not own this template', 403);
+  }
+
+  // 3. Find junction row by id, scoped to this training template
+  const junctionRow = await prisma.trainingTemplateExerciseTemplate.findFirst({
+    where: { id: exerciseId, trainingTemplateId: templateId },
+  });
+
+  if (!junctionRow) {
+    throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
+  }
+
+  // 4. Build update data — only include fields explicitly provided by the caller
+  const updateData = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.type !== undefined) updateData.type = data.type;
+  if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
+  if (data.sets !== undefined) updateData.sets = data.sets;
+  if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
+  if (data.duration !== undefined) updateData.duration = data.duration;
+  if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
+  if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
+  if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
+  if (data.notes !== undefined) updateData.notes = data.notes;
+  if (data.order !== undefined) updateData.order = data.order;
+
+  // 5. Update and return the updated junction row with exerciseTemplate for reference
+  const updated = await prisma.trainingTemplateExerciseTemplate.update({
+    where: { id: exerciseId },
+    data: updateData,
+    include: { exerciseTemplate: true },
+  });
+
+  return updated;
 }

@@ -481,21 +481,21 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
         },
       });
 
-      for (const { exerciseTemplate, order } of trainingTemplate.trainingTemplateExerciseTemplates) {
+      for (const junctionRow of trainingTemplate.trainingTemplateExerciseTemplates) {
         await tx.exercise.create({
           data: {
             trainingId: createdTraining.id,
-            exerciseTemplateId: exerciseTemplate.id,
-            name: exerciseTemplate.name,
-            type: exerciseTemplate.type,
-            videoUrl: exerciseTemplate.videoUrl || null,
-            order,
-            sets: exerciseTemplate.sets ?? null,
-            repetitions: exerciseTemplate.repetitions ?? null,
-            duration: exerciseTemplate.duration ?? null,
-            hasLoad: exerciseTemplate.hasLoad ?? false,
-            suggestedLoad: exerciseTemplate.suggestedLoad ?? null,
-            notes: exerciseTemplate.notes ?? null,
+            exerciseTemplateId: junctionRow.exerciseTemplateId,
+            name: junctionRow.name,
+            type: junctionRow.type,
+            videoUrl: junctionRow.videoUrl || null,
+            order: junctionRow.order,
+            sets: junctionRow.sets ?? null,
+            repetitions: junctionRow.repetitions ?? null,
+            duration: junctionRow.duration ?? null,
+            hasLoad: junctionRow.hasLoad ?? false,
+            suggestedLoad: junctionRow.suggestedLoad ?? null,
+            notes: junctionRow.notes ?? null,
           },
         });
       }

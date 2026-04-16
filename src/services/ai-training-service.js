@@ -610,12 +610,12 @@ function summarizeToolResult(toolResult) {
         weekDay: t.weekDay,
         exercisesCount: t.trainingTemplate?.trainingTemplateExerciseTemplates?.length ?? null,
         exercises: t.trainingTemplate?.trainingTemplateExerciseTemplates?.map((e) => ({
-          name: e.exerciseTemplate?.name || "exercício",
-          sets: e.exerciseTemplate?.sets ?? null,
-          repetitions: e.exerciseTemplate?.repetitions ?? null,
-          restInterval: e.exerciseTemplate?.restInterval ?? null,
-          hasLoad: e.exerciseTemplate?.hasLoad ?? null,
-          suggestedLoad: e.exerciseTemplate?.suggestedLoad ?? null,
+          name: e.name || "exercício",
+          sets: e.sets ?? null,
+          repetitions: e.repetitions ?? null,
+          restInterval: e.restInterval ?? null,
+          hasLoad: e.hasLoad ?? null,
+          suggestedLoad: e.suggestedLoad ?? null,
         })) ?? [],
       })),
     };
@@ -632,12 +632,12 @@ function summarizeToolResult(toolResult) {
       category: data.category,
       exercisesCount: data.trainingTemplateExerciseTemplates.length,
       exercises: data.trainingTemplateExerciseTemplates.map((e) => ({
-        name: e.exerciseTemplate?.name || "exercício",
-        sets: e.exerciseTemplate?.sets ?? null,
-        repetitions: e.exerciseTemplate?.repetitions ?? null,
-        restInterval: e.exerciseTemplate?.restInterval ?? null,
-        hasLoad: e.exerciseTemplate?.hasLoad ?? null,
-        suggestedLoad: e.exerciseTemplate?.suggestedLoad ?? null,
+        name: e.name || "exercício",
+        sets: e.sets ?? null,
+        repetitions: e.repetitions ?? null,
+        restInterval: e.restInterval ?? null,
+        hasLoad: e.hasLoad ?? null,
+        suggestedLoad: e.suggestedLoad ?? null,
       })),
     };
   }
@@ -770,9 +770,20 @@ async function executeTool(userId, toolName, toolInput) {
           }
         }
 
+        // Fetch existing exercise templates upfront so we can snapshot their fields
+        let existingTemplatesForSnapshot = [];
+        if (existingIds.length > 0) {
+          existingTemplatesForSnapshot = await prisma.exerciseTemplate.findMany({
+            where: { id: { in: existingIds }, trainerId: trainer.id },
+          });
+        }
+        const existingTemplateSnapshotById = Object.fromEntries(
+          existingTemplatesForSnapshot.map((t) => [t.id, t]),
+        );
+
         result = await prisma.$transaction(async (tx) => {
-          // Batch create exercise templates
-          const createdExerciseIds = [];
+          // Batch create exercise templates; collect full data for snapshot
+          const createdExerciseSnapshots = [];
           if (inlineExercises.length > 0) {
             for (const ex of inlineExercises) {
               const created = await tx.exerciseTemplate.create({
@@ -789,11 +800,43 @@ async function executeTool(userId, toolName, toolInput) {
                   notes: ex.notes ?? null,
                 },
               });
-              createdExerciseIds.push(created.id);
+              createdExerciseSnapshots.push(created);
             }
           }
 
-          const allExerciseIds = [...existingIds, ...createdExerciseIds];
+          // Build junction rows: existing ids first, then newly created
+          const existingJunctionRows = existingIds.map((id) => {
+            const t = existingTemplateSnapshotById[id];
+            return {
+              exerciseTemplateId: id,
+              name: t.name,
+              type: t.type,
+              videoUrl: t.videoUrl ?? null,
+              sets: t.sets ?? null,
+              repetitions: t.repetitions ?? null,
+              duration: t.duration ?? null,
+              hasLoad: t.hasLoad ?? false,
+              suggestedLoad: t.suggestedLoad ?? null,
+              restInterval: t.restInterval ?? null,
+              notes: t.notes ?? null,
+            };
+          });
+          const createdJunctionRows = createdExerciseSnapshots.map((t) => ({
+            exerciseTemplateId: t.id,
+            name: t.name,
+            type: t.type,
+            videoUrl: t.videoUrl ?? null,
+            sets: t.sets ?? null,
+            repetitions: t.repetitions ?? null,
+            duration: t.duration ?? null,
+            hasLoad: t.hasLoad ?? false,
+            suggestedLoad: t.suggestedLoad ?? null,
+            restInterval: t.restInterval ?? null,
+            notes: t.notes ?? null,
+          }));
+          const allJunctionRows = [...existingJunctionRows, ...createdJunctionRows].map(
+            (row, index) => ({ ...row, order: index }),
+          );
 
           // Create training template with linked exercises
           const trainingTemplate = await tx.trainingTemplate.create({
@@ -805,12 +848,9 @@ async function executeTool(userId, toolName, toolInput) {
               bodySegment: toolInput.bodySegment || null,
               tags: [],
               isPublic: false,
-              ...(allExerciseIds.length > 0 && {
+              ...(allJunctionRows.length > 0 && {
                 trainingTemplateExerciseTemplates: {
-                  create: allExerciseIds.map((id, index) => ({
-                    exerciseTemplateId: id,
-                    order: index,
-                  })),
+                  create: allJunctionRows,
                 },
               }),
             },
@@ -892,8 +932,8 @@ async function executeTool(userId, toolName, toolInput) {
               continue;
             }
 
-            // Batch create exercise templates for this training
-            const exerciseIds = [];
+            // Batch create exercise templates for this training; collect full data for snapshot
+            const exerciseSnapshots = [];
             for (const ex of training.exercises || []) {
               const created = await tx.exerciseTemplate.create({
                 data: {
@@ -909,8 +949,23 @@ async function executeTool(userId, toolName, toolInput) {
                   notes: ex.notes ?? null,
                 },
               });
-              exerciseIds.push(created.id);
+              exerciseSnapshots.push(created);
             }
+
+            const junctionRows = exerciseSnapshots.map((t, index) => ({
+              exerciseTemplateId: t.id,
+              order: index,
+              name: t.name,
+              type: t.type,
+              videoUrl: t.videoUrl ?? null,
+              sets: t.sets ?? null,
+              repetitions: t.repetitions ?? null,
+              duration: t.duration ?? null,
+              hasLoad: t.hasLoad ?? false,
+              suggestedLoad: t.suggestedLoad ?? null,
+              restInterval: t.restInterval ?? null,
+              notes: t.notes ?? null,
+            }));
 
             // Create training template
             const createdTraining = await tx.trainingTemplate.create({
@@ -922,12 +977,9 @@ async function executeTool(userId, toolName, toolInput) {
                 bodySegment: training.bodySegment || null,
                 tags: [],
                 isPublic: false,
-                ...(exerciseIds.length > 0 && {
+                ...(junctionRows.length > 0 && {
                   trainingTemplateExerciseTemplates: {
-                    create: exerciseIds.map((id, index) => ({
-                      exerciseTemplateId: id,
-                      order: index,
-                    })),
+                    create: junctionRows,
                   },
                 }),
               },

@@ -129,7 +129,22 @@ Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch 
 - `test/e2e/anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
 - `test/e2e/ai.e2e.test.js` — 1 test failing (multi-turn conversation)
+- `test/e2e/auth.e2e.test.js` — 2 tests failing (INVALID_CREDENTIALS messageCode)
 These are NOT caused by new features. Do not investigate unless specifically asked.
+
+## Snapshot pattern for junction tables (2026-04-15)
+When a junction table needs independent copies of related entity fields:
+1. Add all fields as nullable in schema first (migration: nullable → backfill → NOT NULL).
+2. Create a `buildJunctionCreateData(e, index, template)` helper: uses `e.field !== undefined ? e.field : template.field` for every field so callers can override any field at link time.
+3. Service must fetch full ExerciseTemplate data (not just `select: { id: true }`) before creating junction rows.
+4. AI service reads exercise display data from junction row fields directly (`e.name`, `e.sets`), NOT from `e.exerciseTemplate.name`.
+5. When updating AI test mocks: `exerciseTemplate.create` must return full field data; junction row mocks must include all snapshot fields at top level.
+
+## Route file inline error handling pattern (training-template-route.js)
+This file uses the OLD inline try/catch with `error.code` checks, not the newer propagation pattern (challenge-route.js). Follow whichever pattern already exists in the file you are editing.
+
+## Custom migration with backfill (NOT NULL columns in populated table)
+Use `npx prisma migrate dev --create-only --name <name>`, edit the SQL: add nullable → UPDATE JOIN → ALTER SET NOT NULL. Then `npm run db:migrate`.
 
 ## i18n schema migrations (PR2, 2026-04-10)
 - `protocolStatus` locale namespace is an empty placeholder — `TrainingProtocol.status` uses `TrainingStatus` enum, so map to `trainingStatus` namespace

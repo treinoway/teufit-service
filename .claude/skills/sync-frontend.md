@@ -15,10 +15,10 @@ Each stage runs sequentially. Full output is passed between stages (no summariza
 
 ## Steps to execute
 
-1. Read the frontend brief: `/Users/adeildoneto/Coding/treinoway-service/.claude/frontend-brief.md`
-2. If needed for ambiguity, reference backend diff: `cd /Users/adeildoneto/Coding/treinoway-service && git diff master...HEAD`
+1. Read the frontend brief: `/Users/adeildoneto/Coding/treinoway/treinoway-service/.claude/frontend-brief.md`
+2. If needed for ambiguity, reference backend diff: `git -C /Users/adeildoneto/Coding/treinoway/treinoway-service diff master...HEAD`
 3. Execute Stages 1–4 as described in `.claude/commands/sync-frontend.md` (same prompt templates)
-4. Final implementation happens in `/Users/adeildoneto/Coding/treinoway-web`
+4. Final implementation happens in `/Users/adeildoneto/Coding/treinoway/treinoway-web`
 
 ## Agent availability check
 

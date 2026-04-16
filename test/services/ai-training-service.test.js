@@ -1011,17 +1011,42 @@ describe('ai-training-service', () => {
           ],
         })
 
-        // Mock exerciseTemplate.create (used inside the $transaction)
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+        // Mock exerciseTemplate.create (used inside the $transaction) — must include snapshot fields
+        prisma.exerciseTemplate.create.mockResolvedValue({
+          id: 'ex-created-1',
+          name: 'Supino reto',
+          type: 'strength',
+          videoUrl: null,
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          duration: null,
+          hasLoad: true,
+          suggestedLoad: 60,
+          restInterval: 90,
+          notes: null,
+        })
 
         // Mock trainingTemplate.create to return a realistic shape so summarizeToolResult
-        // can pick up hasLoad and suggestedLoad.
+        // can pick up hasLoad and suggestedLoad (now read from junction row snapshot fields).
         prisma.trainingTemplate.create.mockResolvedValue({
           id: 'tt-1',
           name: 'Treino A',
           category: 'strength',
           trainingTemplateExerciseTemplates: [
             {
+              id: 'jt-1',
+              exerciseTemplateId: 'ex-created-1',
+              order: 0,
+              name: 'Supino reto',
+              type: 'strength',
+              videoUrl: null,
+              sets: 4,
+              repetitions: { min: 8, max: 12 },
+              duration: null,
+              hasLoad: true,
+              suggestedLoad: 60,
+              restInterval: 90,
+              notes: null,
               exerciseTemplate: {
                 id: 'ex-created-1',
                 name: 'Supino reto',
@@ -1180,11 +1205,24 @@ describe('ai-training-service', () => {
           ],
         })
 
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        // Mock exerciseTemplate.create — must include snapshot fields so junction row is populated
+        prisma.exerciseTemplate.create.mockResolvedValue({
+          id: 'ex-created-2',
+          name: 'Supino reto',
+          type: 'strength',
+          videoUrl: null,
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          duration: null,
+          hasLoad: true,
+          suggestedLoad: 60,
+          restInterval: 90,
+          notes: null,
+        })
         prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
 
         // trainingProtocolTemplate.create returns a shape with nested exercises
-        // so summarizeToolResult can surface hasLoad/suggestedLoad.
+        // so summarizeToolResult can surface hasLoad/suggestedLoad (now from junction row snapshot).
         prisma.trainingProtocolTemplate.create.mockResolvedValue({
           id: 'pt-1',
           name: 'Rotina Full Body',
@@ -1196,6 +1234,19 @@ describe('ai-training-service', () => {
                 name: 'Treino A',
                 trainingTemplateExerciseTemplates: [
                   {
+                    id: 'jt-2',
+                    exerciseTemplateId: 'ex-created-2',
+                    order: 0,
+                    name: 'Supino reto',
+                    type: 'strength',
+                    videoUrl: null,
+                    sets: 4,
+                    repetitions: { min: 8, max: 12 },
+                    duration: null,
+                    hasLoad: true,
+                    suggestedLoad: 60,
+                    restInterval: 90,
+                    notes: null,
                     exerciseTemplate: {
                       id: 'ex-created-2',
                       name: 'Supino reto',
