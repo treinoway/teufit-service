@@ -134,6 +134,9 @@ export async function trainingProtocolRoutes(fastify) {
         if (error.code === 'FORBIDDEN_NOT_PROTOCOL_OWNER') {
           return reply.status(403).send({ error: error.message });
         }
+        if (error.code === 'PROTOCOL_STATUS_NOT_DELETABLE') {
+          return reply.status(409).send({ error: error.message });
+        }
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to delete protocol' });
       }

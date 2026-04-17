@@ -275,6 +275,116 @@ e2eDescribe('e2e: training protocols', () => {
     });
   });
 
+  // ==================== DELETE ====================
+
+  describe('DELETE /trainer/protocols/:id', () => {
+    it('returns 409 when protocol status is active', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { assigneeId, name: 'Active Protocol', startDate: '2025-02-01' },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const { id: protocolId, status } = createResponse.json();
+      expect(status).toBe('active');
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(deleteResponse.statusCode).toBe(409);
+      expect(deleteResponse.json()).toMatchObject({
+        error: 'Active protocols cannot be deleted. Archive the protocol first.',
+      });
+    });
+
+    it('returns 200 when protocol status is completed', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { assigneeId, name: 'Completed Protocol', startDate: '2025-02-01' },
+      });
+      const { id: protocolId } = createResponse.json();
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { status: 'completed' },
+      });
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json()).toHaveProperty('deletedAt');
+    });
+
+    it('returns 200 when protocol status is archived', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { assigneeId, name: 'Archived Protocol', startDate: '2025-02-01' },
+      });
+      const { id: protocolId } = createResponse.json();
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { status: 'archived' },
+      });
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json()).toHaveProperty('deletedAt');
+    });
+
+    it('returns 404 when protocol does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const fakeId = '00000000-0000-0000-0000-000000000000';
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/protocols/${fakeId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(deleteResponse.statusCode).toBe(404);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/trainer/protocols/00000000-0000-0000-0000-000000000000',
+      });
+
+      expect(deleteResponse.statusCode).toBe(401);
+    });
+  });
+
   // ==================== i18n labels ====================
 
   describe('i18n labels — training protocol', () => {

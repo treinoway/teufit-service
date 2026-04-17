@@ -1,111 +1,69 @@
-# Frontend Brief — Trainer Onboarding Checklist
+# Frontend Brief — Block Deletion of Active Training Protocols
 
-**Backend branch**: staging · **Generated**: 2026-04-16
+**Backend branch**: staging · **Generated**: 2026-04-17
 
 ## Elevator pitch
-Trainers now have three trackable onboarding milestones that the app can use to guide them through first-time setup. A trainer who completes their profile, links a student, and creates a training protocol for the first time has their progress persisted — and won't see a completed step re-appear as incomplete.
+Trainers can no longer accidentally delete an active training protocol. When they attempt to, the API now returns a clear 409 error prompting them to archive the protocol first.
 
 ## User story
-As a trainer, I want to see a checklist of key first steps when I log in so that I know what actions to take to start using the platform productively.
+As a trainer, I want to be prevented from deleting an active protocol so that I don't accidentally lose ongoing training data for my students.
 
 ## User flows
 
-1. **Entry point**: Trainer dashboard or home screen — shown prominently until all three milestones are complete, then hidden/collapsed.
-2. **Happy path**:
-   1. Trainer opens the app for the first time after becoming a trainer.
-   2. The checklist renders with three incomplete steps.
-   3. Trainer taps "Complete your profile" → navigates to the profile edit screen.
-   4. After saving, the step shows a checkmark and `profileCompleted: true`.
-   5. Trainer taps "Link your first student" → navigates to student search/invite.
-   6. After linking, `firstStudentLinked: true`.
-   7. Trainer taps "Create your first training protocol" → navigates to protocol creation.
-   8. After creating, `firstProtocolCreated: true`.
-   9. Checklist dismisses (or shows a "you're all set" state) once all three are true.
-3. **Branches**:
-   - If a trainer already completed some milestones (existing accounts), those steps will arrive pre-checked via the backfill.
-   - A student user (no trainer row) will receive `trainerOnboarding: null` — do not render the checklist at all.
-   - Each step is independent; the trainer can complete them in any order.
+1. **Entry point**: Trainer navigates to the protocol list or protocol detail page and taps/clicks the "Delete" action.
+2. **Happy path (deletable protocol)**:
+   1. Trainer selects a protocol with status `completed` or `archived`.
+   2. Confirms the delete action.
+   3. Protocol is soft-deleted and removed from the list.
+3. **Blocked path (active protocol)**:
+   1. Trainer selects a protocol with status `active`.
+   2. Triggers the delete action (button click / confirmation modal).
+   3. API returns `409`. UI shows an error message: the protocol must be archived before it can be deleted.
+   4. The protocol remains visible and unchanged in the list.
+   5. Optionally, the UI surfaces a shortcut: "Archive protocol" CTA leading to the edit/archive flow.
 
 ## UI states to cover
-
-- **Loading**: show skeleton or spinner while `GET /me?include=trainerOnboarding` is in flight.
-- **All incomplete**: show the checklist prominently (e.g., card on dashboard).
-- **Partially complete**: show which steps are done (checked/disabled) and which remain (tappable).
-- **All complete**: collapse or hide the checklist; optionally show a one-time congratulation state.
-- **Null / not a trainer**: `trainerOnboarding: null` — do not render the component.
-- **Network error**: show a non-blocking retry; the checklist is supplementary, not blocking.
+- **Success**: Protocol disappears from the list after deletion.
+- **409 Error**: Inline error or toast explaining the protocol is active and must be archived first.
+- **Permissions**: The delete action is only available to the owning trainer (403 cases are unchanged).
+- **Null/absent data**: Protocol not found (404) remains handled as before.
 
 ## API contract
 
-### GET /me?include=trainerOnboarding
+### DELETE /trainer/protocols/:id
 
-- **Auth**: Bearer token required.
-- **Request**: no body. Query param `include=trainerOnboarding` (can combine: `include=trainerOnboarding,address`).
+- **Auth**: Bearer token required · Role: `TRAINER`
+- **Request**: No body. Path param `id` (UUID).
 - **Success** (200):
   ```json
   {
     "id": "uuid",
-    "email": "trainer@example.com",
-    "roles": ["trainer"],
-    "firstName": "Ana",
-    "trainerOnboarding": {
-      "profileCompletedAt": "2025-01-15T10:00:00.000Z",
-      "firstStudentLinkedAt": null,
-      "firstProtocolCreatedAt": null,
-      "profileCompleted": true,
-      "firstStudentLinked": false,
-      "firstProtocolCreated": false
-    }
+    "deletedAt": "2026-04-17T12:00:00.000Z"
   }
   ```
-  When the user is not a trainer: `"trainerOnboarding": null`.
-- **Errors**:
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · missing or invalid token
-  - `400` · `INVALID_RELATIONS` · (not user-facing) · invalid `include` param
-
-### Milestone trigger summary (read-only for frontend)
-
-| Milestone | Triggered by |
-|---|---|
-| `profileCompleted` | `PATCH /trainer` or `PATCH /me/profile` — when firstName, lastName, birthDate, gender + full address are all set |
-| `firstStudentLinked` | `POST /trainer/students` — first successful student link |
-| `firstProtocolCreated` | `POST /trainer/protocols` or `POST /trainer/protocols/import-from-template` — first protocol |
-
-Milestones are **write-once** on the backend. The frontend does not need to send anything to mark them; they are set automatically as side-effects of the actions above.
+- **Errors** (status · error · messageCode · when):
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · Missing or invalid token
+  - `403` · `FORBIDDEN` · `auth.forbidden` · Trainer does not own the protocol
+  - `404` · `NOT_FOUND` · `trainer.notFound` or `protocol.notFound` · Trainer profile or protocol missing
+  - `409` · `PROTOCOL_STATUS_NOT_DELETABLE` · `legacy.PROTOCOL_STATUS_NOT_DELETABLE` · Protocol status is `active`
+  - `429` · `RATE_LIMIT_EXCEEDED` · `rateLimit.exceeded` · Too many requests
+  - `500` · `INTERNAL_ERROR` · `internal.error` · Unexpected server error
 
 ## i18n keys required
-
-Stable messageCodes the frontend needs to translate for this feature:
-- `onboarding.profileCompleted` → suggested copy: "Complete seu perfil"
-- `onboarding.profileCompleted.description` → suggested copy: "Adicione seus dados pessoais e endereço"
-- `onboarding.firstStudentLinked` → suggested copy: "Vincule seu primeiro aluno"
-- `onboarding.firstStudentLinked.description` → suggested copy: "Convide um aluno pelo e-mail"
-- `onboarding.firstProtocolCreated` → suggested copy: "Crie seu primeiro protocolo"
-- `onboarding.firstProtocolCreated.description` → suggested copy: "Monte um treino e atribua a um aluno"
-- `onboarding.allDone` → suggested copy: "Você está pronto para treinar!"
-- `onboarding.allDone.description` → suggested copy: "Todos os primeiros passos foram concluídos"
+- `legacy.PROTOCOL_STATUS_NOT_DELETABLE` → suggested copy: "Esta rotina está ativa e não pode ser excluída. Arquive-a primeiro."
 
 ## Acceptance criteria
-
-- [ ] The checklist component is rendered on the trainer dashboard when at least one milestone is incomplete.
-- [ ] Each step shows a distinct "done" and "pending" visual state.
-- [ ] Tapping a pending step navigates to the relevant screen.
-- [ ] The checklist is hidden (or collapsed to a "you're all set" summary) when all three booleans are true.
-- [ ] `trainerOnboarding: null` results in no checklist being rendered (not even an empty container).
-- [ ] The component handles the loading state gracefully without layout shift.
-- [ ] Milestone booleans (not timestamps) are used for rendering decisions — timestamps are only used if the designer wants to show "completed on" dates.
+- [ ] Delete button/action for `active` protocols results in a visible 409 error message in the UI.
+- [ ] The error message communicates that the protocol must be archived before deletion.
+- [ ] Optionally, a shortcut to the archive flow is shown alongside the error.
+- [ ] Delete button/action for `completed` or `archived` protocols continues to work as before.
+- [ ] No change to the behavior for 401, 403, 404, or 500 error cases.
 
 ## Out of scope
-
-- Any backend changes to trigger milestones differently.
-- Reverting or resetting milestones (they are one-way by design).
-- Push notifications or in-app alerts triggered by milestone completion.
-- Gamification points or badges for completing the checklist.
+- Implementing the archive flow itself (already exists via the edit form).
+- Changing the delete confirmation modal design beyond adding the 409 error state.
 
 ## Open design questions
-
-- Where exactly on the dashboard should the checklist live — top card, sidebar widget, or modal/drawer on first login?
-- Should steps be numbered (ordered) or presented as an unordered checklist?
-- After all milestones complete, should the component disappear immediately or show a dismissible success state for one session?
-- Should pending steps deep-link directly to the action, or to an explanation screen first?
-- Should the timestamps (`profileCompletedAt` etc.) be surfaced in the UI, e.g., "Completed Jan 15"?
+- Should the delete button be visually disabled (greyed out) for `active` protocols, or should it remain enabled and fail gracefully with the 409 error?
+- If the button is disabled, what tooltip or hint copy should appear on hover?
+- Should a direct "Archive first" CTA appear inline in the error toast/message, or is the existing edit flow sufficient?

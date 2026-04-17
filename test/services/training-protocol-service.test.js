@@ -504,6 +504,49 @@ describe('training-protocol-service', () => {
       });
     });
 
+    it('throws PROTOCOL_STATUS_NOT_DELETABLE when protocol status is active', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({
+        id: 'p1',
+        trainerId: 't1',
+        status: 'active',
+        deletedAt: null,
+      });
+
+      await expect(deleteProtocol('u1', 'p1')).rejects.toMatchObject({
+        code: 'PROTOCOL_STATUS_NOT_DELETABLE',
+        statusCode: 409,
+      });
+    });
+
+    it('soft deletes protocol when status is completed', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({
+        id: 'p1',
+        trainerId: 't1',
+        status: 'completed',
+        deletedAt: null,
+      });
+      const deleted = { id: 'p1', status: 'completed', deletedAt: new Date() };
+      prisma.trainingProtocol.update.mockResolvedValue(deleted);
+
+      await expect(deleteProtocol('u1', 'p1')).resolves.toEqual(deleted);
+    });
+
+    it('soft deletes protocol when status is archived', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({
+        id: 'p1',
+        trainerId: 't1',
+        status: 'archived',
+        deletedAt: null,
+      });
+      const deleted = { id: 'p1', status: 'archived', deletedAt: new Date() };
+      prisma.trainingProtocol.update.mockResolvedValue(deleted);
+
+      await expect(deleteProtocol('u1', 'p1')).resolves.toEqual(deleted);
+    });
+
     it('soft deletes protocol', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.trainingProtocol.findUnique.mockResolvedValue({

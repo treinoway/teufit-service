@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { trainingStatusValues } from '../constants/training.js';
+import { TrainingStatus, trainingStatusValues } from '../constants/training.js';
 import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
@@ -382,6 +382,14 @@ export async function deleteProtocol(userId, protocolId) {
 
   if (protocol.trainerId !== trainer.id) {
     throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this protocol', 403);
+  }
+
+  if (protocol.status === TrainingStatus.ACTIVE) {
+    throw buildError(
+      'PROTOCOL_STATUS_NOT_DELETABLE',
+      'Active protocols cannot be deleted. Archive the protocol first.',
+      409,
+    );
   }
 
   const deleted = await prisma.trainingProtocol.update({
