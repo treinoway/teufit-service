@@ -30,7 +30,10 @@ export class LlmProvider {
    * Send a chat message to the LLM and return a normalized response.
    *
    * @param {object} params
-   * @param {string} params.system - System prompt
+   * @param {string | Array<{type: string, text: string, cache_control?: object}>} params.system -
+   *   System prompt. May be a plain string or an array of text blocks (used by Anthropic for
+   *   prompt caching). Providers that do not support block-style system prompts must flatten
+   *   the array to a concatenated string.
    * @param {object[]} params.tools - Tool definitions in facade format
    * @param {object[]} params.messages - Conversation messages
    * @param {number} params.maxTokens - Maximum tokens to generate
@@ -49,7 +52,10 @@ export class LlmProvider {
    *   { type: 'complete', response: NormalizedResponse }
    *
    * @param {object} params
-   * @param {string} params.system - System prompt
+   * @param {string | Array<{type: string, text: string, cache_control?: object}>} params.system -
+   *   System prompt. May be a plain string or an array of text blocks (used by Anthropic for
+   *   prompt caching). Providers that do not support block-style system prompts must flatten
+   *   the array to a concatenated string.
    * @param {object[]} params.tools - Tool definitions in facade format
    * @param {object[]} params.messages - Conversation messages
    * @param {number} params.maxTokens - Maximum tokens to generate

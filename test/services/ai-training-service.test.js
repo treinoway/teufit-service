@@ -56,6 +56,7 @@ import {
   listConversations,
   getConversation,
   deleteConversation,
+  didPreviousAssistantMessageListExercises,
 } from '../../src/services/ai-training-service.js'
 import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY } from '../../src/constants/ai.js'
 
@@ -1333,6 +1334,452 @@ describe('ai-training-service', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1)
       expect(prisma.aiMessage.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'conv-1' } })
       expect(prisma.aiConversation.delete).toHaveBeenCalledWith({ where: { id: 'conv-1' } })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // didPreviousAssistantMessageListExercises
+  // ---------------------------------------------------------------------------
+
+  describe('didPreviousAssistantMessageListExercises', () => {
+    it('returns false for empty history', () => {
+      expect(didPreviousAssistantMessageListExercises([])).toBe(false)
+    })
+
+    it('returns false when history has no assistant message', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie um treino vazio' },
+      ])).toBe(false)
+    })
+
+    it('returns false when last assistant message has no exercise patterns', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie um treino vazio' },
+        { role: 'assistant', content: 'Vou criar um treino vazio chamado Peito. Confirma?' },
+      ])).toBe(false)
+    })
+
+    it('returns true when last assistant message has 2+ bullet points', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino de peito' },
+        {
+          role: 'assistant',
+          content: 'Vou criar:\n- Supino reto\n- Crucifixo\n- Voador\nConfirma?',
+        },
+      ])).toBe(true)
+    })
+
+    it('returns true when last assistant message has set/rep notation (3x10)', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: 'Vou adicionar Supino com 3x10 repetições. Confirma?' },
+      ])).toBe(true)
+    })
+
+    it('returns true when last assistant message has "séries" notation', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: 'Vou criar Supino com 3 séries de 10 reps. Confirma?' },
+      ])).toBe(true)
+    })
+
+    it('returns true when last assistant message has "series" (without accent) notation', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: 'Vou criar Supino com 3 series de 10 reps. Confirma?' },
+      ])).toBe(true)
+    })
+
+    it('returns true when assistant message lists exercises after colon', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: 'Vou criar treino com exercícios: supino, crucifixo, voador. Confirma?' },
+      ])).toBe(true)
+    })
+
+    it('returns false when "exercícios:" is followed by only one item', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: 'Vou criar treino com exercícios: supino. Confirma?' },
+      ])).toBe(false)
+    })
+
+    it('uses only the last assistant message, ignoring earlier ones', () => {
+      // Earlier assistant message has bullet points; last one does not
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        { role: 'assistant', content: '- Supino\n- Crucifixo\nConfirma?' },
+        { role: 'user', content: 'Sim' },
+        { role: 'assistant', content: 'Treino criado!' },
+      ])).toBe(false)
+    })
+
+    it('handles provider-specific array content (extracts text blocks)', () => {
+      expect(didPreviousAssistantMessageListExercises([
+        { role: 'user', content: 'Crie treino' },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Vou criar:\n- Supino reto\n- Crucifixo\nConfirma?' },
+          ],
+        },
+      ])).toBe(true)
+    })
+
+    it('returns false for null/undefined input', () => {
+      expect(didPreviousAssistantMessageListExercises(null)).toBe(false)
+      expect(didPreviousAssistantMessageListExercises(undefined)).toBe(false)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // processAiChat — consistency warning when exercises were promised but missing
+  // ---------------------------------------------------------------------------
+
+  describe('processAiChat — exercise promise consistency check', () => {
+    function stubTrainerContext() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    }
+
+    function stubExistingConversation({ conversationId = 'conv-1', userId = 'user-1', messages = [] } = {}) {
+      prisma.aiConversation.findUnique.mockResolvedValue({
+        id: conversationId,
+        userId,
+        title: 'Test',
+        messages,
+      })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-2' })
+      prisma.aiConversation.update.mockResolvedValue({})
+    }
+
+    it('appends warning when previous assistant message listed exercises but training was created with 0 exercises', async () => {
+      stubTrainerContext()
+      stubExistingConversation({
+        messages: [
+          { role: 'user', content: 'Crie treino de peito' },
+          {
+            role: 'assistant',
+            content: 'Vou criar treino Peito com:\n- Supino reto\n- Crucifixo\n- Voador\nConfirma?',
+          },
+        ],
+      })
+
+      const toolUseBlock = {
+        type: 'tool_use',
+        id: 'tool-1',
+        name: AI_TOOLS.CREATE_TRAINING_TEMPLATE,
+        input: { name: 'Peito', category: 'strength', exercises: [] },
+      }
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [toolUseBlock],
+      })
+
+      // Mock the DB training creation (empty exercises)
+      prisma.$transaction.mockImplementationOnce(async (fn) => fn(prisma))
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'train-1',
+        name: 'Peito',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      })
+
+      const result = await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      expect(result.message).toContain('Atenção')
+      expect(result.message).toContain('exercícios que mencionei não foram incluídos')
+      expect(result.message).toContain('Me diga os exercícios novamente')
+    })
+
+    it('does NOT append warning when previous assistant message did not list exercises and training has 0 exercises', async () => {
+      stubTrainerContext()
+      stubExistingConversation({
+        messages: [
+          { role: 'user', content: 'Quero um treino vazio por enquanto' },
+          {
+            role: 'assistant',
+            content: 'Vou criar um treino vazio chamado Pernas. Confirma?',
+          },
+        ],
+      })
+
+      const toolUseBlock = {
+        type: 'tool_use',
+        id: 'tool-2',
+        name: AI_TOOLS.CREATE_TRAINING_TEMPLATE,
+        input: { name: 'Pernas', category: 'strength', exercises: [] },
+      }
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [toolUseBlock],
+      })
+
+      prisma.$transaction.mockImplementationOnce(async (fn) => fn(prisma))
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'train-2',
+        name: 'Pernas',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      })
+
+      const result = await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      expect(result.message).not.toContain('Atenção')
+      expect(result.message).not.toContain('exercícios que mencionei não foram incluídos')
+    })
+
+    it('does NOT append warning when training was created with exercises (no broken promise)', async () => {
+      stubTrainerContext()
+      stubExistingConversation({
+        messages: [
+          { role: 'user', content: 'Crie treino de peito' },
+          {
+            role: 'assistant',
+            content: 'Vou criar treino com:\n- Supino reto\n- Crucifixo\nConfirma?',
+          },
+        ],
+      })
+
+      const toolUseBlock = {
+        type: 'tool_use',
+        id: 'tool-3',
+        name: AI_TOOLS.CREATE_TRAINING_TEMPLATE,
+        input: {
+          name: 'Peito',
+          category: 'strength',
+          exercises: [{ name: 'Supino reto', type: 'strength' }],
+        },
+      }
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [toolUseBlock],
+      })
+
+      prisma.$transaction.mockImplementationOnce(async (fn) => fn(prisma))
+      prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-1', name: 'Supino reto' })
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'train-3',
+        name: 'Peito',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [{ name: 'Supino reto', sets: 3, repetitions: { min: 10, max: 12 }, restInterval: 60 }],
+      })
+
+      const result = await processAiChat('user-1', { message: 'Sim', conversationId: 'conv-1' })
+
+      expect(result.message).not.toContain('Atenção')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // buildSystemPrompt — prompt caching structure
+  // ---------------------------------------------------------------------------
+
+  describe('buildSystemPrompt — prompt caching', () => {
+    function setupMinimalContext() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-cache', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-cache' })
+      prisma.aiConversation.update.mockResolvedValue({})
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+    }
+
+    it('system passed to Anthropic SDK is an array (not a string)', async () => {
+      setupMinimalContext()
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const system = anthropicCreate.mock.calls[0][0].system
+      expect(Array.isArray(system)).toBe(true)
+    })
+
+    it('returns an array of exactly 2 blocks', async () => {
+      setupMinimalContext()
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const system = anthropicCreate.mock.calls[0][0].system
+      expect(system).toHaveLength(2)
+    })
+
+    it('first block has cache_control: { type: "ephemeral" }', async () => {
+      setupMinimalContext()
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const [staticBlock] = anthropicCreate.mock.calls[0][0].system
+      expect(staticBlock.cache_control).toEqual({ type: 'ephemeral' })
+    })
+
+    it('second block has no cache_control', async () => {
+      setupMinimalContext()
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const [, dynamicBlock] = anthropicCreate.mock.calls[0][0].system
+      expect(dynamicBlock.cache_control).toBeUndefined()
+    })
+
+    it('first block contains static rules, second block contains DATA ATUAL', async () => {
+      setupMinimalContext()
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const [staticBlock, dynamicBlock] = anthropicCreate.mock.calls[0][0].system
+      expect(staticBlock.text).toContain('SEGURANCA')
+      expect(staticBlock.text).toContain('REGRAS DE EXECUCAO')
+      expect(staticBlock.text).not.toContain('DATA ATUAL')
+      expect(dynamicBlock.text).toContain('DATA ATUAL')
+      expect(dynamicBlock.text).toContain('CONTEXTO DO TREINADOR')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // buildSystemPrompt — fidelity rule presence
+  // ---------------------------------------------------------------------------
+
+  describe('buildSystemPrompt — fidelity rule', () => {
+    it('system prompt sent to LLM contains the fidelity rule (rule 5)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-fidelity', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-f' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const callArgs = anthropicCreate.mock.calls[0][0]
+      // system is now an array of blocks — check the static block (index 0)
+      const staticBlock = callArgs.system[0]
+      expect(staticBlock.text).toContain('FIDELIDADE DESCRICAO')
+      expect(staticBlock.text).toContain('TOOL CALL')
+    })
+
+    it('system prompt rules are uniquely numbered (no duplicate rule numbers)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-nums', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-n' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+
+      await processAiChat('user-1', { message: 'Olá' })
+
+      // system is an array of blocks — join all text for rule-number uniqueness check
+      const systemBlocks = anthropicCreate.mock.calls[0][0].system
+      const systemText = systemBlocks.map((b) => b.text).join('\n')
+      // Extract all lines that start with a standalone rule number at the beginning
+      const ruleNumberMatches = [...systemText.matchAll(/^(\d+)\./gm)].map((m) => Number(m[1]))
+      const unique = new Set(ruleNumberMatches)
+      expect(ruleNumberMatches.length).toBe(unique.size)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // TOOLS array — exercise field descriptions contain fidelity instruction
+  // ---------------------------------------------------------------------------
+
+  describe('TOOLS array — exercises field descriptions', () => {
+    it('CREATE_TRAINING_TEMPLATE exercises description warns about promised exercises', async () => {
+      // Access via the LLM call to verify the actual TOOLS array passed to Anthropic
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-tools', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-t' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const tools = anthropicCreate.mock.calls[0][0].tools
+      const createTrainingTool = tools.find((t) => t.name === AI_TOOLS.CREATE_TRAINING_TEMPLATE)
+      const exercisesDesc = createTrainingTool.input_schema.properties.exercises.description
+      expect(exercisesDesc).toContain('OBRIGATORIAMENTE devem aparecer neste array')
+      expect(exercisesDesc).toContain('Nunca chame esta tool com array vazio se voce prometeu exercicios')
+    })
+
+    it('CREATE_PROTOCOL_TEMPLATE trainings.exercises description warns about promised exercises', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-tools2', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-t2' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const tools = anthropicCreate.mock.calls[0][0].tools
+      const createProtocolTool = tools.find((t) => t.name === AI_TOOLS.CREATE_PROTOCOL_TEMPLATE)
+      const trainingsSchema = createProtocolTool.input_schema.properties.trainings
+      const exercisesDesc = trainingsSchema.items.properties.exercises.description
+      expect(exercisesDesc).toContain('OBRIGATORIAMENTE devem aparecer neste array')
+    })
+
+    it('ADD_TRAINING_TO_PROTOCOL trainings.exercises description warns about promised exercises', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-tools3', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-t3' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Ok' }],
+      })
+
+      await processAiChat('user-1', { message: 'Olá' })
+
+      const tools = anthropicCreate.mock.calls[0][0].tools
+      const addTrainingTool = tools.find((t) => t.name === AI_TOOLS.ADD_TRAINING_TO_PROTOCOL)
+      const exercisesDesc = addTrainingTool.input_schema.properties.trainings.items.properties.exercises.description
+      expect(exercisesDesc).toContain('OBRIGATORIAMENTE devem aparecer neste array')
     })
   })
 })

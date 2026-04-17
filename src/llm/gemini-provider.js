@@ -40,6 +40,21 @@ export class GeminiProvider extends LlmProvider {
     throw normalized;
   }
 
+  /**
+   * Normalizes the system prompt for Gemini. Anthropic-style block arrays are
+   * flattened to a plain string because Gemini's systemInstruction only accepts
+   * a string. cache_control metadata on blocks is discarded silently.
+   *
+   * @param {string | Array<{type: string, text: string}>} system
+   * @returns {string}
+   */
+  _resolveSystemInstruction(system) {
+    if (Array.isArray(system)) {
+      return system.map((block) => block.text).join('\n');
+    }
+    return system;
+  }
+
   async chat({ system, tools, messages, maxTokens }) {
     const client = this._getClient();
     const model = this._resolveModel();
@@ -53,7 +68,7 @@ export class GeminiProvider extends LlmProvider {
         model,
         contents: geminiContents,
         config: {
-          systemInstruction: system,
+          systemInstruction: this._resolveSystemInstruction(system),
           maxOutputTokens: maxTokens,
           tools: geminiTools,
         },
@@ -78,7 +93,7 @@ export class GeminiProvider extends LlmProvider {
         model,
         contents: geminiContents,
         config: {
-          systemInstruction: system,
+          systemInstruction: this._resolveSystemInstruction(system),
           maxOutputTokens: maxTokens,
           tools: geminiTools,
         },

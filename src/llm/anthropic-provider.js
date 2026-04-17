@@ -36,6 +36,22 @@ export class AnthropicProvider extends LlmProvider {
     throw normalized
   }
 
+  /**
+   * Marks the last tool in the array with cache_control: { type: "ephemeral" }
+   * so Anthropic caches the entire tools array after the first request.
+   * Returns the original array unchanged if it is empty.
+   *
+   * @param {object[]} tools
+   * @returns {object[]}
+   */
+  _applyToolCache(tools) {
+    if (!tools || tools.length === 0) return tools
+    return [
+      ...tools.slice(0, -1),
+      { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } },
+    ]
+  }
+
   async chat({ system, tools, messages, maxTokens }) {
     const client = this._getClient()
 
@@ -45,7 +61,7 @@ export class AnthropicProvider extends LlmProvider {
         model: this._resolveModel(),
         max_tokens: maxTokens,
         system,
-        tools,
+        tools: this._applyToolCache(tools),
         messages,
       })
     } catch (err) {
@@ -63,7 +79,7 @@ export class AnthropicProvider extends LlmProvider {
       model: this._resolveModel(),
       max_tokens: maxTokens,
       system,
-      tools,
+      tools: this._applyToolCache(tools),
       messages,
     })
 

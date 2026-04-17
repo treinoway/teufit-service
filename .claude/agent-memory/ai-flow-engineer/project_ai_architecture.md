@@ -22,5 +22,14 @@ Multi-turn history: rawContent stored on assistant messages with tool calls, reb
 
 Tools: import_from_template, add_training_to_protocol, create_exercise_template, create_training_template, create_protocol_template
 
+Prompt caching (added in token-optimization PR):
+- `buildSystemPrompt()` now returns an ARRAY of 2 blocks instead of a plain string
+  - Block 0: static rules (STATIC_SYSTEM_PROMPT module-level const) with `cache_control: { type: "ephemeral" }`
+  - Block 1: dynamic context (date + trainer data) with no cache_control
+- `AnthropicProvider._applyToolCache()` marks the last tool in the array with `cache_control: { type: "ephemeral" }` before passing to SDK; applied in both chat() and chatStream()
+- `GeminiProvider._resolveSystemInstruction()` flattens array-of-blocks to concatenated string (Gemini has no caching equivalent)
+- `LlmProvider` JSDoc updated: `system` param is `string | Array<{type, text, cache_control?}>`
+- 2 cache breakpoints used (tools + system prefix); Anthropic allows max 4
+
 **Why:** Feature added in commit 4693263 to support natural-language training management.
-**How to apply:** All AI changes must touch these files; audit security on any changes to buildSystemPrompt or executeTool.
+**How to apply:** All AI changes must touch these files; audit security on any changes to buildSystemPrompt or executeTool. When buildSystemPrompt returns an array, downstream test assertions must use `.system[0].text` not `.system` directly for string contains checks.
