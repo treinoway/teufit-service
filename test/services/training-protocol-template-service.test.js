@@ -18,7 +18,12 @@ vi.mock('../../src/db.js', () => ({
   },
 }));
 
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { prisma } from '../../src/db.js';
+import { maybeMarkFirstProtocolCreated } from '../../src/services/trainer-onboarding-service.js';
 import {
   createProtocolTemplate,
   getProtocolTemplatesByTrainer,
@@ -47,6 +52,7 @@ describe('training-protocol-template-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+    maybeMarkFirstProtocolCreated.mockResolvedValue(undefined);
   });
 
   // ==================== createProtocolTemplate ====================
@@ -120,6 +126,27 @@ describe('training-protocol-template-service', () => {
         }),
       );
       expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
+    });
+
+    it('calls maybeMarkFirstProtocolCreated with the trainer id after successful creation', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.create.mockResolvedValue({ id: 'tmpl-1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue(baseTemplate);
+
+      await createProtocolTemplate('u1', { name: 'Test Template' });
+
+      expect(maybeMarkFirstProtocolCreated).toHaveBeenCalledOnce();
+      expect(maybeMarkFirstProtocolCreated).toHaveBeenCalledWith({ trainerId: 'trainer-1' });
+    });
+
+    it('does not call maybeMarkFirstProtocolCreated when trainer is not found', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(createProtocolTemplate('u1', { name: 'T' })).rejects.toMatchObject({
+        code: 'TRAINER_PROFILE_MISSING',
+      });
+
+      expect(maybeMarkFirstProtocolCreated).not.toHaveBeenCalled();
     });
 
     it('throws TRAINING_TEMPLATE_NOT_FOUND when a training template in trainings does not exist', async () => {

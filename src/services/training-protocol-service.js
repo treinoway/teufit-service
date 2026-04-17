@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import { trainingStatusValues } from '../constants/training.js';
 import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
+import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 
 /**
  * Validate status
@@ -90,6 +91,8 @@ export async function createProtocol(userId, data) {
       },
     },
   });
+
+  await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
 
   return normalizeProtocolDateFields(protocol);
 }
@@ -519,6 +522,8 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
       },
     });
   });
+
+  await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
 
   return normalizeProtocolDateFields(protocol);
 }

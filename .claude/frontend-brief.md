@@ -1,110 +1,111 @@
-# Frontend Brief — Exercise Snapshot in Training Templates
+# Frontend Brief — Trainer Onboarding Checklist
 
-**Backend branch**: staging · **Generated**: 2026-04-15
+**Backend branch**: staging · **Generated**: 2026-04-16
 
 ## Elevator pitch
-Trainers can now edit the details of an exercise that lives inside a specific training template without changing that exercise globally across all other templates.
+Trainers now have three trackable onboarding milestones that the app can use to guide them through first-time setup. A trainer who completes their profile, links a student, and creates a training protocol for the first time has their progress persisted — and won't see a completed step re-appear as incomplete.
 
 ## User story
-As a trainer, I want to edit an exercise's sets, reps, rest interval, load, and other parameters directly inside a training template so that each template can have its own independent configuration for the same exercise.
+As a trainer, I want to see a checklist of key first steps when I log in so that I know what actions to take to start using the platform productively.
 
 ## User flows
-1. **Entry point**: Training Templates section → open a template detail → exercise list within that template.
+
+1. **Entry point**: Trainer dashboard or home screen — shown prominently until all three milestones are complete, then hidden/collapsed.
 2. **Happy path**:
-   1. Trainer taps or clicks on an exercise inside the template detail screen.
-   2. An edit form opens pre-filled with the exercise's current snapshot values (name, type, sets, reps, duration, hasLoad, suggestedLoad, restInterval, notes, order).
-   3. Trainer changes one or more fields and submits.
-   4. The exercise row updates in place; no other template is affected.
+   1. Trainer opens the app for the first time after becoming a trainer.
+   2. The checklist renders with three incomplete steps.
+   3. Trainer taps "Complete your profile" → navigates to the profile edit screen.
+   4. After saving, the step shows a checkmark and `profileCompleted: true`.
+   5. Trainer taps "Link your first student" → navigates to student search/invite.
+   6. After linking, `firstStudentLinked: true`.
+   7. Trainer taps "Create your first training protocol" → navigates to protocol creation.
+   8. After creating, `firstProtocolCreated: true`.
+   9. Checklist dismisses (or shows a "you're all set" state) once all three are true.
 3. **Branches**:
-   - Trainer opens the same exercise template in a different training template — its values remain unchanged.
-   - Creating a new training template and attaching exercises: optionally override any field at attach time (same form, different context).
-   - Creating/updating a training template via the existing exercise list: snapshot overrides can be passed per exercise item in `exerciseTemplates[]`.
+   - If a trainer already completed some milestones (existing accounts), those steps will arrive pre-checked via the backfill.
+   - A student user (no trainer row) will receive `trainerOnboarding: null` — do not render the checklist at all.
+   - Each step is independent; the trainer can complete them in any order.
 
 ## UI states to cover
-- Loading: skeleton or spinner while the PATCH request is in flight.
-- Success: inline update with no full-page reload; show a brief confirmation toast.
-- Error: display the error message from `error.userMessage` (e.g., exercise not found, not the template owner, validation error).
-- Empty body: the PATCH requires at least one field; disable the submit button if nothing has changed.
-- Permissions: the edit UI is only visible when the trainer owns the template (403 otherwise).
+
+- **Loading**: show skeleton or spinner while `GET /me?include=trainerOnboarding` is in flight.
+- **All incomplete**: show the checklist prominently (e.g., card on dashboard).
+- **Partially complete**: show which steps are done (checked/disabled) and which remain (tappable).
+- **All complete**: collapse or hide the checklist; optionally show a one-time congratulation state.
+- **Null / not a trainer**: `trainerOnboarding: null` — do not render the component.
+- **Network error**: show a non-blocking retry; the checklist is supplementary, not blocking.
 
 ## API contract
 
-### GET /trainer/training-templates/:id
-- **Auth**: Bearer token, TRAINER role.
-- **Success** (200): Each item in `trainingTemplateExerciseTemplates` now includes snapshot fields alongside `exerciseTemplate`:
-  ```json
-  {
-    "id": "<junction-row-uuid>",
-    "trainingTemplateId": "...",
-    "exerciseTemplateId": "...",
-    "order": 0,
-    "name": "Supino reto",
-    "type": "strength",
-    "videoUrl": null,
-    "sets": 4,
-    "repetitions": { "min": 8, "max": 12 },
-    "duration": null,
-    "hasLoad": true,
-    "suggestedLoad": 60.0,
-    "restInterval": 90,
-    "notes": null,
-    "exerciseTemplate": { "id": "...", "name": "Supino reto", "type": "strength" }
-  }
-  ```
+### GET /me?include=trainerOnboarding
 
-### PATCH /trainer/training-templates/:templateId/exercises/:exerciseId
-- **Auth**: Bearer token, TRAINER role.
-- **URL params**: `templateId` = training template UUID, `exerciseId` = junction row UUID (the `id` from `trainingTemplateExerciseTemplates[]`).
-- **Request** (at least one field required):
+- **Auth**: Bearer token required.
+- **Request**: no body. Query param `include=trainerOnboarding` (can combine: `include=trainerOnboarding,address`).
+- **Success** (200):
   ```json
   {
-    "name": "Supino inclinado",
-    "sets": 5,
-    "repetitions": { "min": 6, "max": 10 },
-    "restInterval": 120,
-    "hasLoad": true,
-    "suggestedLoad": 70.0
+    "id": "uuid",
+    "email": "trainer@example.com",
+    "roles": ["trainer"],
+    "firstName": "Ana",
+    "trainerOnboarding": {
+      "profileCompletedAt": "2025-01-15T10:00:00.000Z",
+      "firstStudentLinkedAt": null,
+      "firstProtocolCreatedAt": null,
+      "profileCompleted": true,
+      "firstStudentLinked": false,
+      "firstProtocolCreated": false
+    }
   }
   ```
-- **Success** (200): Updated junction row (same shape as above).
+  When the user is not a trainer: `"trainerOnboarding": null`.
 - **Errors**:
-  - `400` · `VALIDATION_ERROR` · `validation.failed` · no fields sent or field format invalid
-  - `401` · `auth.unauthorized` · session expired
-  - `403` · `FORBIDDEN_NOT_TEMPLATE_OWNER` · trainer does not own the template
-  - `404` · `TRAINER_PROFILE_MISSING` · trainer profile not found
-  - `404` · `TEMPLATE_NOT_FOUND` · training template not found or deleted
-  - `404` · `TRAINING_TEMPLATE_EXERCISE_NOT_FOUND` · junction row not found in this template
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · missing or invalid token
+  - `400` · `INVALID_RELATIONS` · (not user-facing) · invalid `include` param
 
-### POST /trainer/training-templates and PATCH /trainer/training-templates/:id (updated)
-- `exerciseTemplates[]` items now accept snapshot override fields alongside `exerciseTemplateId`:
-  ```json
-  {
-    "exerciseTemplateId": "<uuid>",
-    "order": 0,
-    "sets": 5,
-    "repetitions": { "min": 6, "max": 10 },
-    "restInterval": 120
-  }
-  ```
-  Unspecified snapshot fields are copied from the source `ExerciseTemplate`.
+### Milestone trigger summary (read-only for frontend)
+
+| Milestone | Triggered by |
+|---|---|
+| `profileCompleted` | `PATCH /trainer` or `PATCH /me/profile` — when firstName, lastName, birthDate, gender + full address are all set |
+| `firstStudentLinked` | `POST /trainer/students` — first successful student link |
+| `firstProtocolCreated` | `POST /trainer/protocols` or `POST /trainer/protocols/import-from-template` — first protocol |
+
+Milestones are **write-once** on the backend. The frontend does not need to send anything to mark them; they are set automatically as side-effects of the actions above.
 
 ## i18n keys required
-- `trainingTemplateExercise.notFound` → suggested copy: "Exercise not found in this training template."
+
+Stable messageCodes the frontend needs to translate for this feature:
+- `onboarding.profileCompleted` → suggested copy: "Complete seu perfil"
+- `onboarding.profileCompleted.description` → suggested copy: "Adicione seus dados pessoais e endereço"
+- `onboarding.firstStudentLinked` → suggested copy: "Vincule seu primeiro aluno"
+- `onboarding.firstStudentLinked.description` → suggested copy: "Convide um aluno pelo e-mail"
+- `onboarding.firstProtocolCreated` → suggested copy: "Crie seu primeiro protocolo"
+- `onboarding.firstProtocolCreated.description` → suggested copy: "Monte um treino e atribua a um aluno"
+- `onboarding.allDone` → suggested copy: "Você está pronto para treinar!"
+- `onboarding.allDone.description` → suggested copy: "Todos os primeiros passos foram concluídos"
 
 ## Acceptance criteria
-- [ ] Each exercise row inside a training template detail screen shows its own snapshot values (sets, reps, rest, load), not the global exercise template values.
-- [ ] Tapping an exercise inside a template opens an edit form pre-filled with snapshot values.
-- [ ] Submitting the form sends PATCH to the correct junction row URL and updates the row in the UI without affecting other templates.
-- [ ] The exercise's source template (`exerciseTemplate.name`) is visible for reference but is read-only in this context.
-- [ ] Error messages (not-found, forbidden, validation) are surfaced to the user.
-- [ ] Creating a training template with snapshot overrides in `exerciseTemplates[]` stores the overridden values.
+
+- [ ] The checklist component is rendered on the trainer dashboard when at least one milestone is incomplete.
+- [ ] Each step shows a distinct "done" and "pending" visual state.
+- [ ] Tapping a pending step navigates to the relevant screen.
+- [ ] The checklist is hidden (or collapsed to a "you're all set" summary) when all three booleans are true.
+- [ ] `trainerOnboarding: null` results in no checklist being rendered (not even an empty container).
+- [ ] The component handles the loading state gracefully without layout shift.
+- [ ] Milestone booleans (not timestamps) are used for rendering decisions — timestamps are only used if the designer wants to show "completed on" dates.
 
 ## Out of scope
-- Editing the global `ExerciseTemplate` (separate flow in the exercise library).
-- Reordering all exercises within a training template in bulk (drag-and-drop).
+
+- Any backend changes to trigger milestones differently.
+- Reverting or resetting milestones (they are one-way by design).
+- Push notifications or in-app alerts triggered by milestone completion.
+- Gamification points or badges for completing the checklist.
 
 ## Open design questions
-- Should the exercise edit form be a bottom sheet, a modal, or an inline expand?
-- Should snapshot values visually differ from global template values (e.g., a "customized" badge) to indicate the exercise was locally overridden?
-- Where to surface the "Reset to global defaults" affordance (restore snapshot from ExerciseTemplate)?
-- What is the copy for the edit screen title — "Edit exercise in template" vs "Customize exercise"?
+
+- Where exactly on the dashboard should the checklist live — top card, sidebar widget, or modal/drawer on first login?
+- Should steps be numbered (ordered) or presented as an unordered checklist?
+- After all milestones complete, should the component disappear immediately or show a dismissible success state for one session?
+- Should pending steps deep-link directly to the action, or to an explanation screen first?
+- Should the timestamps (`profileCompletedAt` etc.) be surfaced in the UI, e.g., "Completed Jan 15"?

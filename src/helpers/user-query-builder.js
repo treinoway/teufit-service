@@ -42,12 +42,24 @@ export function buildUserSelect(includeRelations = []) {
     avatarUrl: true,
   };
 
-  // Dynamically add relations from central configuration
-  // This ensures we stay in sync with ALLOWED_USER_RELATIONS
+  // Dynamically add direct Prisma relations from central configuration
   for (const relation of includeRelations) {
     if (USER_RELATION_CONFIGS[relation]) {
       select[relation] = USER_RELATION_CONFIGS[relation];
     }
+  }
+
+  // trainerOnboarding is a virtual alias: the milestone timestamps live on the
+  // Trainer row, not as a named Prisma relation off User. We merge them into
+  // the trainer select so toUserProfile() can detect and map them.
+  if (includeRelations.includes('trainerOnboarding')) {
+    select.trainer = {
+      select: {
+        profileCompletedAt: true,
+        firstStudentLinkedAt: true,
+        firstProtocolCreatedAt: true,
+      },
+    };
   }
 
   return select;

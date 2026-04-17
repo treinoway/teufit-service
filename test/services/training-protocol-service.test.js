@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/db.js', () => ({
   prisma: {
-    trainer: { findUnique: vi.fn() },
+    trainer: { findUnique: vi.fn(), updateMany: vi.fn() },
     user: { findUnique: vi.fn() },
     trainingProtocol: {
       create: vi.fn(),
@@ -32,6 +32,7 @@ describe('training-protocol-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+    prisma.trainer.updateMany.mockResolvedValue({ count: 0 });
   });
 
   describe('createProtocol', () => {

@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import { buildError, validateWeekDay, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
+import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 
 /**
  * Validate that each training item in the trainings array is accessible by the trainer
@@ -106,6 +107,8 @@ export async function createProtocolTemplate(userId, data) {
       },
     });
   });
+
+  await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
 
   return { ...template, trainingsCount: template.trainings.length };
 }

@@ -177,6 +177,24 @@ Challenge status (`scheduled/active/completed/cancelled`) is computed on read fr
 ## PointBalance increment is atomic
 `prisma.pointBalance.upsert({ update: { totalPoints: { increment: N } } })` generates atomic SQL. No race condition under concurrent awards.
 
+## Sub-agent invocation (2026-04-16)
+`test-writer`, `api-docs-sync`, `backend-code-reviewer` are project-level agents in `.claude/agents/`. They are NOT invokable via the `Skill` tool or `RemoteTrigger`. Write tests and update docs directly when these agents cannot be invoked by the Skill tool.
+
+## Onboarding milestone hooks: test mock requirements (2026-04-16)
+When adding `maybeMarkFirstProtocolCreated` (or any onboarding helper) to a NEW service, the service's test file must mock `trainer-onboarding-service.js`:
+```js
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
+}));
+```
+Also add `trainer.updateMany` to any existing Prisma mock that doesn't have it — missing methods cause `TypeError: db.trainer.updateMany is not a function`.
+
+## Frontend OnboardingChecklistCard is already built (2026-04-16)
+`treinoway-web/src/components/OnboardingChecklistCard/` and `treinoway-web/src/hooks/useOnboardingStatus.js` are fully implemented. When extending backend semantics for an existing milestone (e.g., adding template creation as a trigger for `firstProtocolCreated`), no frontend changes are needed — the i18n copy already covers it ("Monte um treino do zero ou use um template").
+
+## Virtual alias pattern in user-relations (2026-04-16)
+`ALLOWED_USER_RELATIONS` is a `Set` derived from `USER_RELATION_CONFIGS` keys. For virtual aliases (fields from a related model, not a direct Prisma sub-relation), add the alias name to the Set separately (not to `USER_RELATION_CONFIGS`), then handle it with a dedicated `if` block in `buildUserSelect`. The `toUserProfile` mapper must guard with `if (user.X !== undefined)` since the field is only present when that alias was requested.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.

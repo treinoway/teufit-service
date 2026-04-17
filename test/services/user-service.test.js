@@ -25,8 +25,13 @@ vi.mock('../../src/services/address-service.js', () => ({
   getAddressByPostalCode: vi.fn(),
 }));
 
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkProfileComplete: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { prisma } from '../../src/db.js';
 import { getAddressByPostalCode } from '../../src/services/address-service.js';
+import { maybeMarkProfileComplete } from '../../src/services/trainer-onboarding-service.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
 
 describe('userService', () => {
@@ -179,6 +184,8 @@ describe('userService', () => {
       update: { activeProfile: 'trainer' },
     });
 
+    expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u1' });
+
     expect(result).toEqual({
       id: 'pref1',
       userId: 'u1',
@@ -202,11 +209,25 @@ describe('userService', () => {
     create: { userId: 'u2', activeProfile: 'trainer' },
     update: { activeProfile: 'trainer' },
   });
+  expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u2' });
   expect(result).toEqual({
     id: 'pref2',
     userId: 'u2',
     activeProfile: 'trainer',
   });
+  });
+
+  it('setActiveProfileToTrainer always calls maybeMarkProfileComplete to check profile milestone on role upgrade', async () => {
+    prisma.user.findUnique.mockResolvedValue({ roles: ['student'] });
+    prisma.userPreferences.upsert.mockResolvedValue({
+      id: 'pref3',
+      userId: 'u3',
+      activeProfile: 'trainer',
+    });
+
+    await setActiveProfileToTrainer('u3');
+
+    expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u3' });
   });
 
   describe('updateUserProfile', () => {
@@ -580,6 +601,35 @@ describe('userService', () => {
 
       expect(result.preferences).toBeDefined();
       expect(result.preferences.rawPreferences).toEqual({ theme: 'dark', language: 'en' });
+    });
+
+    it('does NOT call maybeMarkProfileComplete when the user is a student (no trainer role)', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+      prisma.user.update.mockResolvedValue({
+        id: 'u1',
+        email: 'student@example.com',
+        roles: ['student'],
+        status: 'active',
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'male',
+        birthDate: new Date('1990-01-15'),
+        avatarUrl: null,
+        address: null,
+        socials: null,
+        preferences: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-28T00:00:00.000Z'),
+      });
+
+      await updateUserProfile('u1', {
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'male',
+        birthDate: '1990-01-15',
+      });
+
+      expect(maybeMarkProfileComplete).not.toHaveBeenCalled();
     });
   });
 

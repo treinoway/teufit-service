@@ -1,9 +1,9 @@
-import { USER_RELATION_CONFIGS } from '../../src/constants/user-relations.js';
+import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
 
-// Dynamically generate allowed relations list from USER_RELATION_CONFIGS
-const allowedRelations = Object.keys(USER_RELATION_CONFIGS);
+// Dynamically generate allowed relations list from ALLOWED_USER_RELATIONS (includes virtual aliases)
+const allowedRelations = [...ALLOWED_USER_RELATIONS];
 const allowedRelationsStr = allowedRelations.join(', ');
 const allRelationsExample = allowedRelations.join(',');
 
@@ -99,6 +99,44 @@ export const getMeSchema = {
             },
           },
 	      additionalProperties: false,
+        },
+        trainerOnboarding: {
+          type: 'object',
+          nullable: true,
+          additionalProperties: false,
+          description: 'Trainer onboarding milestones, included only if ?include=trainerOnboarding is specified. Null when user is not a trainer.',
+          properties: {
+            profileCompletedAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer completed their profile (null if not yet done)',
+            },
+            firstStudentLinkedAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer linked their first student (null if not yet done)',
+            },
+            firstProtocolCreatedAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer created their first training protocol (null if not yet done)',
+            },
+            profileCompleted: {
+              type: 'boolean',
+              description: 'True when the trainer has filled all required personal and address fields',
+            },
+            firstStudentLinked: {
+              type: 'boolean',
+              description: 'True when the trainer has linked at least one student',
+            },
+            firstProtocolCreated: {
+              type: 'boolean',
+              description: 'True when the trainer has created at least one training protocol',
+            },
+          },
         },
       },
       additionalProperties: false,

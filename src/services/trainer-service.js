@@ -4,6 +4,10 @@ import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { NotFoundAppError, ConflictAppError, AppError } from '../errors/app-error.js';
+import {
+  maybeMarkProfileComplete,
+  maybeMarkFirstStudentLinked,
+} from './trainer-onboarding-service.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -122,6 +126,8 @@ export async function patch({ userId, trainer, address, socials }) {
       data: { status: 'active', ...userUpdateData },
     });
 
+    await maybeMarkProfileComplete({ userId, tx });
+
     // Return the same response shape as GET /me:
     // - do not leak the user row
     // - omit trainer.userId
@@ -199,6 +205,8 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
   await prisma.trainerStudent.create({
     data: { trainerId, studentId: student.id },
   });
+
+  await maybeMarkFirstStudentLinked({ trainerId });
 
   const avatarUrl = await s3BucketHandler.resolveUrl(student.avatarUrl);
 

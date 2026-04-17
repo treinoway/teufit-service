@@ -9,6 +9,7 @@ vi.mock('../../src/db.js', () => {
       trainer: {
         findMany: vi.fn(),
         findUnique: vi.fn(),
+        updateMany: vi.fn(),
       },
       user: {
         findUnique: vi.fn(),
@@ -37,6 +38,7 @@ describe('trainerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
+    prisma.trainer.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('throws NO_UPDATES when nothing is provided', async () => {

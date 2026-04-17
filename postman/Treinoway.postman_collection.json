@@ -215,8 +215,13 @@
                 },
                 "url": {
                   "raw": "{{baseUrl}}/auth/login",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["auth", "login"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
                 }
               },
               "status": "Unauthorized",
@@ -670,33 +675,81 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/me",
+              "raw": "{{baseUrl}}/me?include=address,socials,preferences,trainerOnboarding",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "me"
+              ],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "address,socials,preferences,trainerOnboarding",
+                  "description": "Comma-separated relations to include. Allowed: address, socials, preferences, trainerOnboarding"
+                }
               ]
             },
-            "description": "Get the current authenticated user's profile including address, socials, and preferences."
+            "description": "Get the current authenticated user's profile including address, socials, preferences, and trainer onboarding milestones. Use ?include to select specific relations."
           },
           "response": [
             {
-              "name": "Get Current User - 200 OK",
+              "name": "Get Current User (minimal — no include param) - 200 OK",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
                   "raw": "{{baseUrl}}/me",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["me"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false\n}"
+            },
+            {
+              "name": "Get Current User with trainerOnboarding - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me?include=trainerOnboarding",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ],
+                  "query": [
+                    {
+                      "key": "include",
+                      "value": "trainerOnboarding"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"trainer@example.com\",\n  \"roles\": [\n    \"trainer\"\n  ],\n  \"rolesLabel\": [\n    \"Treinador\"\n  ],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Silva\",\n  \"gender\": \"female\",\n  \"genderLabel\": \"Feminino\",\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"trainerOnboarding\": {\n    \"profileCompletedAt\": \"2025-01-15T10:00:00.000Z\",\n    \"firstStudentLinkedAt\": null,\n    \"firstProtocolCreatedAt\": null,\n    \"profileCompleted\": true,\n    \"firstStudentLinked\": false,\n    \"firstProtocolCreated\": false\n  }\n}"
             }
           ]
         },
@@ -731,17 +784,32 @@
               "name": "Update Profile - 200 OK",
               "originalRequest": {
                 "method": "PATCH",
-                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
                   "raw": "{{baseUrl}}/me/profile",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["me", "profile"]
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "profile"
+                  ]
                 }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
-              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
               "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
             }
           ]

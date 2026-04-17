@@ -41,6 +41,11 @@ vi.mock('../../src/services/training-protocol-service.js', () => ({
   importFromTemplate: vi.fn(),
 }))
 
+// Mock the trainer onboarding service to prevent real DB calls in unit tests
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { importFromTemplate } from '../../src/services/training-protocol-service.js'

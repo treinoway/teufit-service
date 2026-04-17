@@ -13,6 +13,7 @@ import {
 } from "../helpers/training-validators.js";
 import { importFromTemplate } from "./training-protocol-service.js";
 import { createExerciseTemplate } from "./exercise-template-service.js";
+import { maybeMarkFirstProtocolCreated } from "./trainer-onboarding-service.js";
 
 import { getLlmProvider } from "../llm/index.js";
 
@@ -1038,6 +1039,8 @@ async function executeTool(userId, toolName, toolInput) {
 
           return protocol;
         });
+
+        await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
         break;
       }
 

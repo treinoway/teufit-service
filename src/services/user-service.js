@@ -5,6 +5,7 @@ import { ensureProfileForUser } from './auth-service.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
+import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -66,6 +67,18 @@ async function toUserProfile(user, { hasActiveTrainer } = {}) {
 		profile.preferences = user.preferences ? {
 			activeProfile: user.preferences.activeProfile,
 			rawPreferences: user.preferences.rawPreferences,
+		} : null;
+	}
+
+	// trainer is only present when trainerOnboarding was requested via ?include
+	if (user.trainer !== undefined) {
+		profile.trainerOnboarding = user.trainer ? {
+			profileCompletedAt: user.trainer.profileCompletedAt?.toISOString() ?? null,
+			firstStudentLinkedAt: user.trainer.firstStudentLinkedAt?.toISOString() ?? null,
+			firstProtocolCreatedAt: user.trainer.firstProtocolCreatedAt?.toISOString() ?? null,
+			profileCompleted: user.trainer.profileCompletedAt !== null,
+			firstStudentLinked: user.trainer.firstStudentLinkedAt !== null,
+			firstProtocolCreated: user.trainer.firstProtocolCreatedAt !== null,
 		} : null;
 	}
 
@@ -147,6 +160,11 @@ export async function setActiveProfileToTrainer(userId) {
 
 	// Ensure the Trainer record exists in the database
 	await ensureProfileForUser({ userId, role: Roles.TRAINER });
+
+	// If the user already had all required profile fields filled before becoming a trainer,
+	// mark the profile milestone immediately — it would otherwise stay null until the
+	// next profile PATCH, which is incorrect.
+	await maybeMarkProfileComplete({ userId });
 
 	const preferences = await prisma.userPreferences.upsert({
 		where: { userId },
@@ -315,6 +333,10 @@ if (!userId) {
 			},
 		},
 	});
+
+	if (Array.isArray(updatedUser.roles) && updatedUser.roles.includes(Roles.TRAINER)) {
+		await maybeMarkProfileComplete({ userId });
+	}
 
 	const hasActiveTrainer = await computeHasActiveTrainer(userId);
 

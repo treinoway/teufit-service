@@ -42,11 +42,17 @@ export const USER_RELATION_CONFIGS = {
 };
 
 /**
- * Derived from USER_RELATION_CONFIGS keys
- * Set of allowed relations that can be requested via ?include query parameter
- * These relations are safe to expose and don't contain sensitive information
+ * Derived from USER_RELATION_CONFIGS keys, plus virtual aliases that are
+ * handled with custom logic in buildUserSelect rather than a direct Prisma
+ * relation config.
+ *
+ * Set of allowed relations that can be requested via ?include query parameter.
+ * These relations are safe to expose and don't contain sensitive information.
  */
-export const ALLOWED_USER_RELATIONS = new Set(Object.keys(USER_RELATION_CONFIGS));
+export const ALLOWED_USER_RELATIONS = new Set([
+  ...Object.keys(USER_RELATION_CONFIGS),
+  'trainerOnboarding',
+]);
 
 /**
  * Relations that should never be exposed via the API

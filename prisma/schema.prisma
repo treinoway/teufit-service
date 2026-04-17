@@ -94,6 +94,10 @@ model Trainer {
   // Service mode: online | in_person | hybrid
   serviceMode String? @map("service_mode") @db.Text
 
+  profileCompletedAt      DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  firstStudentLinkedAt    DateTime? @map("first_student_linked_at") @db.Timestamptz(6)
+  firstProtocolCreatedAt  DateTime? @map("first_protocol_created_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
