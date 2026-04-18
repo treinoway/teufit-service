@@ -195,6 +195,13 @@ Also add `trainer.updateMany` to any existing Prisma mock that doesn't have it �
 ## Virtual alias pattern in user-relations (2026-04-16)
 `ALLOWED_USER_RELATIONS` is a `Set` derived from `USER_RELATION_CONFIGS` keys. For virtual aliases (fields from a related model, not a direct Prisma sub-relation), add the alias name to the Set separately (not to `USER_RELATION_CONFIGS`), then handle it with a dedicated `if` block in `buildUserSelect`. The `toUserProfile` mapper must guard with `if (user.X !== undefined)` since the field is only present when that alias was requested.
 
+## Workout of the Day (2026-04-18)
+New service at `src/services/workout-of-the-day-service.js`. Key helpers:
+- `getWeekdayInTimeZone(date, tz)` in `date-helpers.js` — uses `Intl.DateTimeFormat` with `weekday: 'long'` lowercase.
+- `addDaysInTimeZone(date, days)` in `date-helpers.js` — adds ms (no tz arg needed, weekday evaluated via Intl).
+- `resolveTimeZone(header)` in `src/helpers/timezone.js` — validates via Intl try/catch, fallback `America/Sao_Paulo`, never 400.
+- `trainingResponseSchema`, `importedExerciseResponseSchema`, `trainingWithExercisesResponseSchema` are now **exported** from `api/schemas/training-route.schema.js`.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.

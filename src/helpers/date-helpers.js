@@ -36,6 +36,31 @@ export function parseDateOnlyAsUtc(value) {
 }
 
 /**
+ * Returns the weekday name (lowercase) for a given Date in the specified IANA timezone.
+ * E.g. getWeekdayInTimeZone(new Date(), 'America/Sao_Paulo') → 'friday'
+ *
+ * @param {Date} date
+ * @param {string} timeZone - IANA timezone string (e.g. 'America/Sao_Paulo')
+ * @returns {string} Lowercase weekday name matching WeekDays constants
+ */
+export function getWeekdayInTimeZone(date, timeZone) {
+	return new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'long' }).format(date).toLowerCase();
+}
+
+/**
+ * Returns a new Date that is N days ahead of the given date.
+ * Safe for weekday arithmetic: the resulting instant's weekday is evaluated via Intl,
+ * which handles DST boundaries correctly.
+ *
+ * @param {Date} date
+ * @param {number} days - Number of days to add (must be positive)
+ * @returns {Date}
+ */
+export function addDaysMs(date, days) {
+	return new Date(date.getTime() + days * 86400000);
+}
+
+/**
  * Parses a YYYY-MM-DD string (or Date) to exactly midnight UTC.
  * Used for time-boundary calculations (ranking windows, challenge date fences)
  * where the precise start/end of a calendar day matters.

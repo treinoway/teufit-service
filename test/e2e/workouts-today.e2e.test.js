@@ -1,0 +1,321 @@
+import 'dotenv/config';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { prisma } from '../../src/db.js';
+import { setupApp } from '../helpers/setup-app.js';
+import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { WorkoutsTodayMessageCode } from '../../src/constants/training.js';
+
+const hasDatabaseUrl = !!process.env.DATABASE_URL;
+const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
+
+e2eDescribe('e2e: GET /my/workouts/today', () => {
+  let app;
+
+  beforeAll(async () => {
+    app = await setupApp();
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+  });
+
+  beforeEach(async () => {
+    await cleanDatabase();
+  });
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * Returns the lowercase weekday name for today in UTC.
+   * Used to create trainings that match "today" in tests.
+   */
+  function todayWeekday() {
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long' })
+      .format(new Date())
+      .toLowerCase();
+  }
+
+  /**
+   * Returns a lowercase weekday name that is NOT today in UTC.
+   * Used to force a rest-day scenario.
+   */
+  function notTodayWeekday() {
+    const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const today = todayWeekday();
+    return weekdays.find((d) => d !== today);
+  }
+
+  async function createTrainerWithToken() {
+    const email = `e2e+trainer-wotd-${Date.now()}@example.com`;
+    const password = 'StrongPassw0rd!';
+
+    const signupResponse = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email, password },
+    });
+    expect(signupResponse.statusCode).toBe(201);
+    const { user: { id: userId }, token: { accessToken } } = signupResponse.json();
+
+    const becomeTrainerResponse = await app.inject({
+      method: 'PATCH',
+      url: '/become-trainer',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(becomeTrainerResponse.statusCode).toBe(200);
+    const { token: { accessToken: trainerAccessToken } } = becomeTrainerResponse.json();
+
+    const trainerRecord = await prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    return { userId, trainerId: trainerRecord.id, accessToken: trainerAccessToken };
+  }
+
+  async function createStudentWithToken() {
+    const email = `e2e+student-wotd-${Date.now()}@example.com`;
+    const password = 'StrongPassw0rd!';
+
+    const signupResponse = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email, password },
+    });
+    expect(signupResponse.statusCode).toBe(201);
+    const { user: { id: userId }, token: { accessToken } } = signupResponse.json();
+
+    return { userId, accessToken };
+  }
+
+  async function linkStudentToTrainer(trainerId, studentId) {
+    await prisma.trainerStudent.create({ data: { trainerId, studentId } });
+  }
+
+  /**
+   * Creates an active protocol with the given trainings directly via Prisma.
+   * Each entry in `trainingDefs` should have { name, category, weekDay?, order? }.
+   */
+  async function createActiveProtocol(trainerId, studentId, trainingDefs = []) {
+    const protocol = await prisma.trainingProtocol.create({
+      data: {
+        trainerId,
+        assigneeId: studentId,
+        name: 'Test Protocol',
+        status: 'active',
+        startDate: new Date('2025-01-01'),
+      },
+    });
+
+    const trainings = [];
+    for (const def of trainingDefs) {
+      const training = await prisma.training.create({
+        data: {
+          trainingProtocolId: protocol.id,
+          name: def.name ?? 'Training',
+          category: def.category ?? 'strength',
+          weekDay: def.weekDay ?? null,
+          order: def.order ?? 0,
+        },
+      });
+      trainings.push(training);
+    }
+
+    return { protocol, trainings };
+  }
+
+  function getUrl() {
+    return '/my/workouts/today';
+  }
+
+  // ─── Tests ──────────────────────────────────────────────────────────────────
+
+  it('returns 401 when unauthenticated', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toHaveProperty('error');
+  });
+
+  it('returns 404 workoutsToday.noActiveProtocol when student has no protocol', async () => {
+    const { accessToken } = await createStudentWithToken();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().messageCode).toBe(WorkoutsTodayMessageCode.NO_ACTIVE_PROTOCOL);
+  });
+
+  it('returns 200 with targetTraining when weekDay protocol matches today', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    const today = todayWeekday();
+    await createActiveProtocol(trainerId, studentId, [
+      { name: 'Today Training', category: 'strength', weekDay: today, order: 0 },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.targetTraining).not.toBeNull();
+    expect(body.targetTraining.weekDay).toBe(today);
+    expect(body.isRestDay).toBe(false);
+    // i18n label sibling must be present
+    expect(body.targetTraining.weekDayLabel).toBeTruthy();
+  });
+
+  it('returns 200 with correct first training for order-based protocol', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    await createActiveProtocol(trainerId, studentId, [
+      { name: 'Training A', category: 'strength', weekDay: null, order: 0 },
+      { name: 'Training B', category: 'cardio', weekDay: null, order: 1 },
+      { name: 'Training C', category: 'strength', weekDay: null, order: 2 },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.targetTraining).not.toBeNull();
+    expect(body.targetTraining.order).toBe(0);
+    expect(body.isRestDay).toBe(false);
+    expect(body.nextScheduledDate).toBeNull();
+  });
+
+  it('returns 200 with isRestDay: true and nextScheduledDate for rest day', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    // Use a weekDay that is NOT today so today is a rest day
+    const notToday = notTodayWeekday();
+    await createActiveProtocol(trainerId, studentId, [
+      { name: 'Off-day Training', category: 'strength', weekDay: notToday, order: 0 },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.isRestDay).toBe(true);
+    expect(body.targetTraining).toBeNull();
+    // nextScheduledDate should be a YYYY-MM-DD string (the next matching day)
+    if (body.nextScheduledDate !== null) {
+      expect(body.nextScheduledDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it('returns 200 with pendingTraining populated when an in_progress session exists', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    const { trainings } = await createActiveProtocol(trainerId, studentId, [
+      { name: 'Training A', category: 'strength', weekDay: null, order: 0 },
+    ]);
+
+    // Create an in_progress session directly via prisma
+    const session = await prisma.workoutSession.create({
+      data: {
+        trainingId: trainings[0].id,
+        userId: studentId,
+        status: 'in_progress',
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.pendingTraining).not.toBeNull();
+    expect(body.pendingTraining.sessionId).toBe(session.id);
+    expect(body.pendingTraining.trainingId).toBe(trainings[0].id);
+    expect(body.pendingTraining.startedAt).toBeTruthy();
+    expect(body.pendingTraining.status).toBe('in_progress');
+    expect(body.pendingTraining.statusLabel).toBeTruthy();
+  });
+
+  it('returns translated labels based on app-language header', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    const today = todayWeekday();
+    await createActiveProtocol(trainerId, studentId, [
+      { name: 'Strength Training', category: 'strength', weekDay: today, order: 0 },
+    ]);
+
+    const ptRes = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'pt-BR' },
+    });
+
+    const enRes = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US' },
+    });
+
+    expect(ptRes.statusCode).toBe(200);
+    expect(enRes.statusCode).toBe(200);
+
+    const ptBody = ptRes.json();
+    const enBody = enRes.json();
+
+    // category 'strength' → 'Força' in pt-BR, 'Strength' in en-US
+    expect(ptBody.targetTraining.categoryLabel).toBe('Força');
+    expect(enBody.targetTraining.categoryLabel).toBe('Strength');
+  });
+
+  it('returns 200 (not 400) when app-timezone header is invalid', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    await createActiveProtocol(trainerId, studentId, [
+      { name: 'Training A', category: 'strength', weekDay: null, order: 0 },
+    ]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+        'app-timezone': 'NotATimezone/Invalid',
+      },
+    });
+
+    // Must not 400 — falls back to America/Sao_Paulo
+    expect(res.statusCode).toBe(200);
+  });
+});

@@ -2,7 +2,7 @@ import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
-const trainingResponseSchema = {
+export const trainingResponseSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
@@ -154,7 +154,7 @@ export const deleteTrainingSchema = {
   },
 };
 
-const importedExerciseResponseSchema = {
+export const importedExerciseResponseSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
@@ -183,7 +183,7 @@ const importedExerciseResponseSchema = {
   },
 };
 
-const trainingWithExercisesResponseSchema = {
+export const trainingWithExercisesResponseSchema = {
   type: 'object',
   properties: {
     ...trainingResponseSchema.properties,

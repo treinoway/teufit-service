@@ -2422,6 +2422,47 @@
       ]
     },
     {
+      "name": "Workouts Today",
+      "description": "Returns the training the authenticated student should do today, based on weekday or order-based protocol logic.",
+      "item": [
+        {
+          "name": "Get Today's Workout",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "app-language",
+                "value": "pt-BR",
+                "description": "Language for translated labels. Defaults to pt-BR."
+              },
+              {
+                "key": "app-timezone",
+                "value": "America/Sao_Paulo",
+                "description": "IANA timezone used to resolve today's weekday. Invalid or missing values fall back to America/Sao_Paulo (never 400)."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workouts/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workouts",
+                "today"
+              ]
+            },
+            "description": "Returns the training the student should do today.\n\n- weekDay mode: if any training in the active protocol has a weekDay set, picks the one matching today's weekday in the given timezone. Returns isRestDay: true and nextScheduledDate when no match.\n- order mode: if no training has a weekDay, picks the next training after the last completed session, cycling back to the first.\n\nAlso returns any in_progress WorkoutSession (cross-protocol) as pendingTraining.\n\n**Errors**:\n- 404 workoutsToday.noActiveProtocol — student has no active protocol\n- 404 workoutsToday.emptyProtocol — active protocol has no trainings"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Workout Sessions",
       "description": "Workout session logging — start, track, and finish workout sessions in real time.",
       "item": [

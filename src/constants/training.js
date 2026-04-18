@@ -86,3 +86,14 @@ export const exerciseTypeValues = Object.freeze(Object.values(ExerciseType));
 export const protocolTypeValues = Object.freeze(Object.values(ProtocolType));
 export const workoutSessionStatusValues = Object.freeze(Object.values(WorkoutSessionStatus));
 export const exerciseLogStatusValues = Object.freeze(Object.values(ExerciseLogStatus));
+
+// Workouts Today error codes and message codes
+export const WorkoutsTodayErrorCode = Object.freeze({
+  NO_ACTIVE_PROTOCOL: 'NO_ACTIVE_PROTOCOL',
+  EMPTY_PROTOCOL: 'EMPTY_PROTOCOL',
+});
+
+export const WorkoutsTodayMessageCode = Object.freeze({
+  NO_ACTIVE_PROTOCOL: 'workoutsToday.noActiveProtocol',
+  EMPTY_PROTOCOL: 'workoutsToday.emptyProtocol',
+});

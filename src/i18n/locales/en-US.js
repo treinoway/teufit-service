@@ -188,6 +188,10 @@ export default {
     'challenge.filter.empty': 'No students match the filter criteria.',
     'challenge.durationExceeded': 'Challenge duration cannot exceed 365 days.',
     'challenge.notActive': 'This challenge is not active.',
+
+    // Workouts Today
+    'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',
+    'workoutsToday.emptyProtocol': 'Your active protocol does not have any workouts yet.',
   },
 
   validation: {

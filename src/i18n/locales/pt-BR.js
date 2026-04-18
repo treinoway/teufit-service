@@ -192,6 +192,10 @@ export default {
     'challenge.filter.empty': 'Nenhum aluno atende aos critérios do filtro.',
     'challenge.durationExceeded': 'A duração do campeonato não pode ultrapassar 365 dias.',
     'challenge.notActive': 'Este campeonato não está ativo.',
+
+    // Workouts Today
+    'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',
+    'workoutsToday.emptyProtocol': 'Seu protocolo ativo ainda não tem treinos.',
   },
 
   validation: {
