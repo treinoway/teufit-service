@@ -506,6 +506,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
             duration: junctionRow.duration ?? null,
             hasLoad: junctionRow.hasLoad ?? false,
             suggestedLoad: junctionRow.suggestedLoad ?? null,
+            restInterval: junctionRow.restInterval ?? null,
             notes: junctionRow.notes ?? null,
           },
         });

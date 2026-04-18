@@ -82,6 +82,31 @@ e2eDescribe('e2e: training templates', () => {
     return response.json();
   }
 
+  async function createAssigneeWithToken() {
+    const email = `e2e+training-template-assignee-${Date.now()}@example.com`;
+    const password = 'StrongPassw0rd!';
+
+    const signupResponse = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email, password },
+    });
+    expect(signupResponse.statusCode).toBe(201);
+    const { user: { id: userId }, token: { accessToken } } = signupResponse.json();
+    return { userId, accessToken };
+  }
+
+  async function createProtocol(accessToken, assigneeId) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/trainer/protocols',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { assigneeId, name: 'Protocol E2E', startDate: '2025-01-01' },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json();
+  }
+
   // ==================== POST /trainer/training-templates ====================
 
   describe('POST /trainer/training-templates', () => {
@@ -334,6 +359,142 @@ e2eDescribe('e2e: training templates', () => {
       });
 
       expect(patchResponse.statusCode).toBe(401);
+    });
+  });
+
+  // ==================== POST /trainer/trainings/from-template ====================
+
+  describe('POST /trainer/trainings/from-template', () => {
+    it('returns 201 with populated exercises array when template has exercises', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const protocol = await createProtocol(accessToken, assigneeId);
+
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Agachamento',
+        type: 'strength',
+        sets: 4,
+        repetitions: { min: 8, max: 12 },
+        hasLoad: true,
+        suggestedLoad: 80,
+        restInterval: 120,
+        notes: 'Manter costas retas',
+      });
+
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Pernas',
+        category: 'strength',
+        exerciseTemplates: [
+          { exerciseTemplateId: exerciseTemplate.id, order: 0 },
+          { exerciseTemplateId: exerciseTemplate.id, order: 1 },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { protocolId: protocol.id, templateId: trainingTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+
+      expect(body).toHaveProperty('id');
+      expect(body).toHaveProperty('exercises');
+      expect(body.exercises).toHaveLength(trainingTemplate.trainingTemplateExerciseTemplates.length);
+
+      const firstExercise = body.exercises[0];
+      const firstJunction = trainingTemplate.trainingTemplateExerciseTemplates[0];
+      expect(firstExercise.order).toBe(firstJunction.order);
+      expect(firstExercise.name).toBe(firstJunction.name);
+      expect(firstExercise.sets).toBe(firstJunction.sets);
+      expect(firstExercise.restInterval).toBe(firstJunction.restInterval);
+    });
+
+    it('returns exercises ordered ascending by order field', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const protocol = await createProtocol(accessToken, assigneeId);
+
+      const et1 = await createExerciseTemplate(accessToken, { name: 'Supino', type: 'strength', sets: 3 });
+      const et2 = await createExerciseTemplate(accessToken, { name: 'Crucifixo', type: 'strength', sets: 3 });
+
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Peito',
+        category: 'strength',
+        exerciseTemplates: [
+          { exerciseTemplateId: et2.id, order: 1 },
+          { exerciseTemplateId: et1.id, order: 0 },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { protocolId: protocol.id, templateId: trainingTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const { exercises } = response.json();
+      expect(exercises).toHaveLength(2);
+      expect(exercises[0].order).toBe(0);
+      expect(exercises[1].order).toBe(1);
+    });
+
+    it('returns 201 with exercises as empty array when template has zero exercises', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const protocol = await createProtocol(accessToken, assigneeId);
+
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Cardio Vazio',
+        category: 'cardio',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { protocolId: protocol.id, templateId: trainingTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('exercises');
+      expect(body.exercises).toEqual([]);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        payload: {
+          protocolId: '00000000-0000-0000-0000-000000000000',
+          templateId: '00000000-0000-0000-0000-000000000001',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when template does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const protocol = await createProtocol(accessToken, assigneeId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          protocolId: protocol.id,
+          templateId: '00000000-0000-0000-0000-000000000099',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 });

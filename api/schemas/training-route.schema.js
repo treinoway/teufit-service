@@ -154,6 +154,46 @@ export const deleteTrainingSchema = {
   },
 };
 
+const importedExerciseResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainingId: { type: 'string', format: 'uuid' },
+    exerciseTemplateId: { type: 'string', format: 'uuid', nullable: true },
+    name: { type: 'string' },
+    ...i18nField('type', 'exerciseType'),
+    videoUrl: { type: 'string', nullable: true },
+    order: { type: 'integer' },
+    sets: { type: 'integer', nullable: true },
+    repetitions: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        min: { type: 'integer', nullable: true, minimum: 1 },
+        max: { type: 'integer', nullable: true, minimum: 1 },
+      },
+    },
+    duration: { type: 'integer', nullable: true },
+    hasLoad: { type: 'boolean' },
+    suggestedLoad: { type: 'number', nullable: true },
+    restInterval: { type: 'integer', nullable: true },
+    notes: { type: 'string', nullable: true },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
+const trainingWithExercisesResponseSchema = {
+  type: 'object',
+  properties: {
+    ...trainingResponseSchema.properties,
+    exercises: {
+      type: 'array',
+      items: importedExerciseResponseSchema,
+    },
+  },
+};
+
 export const importTrainingFromTemplateSchema = {
   tags: ['Trainings - Trainer'],
   summary: 'Create training from template',
@@ -173,7 +213,7 @@ export const importTrainingFromTemplateSchema = {
     additionalProperties: false,
   },
   response: {
-    201: trainingResponseSchema,
+    201: trainingWithExercisesResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

@@ -740,6 +740,7 @@ describe('training-protocol-service', () => {
                   duration: null,
                   hasLoad: true,
                   suggestedLoad: 60,
+                  restInterval: 90,
                   notes: null,
                   exerciseTemplate: { id: 'et-1', name: 'Supino', type: 'strength' },
                 },
@@ -792,6 +793,7 @@ describe('training-protocol-service', () => {
             repetitions: 10,
             hasLoad: true,
             suggestedLoad: 60,
+            restInterval: 90,
           }),
         }),
       );

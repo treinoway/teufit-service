@@ -308,6 +308,11 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
 
   const template = await prisma.trainingTemplate.findUnique({
     where: { id: templateId },
+    include: {
+      trainingTemplateExerciseTemplates: {
+        orderBy: { order: 'asc' },
+      },
+    },
   });
 
   if (!template || template.deletedAt) {
@@ -322,18 +327,50 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     validateWeekDay(data.weekDay);
   }
 
-  const training = await prisma.training.create({
-    data: {
-      trainingProtocolId: protocolId,
-      trainingTemplateId: template.id,
-      name: data.name || template.name,
-      description: data.description || template.description,
-      category: data.category || template.category,
-      bodySegment: data.bodySegment || template.bodySegment,
-      weekDay: data.weekDay || null,
-      order: data.order !== undefined ? data.order : 0,
-      notes: data.notes || null,
-    },
+  const training = await prisma.$transaction(async (tx) => {
+    const createdTraining = await tx.training.create({
+      data: {
+        trainingProtocolId: protocolId,
+        trainingTemplateId: template.id,
+        name: data.name || template.name,
+        description: data.description || template.description,
+        category: data.category || template.category,
+        bodySegment: data.bodySegment || template.bodySegment,
+        weekDay: data.weekDay || null,
+        order: data.order !== undefined ? data.order : 0,
+        notes: data.notes || null,
+      },
+    });
+
+    for (const junctionRow of template.trainingTemplateExerciseTemplates) {
+      await tx.exercise.create({
+        data: {
+          trainingId: createdTraining.id,
+          exerciseTemplateId: junctionRow.exerciseTemplateId,
+          name: junctionRow.name,
+          type: junctionRow.type,
+          videoUrl: junctionRow.videoUrl ?? null,
+          order: junctionRow.order,
+          sets: junctionRow.sets ?? null,
+          repetitions: junctionRow.repetitions ?? null,
+          duration: junctionRow.duration ?? null,
+          hasLoad: junctionRow.hasLoad ?? false,
+          suggestedLoad: junctionRow.suggestedLoad ?? null,
+          restInterval: junctionRow.restInterval ?? null,
+          notes: junctionRow.notes ?? null,
+        },
+      });
+    }
+
+    return tx.training.findUnique({
+      where: { id: createdTraining.id },
+      include: {
+        exercises: {
+          where: { deletedAt: null },
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
   });
 
   return training;
