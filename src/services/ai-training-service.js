@@ -50,12 +50,12 @@ async function buildTrainerContext(userId) {
           select: { id: true, firstName: true, lastName: true, email: true },
         },
       },
-      take: AI_LIMITS.MAX_CONTEXT_ITEMS,
+      take: AI_LIMITS.MAX_CONTEXT_STUDENTS,
     }),
     prisma.trainingProtocolTemplate.findMany({
       where: { trainerId: trainer.id, deletedAt: null },
       select: { id: true, name: true, description: true },
-      take: AI_LIMITS.MAX_CONTEXT_ITEMS,
+      take: AI_LIMITS.MAX_CONTEXT_PROTOCOL_TEMPLATES,
     }),
     prisma.trainingTemplate.findMany({
       where: {
@@ -63,7 +63,7 @@ async function buildTrainerContext(userId) {
         OR: [{ trainerId: trainer.id }, { isPublic: true }],
       },
       select: { id: true, name: true, category: true },
-      take: AI_LIMITS.MAX_CONTEXT_ITEMS,
+      take: AI_LIMITS.MAX_CONTEXT_TRAINING_TEMPLATES,
     }),
     prisma.trainingProtocol.findMany({
       where: { trainerId: trainer.id, deletedAt: null, status: "active" },
@@ -73,13 +73,13 @@ async function buildTrainerContext(userId) {
         assigneeId: true,
         assignee: { select: { firstName: true, lastName: true } },
       },
-      take: AI_LIMITS.MAX_CONTEXT_ITEMS,
+      take: AI_LIMITS.MAX_CONTEXT_ACTIVE_PROTOCOLS,
     }),
     // Only own exercise templates — createTrainingTemplate only allows linking trainer-owned templates
     prisma.exerciseTemplate.findMany({
       where: { trainerId: trainer.id, deletedAt: null },
       select: { id: true, name: true, type: true },
-      take: AI_LIMITS.MAX_CONTEXT_ITEMS,
+      take: AI_LIMITS.MAX_CONTEXT_EXERCISE_TEMPLATES,
     }),
   ]);
 
@@ -229,13 +229,11 @@ const TOOLS = [
         },
         startDate: {
           type: "string",
-          description:
-            'Data de inicio no formato YYYY-MM-DD. Interprete datas em portugues: "amanha", "proxima segunda", "01/04/2026", "1 de abril" devem ser convertidas para YYYY-MM-DD.',
+          description: "Formato YYYY-MM-DD.",
         },
         expirationDate: {
           type: "string",
-          description:
-            'Data de expiracao no formato YYYY-MM-DD. Interprete datas em portugues: "daqui 3 meses", "fim de junho", "01/07/2026" devem ser convertidas para YYYY-MM-DD.',
+          description: "Formato YYYY-MM-DD.",
         },
         name: {
           type: "string",
@@ -315,7 +313,7 @@ const TOOLS = [
         exercises: {
           type: "array",
           description:
-            "Exercicios novos para criar como templates e vincular ao treino. Use este campo quando os exercicios ainda nao existem na biblioteca. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador na mensagem anterior. Se voce mencionou exercicios especificos por nome (ex: 'supino, crucifixo, voador'), eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
+            "Exercícios novos para criar e vincular ao treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
           items: {
             type: "object",
             required: ["name", "type"],
@@ -384,7 +382,7 @@ const TOOLS = [
         trainings: {
           type: "array",
           description:
-            "Treinos para vincular a rotina. Cada item pode ser um treino existente (com trainingTemplateId) OU um treino novo inline (com name, category e exercicios).",
+            "Treinos da rotina. Use trainingTemplateId para vincular existente, ou name+category+exercises para criar novo inline.",
           items: {
             type: "object",
             properties: {
@@ -436,7 +434,7 @@ const TOOLS = [
               exercises: {
                 type: "array",
                 description:
-                  "Exercicios novos para criar como templates dentro deste treino. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador para este treino. Se voce mencionou exercicios especificos por nome, eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
+                  "Exercícios novos para criar neste treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
                 items: {
                   type: "object",
                   required: ["name", "type"],
@@ -521,7 +519,7 @@ const TOOLS = [
               exercises: {
                 type: "array",
                 description:
-                  "Exercicios novos para criar dentro deste treino. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador para este treino. Se voce mencionou exercicios especificos por nome, eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
+                  "Exercícios novos para criar neste treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
                 items: {
                   type: "object",
                   required: ["name", "type"],
@@ -1586,17 +1584,35 @@ export async function processAiChat(userId, { message, conversationId }) {
   } = await setupConversation(userId, { message, conversationId });
 
   const provider = getLlmProvider();
-  const response = await withLlmRetry(() =>
-    provider.chat({
-      system: buildSystemPrompt(context),
-      tools: TOOLS,
-      messages: [
-        ...conversationHistory,
-        { role: "user", content: `<user_input>${sanitizeUserMessage(message)}</user_input>` },
-      ],
-      maxTokens: AI_LIMITS.MAX_TOKENS,
-    }),
-  );
+  const chatParams = {
+    system: buildSystemPrompt(context),
+    tools: TOOLS,
+    messages: [
+      ...conversationHistory,
+      { role: "user", content: `<user_input>${sanitizeUserMessage(message)}</user_input>` },
+    ],
+    maxTokens: AI_LIMITS.MAX_TOKENS,
+  };
+
+  let response;
+  for (let emptyAttempt = 1; emptyAttempt <= AI_RETRY.MAX_ATTEMPTS; emptyAttempt++) {
+    response = await withLlmRetry(() => provider.chat(chatParams));
+
+    const isEmpty =
+      response.stopReason === "end_turn" &&
+      !response.text &&
+      response.toolCalls.length === 0;
+
+    if (!isEmpty) break;
+
+    if (emptyAttempt < AI_RETRY.MAX_ATTEMPTS) {
+      const delayMs = AI_RETRY.BASE_DELAY_MS * 2 ** (emptyAttempt - 1);
+      console.warn(
+        `[AI] Empty LLM response, retrying in ${delayMs}ms (attempt ${emptyAttempt}/${AI_RETRY.MAX_ATTEMPTS})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
 
   console.info(
     `[AI] LLM response: stopReason=${response.stopReason}, toolCalls=${response.toolCalls.length}, textLength=${response.text?.length ?? 0}`,
@@ -1669,7 +1685,9 @@ export async function processAiChat(userId, { message, conversationId }) {
   }
 
   // Model responded with text (waiting for confirmation or clarification)
-  const responseText = response.text ?? "";
+  const responseText =
+    response.text ||
+    "Desculpe, não consegui gerar uma resposta. Tente reformular seu pedido.";
   await saveAssistantMessage(resolvedConversationId, responseText, []);
 
   if (isNewConversation) {
@@ -1726,7 +1744,27 @@ export async function* processAiChatStream(
           firstResponse = chunk.response;
         }
       }
-      break; // stream completed without error
+      // Stream completed without error — check for empty response before breaking.
+      const isEmptyResponse =
+        firstResponse &&
+        firstResponse.stopReason === "end_turn" &&
+        !firstResponse.text &&
+        firstResponse.toolCalls.length === 0 &&
+        firstTextChunks.length === 0;
+
+      if (isEmptyResponse && streamAttempt < AI_RETRY.MAX_ATTEMPTS) {
+        const delayMs = AI_RETRY.BASE_DELAY_MS * 2 ** (streamAttempt - 1);
+        console.warn(
+          `[AI] Empty LLM response, retrying in ${delayMs}ms (attempt ${streamAttempt}/${AI_RETRY.MAX_ATTEMPTS})`,
+        );
+        firstResponse = undefined;
+        firstTextChunks.length = 0;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        streamAttempt++;
+        continue;
+      }
+
+      break; // stream completed — either non-empty or retries exhausted
     } catch (err) {
       streamErr = err;
     }
@@ -1893,6 +1931,7 @@ export async function getConversation(userId, conversationId) {
       createdAt: true,
       updatedAt: true,
       messages: {
+        where: { role: { not: 'tool_result' } },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
