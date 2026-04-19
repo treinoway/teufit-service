@@ -79,6 +79,12 @@ export async function aiRoutes(fastify) {
           reply.raw.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`)
         }
       } catch (err) {
+        if (!(err instanceof AppError)) {
+          request.log.error(
+            { err, userId: request.user.id, stack: err?.stack },
+            '[AI][stream] unexpected non-AppError',
+          )
+        }
         if (!clientDisconnected) {
           const errorData = err instanceof AppError
             ? { error: err.error, messageCode: err.messageCode, message: err.message }

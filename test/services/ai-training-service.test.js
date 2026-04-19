@@ -272,11 +272,14 @@ describe('ai-training-service', () => {
     }
 
     function stubExistingConversation({ conversationId = 'conv-1', userId = 'user-1', messages = [] } = {}) {
+      // loadConversationHistory now queries with orderBy: { createdAt: 'desc' } + take.
+      // Messages passed here are in chronological (ASC) order — reverse them so the
+      // service's internal .reverse() restores the original ASC order correctly.
       prisma.aiConversation.findUnique.mockResolvedValue({
         id: conversationId,
         userId,
         title: 'Test',
-        messages,
+        messages: [...messages].reverse(),
       })
       prisma.aiMessage.create.mockResolvedValue({ id: 'msg-2' })
       prisma.aiConversation.update.mockResolvedValue({})
@@ -814,17 +817,19 @@ describe('ai-training-service', () => {
       ]
       const toolResultData = [{ toolCallId: 'tc-1', content: '{"success":true,"name":"Protocolo Teste"}' }]
 
-      // Conversation history includes a prior tool_use/tool_result exchange
+      // Conversation history includes a prior tool_use/tool_result exchange.
+      // loadConversationHistory now queries DESC; provide messages in DESC order
+      // (newest first) so the service's .reverse() restores the correct ASC order.
       prisma.aiConversation.findUnique.mockResolvedValue({
         id: 'conv-1',
         userId: 'user-1',
         title: 'Test',
         messages: [
-          { role: 'user', content: 'Cria usando template A', rawContent: null },
-          { role: 'assistant', content: 'Protocolo criado!', rawContent: rawAssistantContent },
-          { role: 'tool_result', content: '{"success":true}', rawContent: toolResultData },
-          { role: 'user', content: 'E agora, cria outro?', rawContent: null },
           { role: 'assistant', content: 'Claro, confirma?', rawContent: null },
+          { role: 'user', content: 'E agora, cria outro?', rawContent: null },
+          { role: 'tool_result', content: '{"success":true}', rawContent: toolResultData },
+          { role: 'assistant', content: 'Protocolo criado!', rawContent: rawAssistantContent },
+          { role: 'user', content: 'Cria usando template A', rawContent: null },
         ],
       })
       prisma.aiMessage.create.mockResolvedValue({ id: 'msg-new' })
@@ -1447,11 +1452,13 @@ describe('ai-training-service', () => {
     }
 
     function stubExistingConversation({ conversationId = 'conv-1', userId = 'user-1', messages = [] } = {}) {
+      // loadConversationHistory queries DESC + take; reverse here so the service's
+      // internal .reverse() restores the original ASC order correctly.
       prisma.aiConversation.findUnique.mockResolvedValue({
         id: conversationId,
         userId,
         title: 'Test',
-        messages,
+        messages: [...messages].reverse(),
       })
       prisma.aiMessage.create.mockResolvedValue({ id: 'msg-2' })
       prisma.aiConversation.update.mockResolvedValue({})
