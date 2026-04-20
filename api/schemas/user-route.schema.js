@@ -89,7 +89,7 @@ export const getMeSchema = {
             activeProfile: {
               type: 'string',
               description: 'Current active profile for this user',
-              enum: ['student', 'trainer'],
+              enum: ['student', 'trainer', 'nutritionist'],
             },
             rawPreferences: {
               type: 'object',
@@ -280,7 +280,53 @@ export const becomeTrainerSchema = {
         activeProfile: {
           type: 'string',
           description: 'The new active profile for this user',
-          enum: ['student', 'trainer'],
+          enum: ['student', 'trainer', 'nutritionist'],
+        },
+        token: {
+          type: 'object',
+          properties: {
+            accessToken: { type: 'string', description: 'New JWT access token with updated roles' },
+          },
+          required: ['accessToken'],
+        },
+        refreshToken: {
+          type: 'string',
+          description: 'New refresh token',
+        },
+      },
+      required: ['activeProfile', 'token', 'refreshToken'],
+      additionalProperties: false,
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const becomeNutritionistSchema = {
+  tags: ['user'],
+  summary: 'Set active profile to nutritionist',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    200: {
+      description: 'Updated user preferences with new auth tokens',
+      type: 'object',
+      properties: {
+        activeProfile: {
+          type: 'string',
+          description: 'The new active profile for this user',
+          enum: ['student', 'trainer', 'nutritionist'],
         },
         token: {
           type: 'object',

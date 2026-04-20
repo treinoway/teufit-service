@@ -28,6 +28,10 @@ export default {
               max: 1000,
               timeWindow: '1 hour',
             },
+            becomeNutritionist: {
+              max: 1000,
+              timeWindow: '1 hour',
+            },
             uploadAvatar: {
               max: 1000,
               timeWindow: '1 minute',

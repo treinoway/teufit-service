@@ -14,6 +14,7 @@ import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from
 import { translate } from '../src/i18n/index.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
+import { nutritionistRoutes } from './routes/nutritionist-route.js';
 import { userRoutes } from './routes/user-route.js';
 import { addressRoutes } from './routes/address-route.js';
 import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
@@ -256,6 +257,7 @@ export async function buildServer(options = {}) {
 
     // Register all protected routes
     await fastify.register(trainerRoutes);
+    await fastify.register(nutritionistRoutes);
     await fastify.register(userRoutes);
     await fastify.register(addressRoutes);
     await fastify.register(trainingProtocolTemplateRoutes);

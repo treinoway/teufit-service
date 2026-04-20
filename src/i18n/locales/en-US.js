@@ -102,6 +102,7 @@ export default {
     },
     userRole: {
       trainer: 'Trainer',
+      nutritionist: 'Nutritionist',
       admin: 'Administrator',
     },
     trainerServiceMode: {
@@ -134,6 +135,7 @@ export default {
     'student.notLinked': 'This student is not linked to your account.',
     'student.notTrainee': 'This student does not belong to your roster.',
     'trainer.notFound': 'Trainer profile not found.',
+    'nutritionist.notFound': 'Nutritionist profile not found.',
 
     // Branding
     'branding.notFound': 'Branding not found. Please save your settings first.',

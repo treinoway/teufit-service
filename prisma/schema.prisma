@@ -225,18 +225,20 @@ model PasswordResetToken {
 }
 
 model Nutritionist {
-  id            String  @id @default(uuid()) @db.Uuid
-  userId        String  @map("user_id") @db.Uuid
-  councilNumber String? @map("council_number") @db.Text
-  specialties   String? @db.Text
+  id                   String    @id @default(uuid()) @db.Uuid
+  userId               String    @unique @map("user_id") @db.Uuid
+  professionalDocument String?   @map("professional_document") @db.Text
+  clinicName           String?   @map("clinic_name") @db.Text
+  notes                String?   @db.Text
+  serviceMode          String?   @map("service_mode") @db.Text
+  profileCompletedAt   DateTime? @map("profile_completed_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt       @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@unique([userId])
   @@map("nutritionists")
 }
 

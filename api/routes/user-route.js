@@ -1,10 +1,10 @@
 import { authenticate } from '../middleware/auth.js';
-import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
+import { getUserProfileById, setActiveProfileToTrainer, setActiveProfileToNutritionist, updateUserProfile } from '../../src/services/user-service.js';
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
-import { getMeSchema, becomeTrainerSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
+import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
 import config from '../../config/index.js';
 
 export async function userRoutes(fastify) {
@@ -83,6 +83,42 @@ export async function userRoutes(fastify) {
         });
       } catch (error) {
         request.log.error({ error }, 'Error updating activeProfile in PATCH /become-trainer');
+
+        if (error?.code === 'USER_ID_REQUIRED') {
+          return reply.status(400).send({ error: 'USER_ID_REQUIRED' });
+        }
+
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    },
+  );
+
+  // Rate limit: 3 req/hour (disabled in test environment)
+  fastify.patch(
+    '/become-nutritionist',
+    {
+      config: {
+        rateLimit: config.rateLimit.user.becomeNutritionist,
+      },
+      preHandler: [authenticate],
+      schema: becomeNutritionistSchema,
+    },
+    async (request, reply) => {
+      try {
+        const userId = request.user.id;
+        const preferences = await setActiveProfileToNutritionist(userId);
+
+        const updatedUser = await getUserProfileById(userId);
+        const access = issueAccessToken({ fastify, user: updatedUser });
+        const refresh = await issueRefreshToken({ user: updatedUser });
+
+        return reply.send({
+          activeProfile: preferences.activeProfile,
+          token: { accessToken: access.accessToken },
+          refreshToken: refresh.refreshToken,
+        });
+      } catch (error) {
+        request.log.error({ error }, 'Error updating activeProfile in PATCH /become-nutritionist');
 
         if (error?.code === 'USER_ID_REQUIRED') {
           return reply.status(400).send({ error: 'USER_ID_REQUIRED' });

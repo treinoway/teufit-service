@@ -175,6 +175,49 @@ export async function setActiveProfileToTrainer(userId) {
 	return preferences;
 }
 
+export async function setActiveProfileToNutritionist(userId) {
+	if (!userId) {
+		const err = new Error('userId is required');
+		err.code = 'USER_ID_REQUIRED';
+		err.statusCode = 400;
+		throw err;
+	}
+
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		select: { roles: true },
+	});
+
+	if (!user) {
+		const err = new Error('User not found');
+		err.code = 'USER_NOT_FOUND';
+		err.statusCode = 404;
+		throw err;
+	}
+
+	const currentRoles = Array.isArray(user.roles) ? user.roles : [];
+	if (!currentRoles.includes(Roles.NUTRITIONIST)) {
+		await prisma.user.update({
+			where: { id: userId },
+			data: {
+				roles: {
+					set: [...currentRoles, Roles.NUTRITIONIST],
+				},
+			},
+		});
+	}
+
+	await ensureProfileForUser({ userId, role: Roles.NUTRITIONIST });
+
+	const preferences = await prisma.userPreferences.upsert({
+		where: { userId },
+		create: { userId, activeProfile: 'nutritionist' },
+		update: { activeProfile: 'nutritionist' },
+	});
+
+	return preferences;
+}
+
 /**
  * Update user profile including personal data, address, and socials.
  * All fields are optional - only provided fields will be updated.

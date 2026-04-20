@@ -83,6 +83,13 @@ export async function ensureProfileForUser({ userId, role }) {
     return { created: true, role };
   }
 
+  if (role === Roles.NUTRITIONIST) {
+    const existing = await prisma.nutritionist.findFirst({ where: { userId } });
+    if (existing) return { created: false, role };
+    await prisma.nutritionist.create({ data: { userId } });
+    return { created: true, role };
+  }
+
   const err = new Error('Invalid profile type');
   err.code = 'INVALID_PROFILE_TYPE';
   err.statusCode = 400;

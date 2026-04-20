@@ -1,69 +1,140 @@
-# Frontend Brief — Block Deletion of Active Training Protocols
+# Frontend Brief — Nutritionist Profile
 
-**Backend branch**: staging · **Generated**: 2026-04-17
+**Backend branch**: staging · **Generated**: 2026-04-19
 
 ## Elevator pitch
-Trainers can no longer accidentally delete an active training protocol. When they attempt to, the API now returns a clear 409 error prompting them to archive the protocol first.
+Users can now register as nutritionists, building a public profile (clinic name, CRN number, service mode) that appears in a discoverable listing — exactly the same UX pattern as the existing trainer profile.
 
 ## User story
-As a trainer, I want to be prevented from deleting an active protocol so that I don't accidentally lose ongoing training data for my students.
+As a user, I want to activate a nutritionist profile so that clients can find me and I can operate as a nutritionist within the platform.
 
 ## User flows
 
-1. **Entry point**: Trainer navigates to the protocol list or protocol detail page and taps/clicks the "Delete" action.
-2. **Happy path (deletable protocol)**:
-   1. Trainer selects a protocol with status `completed` or `archived`.
-   2. Confirms the delete action.
-   3. Protocol is soft-deleted and removed from the list.
-3. **Blocked path (active protocol)**:
-   1. Trainer selects a protocol with status `active`.
-   2. Triggers the delete action (button click / confirmation modal).
-   3. API returns `409`. UI shows an error message: the protocol must be archived before it can be deleted.
-   4. The protocol remains visible and unchanged in the list.
-   5. Optionally, the UI surfaces a shortcut: "Archive protocol" CTA leading to the edit/archive flow.
+1. **Entry point**: Profile settings or role-selection screen — a "Become Nutritionist" CTA alongside the existing "Become Trainer" button.
+2. **Happy path**:
+   1. User taps "Become Nutritionist".
+   2. App calls `PATCH /become-nutritionist` — receives new tokens with `nutritionist` role and `activeProfile: 'nutritionist'`.
+   3. App stores new tokens, switches active profile to `nutritionist`.
+   4. User is directed to the nutritionist onboarding form: professional document (CRN), clinic name, service mode, notes.
+   5. User submits the form — app calls `PATCH /nutritionist`.
+   6. Profile completion is determined automatically: when personal data (first name, last name, birth date, gender) and address (line1, city, state, postal code, country) are filled, `profileCompletedAt` is set.
+   7. Completed profiles appear in `GET /nutritionists`.
+3. **Branches**:
+   - User already has `nutritionist` role: `PATCH /become-nutritionist` is idempotent — safe to call again.
+   - User also has `trainer` role: both profiles coexist; the `activeProfile` preference determines which dashboard is shown.
 
 ## UI states to cover
-- **Success**: Protocol disappears from the list after deletion.
-- **409 Error**: Inline error or toast explaining the protocol is active and must be archived first.
-- **Permissions**: The delete action is only available to the owning trainer (403 cases are unchanged).
-- **Null/absent data**: Protocol not found (404) remains handled as before.
+- Loading / Empty / Error / Success for all three nutritionist endpoints.
+- `profileCompletedAt: null` → show "complete your profile" nudge; non-null → show completed badge.
+- `serviceMode: null` → display nothing or "not specified".
+- `GET /nutritionists` empty array → "No nutritionists registered yet."
+- Permissions: `PATCH /nutritionist` and `GET /nutritionist` return `403` if the user does not have the `nutritionist` role.
 
 ## API contract
 
-### DELETE /trainer/protocols/:id
+### PATCH /become-nutritionist
+- **Auth**: Bearer token required (any authenticated user)
+- **Request**: no body
+- **Success** (200):
+  ```json
+  {
+    "activeProfile": "nutritionist",
+    "token": { "accessToken": "<jwt>" },
+    "refreshToken": "<token>"
+  }
+  ```
+- **Errors**:
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · missing/expired token
+  - `500` · `INTERNAL_SERVER_ERROR` · `internal.serverError` · unexpected failure
 
-- **Auth**: Bearer token required · Role: `TRAINER`
-- **Request**: No body. Path param `id` (UUID).
+### PATCH /nutritionist
+- **Auth**: Bearer token, `nutritionist` role required
+- **Request**:
+  ```json
+  {
+    "nutritionist": {
+      "professionalDocument": "CRN-3 12345",
+      "clinicName": "Clínica Saúde",
+      "notes": "Especialista em nutrição esportiva",
+      "serviceMode": "online"
+    }
+  }
+  ```
+  All fields optional. `serviceMode` must be `"online"`, `"in_person"`, or `"hybrid"`.
+- **Success** (200): full nutritionist profile object (see GET /nutritionist)
+- **Errors**:
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · invalid serviceMode or no body
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · not authenticated
+  - `403` · `FORBIDDEN` · `auth.forbidden` · missing nutritionist role
+  - `404` · `NOT_FOUND` · `nutritionist.notFound` · nutritionist record missing
+
+### GET /nutritionist
+- **Auth**: Bearer token, `nutritionist` role required
 - **Success** (200):
   ```json
   {
     "id": "uuid",
-    "deletedAt": "2026-04-17T12:00:00.000Z"
+    "firstName": "Ana",
+    "lastName": "Silva",
+    "birthDate": "1990-05-15",
+    "avatarUrl": "https://...",
+    "professionalDocument": "CRN-3 12345",
+    "clinicName": "Clínica Saúde",
+    "notes": "...",
+    "serviceMode": "online",
+    "serviceModeLabel": "Online",
+    "profileCompletedAt": "2026-04-19T22:00:00Z",
+    "address": { "city": "São Paulo", "state": "SP", ... },
+    "socialNetworks": { "instagram": "...", ... },
+    "createdAt": "2026-04-19T22:00:00Z"
   }
   ```
-- **Errors** (status · error · messageCode · when):
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · Missing or invalid token
-  - `403` · `FORBIDDEN` · `auth.forbidden` · Trainer does not own the protocol
-  - `404` · `NOT_FOUND` · `trainer.notFound` or `protocol.notFound` · Trainer profile or protocol missing
-  - `409` · `PROTOCOL_STATUS_NOT_DELETABLE` · `legacy.PROTOCOL_STATUS_NOT_DELETABLE` · Protocol status is `active`
-  - `429` · `RATE_LIMIT_EXCEEDED` · `rateLimit.exceeded` · Too many requests
-  - `500` · `INTERNAL_ERROR` · `internal.error` · Unexpected server error
+- **Errors**:
+  - `403` · `FORBIDDEN` · `auth.forbidden` · missing nutritionist role
+  - `404` · `NOT_FOUND` · `nutritionist.notFound` · profile not found
+
+### GET /nutritionists
+- **Auth**: Bearer token required (any authenticated user)
+- **Success** (200): array of nutritionist items:
+  ```json
+  [
+    {
+      "id": "uuid",
+      "firstName": "Ana",
+      "lastName": "Silva",
+      "avatarUrl": "https://...",
+      "serviceMode": "online",
+      "serviceModeLabel": "Online",
+      "address": { "city": "São Paulo", "state": "SP", "country": "Brasil" },
+      "socialNetworks": { "instagram": "..." }
+    }
+  ]
+  ```
+  Only nutritionists with `profileCompletedAt` set are returned.
 
 ## i18n keys required
-- `legacy.PROTOCOL_STATUS_NOT_DELETABLE` → suggested copy: "Esta rotina está ativa e não pode ser excluída. Arquive-a primeiro."
+- `nutritionist.notFound` → suggested copy: "Nutritionist profile not found."
+- `trainerServiceMode.online` → "Online" (shared with trainer, already exists)
+- `trainerServiceMode.in_person` → "In Person" (shared with trainer, already exists)
+- `trainerServiceMode.hybrid` → "Hybrid" (shared with trainer, already exists)
+- `userRole.nutritionist` → "Nutritionist" (new, added to locale files)
 
 ## Acceptance criteria
-- [ ] Delete button/action for `active` protocols results in a visible 409 error message in the UI.
-- [ ] The error message communicates that the protocol must be archived before deletion.
-- [ ] Optionally, a shortcut to the archive flow is shown alongside the error.
-- [ ] Delete button/action for `completed` or `archived` protocols continues to work as before.
-- [ ] No change to the behavior for 401, 403, 404, or 500 error cases.
+- [ ] "Become Nutritionist" flow grants the nutritionist role and issues new tokens.
+- [ ] Nutritionist profile form shows `professionalDocument`, `clinicName`, `serviceMode`, `notes` fields.
+- [ ] Profile completion nudge disappears once `profileCompletedAt` is set.
+- [ ] Completed nutritionist profiles appear in the public listing.
+- [ ] A user with the `trainer` role can also become a nutritionist — both profiles coexist.
+- [ ] `serviceMode` is displayed using its translated label (`serviceModeLabel`).
+- [ ] Users without the `nutritionist` role see `403` when accessing `/nutritionist` endpoints.
 
 ## Out of scope
-- Implementing the archive flow itself (already exists via the edit form).
-- Changing the delete confirmation modal design beyond adding the 409 error state.
+- Nutritionist-specific student management (no student linking for nutritionists in this cycle).
+- Nutritionist onboarding milestone tracking (`profileCompleted` flag only — no `firstStudentLinked` equivalent).
+- Diet plan or meal management features.
 
 ## Open design questions
-- Should the delete button be visually disabled (greyed out) for `active` protocols, or should it remain enabled and fail gracefully with the 409 error?
-- If the button is disabled, what tooltip or hint copy should appear on hover?
-- Should a direct "Archive first" CTA appear inline in the error toast/message, or is the existing edit flow sufficient?
+- Where should "Become Nutritionist" live: alongside "Become Trainer" on the same screen, or in a separate role-selection flow?
+- Should the nutritionist dashboard share the same navigation structure as the trainer dashboard, or have its own?
+- What icon/color scheme differentiates the nutritionist profile from the trainer profile?
+- Should `clinicName` be labeled "Clínica" or "Local de atendimento"?
