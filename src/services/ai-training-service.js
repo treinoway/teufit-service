@@ -115,7 +115,7 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 1. CONFIRMACAO OBRIGATORIA: NUNCA execute uma tool sem antes descrever exatamente o que vai fazer e receber confirmacao explicita ("sim", "pode fazer", "confirmo" ou equivalente). Se o treinador negar ou cancelar, responda: "Entendido, nao vou executar. Posso ajudar com algo mais?"
 2. RECURSOS INEXISTENTES: Se o aluno, template ou protocolo mencionado nao existir no contexto abaixo, informe o treinador e NAO execute nada. Oferea alternativas do contexto disponivel quando possivel.
 3. ESCOPO UNICO POR TURNO: Execute apenas uma tool por turno. Se o treinador pedir multiplas acoes, informe que vai fazer uma por vez e peca para ele confirmar cada uma.
-4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios e treinos inline. Inclua TUDO em uma unica chamada — exercicios no campo "exercises", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez.
+4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios inline (campo "exercises") OU por ID de template existente (campo "exerciseTemplateIds"). Inclua TUDO em uma unica chamada — exercicios no campo "exercises" e/ou "exerciseTemplateIds", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez.
 5. FIDELIDADE DESCRICAO -> TOOL CALL: Se na sua mensagem anterior voce descreveu exercicios, treinos ou campos especificos (ex: "vou criar treino Peito com supino, crucifixo e voador com 3 series de 10 reps"), ao executar a tool esses EXATOS itens DEVEM aparecer nos parametros correspondentes. Nunca descreva uma acao e depois chame a tool com campos vazios ou diferentes do que prometeu — isso quebra a confianca do treinador. A tool call e o contrato do que voce prometeu. Se prometeu exercicios, eles OBRIGATORIAMENTE devem estar no campo "exercises" da chamada.
 
 === REGRAS DE RESPOSTA ===
@@ -434,7 +434,7 @@ const TOOLS = [
               exercises: {
                 type: "array",
                 description:
-                  "Exercícios novos para criar neste treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
+                  "Exercícios novos para criar neste treino inline. Use 'exerciseTemplateIds' para referenciar templates ja existentes (as duas opcoes podem coexistir).",
                 items: {
                   type: "object",
                   required: ["name", "type"],
@@ -463,6 +463,12 @@ const TOOLS = [
                     notes: { type: "string" },
                   },
                 },
+              },
+              exerciseTemplateIds: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "IDs de modelos de exercicio existentes para vincular ao treino (alternativa ou complemento a 'exercises' inline)",
               },
             },
           },
@@ -1089,7 +1095,33 @@ async function executeTool(userId, toolName, toolInput) {
               continue;
             }
 
-            // Batch create exercise templates for this training; collect full data for snapshot
+            const existingExIds = training.exerciseTemplateIds || [];
+
+            // SECURITY: Verify all referenced exercise templates belong to this trainer
+            if (existingExIds.length > 0) {
+              const owned = await tx.exerciseTemplate.findMany({
+                where: { id: { in: existingExIds }, trainerId: trainer.id },
+                select: { id: true },
+              });
+              if (owned.length !== existingExIds.length) {
+                throw new AppError({
+                  httpStatus: 403,
+                  error: AI_ERRORS.EXERCISE_TEMPLATE_NOT_OWNED,
+                  messageCode: "ai.exerciseTemplateNotOwned",
+                  message: "One or more exercise templates do not belong to this trainer",
+                });
+              }
+            }
+
+            // Fetch existing exercise templates for snapshot data
+            let existingExSnapshots = [];
+            if (existingExIds.length > 0) {
+              existingExSnapshots = await tx.exerciseTemplate.findMany({
+                where: { id: { in: existingExIds }, trainerId: trainer.id },
+              });
+            }
+
+            // Batch create inline exercise templates; collect full data for snapshot
             const exerciseSnapshots = [];
             for (const ex of training.exercises || []) {
               const created = await tx.exerciseTemplate.create({
@@ -1109,7 +1141,8 @@ async function executeTool(userId, toolName, toolInput) {
               exerciseSnapshots.push(created);
             }
 
-            const junctionRows = exerciseSnapshots.map((t, index) => ({
+            // Build junction rows: inline first, then existing-by-ID (order is sequential, no gaps)
+            const inlineJunctionRows = exerciseSnapshots.map((t, index) => ({
               exerciseTemplateId: t.id,
               order: index,
               name: t.name,
@@ -1123,6 +1156,21 @@ async function executeTool(userId, toolName, toolInput) {
               restInterval: t.restInterval ?? null,
               notes: t.notes ?? null,
             }));
+            const existingJunctionRows = existingExSnapshots.map((t, index) => ({
+              exerciseTemplateId: t.id,
+              order: exerciseSnapshots.length + index,
+              name: t.name,
+              type: t.type,
+              videoUrl: t.videoUrl ?? null,
+              sets: t.sets ?? null,
+              repetitions: t.repetitions ?? null,
+              duration: t.duration ?? null,
+              hasLoad: t.hasLoad ?? false,
+              suggestedLoad: t.suggestedLoad ?? null,
+              restInterval: t.restInterval ?? null,
+              notes: t.notes ?? null,
+            }));
+            const allJunctionRows = [...inlineJunctionRows, ...existingJunctionRows];
 
             // Create training template
             const createdTraining = await tx.trainingTemplate.create({
@@ -1134,9 +1182,9 @@ async function executeTool(userId, toolName, toolInput) {
                 bodySegment: training.bodySegment || null,
                 tags: [],
                 isPublic: false,
-                ...(junctionRows.length > 0 && {
+                ...(allJunctionRows.length > 0 && {
                   trainingTemplateExerciseTemplates: {
-                    create: junctionRows,
+                    create: allJunctionRows,
                   },
                 }),
               },
