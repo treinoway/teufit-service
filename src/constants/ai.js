@@ -14,6 +14,12 @@ export const AI_TOOLS = Object.freeze({
   CREATE_EXERCISE_TEMPLATE: 'create_exercise_template',
   CREATE_TRAINING_TEMPLATE: 'create_training_template',
   CREATE_PROTOCOL_TEMPLATE: 'create_protocol_template',
+  UPDATE_PROTOCOL_TEMPLATE: 'update_protocol_template',
+  UPDATE_TRAINING_TEMPLATE: 'update_training_template',
+  UPDATE_EXERCISE_TEMPLATE: 'update_exercise_template',
+  UPDATE_PROTOCOL: 'update_protocol',
+  UPDATE_TRAINING: 'update_training',
+  UPDATE_EXERCISE: 'update_exercise',
 })
 
 export const AI_ERRORS = Object.freeze({
@@ -36,6 +42,8 @@ export const AI_LIMITS = Object.freeze({
   MAX_CONTEXT_TRAINING_TEMPLATES: 30,
   MAX_CONTEXT_ACTIVE_PROTOCOLS: 30,
   MAX_CONTEXT_EXERCISE_TEMPLATES: 20,
+  MAX_CONTEXT_TRAININGS_PER_PROTOCOL: 6,
+  MAX_CONTEXT_EXERCISES_PER_TRAINING: 6,
   MAX_TOKENS: 2500,
   RATE_LIMIT_MAX: 10,
   RATE_LIMIT_WINDOW: '1 minute',

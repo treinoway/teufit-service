@@ -11,9 +11,13 @@ import {
   validateTrainingLevel,
   validateProtocolType,
 } from "../helpers/training-validators.js";
-import { importFromTemplate } from "./training-protocol-service.js";
-import { createExerciseTemplate } from "./exercise-template-service.js";
+import { importFromTemplate, updateProtocol } from "./training-protocol-service.js";
+import { createExerciseTemplate, updateExerciseTemplate } from "./exercise-template-service.js";
 import { maybeMarkFirstProtocolCreated } from "./trainer-onboarding-service.js";
+import { updateProtocolTemplate } from "./training-protocol-template-service.js";
+import { updateTrainingTemplate } from "./training-template-service.js";
+import { updateTraining } from "./training-service.js";
+import { updateExercise } from "./exercise-service.js";
 
 import { getLlmProvider } from "../llm/index.js";
 
@@ -72,6 +76,22 @@ async function buildTrainerContext(userId) {
         name: true,
         assigneeId: true,
         assignee: { select: { firstName: true, lastName: true } },
+        trainings: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            weekDay: true,
+            exercises: {
+              where: { deletedAt: null },
+              select: { id: true, name: true },
+              take: AI_LIMITS.MAX_CONTEXT_EXERCISES_PER_TRAINING,
+              orderBy: { order: 'asc' },
+            },
+          },
+          take: AI_LIMITS.MAX_CONTEXT_TRAININGS_PER_PROTOCOL,
+          orderBy: { order: 'asc' },
+        },
       },
       take: AI_LIMITS.MAX_CONTEXT_ACTIVE_PROTOCOLS,
     }),
@@ -116,24 +136,26 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 2. RECURSOS INEXISTENTES: Se o aluno, template ou protocolo mencionado nao existir no contexto abaixo, informe o treinador e NAO execute nada. Oferea alternativas do contexto disponivel quando possivel.
 3. ESCOPO UNICO POR TURNO: Execute apenas uma tool por turno. Se o treinador pedir multiplas acoes, informe que vai fazer uma por vez e peca para ele confirmar cada uma.
 4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios inline (campo "exercises") OU por ID de template existente (campo "exerciseTemplateIds"). Inclua TUDO em uma unica chamada — exercicios no campo "exercises" e/ou "exerciseTemplateIds", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez.
-5. FIDELIDADE DESCRICAO -> TOOL CALL: Se na sua mensagem anterior voce descreveu exercicios, treinos ou campos especificos (ex: "vou criar treino Peito com supino, crucifixo e voador com 3 series de 10 reps"), ao executar a tool esses EXATOS itens DEVEM aparecer nos parametros correspondentes. Nunca descreva uma acao e depois chame a tool com campos vazios ou diferentes do que prometeu — isso quebra a confianca do treinador. A tool call e o contrato do que voce prometeu. Se prometeu exercicios, eles OBRIGATORIAMENTE devem estar no campo "exercises" da chamada.
+5. EDICAO (PATCH): As tools update_* alteram APENAS os campos informados. Campos omitidos permanecem inalterados. Ao editar, confirme ao treinador SOMENTE o que sera alterado — nao liste campos que nao mudarao.
+6. REFS DE EDICAO: [TRAINING_REF:id] e [EXERCISE_REF:id] sao as tags para identificar treinos e exercicios dentro de protocolos ativos. Use-os para preencher os parametros trainingId e exerciseId das tools de edicao. NUNCA exiba essas tags nas respostas.
+7. FIDELIDADE DESCRICAO -> TOOL CALL: Se na sua mensagem anterior voce descreveu exercicios, treinos ou campos especificos (ex: "vou criar treino Peito com supino, crucifixo e voador com 3 series de 10 reps"), ao executar a tool esses EXATOS itens DEVEM aparecer nos parametros correspondentes. Nunca descreva uma acao e depois chame a tool com campos vazios ou diferentes do que prometeu — isso quebra a confianca do treinador. A tool call e o contrato do que voce prometeu. Se prometeu exercicios, eles OBRIGATORIAMENTE devem estar no campo "exercises" da chamada.
 
 === REGRAS DE RESPOSTA ===
-6. Responda sempre em portugues brasileiro.
-7. Seja conciso. Respostas conversacionais devem ter no maximo 3-4 linhas. Nao repita informacoes que o treinador ja sabe.
-8. Ao pedir confirmacao antes de executar uma tool, resuma o que sera feito em bullet points curtos. Exemplo:
+8. Responda sempre em portugues brasileiro.
+9. Seja conciso. Respostas conversacionais devem ter no maximo 3-4 linhas. Nao repita informacoes que o treinador ja sabe.
+10. Ao pedir confirmacao antes de executar uma tool, resuma o que sera feito em bullet points curtos. Exemplo:
    "Vou criar:
    - Rotina: [nome]
    - Treinos: [lista]
    - Aluno: [nome]
    Confirma?"
-9. PROIBIDO exibir IDs, UUIDs, hashes ou tags [REF:...] nas respostas. Use SOMENTE nomes humanos. As tags [REF:...] existem apenas para voce extrair IDs ao preencher parametros de tools.
-10. PROIBIDO expor nomes tecnicos de campos/parametros nas respostas ao treinador. NUNCA escreva coisas como "hasLoad=true", "suggestedLoad", "restInterval", "repetitions.min", "bodySegment", "genderOrdination", "trainingLevel", notacao de objeto, JSON, snake_case ou camelCase. Use SEMPRE linguagem natural em portugues: "com carga", "carga sugerida de X kg", "60s de descanso", "10 a 12 repeticoes", "treino de membros inferiores", etc. Os nomes tecnicos existem APENAS para preencher parametros de tools — nunca para o treinador ler.
+11. PROIBIDO exibir IDs, UUIDs, hashes ou tags [REF:...] nas respostas. Use SOMENTE nomes humanos. As tags [REF:...] existem apenas para voce extrair IDs ao preencher parametros de tools.
+12. PROIBIDO expor nomes tecnicos de campos/parametros nas respostas ao treinador. NUNCA escreva coisas como "hasLoad=true", "suggestedLoad", "restInterval", "repetitions.min", "bodySegment", "genderOrdination", "trainingLevel", notacao de objeto, JSON, snake_case ou camelCase. Use SEMPRE linguagem natural em portugues: "com carga", "carga sugerida de X kg", "60s de descanso", "10 a 12 repeticoes", "treino de membros inferiores", etc. Os nomes tecnicos existem APENAS para preencher parametros de tools — nunca para o treinador ler.
 
 === REGRAS DE CONTEUDO ===
-11. OBRIGATORIO: Ao chamar tools que criam exercicios, SEMPRE preencha sets, repetitions (min e max), e restInterval — sem excecao. Defaults quando o treinador nao especificar: 3 series, 10-12 repeticoes (min=10, max=12), 60s de descanso. Para exercicios de forca, preencha hasLoad=true e suggestedLoad quando o treinador indicar peso. Nunca omita esses campos. (Lembrete: esses nomes tecnicos servem apenas para o parametro da tool — na resposta ao treinador use linguagem natural, conforme regra 10.)
-12. Quando o treinador pedir exercicios sem lista especifica (ex: "4 exercicios variados"), use seu conhecimento de musculacao para sugerir exercicios apropriados ao contexto (segmento corporal, nivel, tipo de treino). Nao peca ao treinador para listar cada um — so confirme antes de criar.
-13. Datas: converta qualquer formato em portugues ("amanha", "proxima segunda", "dia 15", "daqui 2 meses", "01/04") para YYYY-MM-DD internamente. NUNCA peca ao treinador para formatar datas. Se nao informar datas, sugira: inicio hoje, expiracao em 8 semanas.`;
+13. OBRIGATORIO: Ao chamar tools que criam exercicios, SEMPRE preencha sets, repetitions (min e max), e restInterval — sem excecao. Defaults quando o treinador nao especificar: 3 series, 10-12 repeticoes (min=10, max=12), 60s de descanso. Para exercicios de forca, preencha hasLoad=true e suggestedLoad quando o treinador indicar peso. Nunca omita esses campos. (Lembrete: esses nomes tecnicos servem apenas para o parametro da tool — na resposta ao treinador use linguagem natural, conforme regra 12.)
+14. Quando o treinador pedir exercicios sem lista especifica (ex: "4 exercicios variados"), use seu conhecimento de musculacao para sugerir exercicios apropriados ao contexto (segmento corporal, nivel, tipo de treino). Nao peca ao treinador para listar cada um — so confirme antes de criar.
+15. Datas: converta qualquer formato em portugues ("amanha", "proxima segunda", "dia 15", "daqui 2 meses", "01/04") para YYYY-MM-DD internamente. NUNCA peca ao treinador para formatar datas. Se nao informar datas, sugira: inicio hoje, expiracao em 8 semanas.`;
 
 /**
  * Builds the dynamic portion of the system prompt: current date and trainer context.
@@ -163,9 +185,16 @@ function buildDynamicContext(context) {
   const activeProtocolList = context.activeProtocols
     .map((p) => {
       const assigneeName =
-        [p.assignee.firstName, p.assignee.lastName].filter(Boolean).join(" ") ||
-        "Aluno";
-      return `- ${p.name} -> aluno: ${assigneeName} [PROTOCOL_REF:${p.id}] [ASSIGNEE_REF:${p.assigneeId}]`;
+        [p.assignee.firstName, p.assignee.lastName].filter(Boolean).join(" ") || "Aluno";
+      const lines = [`- ${p.name} -> aluno: ${assigneeName} [PROTOCOL_REF:${p.id}] [ASSIGNEE_REF:${p.assigneeId}]`];
+      for (const t of p.trainings || []) {
+        const dayStr = t.weekDay ? ` (${t.weekDay})` : "";
+        lines.push(`  - ${t.name}${dayStr} [TRAINING_REF:${t.id}]`);
+        for (const e of t.exercises || []) {
+          lines.push(`    - ${e.name} [EXERCISE_REF:${e.id}]`);
+        }
+      }
+      return lines.join("\n");
     })
     .join("\n");
 
@@ -313,7 +342,7 @@ const TOOLS = [
         exercises: {
           type: "array",
           description:
-            "Exercícios novos para criar e vincular ao treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
+            "Exercicios novos para criar como templates e vincular ao treino. Use este campo quando os exercicios ainda nao existem na biblioteca. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador na mensagem anterior. Se voce mencionou exercicios especificos por nome (ex: 'supino, crucifixo, voador'), eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
           items: {
             type: "object",
             required: ["name", "type"],
@@ -434,7 +463,7 @@ const TOOLS = [
               exercises: {
                 type: "array",
                 description:
-                  "Exercícios novos para criar neste treino inline. Use 'exerciseTemplateIds' para referenciar templates ja existentes (as duas opcoes podem coexistir).",
+                  "Exercicios novos para criar como templates dentro deste treino. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador para este treino. Se voce mencionou exercicios especificos por nome, eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
                 items: {
                   type: "object",
                   required: ["name", "type"],
@@ -525,7 +554,7 @@ const TOOLS = [
               exercises: {
                 type: "array",
                 description:
-                  "Exercícios novos para criar neste treino. Inclua todos de uma vez com sets/repetitions/restInterval preenchidos.",
+                  "Exercicios novos para criar dentro deste treino. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador para este treino. Se voce mencionou exercicios especificos por nome, eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos. Nunca chame esta tool com array vazio se voce prometeu exercicios.",
                 items: {
                   type: "object",
                   required: ["name", "type"],
@@ -564,6 +593,118 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: AI_TOOLS.UPDATE_PROTOCOL_TEMPLATE,
+    description:
+      'Edita campos de um template de protocolo existente (nome, descricao, duracao padrao, genero, nivel, tipo). Use quando o treinador quiser modificar um template de rotina ja criado. Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['templateId'],
+      properties: {
+        templateId: { type: 'string', description: 'ID do template de protocolo [REF:id]' },
+        name: { type: 'string', description: 'Novo nome do template' },
+        description: { type: 'string', description: 'Nova descricao' },
+        defaultDurationWeeks: { type: 'integer', description: 'Duracao padrao em semanas' },
+        genderOrdination: { type: 'string', enum: ['male', 'female', 'other'], description: 'Genero alvo' },
+        trainingLevel: { type: 'string', enum: ['beginner', 'intermediate', 'advanced', 'athlete'], description: 'Nivel de treino' },
+        type: { type: 'string', enum: ['strength', 'cardio', 'stretching', 'mobility', 'activation'], description: 'Tipo do protocolo' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.UPDATE_TRAINING_TEMPLATE,
+    description:
+      'Edita campos de um template de treino existente (nome, descricao, categoria, segmento corporal). Use quando o treinador quiser modificar um template de treino ja criado. Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['templateId'],
+      properties: {
+        templateId: { type: 'string', description: 'ID do template de treino [REF:id]' },
+        name: { type: 'string', description: 'Novo nome' },
+        description: { type: 'string', description: 'Nova descricao' },
+        category: { type: 'string', enum: ['strength', 'cardio', 'flexibility', 'rest', 'functional', 'mobility'], description: 'Nova categoria' },
+        bodySegment: { type: 'string', enum: ['upper', 'lower', 'core', 'full_body'], description: 'Segmento corporal' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.UPDATE_EXERCISE_TEMPLATE,
+    description:
+      'Edita campos de um template de exercicio existente na biblioteca do treinador. Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['templateId'],
+      properties: {
+        templateId: { type: 'string', description: 'ID do template de exercicio [REF:id]' },
+        name: { type: 'string', description: 'Novo nome' },
+        type: { type: 'string', enum: ['strength', 'cardio', 'mobility', 'stretching'], description: 'Tipo do exercicio' },
+        sets: { type: 'integer', description: 'Numero de series' },
+        repetitions: { type: 'object', properties: { min: { type: 'integer' }, max: { type: 'integer' } }, description: 'Repeticoes min/max' },
+        duration: { type: 'integer', description: 'Duracao em segundos (cardio/stretching)' },
+        hasLoad: { type: 'boolean', description: 'true se exercicio usa carga' },
+        suggestedLoad: { type: 'number', description: 'Carga sugerida em kg' },
+        restInterval: { type: 'integer', description: 'Descanso em segundos' },
+        notes: { type: 'string', description: 'Observacoes' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.UPDATE_PROTOCOL,
+    description:
+      'Edita campos de um protocolo ativo de um aluno (nome, descricao, status, datas). Use quando o treinador quiser modificar um protocolo ja criado. Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['protocolId'],
+      properties: {
+        protocolId: { type: 'string', description: 'ID do protocolo [PROTOCOL_REF:id]' },
+        name: { type: 'string', description: 'Novo nome' },
+        description: { type: 'string', description: 'Nova descricao' },
+        status: { type: 'string', enum: ['active', 'completed', 'archived', 'paused'], description: 'Novo status' },
+        startDate: { type: 'string', description: 'Nova data de inicio YYYY-MM-DD' },
+        expirationDate: { type: 'string', description: 'Nova data de expiracao YYYY-MM-DD' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.UPDATE_TRAINING,
+    description:
+      'Edita campos de um treino dentro de um protocolo ativo de aluno (nome, categoria, dia da semana, segmento, ordem, notas). Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['trainingId'],
+      properties: {
+        trainingId: { type: 'string', description: 'ID do treino [TRAINING_REF:id]' },
+        name: { type: 'string', description: 'Novo nome' },
+        description: { type: 'string', description: 'Nova descricao' },
+        category: { type: 'string', enum: ['strength', 'cardio', 'flexibility', 'rest', 'functional', 'mobility'], description: 'Nova categoria' },
+        bodySegment: { type: 'string', enum: ['upper', 'lower', 'core', 'full_body'], description: 'Segmento corporal' },
+        weekDay: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], description: 'Dia da semana' },
+        order: { type: 'integer', description: 'Ordem do treino no protocolo' },
+        notes: { type: 'string', description: 'Observacoes' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.UPDATE_EXERCISE,
+    description:
+      'Edita campos de um exercicio dentro de um treino de protocolo ativo de aluno (series, repeticoes, carga, descanso, etc). Apenas os campos informados sao alterados.',
+    input_schema: {
+      type: 'object',
+      required: ['exerciseId'],
+      properties: {
+        exerciseId: { type: 'string', description: 'ID do exercicio [EXERCISE_REF:id]' },
+        name: { type: 'string', description: 'Novo nome' },
+        type: { type: 'string', enum: ['strength', 'cardio', 'mobility', 'stretching'], description: 'Tipo do exercicio' },
+        sets: { type: 'integer', description: 'Numero de series' },
+        repetitions: { type: 'object', properties: { min: { type: 'integer' }, max: { type: 'integer' } }, description: 'Repeticoes min/max' },
+        duration: { type: 'integer', description: 'Duracao em segundos (cardio/stretching)' },
+        hasLoad: { type: 'boolean', description: 'true se exercicio usa carga' },
+        suggestedLoad: { type: 'number', description: 'Carga sugerida em kg' },
+        restInterval: { type: 'integer', description: 'Descanso em segundos' },
+        notes: { type: 'string', description: 'Observacoes' },
+      },
+    },
+  },
 ];
 
 // --- Tool display labels (user-facing, Portuguese) ---
@@ -574,6 +715,12 @@ const TOOL_DISPLAY_LABELS = {
   [AI_TOOLS.CREATE_EXERCISE_TEMPLATE]: "Criando exercicio",
   [AI_TOOLS.CREATE_TRAINING_TEMPLATE]: "Criando treino",
   [AI_TOOLS.CREATE_PROTOCOL_TEMPLATE]: "Criando rotina",
+  [AI_TOOLS.UPDATE_PROTOCOL_TEMPLATE]: "Editando template de protocolo",
+  [AI_TOOLS.UPDATE_TRAINING_TEMPLATE]: "Editando template de treino",
+  [AI_TOOLS.UPDATE_EXERCISE_TEMPLATE]: "Editando template de exercicio",
+  [AI_TOOLS.UPDATE_PROTOCOL]: "Editando protocolo",
+  [AI_TOOLS.UPDATE_TRAINING]: "Editando treino",
+  [AI_TOOLS.UPDATE_EXERCISE]: "Editando exercicio",
 };
 
 // --- Audit logging ---
@@ -842,6 +989,30 @@ function buildToolResultMessage(toolName, toolResult, conversationHistory = []) 
       baseMessage = `${count} treino(s) adicionado(s) ao protocolo com sucesso!`;
       break;
     }
+
+    case AI_TOOLS.UPDATE_PROTOCOL_TEMPLATE:
+      baseMessage = `Template "${data?.name || 'protocolo'}" atualizado com sucesso!`;
+      break;
+
+    case AI_TOOLS.UPDATE_TRAINING_TEMPLATE:
+      baseMessage = `Template de treino "${data?.name || 'treino'}" atualizado com sucesso!`;
+      break;
+
+    case AI_TOOLS.UPDATE_EXERCISE_TEMPLATE:
+      baseMessage = `Exercício "${data?.name || 'exercício'}" atualizado na sua biblioteca.`;
+      break;
+
+    case AI_TOOLS.UPDATE_PROTOCOL:
+      baseMessage = `Protocolo "${data?.name || 'protocolo'}" atualizado com sucesso!`;
+      break;
+
+    case AI_TOOLS.UPDATE_TRAINING:
+      baseMessage = `Treino "${data?.name || 'treino'}" atualizado com sucesso!`;
+      break;
+
+    case AI_TOOLS.UPDATE_EXERCISE:
+      baseMessage = `Exercício "${data?.name || 'exercício'}" atualizado com sucesso!`;
+      break;
 
     default:
       baseMessage = "Ação executada com sucesso!";
@@ -1348,6 +1519,48 @@ async function executeTool(userId, toolName, toolInput) {
           return createdTrainings;
         });
 
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_PROTOCOL_TEMPLATE: {
+        const fields = ['name', 'description', 'defaultDurationWeeks', 'genderOrdination', 'trainingLevel', 'type'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateProtocolTemplate(userId, toolInput.templateId, data);
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_TRAINING_TEMPLATE: {
+        const fields = ['name', 'description', 'category', 'bodySegment'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateTrainingTemplate(userId, toolInput.templateId, data);
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_EXERCISE_TEMPLATE: {
+        const fields = ['name', 'type', 'sets', 'repetitions', 'duration', 'hasLoad', 'suggestedLoad', 'restInterval', 'notes'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateExerciseTemplate(userId, toolInput.templateId, data);
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_PROTOCOL: {
+        const fields = ['name', 'description', 'status', 'startDate', 'expirationDate'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateProtocol(userId, toolInput.protocolId, data);
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_TRAINING: {
+        const fields = ['name', 'description', 'category', 'bodySegment', 'weekDay', 'order', 'notes'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateTraining(userId, toolInput.trainingId, data);
+        break;
+      }
+
+      case AI_TOOLS.UPDATE_EXERCISE: {
+        const fields = ['name', 'type', 'sets', 'repetitions', 'duration', 'hasLoad', 'suggestedLoad', 'restInterval', 'notes'];
+        const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
+        result = await updateExercise(userId, toolInput.exerciseId, data);
         break;
       }
 

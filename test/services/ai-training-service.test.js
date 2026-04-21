@@ -91,7 +91,7 @@ describe('ai-training-service', () => {
       })
     })
 
-    it('queries all context entities with take: AI_LIMITS.MAX_CONTEXT_ITEMS', async () => {
+    it('queries all context entities with their respective take limits', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
       prisma.trainerStudent.findMany.mockResolvedValue([])
       prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
@@ -102,16 +102,16 @@ describe('ai-training-service', () => {
       await buildTrainerContext('user-1')
 
       expect(prisma.trainerStudent.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_ITEMS }),
+        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_STUDENTS }),
       )
       expect(prisma.trainingProtocolTemplate.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_ITEMS }),
+        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_PROTOCOL_TEMPLATES }),
       )
       expect(prisma.trainingTemplate.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_ITEMS }),
+        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_TRAINING_TEMPLATES }),
       )
       expect(prisma.trainingProtocol.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_ITEMS }),
+        expect.objectContaining({ take: AI_LIMITS.MAX_CONTEXT_ACTIVE_PROTOCOLS }),
       )
     })
   })
