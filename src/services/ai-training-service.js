@@ -705,6 +705,46 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: AI_TOOLS.ADD_EXERCISES_TO_TRAINING,
+    description:
+      'Adiciona exercicios a um treino EXISTENTE dentro de um protocolo ativo. Use quando o treinador quiser incluir exercicios em um treino que ja existe — NAO cria um treino novo. IMPORTANTE: inclua TODOS os exercicios solicitados de uma vez na mesma chamada.',
+    input_schema: {
+      type: 'object',
+      required: ['trainingId', 'exercises'],
+      properties: {
+        trainingId: { type: 'string', description: 'ID do treino existente [TRAINING_REF:id]' },
+        exercises: {
+          type: 'array',
+          description:
+            'Exercicios a adicionar no treino. IMPORTANTE: inclua aqui TODOS os exercicios que voce descreveu ao treinador. Se voce mencionou exercicios especificos por nome, eles OBRIGATORIAMENTE devem aparecer neste array com sets/repetitions/restInterval preenchidos.',
+          items: {
+            type: 'object',
+            required: ['name', 'type'],
+            properties: {
+              name: { type: 'string', description: 'Nome do exercicio' },
+              type: {
+                type: 'string',
+                enum: ['strength', 'cardio', 'mobility', 'stretching'],
+                description: 'Tipo do exercicio',
+              },
+              sets: { type: 'integer', description: 'Series (default: 3)' },
+              repetitions: {
+                type: 'object',
+                properties: { min: { type: 'integer' }, max: { type: 'integer' } },
+                description: 'Repeticoes min/max (default forca: 10-12). Cardio/stretching usa duration.',
+              },
+              duration: { type: 'integer', description: 'Duracao em segundos (cardio/stretching)' },
+              hasLoad: { type: 'boolean', description: 'true para forca com peso' },
+              suggestedLoad: { type: 'number', description: 'Carga sugerida em kg (se hasLoad=true)' },
+              restInterval: { type: 'integer', description: 'Descanso em segundos (default: 60)' },
+              notes: { type: 'string', description: 'Observacoes sobre o exercicio' },
+            },
+          },
+        },
+      },
+    },
+  },
 ];
 
 // --- Tool display labels (user-facing, Portuguese) ---
@@ -721,6 +761,7 @@ const TOOL_DISPLAY_LABELS = {
   [AI_TOOLS.UPDATE_PROTOCOL]: "Editando protocolo",
   [AI_TOOLS.UPDATE_TRAINING]: "Editando treino",
   [AI_TOOLS.UPDATE_EXERCISE]: "Editando exercicio",
+  [AI_TOOLS.ADD_EXERCISES_TO_TRAINING]: "Adicionando exercicios ao treino",
 };
 
 // --- Audit logging ---
@@ -732,6 +773,7 @@ const TOOLS_WITH_EXERCISES = new Set([
   AI_TOOLS.CREATE_TRAINING_TEMPLATE,
   AI_TOOLS.CREATE_PROTOCOL_TEMPLATE,
   AI_TOOLS.ADD_TRAINING_TO_PROTOCOL,
+  AI_TOOLS.ADD_EXERCISES_TO_TRAINING,
 ]);
 
 /**
@@ -926,6 +968,11 @@ function summaryHasEmptyTrainings(toolName, summary) {
     return (summary.exercisesCount ?? 0) === 0;
   }
 
+  if (toolName === AI_TOOLS.ADD_EXERCISES_TO_TRAINING) {
+    // result is an array of created exercises — empty means nothing was created
+    return !Array.isArray(summary) || summary.length === 0;
+  }
+
   // CREATE_PROTOCOL_TEMPLATE and ADD_TRAINING_TO_PROTOCOL: check each training
   if (Array.isArray(summary.trainings)) {
     return summary.trainings.some((t) => (t.exercisesCount ?? 0) === 0);
@@ -1013,6 +1060,12 @@ function buildToolResultMessage(toolName, toolResult, conversationHistory = []) 
     case AI_TOOLS.UPDATE_EXERCISE:
       baseMessage = `Exercício "${data?.name || 'exercício'}" atualizado com sucesso!`;
       break;
+
+    case AI_TOOLS.ADD_EXERCISES_TO_TRAINING: {
+      const count = Array.isArray(data) ? data.length : 1;
+      baseMessage = `${count} exercício(s) adicionado(s) ao treino com sucesso!`;
+      break;
+    }
 
     default:
       baseMessage = "Ação executada com sucesso!";
@@ -1561,6 +1614,80 @@ async function executeTool(userId, toolName, toolInput) {
         const fields = ['name', 'type', 'sets', 'repetitions', 'duration', 'hasLoad', 'suggestedLoad', 'restInterval', 'notes'];
         const data = Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(f => [f, toolInput[f]]));
         result = await updateExercise(userId, toolInput.exerciseId, data);
+        break;
+      }
+
+      case AI_TOOLS.ADD_EXERCISES_TO_TRAINING: {
+        const trainer = await prisma.trainer.findUnique({
+          where: { userId },
+          select: { id: true },
+        });
+        if (!trainer) {
+          throw new AppError({
+            httpStatus: 404,
+            error: "TRAINER_PROFILE_MISSING",
+            messageCode: "legacy.TRAINER_PROFILE_MISSING",
+            message: "Trainer profile not found",
+          });
+        }
+
+        if (!toolInput.exercises?.length) {
+          throw new AppError({
+            httpStatus: 400,
+            error: "VALIDATION_ERROR",
+            messageCode: "validation.failed",
+            message: "At least one exercise is required",
+          });
+        }
+
+        // Verify the training exists and belongs to this trainer (via protocol ownership)
+        const training = await prisma.training.findUnique({
+          where: { id: toolInput.trainingId },
+          select: { id: true, deletedAt: true, trainingProtocol: { select: { trainerId: true } } },
+        });
+
+        if (!training || training.deletedAt) {
+          throw new AppError({
+            httpStatus: 404,
+            error: "TRAINING_NOT_FOUND",
+            messageCode: "legacy.TRAINING_NOT_FOUND",
+            message: "Training not found",
+          });
+        }
+
+        if (training.trainingProtocol.trainerId !== trainer.id) {
+          throw new AppError({
+            httpStatus: 403,
+            error: "FORBIDDEN_NOT_PROTOCOL_OWNER",
+            messageCode: "legacy.FORBIDDEN_NOT_PROTOCOL_OWNER",
+            message: "You do not own this training's protocol",
+          });
+        }
+
+        result = await prisma.$transaction(async (tx) => {
+          const created = [];
+          for (const exercise of toolInput.exercises) {
+            validateExerciseType(exercise.type);
+            if (exercise.repetitions) validateRepetitions(exercise.repetitions);
+
+            const ex = await tx.exercise.create({
+              data: {
+                name: exercise.name,
+                type: exercise.type,
+                sets: exercise.sets || null,
+                repetitions: exercise.repetitions || null,
+                duration: exercise.duration || null,
+                hasLoad: exercise.hasLoad ?? false,
+                suggestedLoad: exercise.suggestedLoad || null,
+                restInterval: exercise.restInterval || null,
+                notes: exercise.notes || null,
+                trainingId: toolInput.trainingId,
+              },
+            });
+            created.push(ex);
+          }
+          return created;
+        });
         break;
       }
 
