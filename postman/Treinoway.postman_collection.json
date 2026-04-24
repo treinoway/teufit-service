@@ -3445,14 +3445,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"How many hours do you sleep per night?\",\n  \"type\": \"numeric\",\n  \"required\": true,\n  \"config\": {\n    \"min\": 0,\n    \"max\": 24,\n    \"unit\": \"hours\"\n  }\n}",
+              "raw": "{\n  \"text\": \"How many hours do you sleep per night?\",\n  \"type\": \"numeric\",\n  \"required\": true,\n  \"config\": {\n    \"min\": 0,\n    \"max\": 24,\n    \"unit\": \"hours\"\n  },\n  \"parentQuestionId\": null,\n  \"condition\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Add a question to a section. Types: free_text, dichotomous, multiple_choice, numeric, single_choice, matrix. Types with options: multiple_choice, single_choice, matrix."
+            "description": "Add a question to a section. Types: free_text, dichotomous, multiple_choice, numeric, single_choice, matrix. Types with options: multiple_choice, single_choice, matrix.\n\nConditional display: set parentQuestionId (UUID of an eligible parent in the same section) and condition:\n- Dichotomous parent: { \"operator\": \"equals\", \"value\": \"yes\" | \"no\" }\n- Single choice parent: { \"operator\": \"equals\", \"optionId\": \"<uuid>\" }\n- Multiple choice parent: { \"operator\": \"includesAny\", \"optionIds\": [\"<uuid>\"] }\n\nErrors: 400 PARENT_NOT_ELIGIBLE, PARENT_MUST_BE_SAME_SECTION, INVALID_CONDITION, CONDITIONAL_DEPTH_EXCEEDED"
           },
           "response": []
         },
@@ -3504,14 +3504,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false,\n  \"options\": [\n    {\n      \"text\": \"New Option A\"\n    },\n    {\n      \"text\": \"New Option B\"\n    }\n  ]\n}",
+              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false,\n  \"options\": [\n    {\n      \"text\": \"New Option A\"\n    },\n    {\n      \"text\": \"New Option B\"\n    }\n  ],\n  \"parentQuestionId\": null,\n  \"condition\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Update a question. If options array is provided, it completely replaces existing options."
+            "description": "Update a question. If options array is provided, it completely replaces existing options.\n\nConditional display: set parentQuestionId + condition to link to a parent, or set both to null to remove the condition.\n\nErrors: 400 PARENT_NOT_ELIGIBLE | PARENT_MUST_BE_SAME_SECTION | INVALID_CONDITION | CONDITIONAL_DEPTH_EXCEEDED; 409 PARENT_TYPE_LOCKED (cannot change type if question has conditional children) | CONDITION_REFERENCES_REMOVED_OPTION (cannot remove option referenced by child condition)"
           },
           "response": []
         },
@@ -4233,14 +4233,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"Do you have any chronic conditions?\",\n  \"type\": \"dichotomous\",\n  \"required\": true,\n  \"order\": 0\n}",
+              "raw": "{\n  \"text\": \"Do you have any chronic conditions?\",\n  \"type\": \"dichotomous\",\n  \"required\": true,\n  \"order\": 0,\n  \"parentQuestionId\": null,\n  \"condition\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Add a question (with optional options) to a section on a public anamnesis. Requires ADMIN role."
+            "description": "Add a question (with optional options) to a section on a public anamnesis. Supports parentQuestionId + condition for conditional display. Requires ADMIN role."
           },
           "response": []
         },
@@ -4292,14 +4292,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false\n}",
+              "raw": "{\n  \"text\": \"Updated question text\",\n  \"required\": false,\n  \"parentQuestionId\": null,\n  \"condition\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Requires ADMIN role."
+            "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Supports parentQuestionId + condition for conditional display. Errors: 409 PARENT_TYPE_LOCKED | CONDITION_REFERENCES_REMOVED_OPTION. Requires ADMIN role."
           },
           "response": []
         },

@@ -1,140 +1,133 @@
-# Frontend Brief — Nutritionist Profile
+# Frontend Brief — Anamnesis: Conditional Questions
 
-**Backend branch**: staging · **Generated**: 2026-04-19
+**Backend branch**: staging · **Generated**: 2026-04-23
 
 ## Elevator pitch
-Users can now register as nutritionists, building a public profile (clinic name, CRN number, service mode) that appears in a discoverable listing — exactly the same UX pattern as the existing trainer profile.
+Trainers can now mark any question as "only show if [parent question] = [value]". Students filling in an anamnesis see those questions appear and disappear live as they answer earlier questions in the same section.
 
 ## User story
-As a user, I want to activate a nutritionist profile so that clients can find me and I can operate as a nutritionist within the platform.
+As a trainer, I want to link a question to a parent question's answer so that my students only see follow-up questions that are relevant to their situation.
 
 ## User flows
 
-1. **Entry point**: Profile settings or role-selection screen — a "Become Nutritionist" CTA alongside the existing "Become Trainer" button.
-2. **Happy path**:
-   1. User taps "Become Nutritionist".
-   2. App calls `PATCH /become-nutritionist` — receives new tokens with `nutritionist` role and `activeProfile: 'nutritionist'`.
-   3. App stores new tokens, switches active profile to `nutritionist`.
-   4. User is directed to the nutritionist onboarding form: professional document (CRN), clinic name, service mode, notes.
-   5. User submits the form — app calls `PATCH /nutritionist`.
-   6. Profile completion is determined automatically: when personal data (first name, last name, birth date, gender) and address (line1, city, state, postal code, country) are filled, `profileCompletedAt` is set.
-   7. Completed profiles appear in `GET /nutritionists`.
-3. **Branches**:
-   - User already has `nutritionist` role: `PATCH /become-nutritionist` is idempotent — safe to call again.
-   - User also has `trainer` role: both profiles coexist; the `activeProfile` preference determines which dashboard is shown.
+1. **Entry point**: Trainer → Anamnesis editor → Canvas view of a section's questions (CanvasQuestionCard).
+2. **Happy path — linking a condition**:
+   1. Trainer expands a question card and scrolls to the new "Condição de exibição" section.
+   2. Trainer opens the "Mostrar somente se..." dropdown. It lists all eligible questions in the **same section** (dichotomous, single choice, or multiple choice) that do not already have a parent.
+   3. Trainer selects a parent question. A trigger-value picker appears below:
+      - **Dichotomous parent** → two radio options: "Sim" / "Não".
+      - **Single choice parent** → radio list of the parent's options.
+      - **Multiple choice parent** → checkbox list of the parent's options with hint "mostrar se qualquer uma estiver marcada".
+   4. Trainer picks a trigger value and saves the question.
+3. **Removing a condition**: Trainer clicks "Remover condição" in the same UI section → `parentQuestionId` and `condition` are sent as `null` on the next save.
+4. **Outline panel nesting**: conditional children are visually indented under their parent with a small "↳ condicional" badge but keep their existing `order` number.
+5. **Student form (MyAnamneses)**:
+   1. Student opens an anamnesis and sees all top-level questions.
+   2. As the student answers a parent question, child questions appear or disappear immediately.
+   3. When a child is hidden (parent answer doesn't match), any value the student had previously entered in that child is cleared from form state.
+   4. The required-field gate runs only on visible questions.
+6. **Preview modal**: trainer sees the same show/hide behavior when previewing the anamnesis. A static hint label above each conditional question reads: "Condicional: mostrado se «[parent question text]» = «[value]»".
 
 ## UI states to cover
-- Loading / Empty / Error / Success for all three nutritionist endpoints.
-- `profileCompletedAt: null` → show "complete your profile" nudge; non-null → show completed badge.
-- `serviceMode: null` → display nothing or "not specified".
-- `GET /nutritionists` empty array → "No nutritionists registered yet."
-- Permissions: `PATCH /nutritionist` and `GET /nutritionist` return `403` if the user does not have the `nutritionist` role.
+
+- **Dropdown empty state**: if there are no eligible parent questions in the section, show a disabled dropdown or a hint "Nenhuma pergunta elegível nesta seção."
+- **Child hidden / shown**: smooth toggle (e.g., fade or slide) — avoid jarring jump.
+- **Stale value cleared**: when a child becomes hidden because the user changed the parent answer, the child's input is reset to empty so the stale value isn't submitted.
+- **Server-side errors**: if the API returns one of the error messageCodes listed below, surface it as a toast.
+- **Type selector disabled hint**: if a question has conditional children, the type selector should show a tooltip: "Não é possível alterar o tipo enquanto houver perguntas condicionais vinculadas." The server enforces this; the UI is a courtesy hint only.
+- **Parent deleted**: when a parent question is deleted server-side, its former children become unconditional (always visible) — no special UI handling needed beyond a normal reload.
 
 ## API contract
 
-### PATCH /become-nutritionist
-- **Auth**: Bearer token required (any authenticated user)
-- **Request**: no body
-- **Success** (200):
+### POST /anamneses/:anamnesisId/sections/:sectionId/questions
+- **Auth**: Bearer token, role TRAINER
+- **Request** (new optional fields):
   ```json
   {
-    "activeProfile": "nutritionist",
-    "token": { "accessToken": "<jwt>" },
-    "refreshToken": "<token>"
+    "text": "Há quanto tempo você treina?",
+    "type": "numeric",
+    "required": true,
+    "parentQuestionId": "<uuid of parent>",
+    "condition": { "operator": "equals", "value": "yes" }
   }
   ```
+- **Success** (201): returns full question object (see response shape below)
 - **Errors**:
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · missing/expired token
-  - `500` · `INTERNAL_SERVER_ERROR` · `internal.serverError` · unexpected failure
+  - `400` · `PARENT_NOT_ELIGIBLE` · `anamnesis.parentNotEligible` · parent type is free_text / numeric / matrix
+  - `400` · `PARENT_MUST_BE_SAME_SECTION` · `anamnesis.parentMustBeSameSection` · parent is in a different section
+  - `400` · `INVALID_CONDITION` · `anamnesis.invalidCondition` · condition shape doesn't match parent type
+  - `400` · `CONDITIONAL_DEPTH_EXCEEDED` · `anamnesis.conditionalDepthExceeded` · parent itself already has a parent
 
-### PATCH /nutritionist
-- **Auth**: Bearer token, `nutritionist` role required
-- **Request**:
+### PATCH /anamneses/:anamnesisId/sections/:sectionId/questions/:questionId
+- **Auth**: Bearer token, role TRAINER
+- **Request** (new optional fields — same as above, also nullable to clear):
   ```json
   {
-    "nutritionist": {
-      "professionalDocument": "CRN-3 12345",
-      "clinicName": "Clínica Saúde",
-      "notes": "Especialista em nutrição esportiva",
-      "serviceMode": "online"
-    }
+    "parentQuestionId": null,
+    "condition": null
   }
   ```
-  All fields optional. `serviceMode` must be `"online"`, `"in_person"`, or `"hybrid"`.
-- **Success** (200): full nutritionist profile object (see GET /nutritionist)
-- **Errors**:
-  - `400` · `VALIDATION_ERROR` · `validation.failed` · invalid serviceMode or no body
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · not authenticated
-  - `403` · `FORBIDDEN` · `auth.forbidden` · missing nutritionist role
-  - `404` · `NOT_FOUND` · `nutritionist.notFound` · nutritionist record missing
+- **Success** (200): updated question
+- **Errors** (in addition to standard 400/404):
+  - `409` · `PARENT_TYPE_LOCKED` · `anamnesis.parentTypeLocked` · trainer tries to change a parent question's type while it has children
+  - `409` · `CONDITION_REFERENCES_REMOVED_OPTION` · `anamnesis.conditionReferencesRemovedOption` · trainer removes an option that a child condition references
 
-### GET /nutritionist
-- **Auth**: Bearer token, `nutritionist` role required
-- **Success** (200):
-  ```json
-  {
-    "id": "uuid",
-    "firstName": "Ana",
-    "lastName": "Silva",
-    "birthDate": "1990-05-15",
-    "avatarUrl": "https://...",
-    "professionalDocument": "CRN-3 12345",
-    "clinicName": "Clínica Saúde",
-    "notes": "...",
-    "serviceMode": "online",
-    "serviceModeLabel": "Online",
-    "profileCompletedAt": "2026-04-19T22:00:00Z",
-    "address": { "city": "São Paulo", "state": "SP", ... },
-    "socialNetworks": { "instagram": "...", ... },
-    "createdAt": "2026-04-19T22:00:00Z"
-  }
-  ```
-- **Errors**:
-  - `403` · `FORBIDDEN` · `auth.forbidden` · missing nutritionist role
-  - `404` · `NOT_FOUND` · `nutritionist.notFound` · profile not found
+### Question response shape (both create and update)
+```json
+{
+  "id": "<uuid>",
+  "sectionId": "<uuid>",
+  "text": "...",
+  "type": "numeric",
+  "required": true,
+  "order": 2,
+  "config": null,
+  "parentQuestionId": "<uuid or null>",
+  "condition": { "operator": "equals", "value": "yes" },
+  "options": [],
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
 
-### GET /nutritionists
-- **Auth**: Bearer token required (any authenticated user)
-- **Success** (200): array of nutritionist items:
-  ```json
-  [
-    {
-      "id": "uuid",
-      "firstName": "Ana",
-      "lastName": "Silva",
-      "avatarUrl": "https://...",
-      "serviceMode": "online",
-      "serviceModeLabel": "Online",
-      "address": { "city": "São Paulo", "state": "SP", "country": "Brasil" },
-      "socialNetworks": { "instagram": "..." }
-    }
-  ]
-  ```
-  Only nutritionists with `profileCompletedAt` set are returned.
+### Condition shapes by parent type
+| Parent type | Condition object |
+|---|---|
+| `dichotomous` | `{ "operator": "equals", "value": "yes" \| "no" }` |
+| `single_choice` | `{ "operator": "equals", "optionId": "<uuid>" }` |
+| `multiple_choice` | `{ "operator": "includesAny", "optionIds": ["<uuid>", ...] }` |
+
+### POST /my/anamneses/:anamnesisId/response (submit)
+Unchanged in shape. The backend silently drops answers for hidden children; the frontend must also not submit them (for correctness and UX consistency, clear stale values in form state before submit).
 
 ## i18n keys required
-- `nutritionist.notFound` → suggested copy: "Nutritionist profile not found."
-- `trainerServiceMode.online` → "Online" (shared with trainer, already exists)
-- `trainerServiceMode.in_person` → "In Person" (shared with trainer, already exists)
-- `trainerServiceMode.hybrid` → "Hybrid" (shared with trainer, already exists)
-- `userRole.nutritionist` → "Nutritionist" (new, added to locale files)
+
+- `anamnesis.invalidCondition` → suggested copy: "Condição inválida para o tipo da pergunta pai."
+- `anamnesis.parentNotEligible` → suggested copy: "Apenas perguntas Sim/Não, Escolha Única ou Múltipla Escolha podem ser perguntas pai."
+- `anamnesis.parentMustBeSameSection` → suggested copy: "A pergunta pai deve estar na mesma seção."
+- `anamnesis.parentTypeLocked` → suggested copy: "O tipo da pergunta não pode ser alterado porque existem perguntas condicionais vinculadas."
+- `anamnesis.conditionReferencesRemovedOption` → suggested copy: "Não é possível remover uma opção referenciada por uma pergunta condicional."
+- `anamnesis.conditionalDepthExceeded` → suggested copy: "Perguntas condicionais não podem ser encadeadas (apenas um nível)."
 
 ## Acceptance criteria
-- [ ] "Become Nutritionist" flow grants the nutritionist role and issues new tokens.
-- [ ] Nutritionist profile form shows `professionalDocument`, `clinicName`, `serviceMode`, `notes` fields.
-- [ ] Profile completion nudge disappears once `profileCompletedAt` is set.
-- [ ] Completed nutritionist profiles appear in the public listing.
-- [ ] A user with the `trainer` role can also become a nutritionist — both profiles coexist.
-- [ ] `serviceMode` is displayed using its translated label (`serviceModeLabel`).
-- [ ] Users without the `nutritionist` role see `403` when accessing `/nutritionist` endpoints.
 
-## Out of scope
-- Nutritionist-specific student management (no student linking for nutritionists in this cycle).
-- Nutritionist onboarding milestone tracking (`profileCompleted` flag only — no `firstStudentLinked` equivalent).
-- Diet plan or meal management features.
+- [ ] Trainer can open an eligible parent dropdown in the question card editor and select a parent question from the same section.
+- [ ] Trigger-value picker renders the correct control for each parent type (radio for dichotomous/single, checkboxes for multiple).
+- [ ] "Remover condição" clears parent + condition and saves cleanly.
+- [ ] Outline panel renders conditional children indented under their parent with a "↳ condicional" badge.
+- [ ] Type selector shows a disabled hint tooltip when the question has conditional children.
+- [ ] Student form hides conditional children whose parent answer doesn't match.
+- [ ] When a parent answer changes and a child becomes hidden, the child's form value is cleared.
+- [ ] Client-side required validation skips hidden questions.
+- [ ] Preview modal applies the same visibility logic and shows the condition hint label.
+- [ ] Fork/copy: the forked anamnesis has the same conditional structure and conditions still fire correctly.
+- [ ] Parent deletion: formerly conditional children become unconditional (always visible) after reload.
+- [ ] All six new error messageCodes surface as user-facing toasts in the trainer editor.
 
 ## Open design questions
-- Where should "Become Nutritionist" live: alongside "Become Trainer" on the same screen, or in a separate role-selection flow?
-- Should the nutritionist dashboard share the same navigation structure as the trainer dashboard, or have its own?
-- What icon/color scheme differentiates the nutritionist profile from the trainer profile?
-- Should `clinicName` be labeled "Clínica" or "Local de atendimento"?
+
+- What animation/transition style for show/hide? Fade, height slide, or instant?
+- Where in the question card should "Condição de exibição" live — at the bottom of the card, inside a collapsible accordion, or in a side-panel/drawer?
+- Should the "↳ condicional" badge in the outline panel be a full indent (nested list) or a flat list with a visual indicator?
+- What copy should appear on the "Mostrar somente se…" dropdown label?
+- Should the preview modal condition hint be inside the question card or above it?

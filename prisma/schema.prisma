@@ -562,22 +562,27 @@ model AnamnesisSection {
 }
 
 model AnamnesisQuestion {
-  id        String  @id @default(uuid()) @db.Uuid
-  sectionId String  @map("section_id") @db.Uuid
-  text      String  @db.Text
-  type      String  @db.Text
-  required  Boolean @default(false)
-  order     Int     @default(0)
-  config    Json?
+  id               String  @id @default(uuid()) @db.Uuid
+  sectionId        String  @map("section_id") @db.Uuid
+  text             String  @db.Text
+  type             String  @db.Text
+  required         Boolean @default(false)
+  order            Int     @default(0)
+  config           Json?
+  parentQuestionId String? @map("parent_question_id") @db.Uuid
+  condition        Json?
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  section AnamnesisSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  options AnamnesisQuestionOption[]
-  answers AnamnesisAnswer[]
+  section            AnamnesisSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  parentQuestion     AnamnesisQuestion?       @relation("AnamnesisQuestionChildren", fields: [parentQuestionId], references: [id], onDelete: SetNull)
+  dependentQuestions AnamnesisQuestion[]      @relation("AnamnesisQuestionChildren")
+  options            AnamnesisQuestionOption[]
+  answers            AnamnesisAnswer[]
 
+  @@index([parentQuestionId])
   @@map("anamnesis_questions")
 }
 

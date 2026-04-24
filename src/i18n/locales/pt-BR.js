@@ -158,6 +158,12 @@ export default {
     'anamnesis.hasStudentLinks': 'Esta anamnese está vinculada a alunos. Crie uma nova versão antes de editar.',
     'anamnesis.response.notFound': 'Nenhuma resposta encontrada para esta anamnese.',
     'anamnesis.notLinkedToStudent': 'Esta anamnese não está vinculada ao seu perfil.',
+    'anamnesis.invalidCondition': 'Condição inválida para o tipo da pergunta pai.',
+    'anamnesis.parentNotEligible': 'Apenas perguntas do tipo Sim/Não, Escolha Única ou Múltipla Escolha podem ser perguntas pai.',
+    'anamnesis.parentMustBeSameSection': 'A pergunta pai deve estar na mesma seção.',
+    'anamnesis.parentTypeLocked': 'O tipo da pergunta não pode ser alterado porque existem perguntas condicionais vinculadas.',
+    'anamnesis.conditionReferencesRemovedOption': 'Não é possível remover uma opção referenciada por uma pergunta condicional.',
+    'anamnesis.conditionalDepthExceeded': 'Perguntas condicionais não podem encadear (apenas um nível).',
 
     // Import
     'import.primecoaching.formatChanged': 'O arquivo não corresponde ao formato esperado do PrimeCoaching. Verifique se você exportou a planilha correta.',

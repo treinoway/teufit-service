@@ -15,6 +15,17 @@ export const questionOptionSchema = {
   },
 };
 
+export const conditionSchema = {
+  anyOf: [
+    {
+      type: 'object',
+      description: 'Condition object for conditional question visibility',
+      additionalProperties: true,
+    },
+    { type: 'null' },
+  ],
+};
+
 export const questionSchema = {
   type: 'object',
   properties: {
@@ -24,7 +35,9 @@ export const questionSchema = {
     ...i18nField('type', 'anamnesisQuestionType'),
     required: { type: 'boolean' },
     order: { type: 'integer' },
-    config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+    config: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] },
+    parentQuestionId: { anyOf: [{ type: 'string', format: 'uuid' }, { type: 'null' }] },
+    condition: conditionSchema,
     options: { type: 'array', items: questionOptionSchema },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -113,8 +126,10 @@ export const questionBodySchema = {
     type: { type: 'string', enum: anamnesisQuestionTypeValues },
     required: { type: 'boolean' },
     order: { type: 'integer', minimum: 0 },
-    config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+    config: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] },
     options: { type: 'array', items: questionOptionBodySchema },
+    parentQuestionId: { anyOf: [{ type: 'string', format: 'uuid' }, { type: 'null' }] },
+    condition: conditionSchema,
   },
   additionalProperties: false,
 };

@@ -12,6 +12,7 @@ import {
   validateQuestionType,
   buildQuestionsCreateData,
   validateSectionIds,
+  validateParentLink,
 } from './anamnesis-shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -335,13 +336,21 @@ export async function reorderPublicSections(anamnesisId, orderedIds) {
  *
  * @param {string} anamnesisId
  * @param {string} sectionId
- * @param {object} data - { text, type, required, order, config, options }
+ * @param {object} data - { text, type, required, order, config, options, parentQuestionId, condition }
  * @returns {Promise<object>}
  */
 export async function addPublicQuestion(anamnesisId, sectionId, data) {
   await findPublicAnamnesisOrThrow(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
   validateQuestionType(data.type);
+
+  if (data.parentQuestionId) {
+    await validateParentLink({
+      parentId: data.parentQuestionId,
+      childSectionId: sectionId,
+      condition: data.condition,
+    });
+  }
 
   const question = await prisma.anamnesisQuestion.create({
     data: {
@@ -351,6 +360,8 @@ export async function addPublicQuestion(anamnesisId, sectionId, data) {
       required: data.required ?? false,
       order: data.order ?? 0,
       config: data.config ?? null,
+      parentQuestionId: data.parentQuestionId ?? null,
+      condition: data.condition ?? null,
       options: questionTypesWithOptions.includes(data.type) && data.options?.length
         ? {
             create: data.options.map((opt, index) => ({
@@ -360,7 +371,10 @@ export async function addPublicQuestion(anamnesisId, sectionId, data) {
           }
         : undefined,
     },
-    include: { options: { orderBy: { order: 'asc' } } },
+    include: {
+      options: { orderBy: { order: 'asc' } },
+      dependentQuestions: { where: { deletedAt: null }, select: { id: true } },
+    },
   });
 
   return question;
@@ -373,20 +387,91 @@ export async function addPublicQuestion(anamnesisId, sectionId, data) {
  * @param {string} anamnesisId
  * @param {string} sectionId
  * @param {string} questionId
- * @param {object} data - { text, type, required, order, config, options }
+ * @param {object} data - { text, type, required, order, config, options, parentQuestionId, condition }
  * @returns {Promise<object>}
  */
 export async function updatePublicQuestion(anamnesisId, sectionId, questionId, data) {
   await findPublicAnamnesisOrThrow(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
-  await findQuestionOrThrow(sectionId, questionId);
+  const existingQuestion = await findQuestionOrThrow(sectionId, questionId);
 
   if (data.type !== undefined) {
     validateQuestionType(data.type);
   }
 
-  const effectiveType = data.type
-    ?? (await prisma.anamnesisQuestion.findUnique({ where: { id: questionId }, select: { type: true } })).type;
+  // Block type change if the question has dependent (child) questions
+  if (data.type !== undefined && data.type !== existingQuestion.type) {
+    const dependentCount = await prisma.anamnesisQuestion.count({
+      where: { parentQuestionId: questionId, deletedAt: null },
+    });
+    if (dependentCount > 0) {
+      throw new AppError({
+        httpStatus: 409,
+        error: AnamnesisErrorCode.PARENT_TYPE_LOCKED,
+        messageCode: AnamnesisMessageCode.PARENT_TYPE_LOCKED,
+        message: 'Cannot change the type of a question that has conditional child questions. Detach or delete the dependent questions first.',
+      });
+    }
+  }
+
+  // Block removing options that are referenced by child conditions
+  if (data.options !== undefined) {
+    const childrenWithConditions = await prisma.anamnesisQuestion.findMany({
+      where: { parentQuestionId: questionId, deletedAt: null, condition: { not: null } },
+      select: { id: true, condition: true },
+    });
+
+    if (childrenWithConditions.length > 0) {
+      const existingOptions = await prisma.anamnesisQuestionOption.findMany({
+        where: { questionId },
+        select: { id: true, text: true },
+      });
+
+      const existingOptionsByText = new Map(existingOptions.map((o) => [o.text, o.id]));
+      const keptOptionIds = new Set(
+        data.options
+          .map((o) => existingOptionsByText.get(o.text))
+          .filter(Boolean),
+      );
+
+      for (const child of childrenWithConditions) {
+        const condition = child.condition;
+        if (!condition) continue;
+
+        const referencedIds = condition.optionId
+          ? [condition.optionId]
+          : (condition.optionIds ?? []);
+
+        const removedReference = referencedIds.find((id) => !keptOptionIds.has(id));
+        if (removedReference) {
+          throw new AppError({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.CONDITION_REFERENCES_REMOVED_OPTION,
+            messageCode: AnamnesisMessageCode.CONDITION_REFERENCES_REMOVED_OPTION,
+            message: 'Cannot remove an option that is referenced by a conditional child question.',
+          });
+        }
+      }
+    }
+  }
+
+  const effectiveType = data.type ?? existingQuestion.type;
+
+  // Validate parent link if parentQuestionId or condition is being set
+  const newParentId = data.parentQuestionId !== undefined
+    ? data.parentQuestionId
+    : existingQuestion.parentQuestionId;
+  const newCondition = data.condition !== undefined
+    ? data.condition
+    : existingQuestion.condition;
+
+  if (newParentId) {
+    await validateParentLink({
+      parentId: newParentId,
+      childSectionId: sectionId,
+      condition: newCondition,
+    });
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     if (data.options !== undefined) {
@@ -411,8 +496,13 @@ export async function updatePublicQuestion(anamnesisId, sectionId, questionId, d
         ...(data.required !== undefined && { required: data.required }),
         ...(data.order !== undefined && { order: data.order }),
         ...(data.config !== undefined && { config: data.config }),
+        ...(data.parentQuestionId !== undefined && { parentQuestionId: data.parentQuestionId }),
+        ...(data.condition !== undefined && { condition: data.condition }),
       },
-      include: { options: { orderBy: { order: 'asc' } } },
+      include: {
+        options: { orderBy: { order: 'asc' } },
+        dependentQuestions: { where: { deletedAt: null }, select: { id: true } },
+      },
     });
   });
 

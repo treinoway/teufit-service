@@ -12,11 +12,13 @@ vi.mock('../../src/db.js', () => ({
     },
     anamnesisQuestion: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      count: vi.fn(),
     },
-    anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn() },
+    anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
     studentAnamnesis: { count: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -508,6 +510,8 @@ describe('admin-anamnesis-service', () => {
       prisma.anamnesisQuestion.findUnique.mockResolvedValue(
         makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }),
       );
+      // No dependent children — option removal guard passes
+      prisma.anamnesisQuestion.findMany.mockResolvedValue([]);
 
       const updatedQuestion = makeQuestion({ text: 'Updated?' });
       prisma.$transaction.mockImplementation(async (fn) => {
@@ -517,7 +521,7 @@ describe('admin-anamnesis-service', () => {
             createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           anamnesisQuestion: {
-            update: vi.fn().mockResolvedValue({ ...updatedQuestion, options: [] }),
+            update: vi.fn().mockResolvedValue({ ...updatedQuestion, options: [], dependentQuestions: [] }),
           },
         };
         return fn(tx);

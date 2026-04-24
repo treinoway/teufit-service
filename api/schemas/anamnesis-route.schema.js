@@ -10,6 +10,7 @@ import {
   questionOptionBodySchema,
   questionBodySchema,
   sectionBodySchema,
+  conditionSchema,
 } from './anamnesis-shared.schema.js';
 
 // Re-export shared sub-schemas for use by other modules if needed
@@ -287,6 +288,8 @@ export const updateQuestionSchema = {
       order: { type: 'integer', minimum: 0 },
       config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
       options: { type: 'array', items: questionOptionBodySchema },
+      parentQuestionId: { anyOf: [{ type: 'string', format: 'uuid' }, { type: 'null' }] },
+      condition: conditionSchema,
     },
     additionalProperties: false,
   },
@@ -296,6 +299,7 @@ export const updateQuestionSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },

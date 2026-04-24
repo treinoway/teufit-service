@@ -124,13 +124,26 @@ When validation (e.g., `validateQuestionType` inside `buildQuestionsCreateData`)
 ## S3 image upload — do NOT wrap in try/catch
 Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch that catches generic errors and re-throws as a new AppError. The global error handler deals with unexpected errors. Only catch to handle specific expected cases. Fire-and-forget `deleteFile` should always be outside any try/catch.
 
-## Pre-existing failing E2E tests (updated 2026-04-10)
+## Pre-existing failing E2E tests (updated 2026-04-23)
 - `test/e2e/admin-anamnesis.e2e.test.js` — 1 test failing
-- `test/e2e/anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
 - `test/e2e/ai.e2e.test.js` — 1 test failing (multi-turn conversation)
 - `test/e2e/auth.e2e.test.js` — 2 tests failing (INVALID_CREDENTIALS messageCode)
 These are NOT caused by new features. Do not investigate unless specifically asked.
+
+## Fastify serialization: JSONB / free-form objects need additionalProperties: true
+When a Prisma `Json?` field appears in a Fastify response schema, the schema object variant MUST declare `additionalProperties: true`. Without it, fast-json-stringify strips all properties → `{}`.
+```js
+// CORRECT
+{ anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] }
+```
+Affects: `condition` (conditional questions), `config` (question config), and any Json? field.
+
+## fork/copy: individual option creates, not createMany
+Two-pass fork/copy uses `tx.anamnesisQuestionOption.create` (not `createMany`) to get new IDs for remapping. Unit test mocks must use `anamnesisQuestionOption: { create: vi.fn() }` and `anamnesisQuestion: { create: vi.fn(), update: vi.fn() }`.
+
+## CONDITIONAL_DEPTH_EXCEEDED test scenario
+Intermediate question in depth test must be ELIGIBLE type (DICHOTOMOUS/SINGLE_CHOICE/MULTIPLE_CHOICE). Otherwise PARENT_NOT_ELIGIBLE fires first.
 
 ## Snapshot pattern for junction tables (2026-04-15)
 When a junction table needs independent copies of related entity fields:

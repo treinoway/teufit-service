@@ -4,6 +4,7 @@ import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
   questionTypesWithOptions,
+  isQuestionVisible,
 } from '../constants/anamnesis.js';
 import {
   fullAnamnesisInclude,
@@ -12,9 +13,40 @@ import {
   validateQuestionType,
   buildQuestionsCreateData,
   validateSectionIds,
+  validateParentLink,
+  normalizeChoiceAnswersForVisibility,
 } from './anamnesis-shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Remap option IDs inside a condition JSONB when forking/copying an anamnesis.
+ * Returns a new condition object with old option IDs replaced by new ones.
+ * Returns null if the condition is null/undefined.
+ *
+ * @param {object|null} condition
+ * @param {Map<string, string>} optionIdMap - old optionId → new optionId
+ * @returns {object|null}
+ */
+function remapConditionOptionIds(condition, optionIdMap) {
+  if (!condition) return null;
+
+  if (condition.optionId !== undefined) {
+    return {
+      ...condition,
+      optionId: optionIdMap.get(condition.optionId) ?? condition.optionId,
+    };
+  }
+
+  if (Array.isArray(condition.optionIds)) {
+    return {
+      ...condition,
+      optionIds: condition.optionIds.map((id) => optionIdMap.get(id) ?? id),
+    };
+  }
+
+  return condition;
+}
 
 /**
  * Load the Trainer record for the given userId or throw 404.
@@ -445,7 +477,7 @@ export async function reorderSections(userId, anamnesisId, orderedIds) {
  * @param {string} userId
  * @param {string} anamnesisId
  * @param {string} sectionId
- * @param {object} data - { text, type, required, order, config, options }
+ * @param {object} data - { text, type, required, order, config, options, parentQuestionId, condition }
  * @returns {Promise<object>}
  */
 export async function addQuestion(userId, anamnesisId, sectionId, data) {
@@ -457,6 +489,14 @@ export async function addQuestion(userId, anamnesisId, sectionId, data) {
   await findSectionOrThrow(anamnesisId, sectionId);
   validateQuestionType(data.type);
 
+  if (data.parentQuestionId) {
+    await validateParentLink({
+      parentId: data.parentQuestionId,
+      childSectionId: sectionId,
+      condition: data.condition,
+    });
+  }
+
   const question = await prisma.anamnesisQuestion.create({
     data: {
       sectionId,
@@ -465,6 +505,8 @@ export async function addQuestion(userId, anamnesisId, sectionId, data) {
       required: data.required ?? false,
       order: data.order ?? 0,
       config: data.config ?? null,
+      parentQuestionId: data.parentQuestionId ?? null,
+      condition: data.condition ?? null,
       options: questionTypesWithOptions.includes(data.type) && data.options?.length
         ? {
             create: data.options.map((opt, index) => ({
@@ -474,7 +516,10 @@ export async function addQuestion(userId, anamnesisId, sectionId, data) {
           }
         : undefined,
     },
-    include: { options: { orderBy: { order: 'asc' } } },
+    include: {
+      options: { orderBy: { order: 'asc' } },
+      dependentQuestions: { where: { deletedAt: null }, select: { id: true } },
+    },
   });
 
   return question;
@@ -487,7 +532,7 @@ export async function addQuestion(userId, anamnesisId, sectionId, data) {
  * @param {string} anamnesisId
  * @param {string} sectionId
  * @param {string} questionId
- * @param {object} data - { text, type, required, order, config, options }
+ * @param {object} data - { text, type, required, order, config, options, parentQuestionId, condition }
  * @returns {Promise<object>}
  */
 export async function updateQuestion(userId, anamnesisId, sectionId, questionId, data) {
@@ -497,13 +542,87 @@ export async function updateQuestion(userId, anamnesisId, sectionId, questionId,
   verifyAnamnesisOwnership(anamnesis, trainer.id);
   await assertAnamnesisNotLinked(anamnesisId);
   await findSectionOrThrow(anamnesisId, sectionId);
-  await findQuestionOrThrow(sectionId, questionId);
+  const existingQuestion = await findQuestionOrThrow(sectionId, questionId);
 
   if (data.type !== undefined) {
     validateQuestionType(data.type);
   }
 
-  const effectiveType = data.type ?? (await prisma.anamnesisQuestion.findUnique({ where: { id: questionId }, select: { type: true } })).type;
+  // Block type change if the question has dependent (child) questions
+  if (data.type !== undefined && data.type !== existingQuestion.type) {
+    const dependentCount = await prisma.anamnesisQuestion.count({
+      where: { parentQuestionId: questionId, deletedAt: null },
+    });
+    if (dependentCount > 0) {
+      throw new AppError({
+        httpStatus: 409,
+        error: AnamnesisErrorCode.PARENT_TYPE_LOCKED,
+        messageCode: AnamnesisMessageCode.PARENT_TYPE_LOCKED,
+        message: 'Cannot change the type of a question that has conditional child questions. Detach or delete the dependent questions first.',
+      });
+    }
+  }
+
+  // Block removing options that are referenced by child condition
+  if (data.options !== undefined) {
+    const childrenWithConditions = await prisma.anamnesisQuestion.findMany({
+      where: { parentQuestionId: questionId, deletedAt: null, condition: { not: null } },
+      select: { id: true, condition: true },
+    });
+
+    if (childrenWithConditions.length > 0) {
+      // We compare by text since incoming options don't have IDs yet (they're being replaced).
+      // Any referenced optionId whose text is not present in the new options list is being removed.
+      const existingOptions = await prisma.anamnesisQuestionOption.findMany({
+        where: { questionId },
+        select: { id: true, text: true },
+      });
+
+      const existingOptionsByText = new Map(existingOptions.map((o) => [o.text, o.id]));
+      const keptOptionIds = new Set(
+        data.options
+          .map((o) => existingOptionsByText.get(o.text))
+          .filter(Boolean),
+      );
+
+      for (const child of childrenWithConditions) {
+        const condition = child.condition;
+        if (!condition) continue;
+
+        const referencedIds = condition.optionId
+          ? [condition.optionId]
+          : (condition.optionIds ?? []);
+
+        const removedReference = referencedIds.find((id) => !keptOptionIds.has(id));
+        if (removedReference) {
+          throw new AppError({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.CONDITION_REFERENCES_REMOVED_OPTION,
+            messageCode: AnamnesisMessageCode.CONDITION_REFERENCES_REMOVED_OPTION,
+            message: 'Cannot remove an option that is referenced by a conditional child question.',
+          });
+        }
+      }
+    }
+  }
+
+  const effectiveType = data.type ?? existingQuestion.type;
+
+  // Validate parent link if parentQuestionId or condition is being set
+  const newParentId = data.parentQuestionId !== undefined
+    ? data.parentQuestionId
+    : existingQuestion.parentQuestionId;
+  const newCondition = data.condition !== undefined
+    ? data.condition
+    : existingQuestion.condition;
+
+  if (newParentId) {
+    await validateParentLink({
+      parentId: newParentId,
+      childSectionId: sectionId,
+      condition: newCondition,
+    });
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     if (data.options !== undefined) {
@@ -528,8 +647,13 @@ export async function updateQuestion(userId, anamnesisId, sectionId, questionId,
         ...(data.required !== undefined && { required: data.required }),
         ...(data.order !== undefined && { order: data.order }),
         ...(data.config !== undefined && { config: data.config }),
+        ...(data.parentQuestionId !== undefined && { parentQuestionId: data.parentQuestionId }),
+        ...(data.condition !== undefined && { condition: data.condition }),
       },
-      include: { options: { orderBy: { order: 'asc' } } },
+      include: {
+        options: { orderBy: { order: 'asc' } },
+        dependentQuestions: { where: { deletedAt: null }, select: { id: true } },
+      },
     });
   });
 
@@ -719,6 +843,7 @@ export async function getMyAnamneses(userId) {
                 where: { deletedAt: null },
                 orderBy: { order: 'asc' },
                 include: { options: { orderBy: { order: 'asc' } } },
+                // parentQuestionId and condition are returned via default field selection
               },
             },
           },
@@ -782,6 +907,11 @@ export async function forkAnamnesis(userId, anamnesisId) {
       },
     });
 
+    // Two-pass build: first pass creates all questions and options, recording ID maps.
+    // Second pass remaps parentQuestionId and option IDs inside condition JSONB.
+    const questionIdMap = new Map(); // oldQuestionId → newQuestionId
+    const optionIdMap = new Map();   // oldOptionId → newOptionId
+
     for (const section of sourceWithContent.sections) {
       const newSection = await tx.anamnesisSection.create({
         data: {
@@ -801,18 +931,43 @@ export async function forkAnamnesis(userId, anamnesisId) {
             required: question.required,
             order: question.order,
             config: question.config,
+            // parentQuestionId and condition are remapped in second pass
           },
         });
 
+        questionIdMap.set(question.id, newQuestion.id);
+
         if (question.options.length > 0) {
-          await tx.anamnesisQuestionOption.createMany({
-            data: question.options.map((opt) => ({
-              questionId: newQuestion.id,
-              text: opt.text,
-              order: opt.order,
-            })),
-          });
+          for (const opt of question.options) {
+            const newOpt = await tx.anamnesisQuestionOption.create({
+              data: {
+                questionId: newQuestion.id,
+                text: opt.text,
+                order: opt.order,
+              },
+            });
+            optionIdMap.set(opt.id, newOpt.id);
+          }
         }
+      }
+    }
+
+    // Second pass: remap parentQuestionId and option IDs inside condition
+    for (const section of sourceWithContent.sections) {
+      for (const question of section.questions) {
+        if (!question.parentQuestionId) continue;
+
+        const newQuestionId = questionIdMap.get(question.id);
+        const newParentId = questionIdMap.get(question.parentQuestionId);
+        const remappedCondition = remapConditionOptionIds(question.condition, optionIdMap);
+
+        await tx.anamnesisQuestion.update({
+          where: { id: newQuestionId },
+          data: {
+            parentQuestionId: newParentId ?? null,
+            condition: remappedCondition,
+          },
+        });
       }
     }
 
@@ -876,6 +1031,11 @@ export async function copyAnamnesis(userId, anamnesisId) {
       },
     });
 
+    // Two-pass build: first pass creates all questions and options, recording ID maps.
+    // Second pass remaps parentQuestionId and option IDs inside condition JSONB.
+    const questionIdMap = new Map(); // oldQuestionId → newQuestionId
+    const optionIdMap = new Map();   // oldOptionId → newOptionId
+
     for (const section of sourceWithContent.sections) {
       const newSection = await tx.anamnesisSection.create({
         data: {
@@ -895,18 +1055,43 @@ export async function copyAnamnesis(userId, anamnesisId) {
             required: question.required,
             order: question.order,
             config: question.config,
+            // parentQuestionId and condition are remapped in second pass
           },
         });
 
+        questionIdMap.set(question.id, newQuestion.id);
+
         if (question.options.length > 0) {
-          await tx.anamnesisQuestionOption.createMany({
-            data: question.options.map((opt) => ({
-              questionId: newQuestion.id,
-              text: opt.text,
-              order: opt.order,
-            })),
-          });
+          for (const opt of question.options) {
+            const newOpt = await tx.anamnesisQuestionOption.create({
+              data: {
+                questionId: newQuestion.id,
+                text: opt.text,
+                order: opt.order,
+              },
+            });
+            optionIdMap.set(opt.id, newOpt.id);
+          }
         }
+      }
+    }
+
+    // Second pass: remap parentQuestionId and option IDs inside condition
+    for (const section of sourceWithContent.sections) {
+      for (const question of section.questions) {
+        if (!question.parentQuestionId) continue;
+
+        const newQuestionId = questionIdMap.get(question.id);
+        const newParentId = questionIdMap.get(question.parentQuestionId);
+        const remappedCondition = remapConditionOptionIds(question.condition, optionIdMap);
+
+        await tx.anamnesisQuestion.update({
+          where: { id: newQuestionId },
+          data: {
+            parentQuestionId: newParentId ?? null,
+            condition: remappedCondition,
+          },
+        });
       }
     }
 
@@ -954,6 +1139,7 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
         include: {
           questions: {
             where: { deletedAt: null },
+            include: { options: { orderBy: { order: 'asc' } } },
           },
         },
       },
@@ -962,10 +1148,28 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
 
   const allQuestions = anamnesisWithQuestions.sections.flatMap((s) => s.questions);
   const knownQuestionIds = new Set(allQuestions.map((q) => q.id));
-  const answeredQuestionIds = new Set(answers.map((a) => a.questionId));
 
+  // Build a lookup map for normalization (needs options for SINGLE/MULTIPLE_CHOICE)
+  const questionsById = new Map(allQuestions.map((q) => [q.id, q]));
+
+  // Normalize choice answers from option text → option UUID for visibility evaluation only.
+  // Persisted AnamnesisAnswer.value remains exactly what the client submitted (see visibleAnswers below).
+  const answersByQuestionId = normalizeChoiceAnswersForVisibility(answers, questionsById);
+
+  // Determine which questions are visible given the submitted answers
+  const visibleQuestionIds = new Set(
+    allQuestions
+      .filter((q) => isQuestionVisible(q, answersByQuestionId))
+      .map((q) => q.id),
+  );
+
+  // Drop answers for hidden questions (fail closed — don't persist ghost answers)
+  const visibleAnswers = answers.filter((a) => visibleQuestionIds.has(a.questionId));
+  const answeredVisibleQuestionIds = new Set(visibleAnswers.map((a) => a.questionId));
+
+  // Required validation applies only to visible questions
   const missingRequiredQuestions = allQuestions.filter(
-    (q) => q.required && !answeredQuestionIds.has(q.id),
+    (q) => q.required && visibleQuestionIds.has(q.id) && !answeredVisibleQuestionIds.has(q.id),
   );
 
   if (missingRequiredQuestions.length > 0) {
@@ -1000,9 +1204,9 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
 
     await tx.anamnesisAnswer.deleteMany({ where: { responseId: upsertedResponse.id } });
 
-    if (answers.length > 0) {
+    if (visibleAnswers.length > 0) {
       await tx.anamnesisAnswer.createMany({
-        data: answers.map((a) => ({
+        data: visibleAnswers.map((a) => ({
           responseId: upsertedResponse.id,
           questionId: a.questionId,
           value: a.value,

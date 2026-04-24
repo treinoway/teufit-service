@@ -154,6 +154,12 @@ export default {
     'anamnesis.hasStudentLinks': 'This anamnesis is linked to students. Please create a new version before editing.',
     'anamnesis.response.notFound': 'No response found for this anamnesis.',
     'anamnesis.notLinkedToStudent': 'This anamnesis is not linked to your profile.',
+    'anamnesis.invalidCondition': 'Invalid condition for the parent question type.',
+    'anamnesis.parentNotEligible': 'Only dichotomous, single choice, or multiple choice questions can be parent questions.',
+    'anamnesis.parentMustBeSameSection': 'The parent question must be in the same section.',
+    'anamnesis.parentTypeLocked': 'The question type cannot be changed because conditional child questions are linked.',
+    'anamnesis.conditionReferencesRemovedOption': 'Cannot remove an option referenced by a conditional question.',
+    'anamnesis.conditionalDepthExceeded': 'Conditional questions cannot be chained — only one level of depth is allowed.',
 
     // Import
     'import.primecoaching.formatChanged': 'The file does not match the expected PrimeCoaching format. Please verify you exported the correct spreadsheet.',

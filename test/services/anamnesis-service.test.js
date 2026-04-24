@@ -13,11 +13,13 @@ vi.mock('../../src/db.js', () => ({
     },
     anamnesisQuestion: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      count: vi.fn(),
     },
-    anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn() },
+    anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
     studentAnamnesis: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -63,7 +65,12 @@ import {
   getMyAnamnesisResponse,
   getStudentAnamnesisResponse,
 } from '../../src/services/anamnesis-service.js';
-import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
+import {
+  AnamnesisQuestionType,
+  validateCondition,
+  isQuestionVisible,
+} from '../../src/constants/anamnesis.js';
+import { validateParentLink, normalizeChoiceAnswersForVisibility } from '../../src/services/anamnesis-shared.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -103,8 +110,18 @@ const makeQuestion = (overrides = {}) => ({
   config: null,
   deletedAt: null,
   options: [],
+  parentQuestionId: null,
+  condition: null,
   createdAt: new Date(),
   updatedAt: null,
+  ...overrides,
+});
+
+const makeOption = (overrides = {}) => ({
+  id: 'opt-1',
+  questionId: 'question-1',
+  text: 'Option A',
+  order: 0,
   ...overrides,
 });
 
@@ -603,6 +620,8 @@ describe('anamnesis-service', () => {
       prisma.anamnesisQuestion.findUnique.mockResolvedValue(
         makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }),
       );
+      // No dependent children — option removal guard passes
+      prisma.anamnesisQuestion.findMany.mockResolvedValue([]);
 
       const updatedQuestion = makeQuestion({ text: 'Updated?' });
       prisma.$transaction.mockImplementation(async (fn) => {
@@ -612,7 +631,7 @@ describe('anamnesis-service', () => {
             createMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
           anamnesisQuestion: {
-            update: vi.fn().mockResolvedValue({ ...updatedQuestion, options: [] }),
+            update: vi.fn().mockResolvedValue({ ...updatedQuestion, options: [], dependentQuestions: [] }),
             findUnique: vi.fn().mockResolvedValue({ type: AnamnesisQuestionType.SINGLE_CHOICE }),
           },
         };
@@ -632,6 +651,8 @@ describe('anamnesis-service', () => {
       prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
       prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
       prisma.anamnesisQuestion.findUnique.mockResolvedValue(makeQuestion());
+      // validateQuestionType throws before count is called, but mock it anyway
+      prisma.anamnesisQuestion.count.mockResolvedValue(0);
 
       await expect(
         updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
@@ -1001,8 +1022,8 @@ describe('anamnesis-service', () => {
             findUnique: vi.fn().mockResolvedValue(forkedAnamnesis),
           },
           anamnesisSection: { create: vi.fn() },
-          anamnesisQuestion: { create: vi.fn() },
-          anamnesisQuestionOption: { createMany: vi.fn() },
+          anamnesisQuestion: { create: vi.fn(), update: vi.fn() },
+          anamnesisQuestionOption: { create: vi.fn() },
         };
         return fn(tx);
       });
@@ -1012,7 +1033,7 @@ describe('anamnesis-service', () => {
       expect(result).toMatchObject({ id: 'forked-1', version: 2, parentId: 'anamnesis-1' });
     });
 
-    it('deep copies sections and questions in transaction', async () => {
+    it('deep copies sections, questions, and options in transaction using individual creates', async () => {
       prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
       const source = makeAnamnesis({ version: 1 });
       const sourceSection = makeSection();
@@ -1030,8 +1051,8 @@ describe('anamnesis-service', () => {
 
       const txAnamnesis = { create: vi.fn().mockResolvedValue({ id: 'forked-1' }), findUnique: vi.fn().mockResolvedValue(forkedAnamnesis) };
       const txSection = { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) };
-      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }) };
-      const txOption = { createMany: vi.fn().mockResolvedValue({ count: 1 }) };
+      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }), update: vi.fn() };
+      const txOption = { create: vi.fn().mockResolvedValue({ id: 'new-opt-1' }) };
 
       prisma.$transaction.mockImplementation(async (fn) => fn({
         anamnesis: txAnamnesis,
@@ -1048,9 +1069,69 @@ describe('anamnesis-service', () => {
       expect(txQuestion.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sectionId: 'new-section-1' }) }),
       );
-      expect(txOption.createMany).toHaveBeenCalledWith(
+      // Individual option creates (not createMany)
+      expect(txOption.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.arrayContaining([expect.objectContaining({ questionId: 'new-question-1' })]),
+          data: expect.objectContaining({ questionId: 'new-question-1', text: 'Yes' }),
+        }),
+      );
+    });
+
+    it('second pass remaps parentQuestionId and condition option IDs for conditional questions', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1 });
+      const sourceSection = makeSection();
+      const parentQuestion = makeQuestion({
+        id: 'parent-q',
+        type: AnamnesisQuestionType.DICHOTOMOUS,
+        options: [],
+        parentQuestionId: null,
+        condition: null,
+      });
+      const childQuestion = makeQuestion({
+        id: 'child-q',
+        type: AnamnesisQuestionType.FREE_TEXT,
+        options: [],
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+      const sourceWithContent = {
+        ...source,
+        sections: [{ ...sourceSection, questions: [parentQuestion, childQuestion] }],
+      };
+
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce(sourceWithContent);
+
+      const forkedAnamnesis = makeAnamnesis({ id: 'forked-1', version: 2, parentId: 'anamnesis-1', sections: [] });
+
+      let questionCreateCount = 0;
+      const txQuestion = {
+        create: vi.fn().mockImplementation(() => {
+          questionCreateCount++;
+          return Promise.resolve({ id: `new-question-${questionCreateCount}` });
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      };
+
+      prisma.$transaction.mockImplementation(async (fn) => fn({
+        anamnesis: { create: vi.fn().mockResolvedValue({ id: 'forked-1' }), findUnique: vi.fn().mockResolvedValue(forkedAnamnesis) },
+        anamnesisSection: { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) },
+        anamnesisQuestion: txQuestion,
+        anamnesisQuestionOption: { create: vi.fn() },
+      }));
+
+      await forkAnamnesis('user-1', 'anamnesis-1');
+
+      // Second pass must have called update for the child question with remapped parentQuestionId
+      expect(txQuestion.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'new-question-2' },
+          data: expect.objectContaining({
+            parentQuestionId: 'new-question-1',
+            condition: { operator: 'equals', value: 'yes' },
+          }),
         }),
       );
     });
@@ -1112,8 +1193,8 @@ describe('anamnesis-service', () => {
             findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
           },
           anamnesisSection: { create: vi.fn() },
-          anamnesisQuestion: { create: vi.fn() },
-          anamnesisQuestionOption: { createMany: vi.fn() },
+          anamnesisQuestion: { create: vi.fn(), update: vi.fn() },
+          anamnesisQuestionOption: { create: vi.fn() },
         };
         return fn(tx);
       });
@@ -1153,8 +1234,8 @@ describe('anamnesis-service', () => {
             findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
           },
           anamnesisSection: { create: vi.fn() },
-          anamnesisQuestion: { create: vi.fn() },
-          anamnesisQuestionOption: { createMany: vi.fn() },
+          anamnesisQuestion: { create: vi.fn(), update: vi.fn() },
+          anamnesisQuestionOption: { create: vi.fn() },
         };
         return fn(tx);
       });
@@ -1186,8 +1267,8 @@ describe('anamnesis-service', () => {
             findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
           },
           anamnesisSection: { create: vi.fn() },
-          anamnesisQuestion: { create: vi.fn() },
-          anamnesisQuestionOption: { createMany: vi.fn() },
+          anamnesisQuestion: { create: vi.fn(), update: vi.fn() },
+          anamnesisQuestionOption: { create: vi.fn() },
         };
         return fn(tx);
       });
@@ -1202,7 +1283,7 @@ describe('anamnesis-service', () => {
       });
     });
 
-    it('deep copies sections, questions, and options in transaction', async () => {
+    it('deep copies sections, questions, and options in transaction using individual creates', async () => {
       prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
       const source = makeAnamnesis({ version: 1 });
       const sourceSection = makeSection();
@@ -1223,8 +1304,8 @@ describe('anamnesis-service', () => {
         findUnique: vi.fn().mockResolvedValue(copiedAnamnesis),
       };
       const txSection = { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) };
-      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }) };
-      const txOption = { createMany: vi.fn().mockResolvedValue({ count: 1 }) };
+      const txQuestion = { create: vi.fn().mockResolvedValue({ id: 'new-question-1' }), update: vi.fn() };
+      const txOption = { create: vi.fn().mockResolvedValue({ id: 'new-opt-1' }) };
 
       prisma.$transaction.mockImplementation(async (fn) => fn({
         anamnesis: txAnamnesis,
@@ -1241,9 +1322,10 @@ describe('anamnesis-service', () => {
       expect(txQuestion.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sectionId: 'new-section-1' }) }),
       );
-      expect(txOption.createMany).toHaveBeenCalledWith(
+      // Individual option creates (not createMany)
+      expect(txOption.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.arrayContaining([expect.objectContaining({ questionId: 'new-question-1' })]),
+          data: expect.objectContaining({ questionId: 'new-question-1', text: 'Yes' }),
         }),
       );
     });
@@ -1442,6 +1524,1100 @@ describe('anamnesis-service', () => {
       const result = await getStudentAnamnesisResponse('user-1', 'student-1', 'anamnesis-1');
 
       expect(result).toEqual(response);
+    });
+  });
+
+  // ── validateCondition (pure, from constants) ─────────────────────────────
+
+  describe('validateCondition', () => {
+    const makeParentQuestion = (type, options = []) => ({
+      id: 'parent-q',
+      type,
+      options,
+    });
+
+    it('throws PARENT_NOT_ELIGIBLE when parent type is free_text', () => {
+      expect(() =>
+        validateCondition(
+          makeParentQuestion(AnamnesisQuestionType.FREE_TEXT),
+          { operator: 'equals', value: 'yes' },
+        ),
+      ).toThrow(expect.objectContaining({
+        error: 'PARENT_NOT_ELIGIBLE',
+        messageCode: 'anamnesis.parentNotEligible',
+      }));
+    });
+
+    it('throws PARENT_NOT_ELIGIBLE when parent type is numeric', () => {
+      expect(() =>
+        validateCondition(
+          makeParentQuestion(AnamnesisQuestionType.NUMERIC),
+          { operator: 'equals', value: 'yes' },
+        ),
+      ).toThrow(expect.objectContaining({ error: 'PARENT_NOT_ELIGIBLE' }));
+    });
+
+    it('throws PARENT_NOT_ELIGIBLE when parent type is matrix', () => {
+      expect(() =>
+        validateCondition(
+          makeParentQuestion(AnamnesisQuestionType.MATRIX),
+          { operator: 'equals', value: 'yes' },
+        ),
+      ).toThrow(expect.objectContaining({ error: 'PARENT_NOT_ELIGIBLE' }));
+    });
+
+    it('throws INVALID_CONDITION when condition is null', () => {
+      expect(() =>
+        validateCondition(
+          makeParentQuestion(AnamnesisQuestionType.DICHOTOMOUS),
+          null,
+        ),
+      ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+    });
+
+    describe('dichotomous parent', () => {
+      it('accepts valid condition with value "yes"', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.DICHOTOMOUS),
+            { operator: 'equals', value: 'yes' },
+          ),
+        ).not.toThrow();
+      });
+
+      it('accepts valid condition with value "no"', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.DICHOTOMOUS),
+            { operator: 'equals', value: 'no' },
+          ),
+        ).not.toThrow();
+      });
+
+      it('throws INVALID_CONDITION when operator is not "equals"', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.DICHOTOMOUS),
+            { operator: 'includesAny', value: 'yes' },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+
+      it('throws INVALID_CONDITION when value is not "yes" or "no"', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.DICHOTOMOUS),
+            { operator: 'equals', value: 'maybe' },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+    });
+
+    describe('single_choice parent', () => {
+      const options = [{ id: 'opt-1', text: 'A' }, { id: 'opt-2', text: 'B' }];
+
+      it('accepts valid condition with known optionId', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.SINGLE_CHOICE, options),
+            { operator: 'equals', optionId: 'opt-1' },
+          ),
+        ).not.toThrow();
+      });
+
+      it('throws INVALID_CONDITION when optionId is missing', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.SINGLE_CHOICE, options),
+            { operator: 'equals' },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+
+      it('throws INVALID_CONDITION when optionId does not belong to parent', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.SINGLE_CHOICE, options),
+            { operator: 'equals', optionId: 'opt-foreign' },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+    });
+
+    describe('multiple_choice parent', () => {
+      const options = [{ id: 'opt-1', text: 'A' }, { id: 'opt-2', text: 'B' }];
+
+      it('accepts valid condition with known optionIds', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.MULTIPLE_CHOICE, options),
+            { operator: 'includesAny', optionIds: ['opt-1'] },
+          ),
+        ).not.toThrow();
+      });
+
+      it('throws INVALID_CONDITION when operator is not "includesAny"', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.MULTIPLE_CHOICE, options),
+            { operator: 'equals', optionIds: ['opt-1'] },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+
+      it('throws INVALID_CONDITION when optionIds is empty', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.MULTIPLE_CHOICE, options),
+            { operator: 'includesAny', optionIds: [] },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+
+      it('throws INVALID_CONDITION when optionIds contains foreign IDs', () => {
+        expect(() =>
+          validateCondition(
+            makeParentQuestion(AnamnesisQuestionType.MULTIPLE_CHOICE, options),
+            { operator: 'includesAny', optionIds: ['opt-1', 'foreign-id'] },
+          ),
+        ).toThrow(expect.objectContaining({ error: 'INVALID_CONDITION' }));
+      });
+    });
+  });
+
+  // ── isQuestionVisible (pure function) ────────────────────────────────────
+
+  describe('isQuestionVisible', () => {
+    it('returns true for unconditional questions (no parentQuestionId)', () => {
+      const question = makeQuestion({ parentQuestionId: null, condition: null });
+      expect(isQuestionVisible(question, {})).toBe(true);
+    });
+
+    it('returns false when parent has not been answered', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+      expect(isQuestionVisible(question, {})).toBe(false);
+    });
+
+    it('returns false when parent answer is null', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+      expect(isQuestionVisible(question, { 'parent-q': null })).toBe(false);
+    });
+
+    describe('dichotomous condition (equals + value)', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+
+      it('returns true when parent answer matches', () => {
+        expect(isQuestionVisible(question, { 'parent-q': 'yes' })).toBe(true);
+      });
+
+      it('returns false when parent answer does not match', () => {
+        expect(isQuestionVisible(question, { 'parent-q': 'no' })).toBe(false);
+      });
+    });
+
+    describe('single_choice condition (equals + optionId)', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', optionId: 'opt-1' },
+      });
+
+      it('returns true when parent answer matches the optionId', () => {
+        expect(isQuestionVisible(question, { 'parent-q': 'opt-1' })).toBe(true);
+      });
+
+      it('returns false when parent answer does not match', () => {
+        expect(isQuestionVisible(question, { 'parent-q': 'opt-2' })).toBe(false);
+      });
+    });
+
+    describe('multiple_choice condition (includesAny + optionIds)', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'includesAny', optionIds: ['opt-1', 'opt-2'] },
+      });
+
+      it('returns true when parent answer includes any of the optionIds', () => {
+        expect(isQuestionVisible(question, { 'parent-q': ['opt-2', 'opt-3'] })).toBe(true);
+      });
+
+      it('returns false when parent answer includes none of the optionIds', () => {
+        expect(isQuestionVisible(question, { 'parent-q': ['opt-3'] })).toBe(false);
+      });
+
+      it('returns false when parent answer is not an array', () => {
+        expect(isQuestionVisible(question, { 'parent-q': 'opt-1' })).toBe(false);
+      });
+    });
+
+    it('works with a Map as answersByQuestionId', () => {
+      const question = makeQuestion({
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+      const answersMap = new Map([['parent-q', 'yes']]);
+      expect(isQuestionVisible(question, answersMap)).toBe(true);
+    });
+  });
+
+  // ── validateParentLink (service helper) ─────────────────────────────────
+
+  describe('validateParentLink', () => {
+    it('throws 404 when parent question does not exist', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(null);
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.question.notFound',
+      });
+    });
+
+    it('throws 404 when parent question is soft-deleted', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ id: 'parent-q', deletedAt: new Date() }),
+      );
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).rejects.toMatchObject({
+        httpStatus: 404,
+        messageCode: 'anamnesis.question.notFound',
+      });
+    });
+
+    it('throws PARENT_MUST_BE_SAME_SECTION when parent is in a different section', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ id: 'parent-q', sectionId: 'other-section', type: AnamnesisQuestionType.DICHOTOMOUS, options: [] }),
+      );
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'PARENT_MUST_BE_SAME_SECTION',
+        messageCode: 'anamnesis.parentMustBeSameSection',
+      });
+    });
+
+    it('throws PARENT_NOT_ELIGIBLE when parent type is free_text', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ id: 'parent-q', sectionId: 'section-1', type: AnamnesisQuestionType.FREE_TEXT, options: [] }),
+      );
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'PARENT_NOT_ELIGIBLE',
+        messageCode: 'anamnesis.parentNotEligible',
+      });
+    });
+
+    it('throws CONDITIONAL_DEPTH_EXCEEDED when parent itself has a parent', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({
+          id: 'parent-q',
+          sectionId: 'section-1',
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          options: [],
+          parentQuestionId: 'grandparent-q',
+        }),
+      );
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'CONDITIONAL_DEPTH_EXCEEDED',
+        messageCode: 'anamnesis.conditionalDepthExceeded',
+      });
+    });
+
+    it('does not throw when all conditions are met for a dichotomous parent', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({
+          id: 'parent-q',
+          sectionId: 'section-1',
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          options: [],
+          parentQuestionId: null,
+        }),
+      );
+
+      await expect(
+        validateParentLink({ parentId: 'parent-q', childSectionId: 'section-1', condition: { operator: 'equals', value: 'yes' } }, prisma),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  // ── addQuestion with conditional fields ──────────────────────────────────
+
+  describe('addQuestion — conditional fields', () => {
+    function setupForAddQuestion() {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(0);
+      prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
+    }
+
+    it('creates a conditional question with parentQuestionId and condition', async () => {
+      setupForAddQuestion();
+
+      // validateParentLink will call prisma.anamnesisQuestion.findUnique
+      prisma.anamnesisQuestion.findUnique
+        .mockResolvedValueOnce(
+          // First call: validateParentLink — the parent question
+          makeQuestion({
+            id: 'parent-q',
+            sectionId: 'section-1',
+            type: AnamnesisQuestionType.DICHOTOMOUS,
+            options: [],
+            parentQuestionId: null,
+          }),
+        );
+
+      const createdQuestion = makeQuestion({
+        id: 'child-q',
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+        options: [],
+      });
+      prisma.anamnesisQuestion.create.mockResolvedValue({
+        ...createdQuestion,
+        dependentQuestions: [],
+      });
+
+      const result = await addQuestion('user-1', 'anamnesis-1', 'section-1', {
+        text: 'How long have you been experiencing this?',
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+
+      expect(result.parentQuestionId).toBe('parent-q');
+      expect(result.condition).toEqual({ operator: 'equals', value: 'yes' });
+      expect(prisma.anamnesisQuestion.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            parentQuestionId: 'parent-q',
+            condition: { operator: 'equals', value: 'yes' },
+          }),
+        }),
+      );
+    });
+
+    it('throws PARENT_MUST_BE_SAME_SECTION when parent is in a different section', async () => {
+      setupForAddQuestion();
+
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({
+          id: 'parent-q',
+          sectionId: 'different-section',
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          options: [],
+          parentQuestionId: null,
+        }),
+      );
+
+      await expect(
+        addQuestion('user-1', 'anamnesis-1', 'section-1', {
+          text: 'Follow-up?',
+          type: AnamnesisQuestionType.FREE_TEXT,
+          parentQuestionId: 'parent-q',
+          condition: { operator: 'equals', value: 'yes' },
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'PARENT_MUST_BE_SAME_SECTION',
+      });
+    });
+
+    it('throws CONDITIONAL_DEPTH_EXCEEDED when parent is itself a child', async () => {
+      setupForAddQuestion();
+
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({
+          id: 'parent-q',
+          sectionId: 'section-1',
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          options: [],
+          parentQuestionId: 'grandparent-q',
+        }),
+      );
+
+      await expect(
+        addQuestion('user-1', 'anamnesis-1', 'section-1', {
+          text: 'Deep chain?',
+          type: AnamnesisQuestionType.FREE_TEXT,
+          parentQuestionId: 'parent-q',
+          condition: { operator: 'equals', value: 'yes' },
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'CONDITIONAL_DEPTH_EXCEEDED',
+      });
+    });
+  });
+
+  // ── updateQuestion — type-lock and option-removal guards ─────────────────
+
+  describe('updateQuestion — conditional guards', () => {
+    function setupForUpdateQuestion(questionOverrides = {}) {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(0);
+      prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          parentQuestionId: null,
+          condition: null,
+          ...questionOverrides,
+        }),
+      );
+    }
+
+    it('throws PARENT_TYPE_LOCKED when changing type of a question with dependent children', async () => {
+      setupForUpdateQuestion();
+      // count returns 1 dependent child
+      prisma.anamnesisQuestion.count.mockResolvedValue(1);
+
+      await expect(
+        updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          type: AnamnesisQuestionType.FREE_TEXT,
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'PARENT_TYPE_LOCKED',
+        messageCode: 'anamnesis.parentTypeLocked',
+      });
+    });
+
+    it('does not check type-lock when type is unchanged', async () => {
+      setupForUpdateQuestion({ type: AnamnesisQuestionType.DICHOTOMOUS });
+      prisma.anamnesisQuestion.count.mockResolvedValue(5); // count would fail if called
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisQuestionOption: { deleteMany: vi.fn(), createMany: vi.fn() },
+          anamnesisQuestion: { update: vi.fn().mockResolvedValue(makeQuestion({ options: [], dependentQuestions: [] })) },
+        };
+        return fn(tx);
+      });
+
+      // Same type — no type-lock check; should not throw even though count > 0
+      await expect(
+        updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          type: AnamnesisQuestionType.DICHOTOMOUS,
+          text: 'Same type update',
+        }),
+      ).resolves.toBeDefined();
+
+      // count should NOT have been called for type-lock
+      expect(prisma.anamnesisQuestion.count).not.toHaveBeenCalled();
+    });
+
+    it('throws CONDITION_REFERENCES_REMOVED_OPTION when a referenced option is removed', async () => {
+      setupForUpdateQuestion({
+        type: AnamnesisQuestionType.SINGLE_CHOICE,
+        options: [makeOption({ id: 'opt-1', text: 'Yes' }), makeOption({ id: 'opt-2', text: 'No' })],
+      });
+      prisma.anamnesisQuestion.count.mockResolvedValue(0); // no type change
+
+      // findMany for childrenWithConditions
+      prisma.anamnesisQuestion.findMany.mockResolvedValue([
+        makeQuestion({
+          id: 'child-q',
+          condition: { operator: 'equals', optionId: 'opt-2' },
+        }),
+      ]);
+
+      // findMany for existing options
+      prisma.anamnesisQuestionOption.findMany.mockResolvedValue([
+        makeOption({ id: 'opt-1', text: 'Yes' }),
+        makeOption({ id: 'opt-2', text: 'No' }),
+      ]);
+
+      await expect(
+        updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          options: [{ text: 'Yes' }], // 'No' is being removed
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 409,
+        error: 'CONDITION_REFERENCES_REMOVED_OPTION',
+        messageCode: 'anamnesis.conditionReferencesRemovedOption',
+      });
+    });
+
+    it('allows removing an option that is not referenced by any child condition', async () => {
+      setupForUpdateQuestion({
+        type: AnamnesisQuestionType.SINGLE_CHOICE,
+        options: [makeOption({ id: 'opt-1', text: 'Yes' }), makeOption({ id: 'opt-2', text: 'No' })],
+      });
+      prisma.anamnesisQuestion.count.mockResolvedValue(0);
+
+      // child references opt-1, we're removing opt-2 (not referenced)
+      prisma.anamnesisQuestion.findMany.mockResolvedValue([
+        makeQuestion({
+          id: 'child-q',
+          condition: { operator: 'equals', optionId: 'opt-1' },
+        }),
+      ]);
+
+      prisma.anamnesisQuestionOption.findMany.mockResolvedValue([
+        makeOption({ id: 'opt-1', text: 'Yes' }),
+        makeOption({ id: 'opt-2', text: 'No' }),
+      ]);
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisQuestionOption: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 2 }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+          anamnesisQuestion: {
+            update: vi.fn().mockResolvedValue(makeQuestion({ options: [], dependentQuestions: [] })),
+          },
+        };
+        return fn(tx);
+      });
+
+      await expect(
+        updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          options: [{ text: 'Yes' }], // opt-2 removed but not referenced
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  // ── submitAnamnesisResponse — conditional visibility ──────────────────────
+
+  describe('submitAnamnesisResponse — conditional visibility', () => {
+    function makeAnamnesisWithConditional() {
+      const parentQuestion = makeQuestion({
+        id: 'parent-q',
+        required: true,
+        type: AnamnesisQuestionType.DICHOTOMOUS,
+        parentQuestionId: null,
+        condition: null,
+      });
+      const childQuestion = makeQuestion({
+        id: 'child-q',
+        required: true,
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', value: 'yes' },
+      });
+
+      return {
+        ...makeAnamnesis(),
+        sections: [
+          {
+            ...makeSection(),
+            questions: [parentQuestion, childQuestion],
+          },
+        ],
+      };
+    }
+
+    it('does not require a hidden child when parent answer is "no"', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithConditional());
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+        };
+        return fn(tx);
+      });
+
+      // Parent is answered "no" — child is hidden, so its required check is skipped
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-q', value: 'no' }],
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('requires the child question when parent answer is "yes" (child is visible)', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithConditional());
+
+      // Parent answered "yes" but child is not answered — should fail required validation
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-q', value: 'yes' }],
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('drops answers for hidden child questions before persisting', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithConditional());
+
+      let capturedCreateManyData;
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockImplementation((args) => {
+              capturedCreateManyData = args.data;
+              return Promise.resolve({ count: args.data.length });
+            }),
+          },
+        };
+        return fn(tx);
+      });
+
+      // Parent is "no", but student also submitted an answer for the hidden child
+      await submitAnamnesisResponse('student-1', 'anamnesis-1', {
+        answers: [
+          { questionId: 'parent-q', value: 'no' },
+          { questionId: 'child-q', value: 'some hidden answer' }, // should be dropped
+        ],
+      });
+
+      // Only parent answer should have been persisted
+      expect(capturedCreateManyData).toHaveLength(1);
+      expect(capturedCreateManyData[0].questionId).toBe('parent-q');
+    });
+  });
+
+  // ── normalizeChoiceAnswersForVisibility (pure function) ───────────────────
+
+  describe('normalizeChoiceAnswersForVisibility', () => {
+    const options = [
+      { id: 'opt-uuid-1', text: 'Option A', order: 0 },
+      { id: 'opt-uuid-2', text: 'Option B', order: 1 },
+      { id: 'opt-uuid-3', text: 'Option C', order: 2 },
+    ];
+
+    const makeQuestionsById = (entries) => new Map(entries);
+
+    it('SINGLE_CHOICE: maps option text to option id', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.SINGLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'Option A' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('opt-uuid-1');
+    });
+
+    it('SINGLE_CHOICE: passes through when value is already an option id', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.SINGLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'opt-uuid-2' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('opt-uuid-2');
+    });
+
+    it('SINGLE_CHOICE: leaves value unchanged when it matches neither text nor id', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.SINGLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'Unknown Option' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('Unknown Option');
+    });
+
+    it('MULTIPLE_CHOICE: maps array of texts to array of ids', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.MULTIPLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: ['Option A', 'Option C'] }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toEqual(['opt-uuid-1', 'opt-uuid-3']);
+    });
+
+    it('MULTIPLE_CHOICE: handles mixed array of texts and ids', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.MULTIPLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: ['opt-uuid-1', 'Option B'] }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toEqual(['opt-uuid-1', 'opt-uuid-2']);
+    });
+
+    it('MULTIPLE_CHOICE: leaves unknown text entries unchanged in the array', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.MULTIPLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: ['Option A', 'Unknown'] }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toEqual(['opt-uuid-1', 'Unknown']);
+    });
+
+    it('MULTIPLE_CHOICE: non-array value passes through unchanged', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.MULTIPLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'Option A' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('Option A');
+    });
+
+    it('FREE_TEXT: passes through unchanged', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.FREE_TEXT, options: [] }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'some free text' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('some free text');
+    });
+
+    it('DICHOTOMOUS: yes/no passes through unchanged', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.DICHOTOMOUS, options: [] }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: 'yes' }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBe('yes');
+    });
+
+    it('null answer value passes through unchanged', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.SINGLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'q-1', value: null }],
+        questionsById,
+      );
+      expect(result.get('q-1')).toBeNull();
+    });
+
+    it('question not found in questionsById: answer passes through unchanged', () => {
+      const questionsById = makeQuestionsById([]);
+      const result = normalizeChoiceAnswersForVisibility(
+        [{ questionId: 'unknown-q', value: 'Option A' }],
+        questionsById,
+      );
+      expect(result.get('unknown-q')).toBe('Option A');
+    });
+
+    it('empty answers array returns empty Map', () => {
+      const questionsById = makeQuestionsById([
+        ['q-1', { type: AnamnesisQuestionType.SINGLE_CHOICE, options }],
+      ]);
+      const result = normalizeChoiceAnswersForVisibility([], questionsById);
+      expect(result.size).toBe(0);
+    });
+  });
+
+  // ── submitAnamnesisResponse — SINGLE_CHOICE parent normalization ──────────
+
+  describe('submitAnamnesisResponse — SINGLE_CHOICE parent normalization', () => {
+    const singleChoiceOptions = [
+      { id: 'opt-uuid-1', text: 'Option A', order: 0 },
+      { id: 'opt-uuid-2', text: 'Option B', order: 1 },
+    ];
+
+    function makeAnamnesisWithSingleChoiceConditional() {
+      const parentQuestion = makeQuestion({
+        id: 'parent-sc',
+        required: true,
+        type: AnamnesisQuestionType.SINGLE_CHOICE,
+        parentQuestionId: null,
+        condition: null,
+        options: singleChoiceOptions,
+      });
+      const childQuestion = makeQuestion({
+        id: 'child-sc',
+        required: true,
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-sc',
+        condition: { operator: 'equals', optionId: 'opt-uuid-1' },
+        options: [],
+      });
+
+      return {
+        ...makeAnamnesis(),
+        sections: [
+          {
+            ...makeSection(),
+            questions: [parentQuestion, childQuestion],
+          },
+        ],
+      };
+    }
+
+    it('child is required when student submits option text matching the trigger', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithSingleChoiceConditional());
+
+      // Parent answered with option TEXT "Option A" — child (opt-uuid-1 trigger) should be visible
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-sc', value: 'Option A' }],
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('child answer is persisted with original text value (not normalized UUID)', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithSingleChoiceConditional());
+
+      let capturedCreateManyData;
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockImplementation((args) => {
+              capturedCreateManyData = args.data;
+              return Promise.resolve({ count: args.data.length });
+            }),
+          },
+        };
+        return fn(tx);
+      });
+
+      await submitAnamnesisResponse('student-1', 'anamnesis-1', {
+        answers: [
+          { questionId: 'parent-sc', value: 'Option A' },
+          { questionId: 'child-sc', value: 'some child text answer' },
+        ],
+      });
+
+      // Parent must be persisted with original text value, not the UUID
+      const parentPersisted = capturedCreateManyData.find((a) => a.questionId === 'parent-sc');
+      expect(parentPersisted.value).toBe('Option A');
+
+      // Child must be persisted with its original answer
+      const childPersisted = capturedCreateManyData.find((a) => a.questionId === 'child-sc');
+      expect(childPersisted.value).toBe('some child text answer');
+    });
+
+    it('child is hidden when student submits option text for a non-triggering option', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithSingleChoiceConditional());
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+        };
+        return fn(tx);
+      });
+
+      // "Option B" does not trigger child (condition requires opt-uuid-1 = "Option A")
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-sc', value: 'Option B' }],
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  // ── submitAnamnesisResponse — MULTIPLE_CHOICE parent normalization ─────────
+
+  describe('submitAnamnesisResponse — MULTIPLE_CHOICE parent normalization', () => {
+    const multiChoiceOptions = [
+      { id: 'opt-uuid-1', text: 'Option A', order: 0 },
+      { id: 'opt-uuid-2', text: 'Option B', order: 1 },
+      { id: 'opt-uuid-3', text: 'Option C', order: 2 },
+    ];
+
+    function makeAnamnesisWithMultipleChoiceConditional() {
+      const parentQuestion = makeQuestion({
+        id: 'parent-mc',
+        required: true,
+        type: AnamnesisQuestionType.MULTIPLE_CHOICE,
+        parentQuestionId: null,
+        condition: null,
+        options: multiChoiceOptions,
+      });
+      const childQuestion = makeQuestion({
+        id: 'child-mc',
+        required: true,
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-mc',
+        condition: { operator: 'includesAny', optionIds: ['opt-uuid-1', 'opt-uuid-2'] },
+        options: [],
+      });
+
+      return {
+        ...makeAnamnesis(),
+        sections: [
+          {
+            ...makeSection(),
+            questions: [parentQuestion, childQuestion],
+          },
+        ],
+      };
+    }
+
+    it('child is required when text array contains a triggering option', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithMultipleChoiceConditional());
+
+      // "Option A" maps to opt-uuid-1 which is in the trigger list — child is visible
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-mc', value: ['Option A', 'Option C'] }],
+        }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('child is hidden when text array contains no triggering options', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithMultipleChoiceConditional());
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+        };
+        return fn(tx);
+      });
+
+      // "Option C" maps to opt-uuid-3 which is NOT in trigger list — child stays hidden
+      await expect(
+        submitAnamnesisResponse('student-1', 'anamnesis-1', {
+          answers: [{ questionId: 'parent-mc', value: ['Option C'] }],
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('child answer is persisted with original text array (not normalized UUIDs)', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithMultipleChoiceConditional());
+
+      let capturedCreateManyData;
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          anamnesisResponse: {
+            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            findUnique: vi.fn().mockResolvedValue({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              submittedAt: new Date(),
+              answers: [],
+            }),
+          },
+          anamnesisAnswer: {
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            createMany: vi.fn().mockImplementation((args) => {
+              capturedCreateManyData = args.data;
+              return Promise.resolve({ count: args.data.length });
+            }),
+          },
+        };
+        return fn(tx);
+      });
+
+      await submitAnamnesisResponse('student-1', 'anamnesis-1', {
+        answers: [
+          { questionId: 'parent-mc', value: ['Option A'] },
+          { questionId: 'child-mc', value: 'some free text' },
+        ],
+      });
+
+      // Parent must be persisted as original text array
+      const parentPersisted = capturedCreateManyData.find((a) => a.questionId === 'parent-mc');
+      expect(parentPersisted.value).toEqual(['Option A']);
+
+      // Child must be persisted with its original answer
+      const childPersisted = capturedCreateManyData.find((a) => a.questionId === 'child-mc');
+      expect(childPersisted.value).toBe('some free text');
     });
   });
 });
