@@ -18,6 +18,61 @@ const templateTrainingItemSchema = {
   additionalProperties: false,
 };
 
+const exerciseTemplateRefSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainerId: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    type: { type: 'string' },
+    videoUrl: { type: 'string', nullable: true },
+    isPublic: { type: 'boolean' },
+    sets: { type: 'integer', nullable: true },
+    repetitions: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        min: { type: 'integer', minimum: 1 },
+        max: { type: 'integer', minimum: 1 },
+      },
+    },
+    duration: { type: 'integer', nullable: true },
+    hasLoad: { type: 'boolean' },
+    suggestedLoad: { type: 'number', nullable: true },
+    restInterval: { type: 'integer', nullable: true },
+    notes: { type: 'string', nullable: true },
+  },
+};
+
+const trainingTemplateExerciseTemplateSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainingTemplateId: { type: 'string', format: 'uuid' },
+    exerciseTemplateId: { type: 'string', format: 'uuid' },
+    order: { type: 'integer' },
+    // Snapshot fields — independent copy of the exercise at link time
+    name: { type: 'string' },
+    type: { type: 'string' },
+    videoUrl: { type: 'string', nullable: true },
+    sets: { type: 'integer', nullable: true },
+    repetitions: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        min: { type: 'integer', minimum: 1 },
+        max: { type: 'integer', minimum: 1 },
+      },
+    },
+    duration: { type: 'integer', nullable: true },
+    hasLoad: { type: 'boolean' },
+    suggestedLoad: { type: 'number', nullable: true },
+    restInterval: { type: 'integer', nullable: true },
+    notes: { type: 'string', nullable: true },
+    exerciseTemplate: exerciseTemplateRefSchema,
+  },
+};
+
 const templateTrainingResponseSchema = {
   type: 'object',
   properties: {
@@ -31,9 +86,19 @@ const templateTrainingResponseSchema = {
       nullable: true,
       properties: {
         id: { type: 'string', format: 'uuid' },
+        trainerId: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
+        description: { type: 'string', nullable: true },
         ...i18nField('category', 'trainingCategory'),
         ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
+        tags: { type: 'array', items: { type: 'string' } },
+        isPublic: { type: 'boolean' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time', nullable: true },
+        trainingTemplateExerciseTemplates: {
+          type: 'array',
+          items: trainingTemplateExerciseTemplateSchema,
+        },
       },
     },
     createdAt: { type: 'string', format: 'date-time' },

@@ -327,6 +327,100 @@ e2eDescribe('e2e: training protocol templates', () => {
     });
   });
 
+  // ==================== GET /trainer/protocol-templates/:id — exercises roundtrip ====================
+
+  describe('GET /trainer/protocol-templates/:id — nested exercises persist across requests', () => {
+    it('returns exercises added to the training after the protocol template was created', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const trainingTemplate = await createTrainingTemplate(accessToken, {
+        name: 'Upper Body',
+        description: 'Upper body session',
+        category: 'strength',
+        bodySegment: 'upper',
+      });
+
+      const createResponse = await createProtocolTemplate(accessToken, {
+        name: 'Template With Exercises',
+        trainings: [{ trainingTemplateId: trainingTemplate.id, weekDay: 'monday', order: 0 }],
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const { id: templateId } = createResponse.json();
+
+      // Trainer comes back later and adds two exercises to the training template
+      const exerciseOneResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${trainingTemplate.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          name: 'Barbell Bench Press',
+          type: 'strength',
+          sets: 4,
+          repetitions: { min: 6, max: 10 },
+          hasLoad: true,
+          order: 0,
+        },
+      });
+      expect(exerciseOneResponse.statusCode).toBe(201);
+
+      const exerciseTwoResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${trainingTemplate.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          name: 'Dumbbell Row',
+          type: 'strength',
+          sets: 3,
+          repetitions: { min: 8, max: 12 },
+          hasLoad: true,
+          order: 1,
+        },
+      });
+      expect(exerciseTwoResponse.statusCode).toBe(201);
+
+      // Re-open the protocol template: exercises must be present on the nested training template
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/protocol-templates/${templateId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings).toHaveLength(1);
+
+      const nested = body.trainings[0].trainingTemplate;
+      expect(nested).toMatchObject({
+        id: trainingTemplate.id,
+        name: 'Upper Body',
+        description: 'Upper body session',
+        category: 'strength',
+        bodySegment: 'upper',
+      });
+
+      expect(Array.isArray(nested.trainingTemplateExerciseTemplates)).toBe(true);
+      expect(nested.trainingTemplateExerciseTemplates).toHaveLength(2);
+
+      const [first, second] = nested.trainingTemplateExerciseTemplates;
+      expect(first).toMatchObject({
+        name: 'Barbell Bench Press',
+        order: 0,
+        sets: 4,
+        hasLoad: true,
+      });
+      expect(first.repetitions).toMatchObject({ min: 6, max: 10 });
+      expect(first.exerciseTemplate).toMatchObject({ name: 'Barbell Bench Press' });
+
+      expect(second).toMatchObject({
+        name: 'Dumbbell Row',
+        order: 1,
+        sets: 3,
+        hasLoad: true,
+      });
+      expect(second.repetitions).toMatchObject({ min: 8, max: 12 });
+      expect(second.exerciseTemplate).toMatchObject({ name: 'Dumbbell Row' });
+    });
+  });
+
   // ==================== PATCH /trainer/protocol-templates/:id ====================
 
   describe('PATCH /trainer/protocol-templates/:id', () => {

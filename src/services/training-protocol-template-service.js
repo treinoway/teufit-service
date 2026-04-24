@@ -3,6 +3,28 @@ import { buildError, validateWeekDay, validateGenderOrdination, validateTraining
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 
 /**
+ * Shared Prisma include for a protocol template's trainings relation. Hydrates
+ * each `ProtocolTemplateTraining` with its full `TrainingTemplate` row plus the
+ * junction rows that wire it to the trainer's exercise templates — without
+ * these nested relations the builder UI can't re-render a saved training.
+ */
+const protocolTemplateTrainingsInclude = {
+  trainings: {
+    orderBy: { order: 'asc' },
+    include: {
+      trainingTemplate: {
+        include: {
+          trainingTemplateExerciseTemplates: {
+            orderBy: { order: 'asc' },
+            include: { exerciseTemplate: true },
+          },
+        },
+      },
+    },
+  },
+};
+
+/**
  * Validate that each training item in the trainings array is accessible by the trainer
  * (either owned by the trainer or marked as public).
  */
@@ -95,16 +117,7 @@ export async function createProtocolTemplate(userId, data) {
 
     return tx.trainingProtocolTemplate.findUnique({
       where: { id: created.id },
-      include: {
-        trainings: {
-          include: {
-            trainingTemplate: {
-              select: { id: true, name: true, category: true, bodySegment: true },
-            },
-          },
-          orderBy: { order: 'asc' },
-        },
-      },
+      include: protocolTemplateTrainingsInclude,
     });
   });
 
@@ -167,16 +180,7 @@ export async function getProtocolTemplateById(userId, templateId) {
 
   const template = await prisma.trainingProtocolTemplate.findUnique({
     where: { id: templateId },
-    include: {
-      trainings: {
-        include: {
-          trainingTemplate: {
-            select: { id: true, name: true, category: true, bodySegment: true },
-          },
-        },
-        orderBy: { order: 'asc' },
-      },
-    },
+    include: protocolTemplateTrainingsInclude,
   });
 
   if (!template) {
@@ -265,16 +269,7 @@ export async function updateProtocolTemplate(userId, templateId, data) {
 
     return tx.trainingProtocolTemplate.findUnique({
       where: { id: templateId },
-      include: {
-        trainings: {
-          include: {
-            trainingTemplate: {
-              select: { id: true, name: true, category: true, bodySegment: true },
-            },
-          },
-          orderBy: { order: 'asc' },
-        },
-      },
+      include: protocolTemplateTrainingsInclude,
     });
   });
 
