@@ -1,5 +1,11 @@
 import { prisma } from '../db.js';
-import { buildError, validateCategory, validateBodySegment } from '../helpers/training-validators.js';
+import {
+  buildError,
+  validateCategory,
+  validateBodySegment,
+  validateExerciseType,
+  validateRepetitions,
+} from '../helpers/training-validators.js';
 
 /**
  * Build junction row create/update data by merging caller overrides with template snapshot.
@@ -446,4 +452,182 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   });
 
   return updated;
+}
+
+/**
+ * Ownership gate reused by every junction-row mutation. Returns the trainer when OK,
+ * throws the appropriate AppError otherwise.
+ */
+async function assertTrainerOwnsTemplate(userId, templateId) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  const template = await prisma.trainingTemplate.findUnique({
+    where: { id: templateId },
+  });
+
+  if (!template || template.deletedAt) {
+    throw buildError('TEMPLATE_NOT_FOUND', 'Training template not found', 404);
+  }
+
+  if (template.trainerId !== trainer.id) {
+    throw buildError('FORBIDDEN_NOT_TEMPLATE_OWNER', 'You do not own this template', 403);
+  }
+
+  return { trainer, template };
+}
+
+/**
+ * Returns the next `order` value for a junction row in the given training template.
+ * Walks the whole relation to find max + 1 — safe because the row count stays small.
+ */
+async function nextExerciseOrder(templateId) {
+  const last = await prisma.trainingTemplateExerciseTemplate.findFirst({
+    where: { trainingTemplateId: templateId },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+  return last ? last.order + 1 : 0;
+}
+
+/**
+ * Create a brand-new ExerciseTemplate and attach it to a training template via a junction row.
+ * Runs inside a transaction so a failure halfway leaves no orphan rows.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string} templateId - Training template ID
+ * @param {object} data - Exercise fields (name, type required) + optional order
+ * @returns {Promise<object>} Created junction row (includes exerciseTemplate relation)
+ */
+export async function createTrainingTemplateExercise(userId, templateId, data) {
+  const { trainer } = await assertTrainerOwnsTemplate(userId, templateId);
+
+  validateExerciseType(data.type);
+  validateRepetitions(data.repetitions);
+
+  const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
+
+  const junction = await prisma.$transaction(async (tx) => {
+    const exerciseTemplate = await tx.exerciseTemplate.create({
+      data: {
+        trainerId: trainer.id,
+        name: data.name,
+        type: data.type,
+        videoUrl: data.videoUrl ?? null,
+        isPublic: data.isPublic !== undefined ? data.isPublic : false,
+        sets: data.sets ?? null,
+        repetitions: data.repetitions ?? null,
+        duration: data.duration ?? null,
+        hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+        suggestedLoad: data.suggestedLoad ?? null,
+        restInterval: data.restInterval ?? null,
+        notes: data.notes ?? null,
+      },
+    });
+
+    return tx.trainingTemplateExerciseTemplate.create({
+      data: {
+        trainingTemplateId: templateId,
+        exerciseTemplateId: exerciseTemplate.id,
+        order,
+        name: exerciseTemplate.name,
+        type: exerciseTemplate.type,
+        videoUrl: exerciseTemplate.videoUrl,
+        sets: exerciseTemplate.sets,
+        repetitions: exerciseTemplate.repetitions,
+        duration: exerciseTemplate.duration,
+        hasLoad: exerciseTemplate.hasLoad,
+        suggestedLoad: exerciseTemplate.suggestedLoad,
+        restInterval: exerciseTemplate.restInterval,
+        notes: exerciseTemplate.notes,
+      },
+      include: { exerciseTemplate: true },
+    });
+  });
+
+  return junction;
+}
+
+/**
+ * Attach an existing ExerciseTemplate to a training template by creating a junction row.
+ * The ExerciseTemplate snapshot is copied to the junction at link time.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string} templateId - Training template ID
+ * @param {object} data - { exerciseTemplateId, order? }
+ * @returns {Promise<object>} Created junction row (includes exerciseTemplate relation)
+ */
+export async function createTrainingTemplateExerciseFromTemplate(userId, templateId, data) {
+  const { trainer } = await assertTrainerOwnsTemplate(userId, templateId);
+
+  const exerciseTemplate = await prisma.exerciseTemplate.findUnique({
+    where: { id: data.exerciseTemplateId },
+  });
+
+  if (!exerciseTemplate || exerciseTemplate.deletedAt) {
+    throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
+  }
+
+  // Only the owner can link — public templates belong to another trainer's library.
+  if (exerciseTemplate.trainerId !== trainer.id) {
+    throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
+  }
+
+  const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
+
+  const junction = await prisma.trainingTemplateExerciseTemplate.create({
+    data: {
+      trainingTemplateId: templateId,
+      exerciseTemplateId: exerciseTemplate.id,
+      order,
+      name: exerciseTemplate.name,
+      type: exerciseTemplate.type,
+      videoUrl: exerciseTemplate.videoUrl,
+      sets: exerciseTemplate.sets,
+      repetitions: exerciseTemplate.repetitions,
+      duration: exerciseTemplate.duration,
+      hasLoad: exerciseTemplate.hasLoad,
+      suggestedLoad: exerciseTemplate.suggestedLoad,
+      restInterval: exerciseTemplate.restInterval,
+      notes: exerciseTemplate.notes,
+    },
+    include: { exerciseTemplate: true },
+  });
+
+  return junction;
+}
+
+/**
+ * Delete a junction row (unlinks an exercise from a training template). The underlying
+ * ExerciseTemplate row in the library is left intact — removal from the template is a
+ * relationship change, not a library cleanup.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string} templateId - Training template ID
+ * @param {string} exerciseId - Junction row ID (TrainingTemplateExerciseTemplate.id)
+ * @returns {Promise<object>} The deleted junction row
+ */
+export async function deleteTrainingTemplateExercise(userId, templateId, exerciseId) {
+  await assertTrainerOwnsTemplate(userId, templateId);
+
+  const junctionRow = await prisma.trainingTemplateExerciseTemplate.findFirst({
+    where: { id: exerciseId, trainingTemplateId: templateId },
+    include: { exerciseTemplate: true },
+  });
+
+  if (!junctionRow) {
+    throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
+  }
+
+  await prisma.trainingTemplateExerciseTemplate.delete({
+    where: { id: exerciseId },
+  });
+
+  return junctionRow;
 }

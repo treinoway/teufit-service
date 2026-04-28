@@ -129,6 +129,8 @@ Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch 
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
 - `test/e2e/ai.e2e.test.js` — 1 test failing (multi-turn conversation)
 - `test/e2e/auth.e2e.test.js` — 2 tests failing (INVALID_CREDENTIALS messageCode)
+- `test/e2e/nutritionist-patient.e2e.test.js` — multiple failures
+- `test/e2e/workouts-today.e2e.test.js` — 2 failures
 These are NOT caused by new features. Do not investigate unless specifically asked.
 
 ## Fastify serialization: JSONB / free-form objects need additionalProperties: true

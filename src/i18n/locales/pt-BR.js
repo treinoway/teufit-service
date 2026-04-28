@@ -114,6 +114,46 @@ export default {
       in_person: 'Presencial',
       hybrid: 'Híbrido',
     },
+    mealType: {
+      breakfast: 'Café da manhã',
+      lunch: 'Almoço',
+      dinner: 'Jantar',
+      morning_snack: 'Lanche da manhã',
+      afternoon_snack: 'Lanche da tarde',
+      supper: 'Ceia',
+    },
+    dietType: {
+      standard: 'Padrão',
+      low_carb: 'Low Carb',
+      high_protein: 'Alta proteína',
+      mediterranean: 'Mediterrânea',
+      vegetarian: 'Vegetariana',
+      vegan: 'Vegana',
+    },
+    goalType: {
+      weight_loss: 'Emagrecimento',
+      muscle_gain: 'Ganho de massa',
+      maintenance: 'Manutenção',
+      health: 'Saúde',
+    },
+    tmbFormula: {
+      harris_benedict: 'Harris-Benedict',
+      mifflin_st_jeor: 'Mifflin-St Jeor',
+      fao_who: 'FAO/OMS',
+      cunningham: 'Cunningham',
+    },
+    activityLevel: {
+      sedentario: 'Sedentário',
+      levemente_ativo: 'Levemente ativo',
+      moderadamente_ativo: 'Moderadamente ativo',
+      muito_ativo: 'Muito ativo',
+      extremamente_ativo: 'Extremamente ativo',
+    },
+    dietProtocolStatus: {
+      active: 'Ativo',
+      completed: 'Concluído',
+      archived: 'Arquivado',
+    },
   },
 
   errors: {
@@ -204,6 +244,18 @@ export default {
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',
     'workoutsToday.emptyProtocol': 'Seu protocolo ativo ainda não tem treinos.',
+
+    // Diet / Nutrition
+    'diet.patientNotFound': 'Paciente não encontrado.',
+    'diet.patientAlreadyLinked': 'Paciente já vinculado a este nutricionista.',
+    'diet.patientNotLinked': 'Paciente não vinculado a este nutricionista.',
+    'diet.templateNotFound': 'Modelo de dieta não encontrado.',
+    'diet.protocolNotFound': 'Protocolo de dieta não encontrado.',
+    'diet.forbiddenNotTemplateOwner': 'Você não tem permissão para modificar este modelo.',
+    'diet.forbiddenNotProtocolOwner': 'Você não tem permissão para modificar este protocolo.',
+    'diet.forbiddenNotYourProtocol': 'Este protocolo não pertence a você.',
+    'diet.mealNotFound': 'Refeição não encontrada.',
+    'diet.foodItemNotFound': 'Item alimentar não encontrado.',
   },
 
   validation: {

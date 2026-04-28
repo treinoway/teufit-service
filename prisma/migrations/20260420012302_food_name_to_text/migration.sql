@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "foods" ALTER COLUMN "name" SET DATA TYPE TEXT;

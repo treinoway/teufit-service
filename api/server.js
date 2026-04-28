@@ -32,6 +32,12 @@ import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
 import { gamificationRoutes } from './routes/gamification-route.js';
 import { challengeRoutes } from './routes/challenge-route.js';
 import { workoutsTodayRoutes } from './routes/workouts-today-route.js';
+import { nutritionistPatientRoutes } from './routes/nutritionist-patient-route.js';
+import { foodRoutes } from './routes/food-route.js';
+import { dietProtocolTemplateRoutes } from './routes/diet-protocol-template-route.js';
+import { dietProtocolRoutes } from './routes/diet-protocol-route.js';
+import { dietMealRoutes } from './routes/diet-meal-route.js';
+import { dietFoodItemRoutes } from './routes/diet-food-item-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 
@@ -275,6 +281,12 @@ export async function buildServer(options = {}) {
     await fastify.register(gamificationRoutes);
     await fastify.register(challengeRoutes);
     await fastify.register(workoutsTodayRoutes);
+    await fastify.register(nutritionistPatientRoutes);
+    await fastify.register(foodRoutes);
+    await fastify.register(dietProtocolTemplateRoutes);
+    await fastify.register(dietProtocolRoutes);
+    await fastify.register(dietMealRoutes);
+    await fastify.register(dietFoodItemRoutes);
   });
 
   return fastify;

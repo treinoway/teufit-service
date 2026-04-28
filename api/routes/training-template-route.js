@@ -122,6 +122,101 @@ export async function trainingTemplateRoutes(fastify) {
     },
   );
 
+  // Create an ad-hoc exercise (new ExerciseTemplate) and attach it to a training template
+  fastify.post(
+    '/trainer/training-templates/:templateId/exercises',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createTrainingTemplateExerciseSchema,
+    },
+    async (request, reply) => {
+      try {
+        const created = await service.createTrainingTemplateExercise(
+          request.user.id,
+          request.params.templateId,
+          request.body,
+        );
+        return reply.status(201).send(created);
+      } catch (error) {
+        if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
+          return reply.status(404).send({ error: error.message });
+        }
+        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {
+          return reply.status(403).send({ error: error.message });
+        }
+        if (error.code === 'INVALID_EXERCISE_TYPE' || error.code === 'INVALID_REPETITIONS') {
+          return reply.status(400).send({ error: error.message });
+        }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to create training template exercise' });
+      }
+    },
+  );
+
+  // Attach an existing exercise template to a training template (junction row only)
+  fastify.post(
+    '/trainer/training-templates/:templateId/exercises/from-template',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createTrainingTemplateExerciseFromTemplateSchema,
+    },
+    async (request, reply) => {
+      try {
+        const created = await service.createTrainingTemplateExerciseFromTemplate(
+          request.user.id,
+          request.params.templateId,
+          request.body,
+        );
+        return reply.status(201).send(created);
+      } catch (error) {
+        if (
+          error.code === 'TEMPLATE_NOT_FOUND' ||
+          error.code === 'TRAINER_PROFILE_MISSING' ||
+          error.code === 'EXERCISE_TEMPLATE_NOT_FOUND'
+        ) {
+          return reply.status(404).send({ error: error.message });
+        }
+        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {
+          return reply.status(403).send({ error: error.message });
+        }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to attach exercise template' });
+      }
+    },
+  );
+
+  // Remove an exercise (junction row) from a training template. Library ExerciseTemplate is preserved.
+  fastify.delete(
+    '/trainer/training-templates/:templateId/exercises/:exerciseId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.deleteTrainingTemplateExerciseSchema,
+    },
+    async (request, reply) => {
+      try {
+        const deleted = await service.deleteTrainingTemplateExercise(
+          request.user.id,
+          request.params.templateId,
+          request.params.exerciseId,
+        );
+        return reply.send(deleted);
+      } catch (error) {
+        if (
+          error.code === 'TEMPLATE_NOT_FOUND' ||
+          error.code === 'TRAINER_PROFILE_MISSING' ||
+          error.code === 'TRAINING_TEMPLATE_EXERCISE_NOT_FOUND'
+        ) {
+          return reply.status(404).send({ error: error.message });
+        }
+        if (error.code === 'FORBIDDEN_NOT_TEMPLATE_OWNER') {
+          return reply.status(403).send({ error: error.message });
+        }
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to delete training template exercise' });
+      }
+    },
+  );
+
   // Update a single exercise (junction row) inside a training template
   fastify.patch(
     '/trainer/training-templates/:templateId/exercises/:exerciseId',

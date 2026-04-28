@@ -20,7 +20,13 @@ Model selection: env ANTHROPIC_MODEL / GEMINI_MODEL, defaults hardcoded in provi
 DB models: AiConversation, AiMessage (role: user | assistant | tool_result)
 Multi-turn history: rawContent stored on assistant messages with tool calls, rebuilt via buildToolResultMessages on load
 
-Tools: import_from_template, add_training_to_protocol, create_exercise_template, create_training_template, create_protocol_template
+Tools (create): import_from_template, add_training_to_protocol, create_exercise_template, create_training_template, create_protocol_template
+Tools (update, added 2026-04-21): update_protocol_template, update_training_template, update_exercise_template, update_protocol, update_training, update_exercise
+- Update tools use PATCH semantics: Object.fromEntries(fields.filter(f => toolInput[f] !== undefined).map(...)) — only defined fields sent
+- Active protocols context now enriched with trainings (take: MAX_CONTEXT_TRAININGS_PER_PROTOCOL=6) and exercises (take: MAX_CONTEXT_EXERCISES_PER_TRAINING=6)
+- buildDynamicContext renders [TRAINING_REF:id] and [EXERCISE_REF:id] tags so model can identify entities for update tools
+- System prompt rules renumbered: rules 5+6 are new EDICAO/REFS_DE_EDICAO; old rules 5–13 shifted to 7–15
+- Tests: test/services/ai-training-service.update-tools.test.js — 26 tests, all passing
 
 Prompt caching (added in token-optimization PR):
 - `buildSystemPrompt()` now returns an ARRAY of 2 blocks instead of a plain string

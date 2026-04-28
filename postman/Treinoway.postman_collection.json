@@ -1934,6 +1934,125 @@
           "response": []
         },
         {
+          "name": "Create Training Template Exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/exercises",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "exercises"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                }
+              ]
+            },
+            "description": "Create a brand-new ExerciseTemplate and attach it to the training template via a junction row. Runs in a transaction. The junction row snapshot mirrors the new ExerciseTemplate. Requires TRAINER role and template ownership."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Training Template Exercise From Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exerciseTemplateId\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/exercises/from-template",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "exercises",
+                "from-template"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                }
+              ]
+            },
+            "description": "Attach an existing ExerciseTemplate from the trainer's library to the training template by creating a junction row. The ExerciseTemplate must belong to the caller. Requires TRAINER role and template ownership."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Training Template Exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/exercises/:exerciseId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "exercises",
+                ":exerciseId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "exerciseId",
+                  "value": "",
+                  "description": "Junction row UUID (TrainingTemplateExerciseTemplate.id)"
+                }
+              ]
+            },
+            "description": "Remove an exercise (junction row) from a training template. The underlying ExerciseTemplate in the library is preserved. Requires TRAINER role and template ownership."
+          },
+          "response": []
+        },
+        {
           "name": "Update Training Template Exercise",
           "request": {
             "method": "PATCH",
@@ -5766,6 +5885,1014 @@
               ]
             },
             "description": "Get challenge leaderboard with own position highlighted"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Foods",
+      "item": [
+        {
+          "name": "Search Foods",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/foods?q=arroz&limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "foods"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "arroz",
+                  "description": "Search query (partial match on food name)"
+                },
+                {
+                  "key": "groupId",
+                  "value": null,
+                  "description": "Filter by food group ID (UUID)",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Max results (1-100, default 20)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Pagination offset (default 0)"
+                }
+              ]
+            },
+            "description": "Search foods by name with optional group filter. Returns paginated list with total count."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Food by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/foods/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "foods",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Food UUID"
+                }
+              ]
+            },
+            "description": "Get full food details including all nutritional data (macros, vitamins, minerals)."
+          },
+          "response": []
+        },
+        {
+          "name": "List Food Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/food-groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "food-groups"
+              ]
+            },
+            "description": "List all food groups (e.g. Cereais, Carnes, Laticínios)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Nutritionist Patients",
+      "item": [
+        {
+          "name": "Link Patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"00000000-0000-0000-0000-000000000001\",\n  \"notes\": \"Paciente encaminhado pelo médico. Objetivo: emagrecimento.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/patients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "patients"
+              ]
+            },
+            "description": "Link a patient to the authenticated nutritionist. Returns the created link with patient details."
+          },
+          "response": []
+        },
+        {
+          "name": "List Patients",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/patients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "patients"
+              ]
+            },
+            "description": "List all patients linked to the authenticated nutritionist."
+          },
+          "response": []
+        },
+        {
+          "name": "Unlink Patient",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/patients/:patientId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "patients",
+                ":patientId"
+              ],
+              "variable": [
+                {
+                  "key": "patientId",
+                  "value": "",
+                  "description": "Patient user UUID"
+                }
+              ]
+            },
+            "description": "Unlink (soft-delete) a patient from the authenticated nutritionist."
+          },
+          "response": []
+        },
+        {
+          "name": "Upsert Metabolic Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weightKg\": 75.5,\n  \"heightCm\": 172,\n  \"leanBodyMassKg\": 58.0,\n  \"tmbFormula\": \"mifflin_st_jeor\",\n  \"activityLevel\": \"moderadamente_ativo\",\n  \"tmbKcal\": 1750,\n  \"getKcal\": 2712\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/patients/:patientId/metabolic-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "patients",
+                ":patientId",
+                "metabolic-profile"
+              ],
+              "variable": [
+                {
+                  "key": "patientId",
+                  "value": "",
+                  "description": "Patient user UUID"
+                }
+              ]
+            },
+            "description": "Create or update the metabolic profile for a patient. Accepted tmbFormula values: harris_benedict, mifflin_st_jeor, fao_who, cunningham. Accepted activityLevel values: sedentario, levemente_ativo, moderadamente_ativo, muito_ativo, extremamente_ativo."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Protocol Templates",
+      "item": [
+        {
+          "name": "Create Diet Protocol Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso\",\n  \"description\": \"Protocolo base para emagrecimento com restrição de carboidratos\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"meals\": [\n    {\n      \"name\": \"Café da manhã\",\n      \"mealType\": \"breakfast\",\n      \"order\": 0,\n      \"scheduledTime\": \"07:00\",\n      \"foodItems\": [\n        {\n          \"foodName\": \"Ovos mexidos\",\n          \"quantityG\": 120,\n          \"unit\": \"g\",\n          \"energyKcal\": 186,\n          \"proteinG\": 14,\n          \"carbohydratesG\": 2,\n          \"totalFatG\": 14\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocol-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocol-templates"
+              ]
+            },
+            "description": "Create a reusable diet protocol template with optional pre-defined meals and food items. Accepted dietType: standard, low_carb, high_protein, mediterranean, vegetarian, vegan. Accepted goalType: weight_loss, muscle_gain, maintenance, health."
+          },
+          "response": []
+        },
+        {
+          "name": "List Diet Protocol Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocol-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocol-templates"
+              ]
+            },
+            "description": "List all diet protocol templates owned by the authenticated nutritionist."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Diet Protocol Template",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocol-templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocol-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
+            },
+            "description": "Get diet protocol template with full meal and food item details."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Diet Protocol Template",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso (Revisada)\",\n  \"description\": \"Versão atualizada com ajuste calórico\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocol-templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocol-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
+            },
+            "description": "Update a diet protocol template. All fields are optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Diet Protocol Template",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocol-templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocol-templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Template UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a diet protocol template. Returns id and deletedAt timestamp."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Protocols",
+      "item": [
+        {
+          "name": "Create Diet Protocol",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Protocolo Emagrecimento - João\",\n  \"description\": \"Dieta personalizada para perda de gordura\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"tmbFormula\": \"mifflin_st_jeor\",\n  \"activityLevel\": \"moderadamente_ativo\",\n  \"tmbKcal\": 1750,\n  \"getKcal\": 2712,\n  \"dailyCaloricTarget\": 2200,\n  \"notes\": \"Evitar glúten\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols"
+              ]
+            },
+            "description": "Create a diet protocol and assign it to a patient. Required: assigneeId, name, startDate."
+          },
+          "response": []
+        },
+        {
+          "name": "Import Diet Protocol from Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateId\": \"00000000-0000-0000-0000-000000000002\",\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Low Carb - Maria (Abril 2026)\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dailyCaloricTarget\": 1800,\n  \"notes\": \"Adaptada para intolerância à lactose\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols/import-from-template",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols",
+                "import-from-template"
+              ]
+            },
+            "description": "Create a new diet protocol by copying a template. Meals and food items are duplicated from the template. Required: templateId, assigneeId."
+          },
+          "response": []
+        },
+        {
+          "name": "List Diet Protocols (Nutritionist)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Filter by status: active, completed, archived",
+                  "disabled": true
+                },
+                {
+                  "key": "assigneeId",
+                  "value": null,
+                  "description": "Filter by patient UUID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all diet protocols created by the authenticated nutritionist."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Diet Protocol (Nutritionist)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Diet protocol UUID"
+                }
+              ]
+            },
+            "description": "Get full diet protocol details including all meals and food items (nutritionist view)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Diet Protocol",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Protocolo Emagrecimento - João (Revisado)\",\n  \"status\": \"active\",\n  \"dailyCaloricTarget\": 2000,\n  \"notes\": \"Ajuste após retorno da consulta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Diet protocol UUID"
+                }
+              ]
+            },
+            "description": "Update a diet protocol. All fields optional. Accepted status values: active, completed, archived."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Diet Protocol",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Diet protocol UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a diet protocol. Returns id and deletedAt timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "List My Diet Protocols (Patient)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/diet-protocols",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "diet-protocols"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Filter by status: active, completed, archived",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get all diet protocols assigned to the authenticated user (patient view). Includes meals and food items."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Diet Protocol (Patient)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/diet-protocols/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "diet-protocols",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Diet protocol UUID"
+                }
+              ]
+            },
+            "description": "Get diet protocol detail (patient view). Returns 403 if the protocol is not assigned to the caller."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Meals",
+      "item": [
+        {
+          "name": "Create Diet Meal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Almoço\",\n  \"mealType\": \"lunch\",\n  \"order\": 2,\n  \"scheduledTime\": \"12:30\",\n  \"notes\": \"Principal refeição do dia\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/diet-protocols/:protocolId/meals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "diet-protocols",
+                ":protocolId",
+                "meals"
+              ],
+              "variable": [
+                {
+                  "key": "protocolId",
+                  "value": "",
+                  "description": "Diet protocol UUID"
+                }
+              ]
+            },
+            "description": "Add a meal to a diet protocol. Required: name, mealType. Accepted mealType values: breakfast, lunch, dinner, morning_snack, afternoon_snack, supper."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Diet Meal",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Almoço Reforçado\",\n  \"scheduledTime\": \"13:00\",\n  \"notes\": \"Aumentar proteína\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/meals/:mealId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "meals",
+                ":mealId"
+              ],
+              "variable": [
+                {
+                  "key": "mealId",
+                  "value": "",
+                  "description": "Diet meal UUID"
+                }
+              ]
+            },
+            "description": "Update a diet meal. All fields optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Diet Meal",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/meals/:mealId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "meals",
+                ":mealId"
+              ],
+              "variable": [
+                {
+                  "key": "mealId",
+                  "value": "",
+                  "description": "Diet meal UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a diet meal. Returns id and deletedAt timestamp."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Diet - Food Items",
+      "item": [
+        {
+          "name": "Add Food Item to Meal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"foodId\": \"00000000-0000-0000-0000-000000000003\",\n  \"foodName\": \"Arroz branco cozido\",\n  \"quantityG\": 150,\n  \"unit\": \"g\",\n  \"energyKcal\": 165,\n  \"proteinG\": 3.1,\n  \"carbohydratesG\": 36.3,\n  \"totalFatG\": 0.2,\n  \"fiberG\": 1.1,\n  \"order\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/meals/:mealId/food-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "meals",
+                ":mealId",
+                "food-items"
+              ],
+              "variable": [
+                {
+                  "key": "mealId",
+                  "value": "",
+                  "description": "Diet meal UUID"
+                }
+              ]
+            },
+            "description": "Add a food item to a diet meal. foodId links to the food catalog (optional — free-text foodName is supported). Required: quantityG."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Food Item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantityG\": 200,\n  \"energyKcal\": 220,\n  \"proteinG\": 4.1,\n  \"carbohydratesG\": 48.4,\n  \"totalFatG\": 0.3,\n  \"notes\": \"Aumentar porção\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/food-items/:foodItemId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "food-items",
+                ":foodItemId"
+              ],
+              "variable": [
+                {
+                  "key": "foodItemId",
+                  "value": "",
+                  "description": "Diet food item UUID"
+                }
+              ]
+            },
+            "description": "Update a diet food item. All fields optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Food Item",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutritionist/food-items/:foodItemId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutritionist",
+                "food-items",
+                ":foodItemId"
+              ],
+              "variable": [
+                {
+                  "key": "foodItemId",
+                  "value": "",
+                  "description": "Diet food item UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a diet food item. Returns id and deletedAt timestamp."
           },
           "response": []
         }

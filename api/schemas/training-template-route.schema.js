@@ -1,4 +1,4 @@
-import { trainingCategoryValues, bodySegmentValues } from '../../src/constants/training.js';
+import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -297,6 +297,108 @@ export const deleteTrainingTemplateSchema = {
   },
   response: {
     200: templateResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const createTrainingTemplateExerciseSchema = {
+  tags: ['Training Templates'],
+  summary: 'Create an ad-hoc exercise and attach it to a training template',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId'],
+    properties: {
+      templateId: { type: 'string', format: 'uuid' },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['name', 'type'],
+    properties: {
+      name: { type: 'string', minLength: 1 },
+      type: { type: 'string', enum: exerciseTypeValues },
+      videoUrl: { type: 'string', nullable: true },
+      isPublic: { type: 'boolean' },
+      sets: { type: 'integer', nullable: true, minimum: 1 },
+      repetitions: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          min: { type: 'integer', minimum: 1 },
+          max: { type: 'integer', minimum: 1 },
+        },
+        additionalProperties: false,
+      },
+      duration: { type: 'integer', nullable: true, minimum: 1 },
+      hasLoad: { type: 'boolean' },
+      suggestedLoad: { type: 'number', nullable: true, minimum: 0 },
+      restInterval: { type: 'integer', nullable: true, minimum: 0 },
+      notes: { type: 'string', nullable: true },
+      order: { type: 'integer', minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    201: trainingTemplateExerciseTemplateSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const createTrainingTemplateExerciseFromTemplateSchema = {
+  tags: ['Training Templates'],
+  summary: 'Attach an existing exercise template to a training template (junction row only)',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId'],
+    properties: {
+      templateId: { type: 'string', format: 'uuid' },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['exerciseTemplateId'],
+    properties: {
+      exerciseTemplateId: { type: 'string', format: 'uuid' },
+      order: { type: 'integer', minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    201: trainingTemplateExerciseTemplateSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const deleteTrainingTemplateExerciseSchema = {
+  tags: ['Training Templates'],
+  summary: 'Remove an exercise (junction row) from a training template',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId', 'exerciseId'],
+    properties: {
+      templateId: { type: 'string', format: 'uuid' },
+      exerciseId: { type: 'string', format: 'uuid' },
+    },
+  },
+  response: {
+    200: trainingTemplateExerciseTemplateSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

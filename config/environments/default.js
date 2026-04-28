@@ -112,5 +112,41 @@ export default {
         timeWindow: '1 minute',
       },
     },
+    dietProtocol: {
+      create: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      getById: { max: 60, timeWindow: '1 minute' },
+      update: { max: 20, timeWindow: '1 minute' },
+      delete: { max: 10, timeWindow: '1 minute' },
+      importFromTemplate: { max: 10, timeWindow: '1 minute' },
+    },
+    dietProtocolTemplate: {
+      create: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      getById: { max: 60, timeWindow: '1 minute' },
+      update: { max: 20, timeWindow: '1 minute' },
+      delete: { max: 10, timeWindow: '1 minute' },
+    },
+    nutritionistPatient: {
+      link: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      unlink: { max: 10, timeWindow: '1 minute' },
+      metabolicProfile: { max: 20, timeWindow: '1 minute' },
+    },
+    food: {
+      search: { max: 60, timeWindow: '1 minute' },
+      getById: { max: 60, timeWindow: '1 minute' },
+      groups: { max: 60, timeWindow: '1 minute' },
+    },
+    dietMeal: {
+      create: { max: 30, timeWindow: '1 minute' },
+      update: { max: 30, timeWindow: '1 minute' },
+      delete: { max: 20, timeWindow: '1 minute' },
+    },
+    dietFoodItem: {
+      create: { max: 30, timeWindow: '1 minute' },
+      update: { max: 30, timeWindow: '1 minute' },
+      delete: { max: 20, timeWindow: '1 minute' },
+    },
   },
 };

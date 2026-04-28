@@ -110,6 +110,46 @@ export default {
       in_person: 'In Person',
       hybrid: 'Hybrid',
     },
+    mealType: {
+      breakfast: 'Breakfast',
+      lunch: 'Lunch',
+      dinner: 'Dinner',
+      morning_snack: 'Morning Snack',
+      afternoon_snack: 'Afternoon Snack',
+      supper: 'Supper',
+    },
+    dietType: {
+      standard: 'Standard',
+      low_carb: 'Low Carb',
+      high_protein: 'High Protein',
+      mediterranean: 'Mediterranean',
+      vegetarian: 'Vegetarian',
+      vegan: 'Vegan',
+    },
+    goalType: {
+      weight_loss: 'Weight Loss',
+      muscle_gain: 'Muscle Gain',
+      maintenance: 'Maintenance',
+      health: 'Health',
+    },
+    tmbFormula: {
+      harris_benedict: 'Harris-Benedict',
+      mifflin_st_jeor: 'Mifflin-St Jeor',
+      fao_who: 'FAO/WHO',
+      cunningham: 'Cunningham',
+    },
+    activityLevel: {
+      sedentario: 'Sedentary',
+      levemente_ativo: 'Lightly Active',
+      moderadamente_ativo: 'Moderately Active',
+      muito_ativo: 'Very Active',
+      extremamente_ativo: 'Extremely Active',
+    },
+    dietProtocolStatus: {
+      active: 'Active',
+      completed: 'Completed',
+      archived: 'Archived',
+    },
   },
 
   errors: {
@@ -200,6 +240,18 @@ export default {
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',
     'workoutsToday.emptyProtocol': 'Your active protocol does not have any workouts yet.',
+
+    // Diet / Nutrition
+    'diet.patientNotFound': 'Patient not found.',
+    'diet.patientAlreadyLinked': 'Patient is already linked to this nutritionist.',
+    'diet.patientNotLinked': 'Patient is not linked to this nutritionist.',
+    'diet.templateNotFound': 'Diet template not found.',
+    'diet.protocolNotFound': 'Diet protocol not found.',
+    'diet.forbiddenNotTemplateOwner': 'You do not have permission to modify this template.',
+    'diet.forbiddenNotProtocolOwner': 'You do not have permission to modify this protocol.',
+    'diet.forbiddenNotYourProtocol': 'This protocol does not belong to you.',
+    'diet.mealNotFound': 'Meal not found.',
+    'diet.foodItemNotFound': 'Food item not found.',
   },
 
   validation: {

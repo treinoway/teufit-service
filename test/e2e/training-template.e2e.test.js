@@ -362,6 +362,468 @@ e2eDescribe('e2e: training templates', () => {
     });
   });
 
+  // ==================== POST /trainer/training-templates/:templateId/exercises ====================
+
+  describe('POST /trainer/training-templates/:templateId/exercises', () => {
+    it('creates a new ExerciseTemplate and attaches it as a junction row', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          name: 'Ad-hoc Squat',
+          type: 'strength',
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          hasLoad: true,
+          suggestedLoad: 60,
+          restInterval: 90,
+          notes: 'Controlled tempo',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('id');
+      expect(body).toHaveProperty('trainingTemplateId', template.id);
+      expect(body).toHaveProperty('exerciseTemplateId');
+      expect(body).toHaveProperty('name', 'Ad-hoc Squat');
+      expect(body).toHaveProperty('sets', 4);
+      expect(body).toHaveProperty('repetitions', { min: 8, max: 12 });
+      expect(body).toHaveProperty('hasLoad', true);
+      expect(body).toHaveProperty('suggestedLoad', 60);
+      expect(body).toHaveProperty('restInterval', 90);
+      expect(body).toHaveProperty('notes', 'Controlled tempo');
+      expect(body).toHaveProperty('order', 0);
+      expect(body.exerciseTemplate).toBeDefined();
+      expect(body.exerciseTemplate.id).toBe(body.exerciseTemplateId);
+    });
+
+    it('assigns order = (max + 1) when existing exercises are present', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, { name: 'Existing', type: 'strength' });
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [
+          { exerciseTemplateId: exerciseTemplate.id, order: 0 },
+          { exerciseTemplateId: exerciseTemplate.id, order: 1 },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'New Exercise', type: 'strength' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toHaveProperty('order', 2);
+    });
+
+    it('creates a new ExerciseTemplate owned by the caller (visible in library)', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Library Entry', type: 'strength', sets: 3 },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const created = createResponse.json();
+
+      const libraryResponse = await app.inject({
+        method: 'GET',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(libraryResponse.statusCode).toBe(200);
+      const library = libraryResponse.json();
+      expect(library.some((t) => t.id === created.exerciseTemplateId)).toBe(true);
+    });
+
+    it('returns 400 when name is missing', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { type: 'strength' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when type is missing', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Missing type' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 when template does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const fakeTemplateId = '00000000-0000-0000-0000-000000000000';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${fakeTemplateId}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Orphan', type: 'strength' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 when trainer does not own the template', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      const template = await createTrainingTemplate(trainerA, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: { name: 'Intruder', type: 'strength' },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates/00000000-0000-0000-0000-000000000000/exercises',
+        payload: { name: 'Nope', type: 'strength' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ==================== POST /trainer/training-templates/:templateId/exercises/from-template ====================
+
+  describe('POST /trainer/training-templates/:templateId/exercises/from-template', () => {
+    it('creates a junction row linking an existing ExerciseTemplate', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Library Pull-Up',
+        type: 'strength',
+        sets: 3,
+        hasLoad: false,
+        restInterval: 60,
+      });
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { exerciseTemplateId: exerciseTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('trainingTemplateId', template.id);
+      expect(body).toHaveProperty('exerciseTemplateId', exerciseTemplate.id);
+      expect(body).toHaveProperty('name', 'Library Pull-Up');
+      expect(body).toHaveProperty('sets', 3);
+      expect(body).toHaveProperty('hasLoad', false);
+      expect(body).toHaveProperty('restInterval', 60);
+      expect(body).toHaveProperty('order', 0);
+      expect(body.exerciseTemplate).toBeDefined();
+      expect(body.exerciseTemplate.id).toBe(exerciseTemplate.id);
+    });
+
+    it('does not create a new ExerciseTemplate (reuses the provided one)', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, { name: 'Reuse me', type: 'strength' });
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const beforeResponse = await app.inject({
+        method: 'GET',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      const beforeCount = beforeResponse.json().length;
+
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { exerciseTemplateId: exerciseTemplate.id },
+      });
+
+      const afterResponse = await app.inject({
+        method: 'GET',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(afterResponse.json().length).toBe(beforeCount);
+    });
+
+    it('assigns order = (max + 1) when exercises already exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const seed = await createExerciseTemplate(accessToken, { name: 'Seed', type: 'strength' });
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [{ exerciseTemplateId: seed.id, order: 0 }],
+      });
+      const other = await createExerciseTemplate(accessToken, { name: 'Imported', type: 'strength' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { exerciseTemplateId: other.id },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toHaveProperty('order', 1);
+    });
+
+    it('returns 400 when exerciseTemplateId is missing', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 when exerciseTemplate does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { exerciseTemplateId: '00000000-0000-0000-0000-000000000000' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the exerciseTemplate belongs to another trainer', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      const foreignExercise = await createExerciseTemplate(trainerA, { name: 'Private', type: 'strength' });
+      const template = await createTrainingTemplate(trainerB, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: { exerciseTemplateId: foreignExercise.id },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the training template does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, { name: 'Solo', type: 'strength' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates/00000000-0000-0000-0000-000000000000/exercises/from-template',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { exerciseTemplateId: exerciseTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 when trainer does not own the template', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      const template = await createTrainingTemplate(trainerA, {});
+      const exerciseTemplate = await createExerciseTemplate(trainerB, { name: 'Mine', type: 'strength' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: { exerciseTemplateId: exerciseTemplate.id },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates/00000000-0000-0000-0000-000000000000/exercises/from-template',
+        payload: { exerciseTemplateId: '00000000-0000-0000-0000-000000000001' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ==================== DELETE /trainer/training-templates/:templateId/exercises/:exerciseId ====================
+
+  describe('DELETE /trainer/training-templates/:templateId/exercises/:exerciseId', () => {
+    it('removes the junction row and returns its final snapshot', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Throwaway',
+        type: 'strength',
+        sets: 3,
+      });
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
+      });
+      const junction = template.trainingTemplateExerciseTemplates[0];
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty('id', junction.id);
+      expect(body).toHaveProperty('exerciseTemplateId', exerciseTemplate.id);
+
+      // Verify the junction row is actually gone
+      const refetch = await app.inject({
+        method: 'GET',
+        url: `/trainer/training-templates/${template.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(refetch.statusCode).toBe(200);
+      expect(refetch.json().trainingTemplateExerciseTemplates).toHaveLength(0);
+    });
+
+    it('leaves the underlying ExerciseTemplate intact in the library', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Keep me',
+        type: 'strength',
+      });
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
+      });
+      const junction = template.trainingTemplateExerciseTemplates[0];
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+
+      const libraryResponse = await app.inject({
+        method: 'GET',
+        url: `/trainer/exercise-templates/${exerciseTemplate.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(libraryResponse.statusCode).toBe(200);
+      expect(libraryResponse.json()).toHaveProperty('id', exerciseTemplate.id);
+      expect(libraryResponse.json()).toHaveProperty('name', 'Keep me');
+    });
+
+    it('is idempotent: deleting a junction twice returns 404 on the second call', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, { name: 'Twice', type: 'strength' });
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
+      });
+      const junction = template.trainingTemplateExerciseTemplates[0];
+
+      const first = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(second.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the junction row does not exist in the template', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+      const fakeExerciseId = '00000000-0000-0000-0000-000000000000';
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${fakeExerciseId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the training template does not exist', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/trainer/training-templates/00000000-0000-0000-0000-000000000000/exercises/00000000-0000-0000-0000-000000000001',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 when trainer does not own the template', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      const exerciseTemplate = await createExerciseTemplate(trainerA, { name: 'Owned', type: 'strength' });
+      const template = await createTrainingTemplate(trainerA, {
+        exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
+      });
+      const junction = template.trainingTemplateExerciseTemplates[0];
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${trainerB}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/trainer/training-templates/00000000-0000-0000-0000-000000000000/exercises/00000000-0000-0000-0000-000000000001',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
   // ==================== POST /trainer/trainings/from-template ====================
 
   describe('POST /trainer/trainings/from-template', () => {

@@ -39,19 +39,38 @@
 | Anamnesis - Copy | /trainer/anamneses/:id/copy | bearer + TRAINER |
 | Import | /trainer/import/primecoaching | bearer + TRAINER |
 | AI Assistant | /trainer/ai/chat | bearer + TRAINER |
+| Diet - Foods | /foods, /food-groups | bearer (any role) |
+| Diet - Nutritionist Patients | /nutritionist/patients | bearer + NUTRITIONIST |
+| Diet - Protocol Templates | /nutritionist/diet-protocol-templates | bearer + NUTRITIONIST |
+| Diet - Protocols | /nutritionist/diet-protocols, /my/diet-protocols | bearer + NUTRITIONIST / bearer |
+| Diet - Meals | /nutritionist/diet-protocols/:protocolId/meals, /nutritionist/meals/:mealId | bearer + NUTRITIONIST |
+| Diet - Food Items | /nutritionist/meals/:mealId/food-items, /nutritionist/food-items/:foodItemId | bearer + NUTRITIONIST |
 
 ## Swagger Tag Names
 
 - `"Workout Sessions"` — all student workout session routes
 - `"Workout Sessions - Trainer"` — all trainer-facing session routes
 - `"AI Assistant"` — trainer AI chat route (`/trainer/ai/chat`)
-- These match the Postman folder names exactly.
+- `"Foods"` — food catalog routes (`/foods`, `/food-groups`)
+- `"Nutritionist - Patients"` — patient link/unlink and metabolic profile routes
+- `"Diet Protocol Templates"` — template CRUD routes
+- `"Diet Protocols - Nutritionist"` — nutritionist-facing protocol CRUD
+- `"Diet Protocols - My"` — patient-facing protocol routes
+- `"Diet Meals"` — meal CRUD within a protocol
+- `"Diet Food Items"` — food item CRUD within a meal
+- Swagger tags do NOT always match Postman folder names exactly (Diet folders are consolidated differently).
 
 ## Status Enum Values
 
 - `WorkoutSessionStatus`: `in_progress`, `completed`, `abandoned`
 - `ExerciseLogStatus`: `pending`, `completed`, `skipped`
-- Source: `src/constants/training.js`
+- `DietProtocolStatus`: `active`, `completed`, `archived` — source: `src/constants/diet.js`
+- `MealType`: `breakfast`, `lunch`, `dinner`, `morning_snack`, `afternoon_snack`, `supper`
+- `DietType`: `standard`, `low_carb`, `high_protein`, `mediterranean`, `vegetarian`, `vegan`
+- `GoalType`: `weight_loss`, `muscle_gain`, `maintenance`, `health`
+- `TmbFormula`: `harris_benedict`, `mifflin_st_jeor`, `fao_who`, `cunningham`
+- `ActivityLevel`: `sedentario`, `levemente_ativo`, `moderadamente_ativo`, `muito_ativo`, `extremamente_ativo`
+- Source: `src/constants/training.js` (training), `src/constants/diet.js` (diet)
 
 ## Error Response Contract
 
@@ -62,4 +81,6 @@ All error responses must include `error`, `messageCode`, `message`, `details`. S
 - Student self-service: `/my/*`
 - Trainer actions on own data: `/trainer/*`
 - Trainer actions on student data: `/trainer/students/:studentId/*`
+- Nutritionist actions on own data: `/nutritionist/*`
+- Nutritionist actions on patient data: `/nutritionist/patients/:patientId/*`
 - Path params in Postman: `:paramName` format in raw URL, listed in `url.variable` array with key, value (empty string), description.
