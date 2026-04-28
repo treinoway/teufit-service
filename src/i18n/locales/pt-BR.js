@@ -256,6 +256,17 @@ export default {
     'diet.forbiddenNotYourProtocol': 'Este protocolo não pertence a você.',
     'diet.mealNotFound': 'Refeição não encontrada.',
     'diet.foodItemNotFound': 'Item alimentar não encontrado.',
+
+    // Admin
+    'admin.grantNotAllowed': 'Sua conta não tem permissão para virar administrador.',
+
+    // Video library
+    'video.notFound': 'Vídeo não encontrado.',
+    'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',
+    'video.invalidCategory': 'Categoria inválida.',
+    'video.invalidBodySegment': 'Segmento corporal inválido.',
+    'video.titleRequired': 'O título do vídeo é obrigatório.',
+    'video.tagsExceeded': 'Quantidade máxima de tags excedida.',
   },
 
   validation: {

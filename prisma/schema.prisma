@@ -51,6 +51,7 @@ model User {
   nutritionistPatients   NutritionistPatient[]
   metabolicProfile       PatientMetabolicProfile?
   dietProtocolsAsPatient DietProtocol[]
+  videosCreated          Video[]
 
   @@map("users")
 }
@@ -97,9 +98,9 @@ model Trainer {
   // Service mode: online | in_person | hybrid
   serviceMode String? @map("service_mode") @db.Text
 
-  profileCompletedAt      DateTime? @map("profile_completed_at") @db.Timestamptz(6)
-  firstStudentLinkedAt    DateTime? @map("first_student_linked_at") @db.Timestamptz(6)
-  firstProtocolCreatedAt  DateTime? @map("first_protocol_created_at") @db.Timestamptz(6)
+  profileCompletedAt     DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  firstStudentLinkedAt   DateTime? @map("first_student_linked_at") @db.Timestamptz(6)
+  firstProtocolCreatedAt DateTime? @map("first_protocol_created_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -125,13 +126,13 @@ model Trainer {
 }
 
 model TrainerBranding {
-  id              String  @id @default(uuid()) @db.Uuid
-  trainerId       String  @unique @map("trainer_id") @db.Uuid
-  primaryColor    String  @map("primary_color") @db.Text
-  secondaryColor  String? @map("secondary_color") @db.Text
-  logoUrl         String? @map("logo_url") @db.Text
-  coverImageUrl   String? @map("cover_image_url") @db.Text
-  welcomeMessage  String? @map("welcome_message") @db.Text
+  id             String  @id @default(uuid()) @db.Uuid
+  trainerId      String  @unique @map("trainer_id") @db.Uuid
+  primaryColor   String  @map("primary_color") @db.Text
+  secondaryColor String? @map("secondary_color") @db.Text
+  logoUrl        String? @map("logo_url") @db.Text
+  coverImageUrl  String? @map("cover_image_url") @db.Text
+  welcomeMessage String? @map("welcome_message") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -237,7 +238,7 @@ model Nutritionist {
   profileCompletedAt   DateTime? @map("profile_completed_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt       @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -261,22 +262,22 @@ model UserWaitlist {
 }
 
 model TrainingProtocolTemplate {
-  id                   String   @id @default(uuid()) @db.Uuid
-  trainerId            String   @map("trainer_id") @db.Uuid
-  name                 String   @db.Text
-  description          String?  @db.Text
-  defaultDurationWeeks Int?     @map("default_duration_weeks")
-  genderOrdination     String?  @map("gender_ordination") @db.Text
-  trainingLevel        String?  @map("training_level") @db.Text
-  type                 String?  @db.Text
+  id                   String  @id @default(uuid()) @db.Uuid
+  trainerId            String  @map("trainer_id") @db.Uuid
+  name                 String  @db.Text
+  description          String? @db.Text
+  defaultDurationWeeks Int?    @map("default_duration_weeks")
+  genderOrdination     String? @map("gender_ordination") @db.Text
+  trainingLevel        String? @map("training_level") @db.Text
+  type                 String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer           Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  protocols         TrainingProtocol[]
-  trainings         ProtocolTemplateTraining[]
+  trainer   Trainer                    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  protocols TrainingProtocol[]
+  trainings ProtocolTemplateTraining[]
 
   @@map("training_protocol_templates")
 }
@@ -321,9 +322,9 @@ model TrainingTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer                           Trainer                              @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  trainer                           Trainer                            @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   trainings                         Training[]
-  protocolTemplateTrainings        ProtocolTemplateTraining[]
+  protocolTemplateTrainings         ProtocolTemplateTraining[]
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
   @@map("training_templates")
@@ -373,18 +374,18 @@ model ExerciseTemplate {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer   Trainer   @relation(fields: [trainerId], references: [id], onDelete: Restrict)
-  exercises Exercise[]
+  trainer                           Trainer                            @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  exercises                         Exercise[]
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
   @@map("exercise_templates")
 }
 
 model TrainingTemplateExerciseTemplate {
-  id                 String  @id @default(uuid()) @db.Uuid
-  trainingTemplateId String  @map("training_template_id") @db.Uuid
-  exerciseTemplateId String  @map("exercise_template_id") @db.Uuid
-  order              Int     @default(0)
+  id                 String @id @default(uuid()) @db.Uuid
+  trainingTemplateId String @map("training_template_id") @db.Uuid
+  exerciseTemplateId String @map("exercise_template_id") @db.Uuid
+  order              Int    @default(0)
 
   // Snapshot fields — copied from ExerciseTemplate at link time; independent after that
   name          String  @db.Text
@@ -584,9 +585,9 @@ model AnamnesisQuestion {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  section            AnamnesisSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  parentQuestion     AnamnesisQuestion?       @relation("AnamnesisQuestionChildren", fields: [parentQuestionId], references: [id], onDelete: SetNull)
-  dependentQuestions AnamnesisQuestion[]      @relation("AnamnesisQuestionChildren")
+  section            AnamnesisSection          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  parentQuestion     AnamnesisQuestion?        @relation("AnamnesisQuestionChildren", fields: [parentQuestionId], references: [id], onDelete: SetNull)
+  dependentQuestions AnamnesisQuestion[]       @relation("AnamnesisQuestionChildren")
   options            AnamnesisQuestionOption[]
   answers            AnamnesisAnswer[]
 
@@ -632,8 +633,8 @@ model AnamnesisResponse {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  anamnesis Anamnesis        @relation(fields: [anamnesisId], references: [id], onDelete: Restrict)
-  student   User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  anamnesis Anamnesis         @relation(fields: [anamnesisId], references: [id], onDelete: Restrict)
+  student   User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
   answers   AnamnesisAnswer[]
 
   @@unique([anamnesisId, studentId])
@@ -692,15 +693,15 @@ model GamificationConfig {
   trainerId String  @unique @map("trainer_id") @db.Uuid
   enabled   Boolean @default(true)
 
-  ptsWorkoutCompleted  Int? @map("pts_workout_completed")
-  ptsStreak7Days       Int? @map("pts_streak_7_days")
-  ptsStreak30Days      Int? @map("pts_streak_30_days")
-  ptsDailyCheckin      Int? @map("pts_daily_checkin")
-  ptsEvolutionRecord   Int? @map("pts_evolution_record")
-  ptsWorkoutFeedback   Int? @map("pts_workout_feedback")
+  ptsWorkoutCompleted Int? @map("pts_workout_completed")
+  ptsStreak7Days      Int? @map("pts_streak_7_days")
+  ptsStreak30Days     Int? @map("pts_streak_30_days")
+  ptsDailyCheckin     Int? @map("pts_daily_checkin")
+  ptsEvolutionRecord  Int? @map("pts_evolution_record")
+  ptsWorkoutFeedback  Int? @map("pts_workout_feedback")
 
-  dailyPointsCap       Int?    @map("daily_points_cap")
-  streakToleranceHours Int     @default(24) @map("streak_tolerance_hours")
+  dailyPointsCap       Int? @map("daily_points_cap")
+  streakToleranceHours Int  @default(24) @map("streak_tolerance_hours")
 
   anonymousRanking Boolean @default(false) @map("anonymous_ranking")
 
@@ -764,14 +765,14 @@ model Challenge {
   filterCriteria  Json?     @map("filter_criteria")
 
   // Per-challenge gamification config (snapshotted from trainer template at create-time)
-  ptsWorkoutCompleted  Int?     @map("pts_workout_completed")
-  ptsStreak7Days       Int?     @map("pts_streak_7_days")
-  ptsStreak30Days      Int?     @map("pts_streak_30_days")
-  ptsDailyCheckin      Int?     @map("pts_daily_checkin")
-  ptsEvolutionRecord   Int?     @map("pts_evolution_record")
-  ptsWorkoutFeedback   Int?     @map("pts_workout_feedback")
-  dailyPointsCap       Int?     @map("daily_points_cap")
-  anonymousRanking     Boolean  @default(false) @map("anonymous_ranking")
+  ptsWorkoutCompleted Int?    @map("pts_workout_completed")
+  ptsStreak7Days      Int?    @map("pts_streak_7_days")
+  ptsStreak30Days     Int?    @map("pts_streak_30_days")
+  ptsDailyCheckin     Int?    @map("pts_daily_checkin")
+  ptsEvolutionRecord  Int?    @map("pts_evolution_record")
+  ptsWorkoutFeedback  Int?    @map("pts_workout_feedback")
+  dailyPointsCap      Int?    @map("daily_points_cap")
+  anonymousRanking    Boolean @default(false) @map("anonymous_ranking")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -879,25 +880,25 @@ model Food {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  foodGroup              FoodGroup              @relation(fields: [foodGroupId], references: [id], onDelete: Restrict)
-  dietTemplateFoodItems  DietTemplateFoodItem[]
-  dietFoodItems          DietFoodItem[]
+  foodGroup             FoodGroup              @relation(fields: [foodGroupId], references: [id], onDelete: Restrict)
+  dietTemplateFoodItems DietTemplateFoodItem[]
+  dietFoodItems         DietFoodItem[]
 
   @@map("foods")
 }
 
 model PatientMetabolicProfile {
-  id             String   @id @default(uuid()) @db.Uuid
-  patientId      String   @unique @map("patient_id") @db.Uuid
-  nutritionistId String   @map("nutritionist_id") @db.Uuid
-  weightKg       Decimal? @map("weight_kg") @db.Decimal(6, 2)
-  heightCm       Decimal? @map("height_cm") @db.Decimal(6, 2)
-  leanBodyMassKg Decimal? @map("lean_body_mass_kg") @db.Decimal(6, 2)
-  tmbFormula     String?  @map("tmb_formula")
-  tmbKcal        Decimal? @map("tmb_kcal") @db.Decimal(8, 2)
-  activityLevel  String?  @map("activity_level")
-  palMultiplier  Decimal? @map("pal_multiplier") @db.Decimal(4, 3)
-  getKcal        Decimal? @map("get_kcal") @db.Decimal(8, 2)
+  id             String    @id @default(uuid()) @db.Uuid
+  patientId      String    @unique @map("patient_id") @db.Uuid
+  nutritionistId String    @map("nutritionist_id") @db.Uuid
+  weightKg       Decimal?  @map("weight_kg") @db.Decimal(6, 2)
+  heightCm       Decimal?  @map("height_cm") @db.Decimal(6, 2)
+  leanBodyMassKg Decimal?  @map("lean_body_mass_kg") @db.Decimal(6, 2)
+  tmbFormula     String?   @map("tmb_formula")
+  tmbKcal        Decimal?  @map("tmb_kcal") @db.Decimal(8, 2)
+  activityLevel  String?   @map("activity_level")
+  palMultiplier  Decimal?  @map("pal_multiplier") @db.Decimal(4, 3)
+  getKcal        Decimal?  @map("get_kcal") @db.Decimal(8, 2)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1010,7 +1011,7 @@ model DietMeal {
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  protocol  DietProtocol  @relation(fields: [dietProtocolId], references: [id], onDelete: Cascade)
+  protocol  DietProtocol   @relation(fields: [dietProtocolId], references: [id], onDelete: Cascade)
   foodItems DietFoodItem[]
 
   @@map("diet_meals")
@@ -1038,4 +1039,30 @@ model DietFoodItem {
   food Food?    @relation(fields: [foodId], references: [id], onDelete: SetNull)
 
   @@map("diet_food_items")
+}
+
+model Video {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String   @db.Text
+  description  String?  @db.Text
+  url          String   @db.Text
+  thumbnailUrl String?  @map("thumbnail_url") @db.Text
+  duration     Int?
+  category     String   @db.Text
+  bodySegment  String?  @map("body_segment") @db.Text
+  tags         String[] @default([])
+
+  createdById String @map("created_by_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([category])
+  @@index([bodySegment])
+  @@index([deletedAt])
+  @@index([tags], type: Gin)
+  @@map("videos")
 }

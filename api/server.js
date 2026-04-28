@@ -26,6 +26,8 @@ import { exerciseRoutes } from './routes/exercise-route.js';
 import { workoutSessionRoutes } from './routes/workout-session-route.js';
 import { anamnesisRoutes } from './routes/anamnesis-route.js';
 import { adminAnamnesisRoutes } from './routes/admin-anamnesis-route.js';
+import { adminVideoRoutes } from './routes/admin-video-route.js';
+import { videoRoutes } from './routes/video-route.js';
 import { importPrimeCoachingRoutes } from './routes/import-primecoaching-route.js';
 import { aiRoutes } from './routes/ai-route.js';
 import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
@@ -275,6 +277,8 @@ export async function buildServer(options = {}) {
     await fastify.register(workoutSessionRoutes);
     await fastify.register(anamnesisRoutes);
     await fastify.register(adminAnamnesisRoutes);
+    await fastify.register(adminVideoRoutes);
+    await fastify.register(videoRoutes);
     await fastify.register(importPrimeCoachingRoutes);
     await fastify.register(aiRoutes);
     await fastify.register(trainerBrandingRoutes);

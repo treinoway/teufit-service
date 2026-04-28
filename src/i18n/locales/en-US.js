@@ -252,6 +252,17 @@ export default {
     'diet.forbiddenNotYourProtocol': 'This protocol does not belong to you.',
     'diet.mealNotFound': 'Meal not found.',
     'diet.foodItemNotFound': 'Food item not found.',
+
+    // Admin
+    'admin.grantNotAllowed': 'Your account is not allowed to become an administrator.',
+
+    // Video library
+    'video.notFound': 'Video not found.',
+    'video.invalidUrl': 'Invalid URL. Please use a valid http(s) address.',
+    'video.invalidCategory': 'Invalid category.',
+    'video.invalidBodySegment': 'Invalid body segment.',
+    'video.titleRequired': 'Video title is required.',
+    'video.tagsExceeded': 'Maximum number of tags exceeded.',
   },
 
   validation: {
