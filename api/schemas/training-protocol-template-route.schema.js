@@ -12,7 +12,7 @@ const templateTrainingItemSchema = {
   required: ['trainingTemplateId'],
   properties: {
     trainingTemplateId: { type: 'string', format: 'uuid' },
-    weekDay: { type: 'string', enum: weekDayEnum },
+    weekDay: { type: ['string', 'null'], enum: [...weekDayEnum, null] },
     order: { type: 'integer', minimum: 0, default: 0 },
   },
   additionalProperties: false,

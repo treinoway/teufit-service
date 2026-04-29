@@ -207,6 +207,23 @@ describe('training-service', () => {
         }),
       );
     });
+
+    it('clears weekDay when null is passed', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining({ weekDay: 'monday' }));
+      const updated = makeTraining({ weekDay: null });
+      prisma.training.update.mockResolvedValue(updated);
+
+      const result = await updateTraining('u1', 'tr1', { weekDay: null });
+
+      expect(result).toEqual(updated);
+      expect(prisma.training.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'tr1' },
+          data: expect.objectContaining({ weekDay: null }),
+        }),
+      );
+    });
   });
 
   describe('importFromTemplate', () => {
