@@ -7,6 +7,9 @@ import {
   validateExerciseType,
   validateRepetitions,
   validateProtocolType,
+  validatePrescriptionMode,
+  resolvePrescriptionMode,
+  applyPrescriptionModeExclusivity,
 } from '../../src/helpers/training-validators.js';
 
 describe('training-validators', () => {
@@ -228,6 +231,124 @@ describe('training-validators', () => {
       expect(() => validateRepetitions({ min: 1, max: -1 })).toThrow(
         expect.objectContaining({ message: expect.stringContaining('repetitions.max') }),
       );
+    });
+  });
+
+  describe('validatePrescriptionMode', () => {
+    it('does not throw when mode is undefined', () => {
+      expect(() => validatePrescriptionMode(undefined)).not.toThrow();
+    });
+
+    it('does not throw when mode is null', () => {
+      expect(() => validatePrescriptionMode(null)).not.toThrow();
+    });
+
+    it('does not throw for valid mode "reps"', () => {
+      expect(() => validatePrescriptionMode('reps', { repetitions: { min: 8, max: 12 } })).not.toThrow();
+    });
+
+    it('does not throw for valid mode "duration" with a positive duration', () => {
+      expect(() => validatePrescriptionMode('duration', { duration: 30 })).not.toThrow();
+    });
+
+    it('throws VALIDATION_ERROR for an unrecognised mode string', () => {
+      expect(() => validatePrescriptionMode('amrap', {})).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('includes the invalid mode in the error message', () => {
+      expect(() => validatePrescriptionMode('amrap', {})).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('amrap') }),
+      );
+    });
+
+    it('throws VALIDATION_ERROR when mode is "duration" but duration is missing', () => {
+      expect(() => validatePrescriptionMode('duration', {})).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('throws VALIDATION_ERROR when mode is "duration" but duration is null', () => {
+      expect(() => validatePrescriptionMode('duration', { duration: null })).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('throws VALIDATION_ERROR when mode is "duration" but duration is zero', () => {
+      expect(() => validatePrescriptionMode('duration', { duration: 0 })).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('throws VALIDATION_ERROR when mode is "reps" but repetitions is absent', () => {
+      expect(() => validatePrescriptionMode('reps', {})).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('throws VALIDATION_ERROR when mode is "reps" but repetitions is null', () => {
+      expect(() => validatePrescriptionMode('reps', { repetitions: null })).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_ERROR', statusCode: 400 }),
+      );
+    });
+
+    it('error message mentions repetitions when mode is "reps" and repetitions is missing', () => {
+      expect(() => validatePrescriptionMode('reps', {})).toThrow(
+        expect.objectContaining({ message: expect.stringContaining('repetitions') }),
+      );
+    });
+  });
+
+  describe('resolvePrescriptionMode', () => {
+    it('returns mode as-is when mode is "reps"', () => {
+      expect(resolvePrescriptionMode('reps', {})).toBe('reps');
+    });
+
+    it('returns mode as-is when mode is "duration"', () => {
+      expect(resolvePrescriptionMode('duration', {})).toBe('duration');
+    });
+
+    it('infers "duration" when mode is null and exercise has duration but no repetitions', () => {
+      expect(resolvePrescriptionMode(null, { duration: 45, repetitions: null })).toBe('duration');
+    });
+
+    it('infers "duration" when mode is undefined and exercise has duration but no repetitions', () => {
+      expect(resolvePrescriptionMode(undefined, { duration: 30, repetitions: null })).toBe('duration');
+    });
+
+    it('infers "reps" when mode is null and exercise has repetitions', () => {
+      expect(resolvePrescriptionMode(null, { repetitions: { min: 8, max: 12 }, duration: null })).toBe('reps');
+    });
+
+    it('infers "reps" when mode is null and exercise has neither duration nor repetitions', () => {
+      expect(resolvePrescriptionMode(null, { duration: null, repetitions: null })).toBe('reps');
+    });
+
+    it('infers "reps" when mode is undefined and exercise has no duration', () => {
+      expect(resolvePrescriptionMode(undefined, { duration: null, repetitions: null })).toBe('reps');
+    });
+  });
+
+  describe('applyPrescriptionModeExclusivity', () => {
+    it('returns duration and nulls repetitions when mode is "duration"', () => {
+      const result = applyPrescriptionModeExclusivity('duration', { duration: 45, repetitions: { min: 8, max: 12 } });
+      expect(result).toEqual({ duration: 45, repetitions: null });
+    });
+
+    it('returns repetitions and nulls duration when mode is "reps"', () => {
+      const result = applyPrescriptionModeExclusivity('reps', { repetitions: { min: 8, max: 12 }, duration: 30 });
+      expect(result).toEqual({ repetitions: { min: 8, max: 12 }, duration: null });
+    });
+
+    it('returns duration as null when mode is "duration" but data has no duration', () => {
+      const result = applyPrescriptionModeExclusivity('duration', {});
+      expect(result).toEqual({ duration: null, repetitions: null });
+    });
+
+    it('returns repetitions as null when mode is "reps" but data has no repetitions', () => {
+      const result = applyPrescriptionModeExclusivity('reps', {});
+      expect(result).toEqual({ repetitions: null, duration: null });
     });
   });
 

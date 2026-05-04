@@ -64,7 +64,7 @@ describe('exercise-template-service', () => {
 
     it('creates template with valid repetitions object', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12 } };
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12 }, prescriptionMode: 'reps' };
       prisma.exerciseTemplate.create.mockResolvedValue(created);
 
       const result = await createExerciseTemplate('u1', { name: 'Squat', type: 'strength', repetitions: { min: 8, max: 12 } });
@@ -82,7 +82,7 @@ describe('exercise-template-service', () => {
 
     it('persists notes when provided on create', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', notes: 'Full range of motion' };
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', notes: 'Full range of motion', prescriptionMode: 'reps' };
       prisma.exerciseTemplate.create.mockResolvedValue(created);
 
       const result = await createExerciseTemplate('u1', {
@@ -111,7 +111,7 @@ describe('exercise-template-service', () => {
 
     it('persists restInterval when provided on create', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', restInterval: 90 };
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', restInterval: 90, prescriptionMode: 'reps' };
       prisma.exerciseTemplate.create.mockResolvedValue(created);
 
       const result = await createExerciseTemplate('u1', {
@@ -140,7 +140,7 @@ describe('exercise-template-service', () => {
 
     it('creates template with no repetitions (repetitions stored as null)', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: null };
+      const created = { id: 'et1', trainerId: 't1', name: 'Squat', type: 'strength', repetitions: null, prescriptionMode: 'reps' };
       prisma.exerciseTemplate.create.mockResolvedValue(created);
 
       const result = await createExerciseTemplate('u1', { name: 'Squat', type: 'strength' });
@@ -148,6 +148,33 @@ describe('exercise-template-service', () => {
       expect(result).toEqual(created);
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ trainerId: 't1', name: 'Squat', type: 'strength' }),
+      });
+    });
+
+    it('persists "duration" mode and nulls repetitions when prescriptionMode is "duration"', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.create.mockResolvedValue({ id: 'et1', prescriptionMode: 'duration' });
+
+      await createExerciseTemplate('u1', { name: 'Plank', type: 'strength', prescriptionMode: 'duration', duration: 30 });
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ prescriptionMode: 'duration', duration: 30, repetitions: null }),
+      });
+    });
+
+    it('persists "reps" mode and nulls duration when prescriptionMode is "reps"', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.create.mockResolvedValue({ id: 'et1', prescriptionMode: 'reps' });
+
+      await createExerciseTemplate('u1', {
+        name: 'Squat',
+        type: 'strength',
+        prescriptionMode: 'reps',
+        repetitions: { min: 10, max: 15 },
+      });
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ prescriptionMode: 'reps', repetitions: { min: 10, max: 15 }, duration: null }),
       });
     });
   });
@@ -179,7 +206,7 @@ describe('exercise-template-service', () => {
     });
 
     it('returns template when owner', async () => {
-      const template = { id: 'et1', trainerId: 't1', name: 'Squat', isPublic: false, deletedAt: null };
+      const template = { id: 'et1', trainerId: 't1', name: 'Squat', isPublic: false, deletedAt: null, prescriptionMode: 'reps' };
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exerciseTemplate.findUnique.mockResolvedValue(template);
 
@@ -213,7 +240,7 @@ describe('exercise-template-service', () => {
     it('updates notes when notes is provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
-      const updated = { id: 'et1', notes: 'Keep core braced' };
+      const updated = { id: 'et1', notes: 'Keep core braced', prescriptionMode: 'reps' };
       prisma.exerciseTemplate.update.mockResolvedValue(updated);
 
       const result = await updateExerciseTemplate('u1', 'et1', { notes: 'Keep core braced' });
@@ -253,7 +280,7 @@ describe('exercise-template-service', () => {
     it('updates restInterval when provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
-      const updated = { id: 'et1', restInterval: 120 };
+      const updated = { id: 'et1', restInterval: 120, prescriptionMode: 'reps' };
       prisma.exerciseTemplate.update.mockResolvedValue(updated);
 
       const result = await updateExerciseTemplate('u1', 'et1', { restInterval: 120 });
@@ -288,6 +315,32 @@ describe('exercise-template-service', () => {
 
       const callData = prisma.exerciseTemplate.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('restInterval');
+    });
+
+    it('sets "duration" mode and nulls repetitions when prescriptionMode is "duration"', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
+      prisma.exerciseTemplate.update.mockResolvedValue({ id: 'et1', prescriptionMode: 'duration' });
+
+      await updateExerciseTemplate('u1', 'et1', { prescriptionMode: 'duration', duration: 45 });
+
+      expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
+        where: { id: 'et1' },
+        data: expect.objectContaining({ prescriptionMode: 'duration', duration: 45, repetitions: null }),
+      });
+    });
+
+    it('sets "reps" mode and nulls duration when prescriptionMode is "reps"', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
+      prisma.exerciseTemplate.update.mockResolvedValue({ id: 'et1', prescriptionMode: 'reps' });
+
+      await updateExerciseTemplate('u1', 'et1', { prescriptionMode: 'reps', repetitions: { min: 8, max: 12 } });
+
+      expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
+        where: { id: 'et1' },
+        data: expect.objectContaining({ prescriptionMode: 'reps', repetitions: { min: 8, max: 12 }, duration: null }),
+      });
     });
 
     it('throws INVALID_REPETITIONS when repetitions.min is not a positive integer', async () => {

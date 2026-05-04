@@ -174,6 +174,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/forgot-password',
     {
+      config: { rateLimit: config.rateLimit.auth.forgotPassword },
       schema: forgotPasswordSchema,
     },
     async (request, reply) => {
@@ -181,7 +182,7 @@ export async function authRoutes(fastify) {
         const body = request.body ?? {};
         const email = body.email;
 
-        const { resetToken } = await requestPasswordReset({ email });
+        const { resetToken, deliveryEmail } = await requestPasswordReset({ email });
 
         const payload = {
           message: 'If an account exists for this email, a reset link has been sent.',
@@ -192,25 +193,34 @@ export async function authRoutes(fastify) {
           payload.resetToken = resetToken;
         }
 
-        return emailHandler.sendResetPasswordEmail({ to: email, passwordToken: resetToken })
-          .then((test) =>{
-            console.log(test);
-            reply.send(payload);
-          })
-          .catch((emailErr) => {
-            console.log(emailErr);
-            fastify.log.error(`Failed to send password reset email to ${email}: ${emailErr.message}`);
-            return reply.send(payload);
-          }).finally((info, error) => {
-            console.log(error);
-          })
+        if (!resetToken || !deliveryEmail) {
+          return reply.send(payload);
+        }
+
+        try {
+          await emailHandler.sendResetPasswordEmail({ to: deliveryEmail, passwordToken: resetToken });
+        } catch (emailErr) {
+          fastify.log.error(`Failed to send password reset email to ${deliveryEmail}: ${emailErr.message}`);
+        }
+
+        return reply.send(payload);
       } catch (error) {
         if (error?.code === 'EMAIL_REQUIRED') {
-          return reply.status(400).send({ error: error.code, message: error.message });
+          return reply.status(400).send({
+            error: error.code,
+            messageCode: 'auth.email.required',
+            message: error.message,
+            details: {},
+          });
         }
 
         fastify.log.error(error);
-        return reply.status(500).send({ error: 'FORGOT_PASSWORD_FAILED', message: 'Failed to process password reset request' });
+        return reply.status(500).send({
+          error: 'FORGOT_PASSWORD_FAILED',
+          messageCode: 'auth.forgotPassword.failed',
+          message: 'Failed to process password reset request',
+          details: {},
+        });
       }
     },
   );
@@ -219,6 +229,7 @@ export async function authRoutes(fastify) {
   fastify.post(
     '/auth/reset-password',
     {
+      config: { rateLimit: config.rateLimit.auth.resetPassword },
       schema: resetPasswordSchema,
     },
     async (request, reply) => {
@@ -240,17 +251,37 @@ export async function authRoutes(fastify) {
         });
       } catch (error) {
         if (error?.code === 'RESET_TOKEN_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_RESET_TOKEN' || error?.code === 'RESET_TOKEN_EXPIRED' || error?.code === 'PASSWORD_MISMATCH') {
-          return reply.status(400).send({ error: error.code, message: error.message });
+          return reply.status(400).send({
+            error: error.code,
+            messageCode: `legacy.${error.code}`,
+            message: error.message,
+            details: {},
+          });
         }
         if (error?.code === 'USER_DELETED') {
-          return reply.status(403).send({ error: 'Account deactivated' });
+          return reply.status(403).send({
+            error: 'USER_DELETED',
+            messageCode: 'auth.user.deleted',
+            message: 'Account deactivated',
+            details: {},
+          });
         }
         if (error?.code === 'JWT_NOT_CONFIGURED') {
-          return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
+          return reply.status(500).send({
+            error: 'JWT_NOT_CONFIGURED',
+            messageCode: 'auth.jwt.notConfigured',
+            message: error.message,
+            details: {},
+          });
         }
 
         fastify.log.error(error);
-        return reply.status(500).send({ error: 'RESET_PASSWORD_FAILED', message: 'Failed to reset password' });
+        return reply.status(500).send({
+          error: 'RESET_PASSWORD_FAILED',
+          messageCode: 'auth.resetPassword.failed',
+          message: 'Failed to reset password',
+          details: {},
+        });
       }
     },
   );

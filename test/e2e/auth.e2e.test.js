@@ -269,6 +269,124 @@ e2eDescribe('e2e: auth flows', () => {
     });
   });
 
+  describe('forgot password', () => {
+    it('returns generic message and creates a token when user exists', async () => {
+      const email = `forgot-existing-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupResponse.statusCode).toBe(201);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty('message');
+      // Non-prod test env exposes resetToken for manual flows.
+      expect(typeof body.resetToken).toBe('string');
+      expect(body.resetToken.length).toBe(6);
+
+      const tokens = await prisma.passwordResetToken.findMany({
+        where: { user: { email } },
+      });
+      expect(tokens.length).toBe(1);
+      expect(tokens[0].used).toBe(false);
+    });
+
+    it('returns generic message and does not create a token when user does not exist', async () => {
+      const email = `forgot-missing-${Date.now()}@example.com`;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveProperty('message');
+      expect(body.resetToken).toBeUndefined();
+
+      const tokens = await prisma.passwordResetToken.findMany({});
+      expect(tokens.length).toBe(0);
+    });
+
+    it('matches case-insensitively for users registered via OAuth-style mixed case', async () => {
+      const email = `forgot-case-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      // Simulate a legacy user with mixed-case email (e.g. from OAuth).
+      const created = await prisma.user.create({
+        data: {
+          email: email.toUpperCase(),
+          passwordHash: null,
+          roles: [],
+          status: 'pending',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email: email.toLowerCase() },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(typeof body.resetToken).toBe('string');
+
+      const tokens = await prisma.passwordResetToken.findMany({
+        where: { userId: created.id },
+      });
+      expect(tokens.length).toBe(1);
+    });
+
+    it('invalidates previously issued unused reset tokens when a new one is requested', async () => {
+      const email = `forgot-rotate-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupResponse.statusCode).toBe(201);
+
+      // First request
+      const firstResp = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email },
+      });
+      expect(firstResp.statusCode).toBe(200);
+
+      // Second request invalidates the first
+      const secondResp = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email },
+      });
+      expect(secondResp.statusCode).toBe(200);
+
+      const tokens = await prisma.passwordResetToken.findMany({
+        where: { user: { email } },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(tokens.length).toBe(2);
+      // Older token marked used; newest still active
+      expect(tokens[0].used).toBe(true);
+      expect(tokens[1].used).toBe(false);
+    });
+  });
+
   describe('change password', () => {
     it('successfully changes password with valid credentials', async () => {
       const email = `change-password-${Date.now()}@example.com`;

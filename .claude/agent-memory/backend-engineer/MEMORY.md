@@ -124,6 +124,22 @@ When validation (e.g., `validateQuestionType` inside `buildQuestionsCreateData`)
 ## S3 image upload — do NOT wrap in try/catch
 Do not wrap `s3BucketHandler.uploadFile` + `prisma.model.update` in a try/catch that catches generic errors and re-throws as a new AppError. The global error handler deals with unexpected errors. Only catch to handle specific expected cases. Fire-and-forget `deleteFile` should always be outside any try/catch.
 
+## Legacy route error handler gap (2026-04-29)
+Routes in `api/routes/` use try/catch with explicit `error.code` checks. `AppError` errors with codes NOT in the list fall to the 500 catch-all. When adding new service validation errors (e.g. `VALIDATION_ERROR`), add handling to the route:
+```js
+if (error.code === 'VALIDATION_ERROR') {
+  return reply.status(400).send({
+    error: error.error ?? error.code,
+    messageCode: error.messageCode ?? 'validation.failed',
+    message: error.message,
+  });
+}
+```
+This does NOT apply to routes already using throw-through (rare) or `setErrorHandler`.
+
+## importFromTemplate prescriptionMode pattern (2026-04-29)
+Both `resolvePrescriptionMode` AND `applyPrescriptionModeExclusivity` must be called when copying junction rows to Exercise in `training-service.importFromTemplate`. Without exclusivity, legacy rows with both fields set create dirty Exercise snapshots.
+
 ## Pre-existing failing E2E tests (updated 2026-04-23)
 - `test/e2e/admin-anamnesis.e2e.test.js` — 1 test failing
 - `test/e2e/import-primecoaching.e2e.test.js` — 3 tests failing
@@ -216,6 +232,25 @@ New service at `src/services/workout-of-the-day-service.js`. Key helpers:
 - `addDaysInTimeZone(date, days)` in `date-helpers.js` — adds ms (no tz arg needed, weekday evaluated via Intl).
 - `resolveTimeZone(header)` in `src/helpers/timezone.js` — validates via Intl try/catch, fallback `America/Sao_Paulo`, never 400.
 - `trainingResponseSchema`, `importedExerciseResponseSchema`, `trainingWithExercisesResponseSchema` are now **exported** from `api/schemas/training-route.schema.js`.
+
+## prescriptionMode mutual exclusivity pattern (2026-04-29)
+When adding a mode-driven mutual exclusivity field (e.g. `prescriptionMode`):
+1. Add `validatePrescriptionMode(mode, data)` in validators — use `new AppError(...)` directly (NOT `buildError`) so error/messageCode are correct.
+2. Add `resolvePrescriptionMode(mode, exercise)` — infers mode from existing data when DB field is null (mirrors backfill SQL).
+3. Add `applyPrescriptionModeExclusivity(mode, data)` — returns only `{ repetitions, duration }` with the opposing field nulled.
+4. In create paths: `const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS` before `applyPrescriptionModeExclusivity`.
+5. In update paths: if `prescriptionMode` is provided → apply exclusivity and set all three fields; otherwise handle `repetitions`/`duration` independently.
+6. Normalize on all read returns: `{ ...record, prescriptionMode: resolvePrescriptionMode(record.prescriptionMode, record) }`.
+7. Template-copy flows inherit via `resolvePrescriptionMode(template.prescriptionMode, template)` — NOT raw `template.prescriptionMode`.
+8. Existing unit tests that use `expect(result).toEqual(mock)` break when normalization adds a field — fix by adding the field to the mock return value.
+
+## Timezone in dashboard service (2026-05-03)
+- `resolveTimeZone(request.headers['app-timezone'])` → pass as `{ ...request.query, timeZone }` to service.
+- Service signature: `{ dateFrom, dateTo, timeZone = 'America/Sao_Paulo' }`.
+- In `$queryRaw` template literals: `DATE(col AT TIME ZONE ${timeZone})` — Prisma parameterizes safely; `resolveTimeZone` already validated the value.
+- `GROUP BY` in daily-activity query also uses `${timeZone}` (both SELECT and GROUP BY must match).
+- Unit tests mock `$queryRaw` and cannot assert on template-literal params. Test that: (a) option accepted without throw, (b) dates returned by mock are passed through as-is (no JS re-bucketing). E2E layer is where actual bucketing correctness must be verified.
+- Dashboard indexes added: `@@index([assigneeId, status, startDate(sort: Desc)])` + `@@index([trainerId])` on `TrainingProtocol`; `@@index([trainingId])` on `Exercise`. Migration: `20260503231518_add_protocol_and_exercise_indexes`.
 
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`

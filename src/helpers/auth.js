@@ -97,6 +97,10 @@ export async function findOrCreateUserFromOAuth(providerData) {
 
   const expiresAtDate = toSafeExpiresDate(expiresAt);
 
+  // Normalize email at write-time so subsequent lookups (login, password reset)
+  // can match without case-sensitivity surprises.
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : email;
+
   // Find account by provider and providerId
   let account = await prisma.account.findUnique({
     where: {
@@ -132,9 +136,9 @@ export async function findOrCreateUserFromOAuth(providerData) {
       },
     });
   } else {
-    // Check if user exists by email
-    user = await prisma.user.findUnique({
-      where: { email },
+    // Case-insensitive lookup: legacy users may have mixed-case email saved.
+    user = await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
     });
 
     if (user?.deletedAt) {
@@ -152,8 +156,8 @@ export async function findOrCreateUserFromOAuth(providerData) {
 
       user = await prisma.user.create({
         data: {
-          email,
-          username: rawName || email.split('@')[0],
+          email: normalizedEmail,
+          username: rawName || normalizedEmail.split('@')[0],
           firstName: inferredFirst,
           lastName: inferredLast,
           avatarUrl: avatar,

@@ -21,6 +21,7 @@ export const AI_TOOLS = Object.freeze({
   UPDATE_TRAINING: 'update_training',
   UPDATE_EXERCISE: 'update_exercise',
   ADD_EXERCISES_TO_TRAINING: 'add_exercises_to_training',
+  GET_STUDENT_PERFORMANCE: 'get_student_performance',
 })
 
 export const AI_ERRORS = Object.freeze({

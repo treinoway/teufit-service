@@ -6,6 +6,8 @@ export default {
           waitlist: { max: 1000, timeWindow: '1 minute' },
           login: { max: 1000, timeWindow: '1 minute' },
           changePassword: { max: 1000, timeWindow: '1 minute' },
+          forgotPassword: { max: 1000, timeWindow: '1 minute' },
+          resetPassword: { max: 1000, timeWindow: '1 minute' },
         },
         postalCode: {
           max: 1000,

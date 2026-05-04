@@ -1,133 +1,66 @@
-# Frontend Brief — Anamnesis: Conditional Questions
+# Frontend Brief — Dashboard Timezone Support
 
-**Backend branch**: staging · **Generated**: 2026-04-23
+**Backend branch**: staging · **Generated**: 2026-05-03
 
 ## Elevator pitch
-Trainers can now mark any question as "only show if [parent question] = [value]". Students filling in an anamnesis see those questions appear and disappear live as they answer earlier questions in the same section.
+The student-dashboard summary and daily-activity endpoints now bucket session dates in the student's local timezone rather than UTC, so a session logged at 22h on Wednesday in Brazil is counted on Wednesday — not Thursday — fixing incorrect streak counts and calendar grids for Brazilian users.
 
 ## User story
-As a trainer, I want to link a question to a parent question's answer so that my students only see follow-up questions that are relevant to their situation.
+As a trainer, I want the student's daily activity calendar and streak count to reflect the student's actual local calendar days, so I can trust that the streak and heatmap accurately represent the student's consistency.
 
 ## User flows
-
-1. **Entry point**: Trainer → Anamnesis editor → Canvas view of a section's questions (CanvasQuestionCard).
-2. **Happy path — linking a condition**:
-   1. Trainer expands a question card and scrolls to the new "Condição de exibição" section.
-   2. Trainer opens the "Mostrar somente se..." dropdown. It lists all eligible questions in the **same section** (dichotomous, single choice, or multiple choice) that do not already have a parent.
-   3. Trainer selects a parent question. A trigger-value picker appears below:
-      - **Dichotomous parent** → two radio options: "Sim" / "Não".
-      - **Single choice parent** → radio list of the parent's options.
-      - **Multiple choice parent** → checkbox list of the parent's options with hint "mostrar se qualquer uma estiver marcada".
-   4. Trainer picks a trigger value and saves the question.
-3. **Removing a condition**: Trainer clicks "Remover condição" in the same UI section → `parentQuestionId` and `condition` are sent as `null` on the next save.
-4. **Outline panel nesting**: conditional children are visually indented under their parent with a small "↳ condicional" badge but keep their existing `order` number.
-5. **Student form (MyAnamneses)**:
-   1. Student opens an anamnesis and sees all top-level questions.
-   2. As the student answers a parent question, child questions appear or disappear immediately.
-   3. When a child is hidden (parent answer doesn't match), any value the student had previously entered in that child is cleared from form state.
-   4. The required-field gate runs only on visible questions.
-6. **Preview modal**: trainer sees the same show/hide behavior when previewing the anamnesis. A static hint label above each conditional question reads: "Condicional: mostrado se «[parent question text]» = «[value]»".
+1. **Entry point**: Trainer opens a student's dashboard (Student Profile → Activity / Dashboard tab)
+2. **Happy path**:
+   - App sends `app-timezone` header on the `/dashboard/summary` and `/dashboard/daily-activity` requests (e.g. `America/Sao_Paulo`)
+   - Daily activity grid shows the correct local day for each session
+   - Max streak count is computed from local-calendar days, not UTC days
+3. **Branches**: If the header is omitted or invalid, the server silently falls back to `America/Sao_Paulo` — no error state is produced
 
 ## UI states to cover
-
-- **Dropdown empty state**: if there are no eligible parent questions in the section, show a disabled dropdown or a hint "Nenhuma pergunta elegível nesta seção."
-- **Child hidden / shown**: smooth toggle (e.g., fade or slide) — avoid jarring jump.
-- **Stale value cleared**: when a child becomes hidden because the user changed the parent answer, the child's input is reset to empty so the stale value isn't submitted.
-- **Server-side errors**: if the API returns one of the error messageCodes listed below, surface it as a toast.
-- **Type selector disabled hint**: if a question has conditional children, the type selector should show a tooltip: "Não é possível alterar o tipo enquanto houver perguntas condicionais vinculadas." The server enforces this; the UI is a courtesy hint only.
-- **Parent deleted**: when a parent question is deleted server-side, its former children become unconditional (always visible) — no special UI handling needed beyond a normal reload.
+- **No new visual states required** — the fix is transparent to rendered UI
+- **Audit needed**: verify `app-timezone` is already included in dashboard requests; if not, add it using the device locale or user profile timezone
+- **Fallback behavior**: missing or garbage `app-timezone` header → server uses `America/Sao_Paulo`, no error
 
 ## API contract
 
-### POST /anamneses/:anamnesisId/sections/:sectionId/questions
-- **Auth**: Bearer token, role TRAINER
-- **Request** (new optional fields):
-  ```json
-  {
-    "text": "Há quanto tempo você treina?",
-    "type": "numeric",
-    "required": true,
-    "parentQuestionId": "<uuid of parent>",
-    "condition": { "operator": "equals", "value": "yes" }
-  }
-  ```
-- **Success** (201): returns full question object (see response shape below)
-- **Errors**:
-  - `400` · `PARENT_NOT_ELIGIBLE` · `anamnesis.parentNotEligible` · parent type is free_text / numeric / matrix
-  - `400` · `PARENT_MUST_BE_SAME_SECTION` · `anamnesis.parentMustBeSameSection` · parent is in a different section
-  - `400` · `INVALID_CONDITION` · `anamnesis.invalidCondition` · condition shape doesn't match parent type
-  - `400` · `CONDITIONAL_DEPTH_EXCEEDED` · `anamnesis.conditionalDepthExceeded` · parent itself already has a parent
+### GET /trainer/students/:studentId/dashboard/summary
+- **Auth**: Bearer token, TRAINER role, student linked to trainer
+- **New header**:
+  - `app-timezone` (optional): IANA timezone string (e.g. `America/Sao_Paulo`). Defaults to `America/Sao_Paulo`.
+- **Timezone effect**: `maxStreakDays` is computed from consecutive local-calendar dates, not UTC dates
+- **Success** (200): unchanged shape — no new fields
+- **Errors** (unchanged):
+  - `400` · `INVALID_DATE_RANGE` · `dashboard.invalidDateRange`
+  - `400` · `WINDOW_TOO_LARGE` · `dashboard.windowTooLarge`
+  - `403` · wrong role or student not linked
+  - `404` · student not found
 
-### PATCH /anamneses/:anamnesisId/sections/:sectionId/questions/:questionId
-- **Auth**: Bearer token, role TRAINER
-- **Request** (new optional fields — same as above, also nullable to clear):
-  ```json
-  {
-    "parentQuestionId": null,
-    "condition": null
-  }
-  ```
-- **Success** (200): updated question
-- **Errors** (in addition to standard 400/404):
-  - `409` · `PARENT_TYPE_LOCKED` · `anamnesis.parentTypeLocked` · trainer tries to change a parent question's type while it has children
-  - `409` · `CONDITION_REFERENCES_REMOVED_OPTION` · `anamnesis.conditionReferencesRemovedOption` · trainer removes an option that a child condition references
+### GET /trainer/students/:studentId/dashboard/daily-activity
+- **Auth**: Bearer token, TRAINER role, student linked to trainer
+- **New header**:
+  - `app-timezone` (optional): IANA timezone string. Defaults to `America/Sao_Paulo`.
+- **Timezone effect**: each row's `date` (YYYY-MM-DD) is now the local-calendar date in the provided timezone, not UTC date
+- **Success** (200): unchanged shape — no new fields
+- **Errors**: same as summary
 
-### Question response shape (both create and update)
-```json
-{
-  "id": "<uuid>",
-  "sectionId": "<uuid>",
-  "text": "...",
-  "type": "numeric",
-  "required": true,
-  "order": 2,
-  "config": null,
-  "parentQuestionId": "<uuid or null>",
-  "condition": { "operator": "equals", "value": "yes" },
-  "options": [],
-  "createdAt": "...",
-  "updatedAt": "..."
-}
-```
-
-### Condition shapes by parent type
-| Parent type | Condition object |
-|---|---|
-| `dichotomous` | `{ "operator": "equals", "value": "yes" \| "no" }` |
-| `single_choice` | `{ "operator": "equals", "optionId": "<uuid>" }` |
-| `multiple_choice` | `{ "operator": "includesAny", "optionIds": ["<uuid>", ...] }` |
-
-### POST /my/anamneses/:anamnesisId/response (submit)
-Unchanged in shape. The backend silently drops answers for hidden children; the frontend must also not submit them (for correctness and UX consistency, clear stale values in form state before submit).
+### Other dashboard endpoints (unchanged)
+`/dashboard/recent-sessions`, `/dashboard/exercise-progression`, `/dashboard/exercise-progression/:exerciseId` — no `app-timezone` support, return raw timestamps.
 
 ## i18n keys required
-
-- `anamnesis.invalidCondition` → suggested copy: "Condição inválida para o tipo da pergunta pai."
-- `anamnesis.parentNotEligible` → suggested copy: "Apenas perguntas Sim/Não, Escolha Única ou Múltipla Escolha podem ser perguntas pai."
-- `anamnesis.parentMustBeSameSection` → suggested copy: "A pergunta pai deve estar na mesma seção."
-- `anamnesis.parentTypeLocked` → suggested copy: "O tipo da pergunta não pode ser alterado porque existem perguntas condicionais vinculadas."
-- `anamnesis.conditionReferencesRemovedOption` → suggested copy: "Não é possível remover uma opção referenciada por uma pergunta condicional."
-- `anamnesis.conditionalDepthExceeded` → suggested copy: "Perguntas condicionais não podem ser encadeadas (apenas um nível)."
+No new message codes introduced in this change.
 
 ## Acceptance criteria
+- [ ] `app-timezone` header is sent on every `/dashboard/summary` and `/dashboard/daily-activity` request
+- [ ] A session logged at 22:30 local time on day D appears under date D in the daily activity grid, not D+1
+- [ ] The max streak counter correctly counts consecutive local-calendar days
+- [ ] Omitting `app-timezone` produces the same result as sending `America/Sao_Paulo`
+- [ ] Sending an invalid timezone string falls back gracefully — no 400 error
 
-- [ ] Trainer can open an eligible parent dropdown in the question card editor and select a parent question from the same section.
-- [ ] Trigger-value picker renders the correct control for each parent type (radio for dichotomous/single, checkboxes for multiple).
-- [ ] "Remover condição" clears parent + condition and saves cleanly.
-- [ ] Outline panel renders conditional children indented under their parent with a "↳ condicional" badge.
-- [ ] Type selector shows a disabled hint tooltip when the question has conditional children.
-- [ ] Student form hides conditional children whose parent answer doesn't match.
-- [ ] When a parent answer changes and a child becomes hidden, the child's form value is cleared.
-- [ ] Client-side required validation skips hidden questions.
-- [ ] Preview modal applies the same visibility logic and shows the condition hint label.
-- [ ] Fork/copy: the forked anamnesis has the same conditional structure and conditions still fire correctly.
-- [ ] Parent deletion: formerly conditional children become unconditional (always visible) after reload.
-- [ ] All six new error messageCodes surface as user-facing toasts in the trainer editor.
+## Out of scope
+- Trainer-side timezone preference setting
+- Displaying the student's timezone label in the UI
+- Any timezone handling for recent-sessions or exercise-progression views (those use raw timestamps)
 
 ## Open design questions
-
-- What animation/transition style for show/hide? Fade, height slide, or instant?
-- Where in the question card should "Condição de exibição" live — at the bottom of the card, inside a collapsible accordion, or in a side-panel/drawer?
-- Should the "↳ condicional" badge in the outline panel be a full indent (nested list) or a flat list with a visual indicator?
-- What copy should appear on the "Mostrar somente se…" dropdown label?
-- Should the preview modal condition hint be inside the question card or above it?
+- Should `app-timezone` be derived from the device locale or a user profile setting? Product decision needed.
+- If trainer and student are in different timezones, whose timezone should the heatmap use? (Backend currently uses whatever the client sends.)

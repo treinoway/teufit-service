@@ -203,7 +203,9 @@ export async function signupWithEmailPassword({ email, password, roles }) {
     throw err;
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+  });
   if (existing && !existing.deletedAt) {
     const err = new Error('Email already in use');
     err.code = 'EMAIL_IN_USE';
@@ -271,7 +273,9 @@ export async function loginWithEmailPassword({ email, password }) {
     throw err;
   }
 
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+  });
   if (!user) {
     const err = new Error('Invalid credentials');
     err.code = 'INVALID_CREDENTIALS';
@@ -322,11 +326,13 @@ export async function requestPasswordReset({ email }) {
     throw err;
   }
 
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+  });
 
   // To avoid user enumeration, do not reveal whether the user exists.
   if (!user || user.deletedAt) {
-    return { resetToken: null };
+    return { resetToken: null, deliveryEmail: null };
   }
 
   // Generate a 6-digit numeric reset code
@@ -335,15 +341,23 @@ export async function requestPasswordReset({ email }) {
   // Token expires in 15 minutes
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-  await prisma.passwordResetToken.create({
-    data: {
-      tokenHash,
-      userId: user.id,
-      expiresAt,
-    },
-  });
+  // Invalidate any prior unused reset tokens for this user before issuing a new one.
+  // Prevents stacking active tokens — only the latest request is valid.
+  await prisma.$transaction([
+    prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, used: false },
+      data: { used: true },
+    }),
+    prisma.passwordResetToken.create({
+      data: {
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+      },
+    }),
+  ]);
 
-  return { resetToken: token };
+  return { resetToken: token, deliveryEmail: user.email };
 }
 
 /**

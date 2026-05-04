@@ -10,12 +10,36 @@ import { cleanDatabase } from '../helpers/db-cleanup.js'
 // anthropicCreate is a stable vi.fn() reference. The constructor mock is
 // re-applied in beforeEach because mockReset:true clears implementations.
 const anthropicCreate = vi.fn()
+const anthropicStream = vi.fn()
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn(),
 }))
 
 import Anthropic from '@anthropic-ai/sdk'
+
+/**
+ * Build a mock Anthropic stream object that yields text_delta events
+ * and resolves finalMessage() to a messages.create-compatible response.
+ */
+function makeAnthropicStreamMock({ textChunks = [], stopReason = 'end_turn', toolUseBlocks = [] } = {}) {
+  const finalContent = [
+    ...textChunks.map((t) => ({ type: 'text', text: t })),
+    ...toolUseBlocks,
+  ]
+  return {
+    [Symbol.asyncIterator]: async function* () {
+      for (const chunk of textChunks) {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: chunk } }
+      }
+    },
+    finalMessage: async () => ({
+      stop_reason: stopReason,
+      content: finalContent,
+      usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    }),
+  }
+}
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip
@@ -37,7 +61,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
     // Re-apply constructor mock after mockReset clears it.
     // Must use a regular function (not arrow) — arrow functions cannot be `new`-ed.
     Anthropic.mockImplementation(function () {
-      this.messages = { create: anthropicCreate }
+      this.messages = { create: anthropicCreate, stream: anthropicStream }
     })
   })
 
@@ -663,6 +687,236 @@ e2eDescribe('e2e: AI Assistant routes', () => {
         (m) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('success'),
       )
       expect(suspectUserMessages).toHaveLength(0)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // get_student_performance — tool execution with real DB
+  // ---------------------------------------------------------------------------
+  describe('get_student_performance tool execution', () => {
+    async function createLinkedStudentForTrainer(trainerToken) {
+      const email = `ai-student-${Date.now()}@test.com`
+      const signupRes = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: 'Test1234!' },
+      })
+      expect(signupRes.statusCode).toBe(201)
+      const { user: { id: studentId } } = signupRes.json()
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email },
+      })
+
+      return { studentId }
+    }
+
+    it('executes get_student_performance on first turn (read-only tool), makes second LLM call for analysis, returns actionsExecuted with success:true', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const { studentId } = await createLinkedStudentForTrainer(accessToken)
+
+      // First call: LLM returns tool_use for get_student_performance on first turn (read-only — bypasses confirmation gate).
+      // Second call: LLM returns the analysis text after receiving the tool_result.
+      anthropicCreate
+        .mockResolvedValueOnce({
+          stop_reason: 'tool_use',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tc-perf-1',
+              name: 'get_student_performance',
+              input: { studentId },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'O aluno tem boa adesão nos últimos 90 dias.' }],
+        })
+
+      const chatRes = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Como está o desempenho do aluno?' },
+      })
+
+      // Tool executed on first turn — actionsExecuted must include the tool
+      expect(chatRes.statusCode).toBe(200)
+      const chatBody = chatRes.json()
+      expect(chatBody.actionsExecuted).toHaveLength(1)
+      expect(chatBody.actionsExecuted[0]).toMatchObject({
+        tool: 'get_student_performance',
+        success: true,
+      })
+      // actionsExecuted.data should contain the snapshot with studentId
+      expect(chatBody.actionsExecuted[0].data).toMatchObject({ studentId })
+
+      // The final message comes from the second LLM call (analysis), not a local fallback
+      expect(chatBody.message).toBe('O aluno tem boa adesão nos últimos 90 dias.')
+
+      // Anthropic was called twice: once for tool_use, once for analysis
+      expect(anthropicCreate).toHaveBeenCalledTimes(2)
+
+      // The conversation should be findable by GET
+      const convRes = await app.inject({
+        method: 'GET',
+        url: `/trainer/ai/conversations/${chatBody.conversationId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      })
+      expect(convRes.statusCode).toBe(200)
+      const { messages } = convRes.json()
+
+      // Conversation must have the user message, the tool_result, and two assistant messages
+      // (first with tool_use rawContent, second with the analysis text)
+      expect(messages.length).toBeGreaterThanOrEqual(2)
+      const userMsg = messages.find((m) => m.role === 'user')
+      const assistantMsgs = messages.filter((m) => m.role === 'assistant')
+      expect(userMsg).toBeDefined()
+      expect(assistantMsgs.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('returns success: false in tool_result when student is not linked to trainer', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const UNLINKED_UUID = '00000000-0000-0000-0000-000000000077'
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tc-perf-unlinked',
+            name: 'get_student_performance',
+            input: { studentId: UNLINKED_UUID },
+          },
+        ],
+      })
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Aluno não encontrado.' }],
+      })
+
+      const chatRes = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Dados de um aluno' },
+      })
+
+      expect(chatRes.statusCode).toBe(200)
+      const body = chatRes.json()
+      expect(body.actionsExecuted).toHaveLength(1)
+      expect(body.actionsExecuted[0].success).toBe(false)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // POST /trainer/ai/chat/stream — get_student_performance SSE streaming
+  // ---------------------------------------------------------------------------
+  describe('POST /trainer/ai/chat/stream — get_student_performance second LLM stream', () => {
+    async function createLinkedStudentForTrainer(trainerToken) {
+      const email = `ai-stream-student-${Date.now()}@test.com`
+      const signupRes = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: 'Test1234!' },
+      })
+      expect(signupRes.statusCode).toBe(201)
+      const { user: { id: studentId } } = signupRes.json()
+
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email },
+      })
+
+      return { studentId }
+    }
+
+    /**
+     * Parse SSE body text into an array of { event, data } objects.
+     */
+    function parseSseBody(body) {
+      const events = []
+      const blocks = body.split('\n\n').filter((b) => b.trim())
+      for (const block of blocks) {
+        const lines = block.split('\n')
+        let event = null
+        let data = null
+        for (const line of lines) {
+          if (line.startsWith('event: ')) event = line.slice('event: '.length).trim()
+          if (line.startsWith('data: ')) {
+            try { data = JSON.parse(line.slice('data: '.length).trim()) } catch { data = null }
+          }
+        }
+        if (event && data !== null) events.push({ event, data })
+      }
+      return events
+    }
+
+    it('yields text_delta SSE events from the second LLM call and a done event with analysis text', async () => {
+      const { accessToken } = await createTrainerWithToken()
+      const { studentId } = await createLinkedStudentForTrainer(accessToken)
+
+      // First stream call: tool_use for get_student_performance
+      anthropicStream.mockReturnValueOnce(
+        makeAnthropicStreamMock({
+          textChunks: [],
+          stopReason: 'tool_use',
+          toolUseBlocks: [
+            {
+              type: 'tool_use',
+              id: 'tc-stream-perf-1',
+              name: 'get_student_performance',
+              input: { studentId },
+            },
+          ],
+        }),
+      )
+
+      // Second stream call: analysis text in chunks
+      anthropicStream.mockReturnValueOnce(
+        makeAnthropicStreamMock({
+          textChunks: ['O aluno completou ', '8 sessões com ', '80% de adesão.'],
+          stopReason: 'end_turn',
+        }),
+      )
+
+      const streamRes = await app.inject({
+        method: 'POST',
+        url: '/trainer/ai/chat/stream',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { message: 'Como está o desempenho do aluno?' },
+      })
+
+      expect(streamRes.statusCode).toBe(200)
+      expect(streamRes.headers['content-type']).toMatch(/text\/event-stream/)
+
+      const events = parseSseBody(streamRes.body)
+
+      // Must have text_delta events from the second LLM call
+      const textDeltas = events.filter((e) => e.event === 'text_delta')
+      expect(textDeltas.length).toBeGreaterThan(0)
+
+      const fullText = textDeltas.map((e) => e.data.content).join('')
+      expect(fullText).toBe('O aluno completou 8 sessões com 80% de adesão.')
+
+      // Must have a done event with the full analysis text
+      const doneEvent = events.find((e) => e.event === 'done')
+      expect(doneEvent).toBeDefined()
+      expect(doneEvent.data.message).toBe('O aluno completou 8 sessões com 80% de adesão.')
+      expect(doneEvent.data.actionsExecuted).toHaveLength(1)
+      expect(doneEvent.data.actionsExecuted[0]).toMatchObject({
+        tool: 'get_student_performance',
+        success: true,
+      })
+
+      // Anthropic stream was called twice (tool then analysis)
+      expect(anthropicStream).toHaveBeenCalledTimes(2)
     })
   })
 })

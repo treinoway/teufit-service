@@ -1,4 +1,4 @@
-import { exerciseTypeValues } from '../../src/constants/training.js';
+import { exerciseTypeValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -12,6 +12,7 @@ const exerciseResponseSchema = {
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
     order: { type: 'integer' },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',
@@ -46,6 +47,7 @@ export const createExerciseSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string' },
       order: { type: 'integer', minimum: 0 },
       sets: { type: 'integer', minimum: 1 },
@@ -89,6 +91,7 @@ export const createExerciseFromTemplateSchema = {
       templateId: { type: 'string', format: 'uuid' },
       name: { type: 'string' },
       type: { type: 'string', enum: exerciseTypeValues },
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string' },
       order: { type: 'integer', minimum: 0 },
       sets: { type: 'integer', minimum: 1 },
@@ -175,6 +178,7 @@ export const updateExerciseSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string' },
       order: { type: 'integer', minimum: 0 },
       sets: { type: ['integer', 'null'], minimum: 1 },

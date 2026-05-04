@@ -1,7 +1,18 @@
 import { prisma } from '../db.js';
-import { buildError, validateExerciseType, validateRepetitions } from '../helpers/training-validators.js';
+import {
+  buildError,
+  validateExerciseType,
+  validateRepetitions,
+  validatePrescriptionMode,
+  applyPrescriptionModeExclusivity,
+  resolvePrescriptionMode,
+} from '../helpers/training-validators.js';
+import { PrescriptionMode } from '../constants/training.js';
 
 function buildTemplateData(data, trainerId) {
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
+
   return {
     trainerId,
     name: data.name,
@@ -9,12 +20,21 @@ function buildTemplateData(data, trainerId) {
     videoUrl: data.videoUrl || null,
     isPublic: data.isPublic !== undefined ? data.isPublic : false,
     sets: data.sets ?? null,
-    repetitions: data.repetitions ?? null,
-    duration: data.duration ?? null,
+    repetitions,
+    duration,
+    prescriptionMode: resolvedMode,
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
     suggestedLoad: data.suggestedLoad ?? null,
     restInterval: data.restInterval ?? null,
     notes: data.notes ?? null,
+  };
+}
+
+function normalizeTemplatePrescriptionMode(template) {
+  if (!template) return template;
+  return {
+    ...template,
+    prescriptionMode: resolvePrescriptionMode(template.prescriptionMode, template),
   };
 }
 
@@ -36,13 +56,14 @@ export async function createExerciseTemplate(userId, data) {
   }
 
   validateExerciseType(data.type);
+  validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
   const template = await prisma.exerciseTemplate.create({
     data: buildTemplateData(data, trainer.id),
   });
 
-  return template;
+  return normalizeTemplatePrescriptionMode(template);
 }
 
 /**
@@ -78,7 +99,7 @@ export async function getExerciseTemplatesByTrainer(userId) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return templates;
+  return templates.map(normalizeTemplatePrescriptionMode);
 }
 
 /**
@@ -101,7 +122,7 @@ export async function getPublicExerciseTemplates() {
     orderBy: { createdAt: 'desc' },
   });
 
-  return templates;
+  return templates.map(normalizeTemplatePrescriptionMode);
 }
 
 /**
@@ -142,7 +163,7 @@ export async function getExerciseTemplateById(userId, templateId) {
     throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
   }
 
-  return template;
+  return normalizeTemplatePrescriptionMode(template);
 }
 
 /**
@@ -178,6 +199,7 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.type) {
     validateExerciseType(data.type);
   }
+  validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
   const updateData = {};
@@ -186,19 +208,27 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
   if (data.sets !== undefined) updateData.sets = data.sets;
-  if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
-  if (data.duration !== undefined) updateData.duration = data.duration;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
+
+  if (data.prescriptionMode !== undefined) {
+    const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);
+    updateData.prescriptionMode = data.prescriptionMode;
+    updateData.repetitions = repetitions;
+    updateData.duration = duration;
+  } else {
+    if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
+    if (data.duration !== undefined) updateData.duration = data.duration;
+  }
 
   const updated = await prisma.exerciseTemplate.update({
     where: { id: templateId },
     data: updateData,
   });
 
-  return updated;
+  return normalizeTemplatePrescriptionMode(updated);
 }
 
 /**

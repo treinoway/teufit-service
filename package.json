@@ -23,6 +23,8 @@
     "deploy:railway": "npm run db:migrate:deploy && npm run db:generate && npm run db:seed",
     "db:studio": "npx prisma studio",
     "db:seed": "npx prisma db seed",
+    "db:seed:dev": "node prisma/seeds/dev-seed.js",
+    "db:reset-and-populate": "NODE_ENV=development docker compose down -v && docker compose up -d --wait && npm run db:migrate && npm run db:seed:dev",
     "setup": "npm install && npm run db:start && sleep 3 && npm run db:migrate && npm run db:generate",
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'test/e2e/**'",

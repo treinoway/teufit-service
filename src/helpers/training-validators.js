@@ -8,6 +8,8 @@ import {
   protocolTypeValues,
   workoutSessionStatusValues,
   exerciseLogStatusValues,
+  prescriptionModeValues,
+  PrescriptionMode,
 } from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
@@ -110,4 +112,87 @@ export function validateExerciseLogStatus(status) {
       `Invalid exercise log status: ${status}. Valid values are: ${exerciseLogStatusValues.join(', ')}`,
     );
   }
+}
+
+/**
+ * Validate prescriptionMode and enforce mutual exclusivity rules.
+ *
+ * - When mode = 'duration': duration must be present and > 0.
+ * - When mode = 'reps' (or omitted): repetitions rules apply via validateRepetitions.
+ * - When mode is provided but not a valid value: throws VALIDATION_ERROR.
+ *
+ * @param {string|undefined} mode - Prescription mode value
+ * @param {object} data - Full exercise data to cross-check fields
+ */
+export function validatePrescriptionMode(mode, data = {}) {
+  if (mode === undefined || mode === null) return;
+
+  if (!prescriptionModeValues.includes(mode)) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      message: `Invalid prescriptionMode: ${mode}. Valid values are: ${prescriptionModeValues.join(', ')}`,
+    });
+  }
+
+  if (mode === PrescriptionMode.DURATION) {
+    const duration = data.duration;
+    if (duration === undefined || duration === null || duration <= 0) {
+      throw new AppError({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        message: 'duration must be a positive integer when prescriptionMode is "duration"',
+      });
+    }
+  }
+
+  if (mode === PrescriptionMode.REPS) {
+    const repetitions = data.repetitions;
+    if (repetitions === undefined || repetitions === null) {
+      throw new AppError({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        message: 'repetitions must be provided when prescriptionMode is "reps"',
+      });
+    }
+  }
+}
+
+/**
+ * Infer prescriptionMode from existing exercise data when the field is null.
+ * Mirrors the SQL backfill logic.
+ *
+ * @param {string|null|undefined} mode - Stored prescriptionMode value
+ * @param {object} exercise - Exercise/template row from DB
+ * @returns {string} Resolved prescriptionMode ('reps' or 'duration')
+ */
+export function resolvePrescriptionMode(mode, exercise = {}) {
+  if (mode !== null && mode !== undefined) return mode;
+  return exercise.duration !== null && exercise.duration !== undefined && exercise.repetitions === null
+    ? PrescriptionMode.DURATION
+    : PrescriptionMode.REPS;
+}
+
+/**
+ * Apply mutual exclusivity: based on prescriptionMode, null out the opposing field.
+ * Returns an object with only the fields that should be persisted.
+ *
+ * @param {string} mode - Resolved prescriptionMode
+ * @param {object} data - Incoming data with optional repetitions and duration
+ * @returns {{ repetitions: any, duration: any }} Normalized values
+ */
+export function applyPrescriptionModeExclusivity(mode, data) {
+  if (mode === PrescriptionMode.DURATION) {
+    return {
+      duration: data.duration ?? null,
+      repetitions: null,
+    };
+  }
+  return {
+    repetitions: data.repetitions ?? null,
+    duration: null,
+  };
 }

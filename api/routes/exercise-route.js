@@ -2,6 +2,7 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/exercise-service.js';
 import * as schema from '../schemas/exercise-route.schema.js';
+import { AppError } from '../../src/errors/app-error.js';
 
 export async function exerciseRoutes(fastify) {
   // ========== TRAINER ROUTES ==========
@@ -22,6 +23,7 @@ export async function exerciseRoutes(fastify) {
         );
         return reply.status(201).send(exercise);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (error.code === 'TRAINING_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
@@ -55,6 +57,7 @@ export async function exerciseRoutes(fastify) {
         );
         return reply.status(201).send(exercise);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (
           error.code === 'TRAINING_NOT_FOUND' ||
           error.code === 'EXERCISE_TEMPLATE_NOT_FOUND' ||
@@ -135,14 +138,19 @@ export async function exerciseRoutes(fastify) {
         const updated = await service.updateExercise(request.user.id, request.params.id, request.body);
         return reply.send(updated);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (error.code === 'EXERCISE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
         if (error.code === 'FORBIDDEN_NOT_PROTOCOL_OWNER') {
           return reply.status(403).send({ error: error.message });
         }
-        if (error.code === 'INVALID_EXERCISE_TYPE') {
-          return reply.status(400).send({ error: error.message });
+        if (error.code === 'INVALID_EXERCISE_TYPE' || error.code === 'VALIDATION_ERROR') {
+          return reply.status(400).send({
+            error: error.error ?? error.code,
+            messageCode: error.messageCode ?? 'validation.failed',
+            message: error.message,
+          });
         }
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to update exercise' });

@@ -253,6 +253,10 @@ export default {
     'diet.mealNotFound': 'Meal not found.',
     'diet.foodItemNotFound': 'Food item not found.',
 
+    // Dashboard
+    'dashboard.invalidDateRange': 'Invalid date range (dateFrom must be before dateTo).',
+    'dashboard.windowTooLarge': 'Date window exceeds the 365-day maximum.',
+
     // Admin
     'admin.grantNotAllowed': 'Your account is not allowed to become an administrator.',
 

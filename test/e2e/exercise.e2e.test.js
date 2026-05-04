@@ -670,6 +670,300 @@ e2eDescribe('e2e: exercises', () => {
     });
   });
 
+  // ==================== prescriptionMode ====================
+
+  describe('prescriptionMode — exercises', () => {
+    describe('Create with prescriptionMode="duration"', () => {
+      it('creates exercise with duration mode, sets duration, and nulls repetitions', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Prancha',
+            type: 'strength',
+            sets: 3,
+            prescriptionMode: 'duration',
+            duration: 45,
+            restInterval: 60,
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('prescriptionMode', 'duration');
+        expect(body).toHaveProperty('duration', 45);
+        expect(body).toHaveProperty('repetitions', null);
+      });
+    });
+
+    describe('Create with prescriptionMode="reps"', () => {
+      it('creates exercise with reps mode, sets repetitions, and nulls duration', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Supino',
+            type: 'strength',
+            sets: 4,
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('prescriptionMode', 'reps');
+        expect(body).toHaveProperty('repetitions', { min: 8, max: 12 });
+        expect(body).toHaveProperty('duration', null);
+      });
+    });
+
+    describe('Update: flip reps → duration', () => {
+      it('updates exercise from reps to duration, sets duration, and nulls repetitions', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Agachamento',
+            type: 'strength',
+            sets: 4,
+            prescriptionMode: 'reps',
+            repetitions: { min: 10, max: 12 },
+          },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { prescriptionMode: 'duration', duration: 30 },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('prescriptionMode', 'duration');
+        expect(body).toHaveProperty('duration', 30);
+        expect(body).toHaveProperty('repetitions', null);
+      });
+    });
+
+    describe('Update: flip duration → reps', () => {
+      it('updates exercise from duration to reps, sets repetitions, and nulls duration', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Prancha',
+            type: 'strength',
+            sets: 3,
+            prescriptionMode: 'duration',
+            duration: 45,
+          },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+          },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('prescriptionMode', 'reps');
+        expect(body).toHaveProperty('repetitions', { min: 8, max: 12 });
+        expect(body).toHaveProperty('duration', null);
+      });
+    });
+
+    describe('M1: Update with mode="reps" but no repetitions provided', () => {
+      it('returns 400 VALIDATION_ERROR when flipping to reps mode without supplying repetitions', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Prancha',
+            type: 'strength',
+            sets: 3,
+            prescriptionMode: 'duration',
+            duration: 45,
+          },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { prescriptionMode: 'reps' },
+        });
+
+        expect(updateResponse.statusCode).toBe(400);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
+        expect(body).toHaveProperty('messageCode', 'validation.failed');
+      });
+    });
+  });
+
+  describe('prescriptionMode — import training from template (C1 regression)', () => {
+    it('preserves prescriptionMode="duration" when importing training template into a protocol', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      // Create an exercise template with duration mode
+      const exerciseTemplateResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: {
+          name: 'Prancha Isométrica',
+          type: 'strength',
+          sets: 3,
+          prescriptionMode: 'duration',
+          duration: 30,
+          restInterval: 60,
+        },
+      });
+      expect(exerciseTemplateResponse.statusCode).toBe(201);
+      const { id: exerciseTemplateId } = exerciseTemplateResponse.json();
+
+      // Create a training template referencing the exercise template
+      const trainingTemplateResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: {
+          name: 'Core Day',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId }],
+        },
+      });
+      expect(trainingTemplateResponse.statusCode).toBe(201);
+      const { id: trainingTemplateId } = trainingTemplateResponse.json();
+
+      // Create a protocol
+      const protocolResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'My Protocol', startDate: '2025-01-01' },
+      });
+      expect(protocolResponse.statusCode).toBe(201);
+      const { id: protocolId } = protocolResponse.json();
+
+      // Import the training template into the protocol
+      const importResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { protocolId, templateId: trainingTemplateId },
+      });
+
+      expect(importResponse.statusCode).toBe(201);
+      const importBody = importResponse.json();
+      expect(importBody).toHaveProperty('exercises');
+      expect(importBody.exercises).toHaveLength(1);
+
+      const exercise = importBody.exercises[0];
+      expect(exercise).toHaveProperty('prescriptionMode', 'duration');
+      expect(exercise).toHaveProperty('duration', 30);
+      expect(exercise).toHaveProperty('repetitions', null);
+    });
+
+    it('preserves prescriptionMode="reps" when importing training template into a protocol', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      const exerciseTemplateResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/exercise-templates',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: {
+          name: 'Supino',
+          type: 'strength',
+          sets: 4,
+          prescriptionMode: 'reps',
+          repetitions: { min: 8, max: 12 },
+          restInterval: 90,
+        },
+      });
+      expect(exerciseTemplateResponse.statusCode).toBe(201);
+      const { id: exerciseTemplateId } = exerciseTemplateResponse.json();
+
+      const trainingTemplateResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: {
+          name: 'Chest Day',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId }],
+        },
+      });
+      expect(trainingTemplateResponse.statusCode).toBe(201);
+      const { id: trainingTemplateId } = trainingTemplateResponse.json();
+
+      const protocolResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'My Protocol', startDate: '2025-01-01' },
+      });
+      expect(protocolResponse.statusCode).toBe(201);
+      const { id: protocolId } = protocolResponse.json();
+
+      const importResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/trainings/from-template',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { protocolId, templateId: trainingTemplateId },
+      });
+
+      expect(importResponse.statusCode).toBe(201);
+      const importBody = importResponse.json();
+      expect(importBody.exercises).toHaveLength(1);
+
+      const exercise = importBody.exercises[0];
+      expect(exercise).toHaveProperty('prescriptionMode', 'reps');
+      expect(exercise).toHaveProperty('repetitions', { min: 8, max: 12 });
+      expect(exercise).toHaveProperty('duration', null);
+    });
+  });
+
   // ==================== i18n labels ====================
 
   describe('i18n labels — exercise templates and exercises', () => {

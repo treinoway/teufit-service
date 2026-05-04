@@ -1,4 +1,4 @@
-import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues } from '../../src/constants/training.js';
+import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -11,6 +11,7 @@ const exerciseTemplateRefSchema = {
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',
@@ -37,6 +38,7 @@ const trainingTemplateExerciseTemplateSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',
@@ -139,6 +141,7 @@ export const createTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
             repetitions: {
               type: 'object',
@@ -254,6 +257,7 @@ export const updateTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
             repetitions: {
               type: 'object',
@@ -322,6 +326,7 @@ export const createTrainingTemplateExerciseSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
       isPublic: { type: 'boolean' },
       sets: { type: 'integer', nullable: true, minimum: 1 },
@@ -425,6 +430,7 @@ export const updateTrainingTemplateExerciseSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string' },
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
       sets: { type: 'integer', nullable: true },
       repetitions: {

@@ -1,4 +1,4 @@
-import { workoutSessionStatusValues, exerciseLogStatusValues } from '../../src/constants/training.js';
+import { workoutSessionStatusValues, exerciseLogStatusValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -38,8 +38,10 @@ const exerciseLogSchema = {
         id: { type: 'string', format: 'uuid' },
         name: { type: 'string' },
         ...i18nField('type', 'exerciseType'),
+        prescriptionMode: { type: 'string', enum: prescriptionModeValues },
         sets: { type: 'integer', nullable: true },
         repetitions: { nullable: true },
+        duration: { type: 'integer', nullable: true },
         hasLoad: { type: 'boolean' },
         suggestedLoad: { type: 'number', nullable: true },
         restInterval: { type: 'integer', nullable: true },

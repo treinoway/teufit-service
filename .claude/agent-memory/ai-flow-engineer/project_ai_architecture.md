@@ -37,5 +37,13 @@ Prompt caching (added in token-optimization PR):
 - `LlmProvider` JSDoc updated: `system` param is `string | Array<{type, text, cache_control?}>`
 - 2 cache breakpoints used (tools + system prefix); Anthropic allows max 4
 
+Read-only tools (READ_ONLY_TOOLS Set, line ~817):
+- Only `get_student_performance` currently. These bypass first-turn confirmation gate AND trigger a second LLM call after tool execution.
+- Flow: first LLM call → tool_use → executeTool → save [assistant(rawContent) + tool_result] in parallel → second LLM call with tool_result in messages → save second assistant (analysis text) → return.
+- Write tools still use local buildToolResultMessage response (no second LLM call).
+- Fallback: if second LLM call returns empty text, `buildToolResultMessage` has a `GET_STUDENT_PERFORMANCE` case that produces a deterministic Portuguese paragraph from the snapshot.
+- DB after a read-only tool turn: 3 aiMessage records (first assistant with rawContent, tool_result, second assistant with analysis). History reconstruction in loadConversationHistory handles the pair (records 1+2) then leaves record 3 as a plain assistant text turn.
+- Streaming: second call uses `provider.chatStream()` so text_delta chunks are yielded to client in real time. If follow-up stream throws after partial yield, uses streamed text as-is. If no text yielded, falls back to deterministic paragraph then emits as single text_delta.
+
 **Why:** Feature added in commit 4693263 to support natural-language training management.
-**How to apply:** All AI changes must touch these files; audit security on any changes to buildSystemPrompt or executeTool. When buildSystemPrompt returns an array, downstream test assertions must use `.system[0].text` not `.system` directly for string contains checks.
+**How to apply:** All AI changes must touch these files; audit security on any changes to buildSystemPrompt or executeTool. When buildSystemPrompt returns an array, downstream test assertions must use `.system[0].text` not `.system` directly for string contains checks. When adding new read-only tools, add to READ_ONLY_TOOLS set AND add a fallback case in buildToolResultMessage.

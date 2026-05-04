@@ -1,1 +1,3 @@
 - [i18n legacy-error translation gap](project_i18n_legacy_error_gap.md) — legacy `.code` errors bypass translation and return English to pt-BR clients until migrated to stable messageCodes
+- [Exercise field copy flow checklist](feedback_exercise_copy_flows.md) — full list of sites that snapshot Exercise fields; backend-engineer reliably misses one (esp. `training-service.importFromTemplate`)
+- [backend-engineer skips E2E tests](feedback_e2e_test_gap.md) — "all tests pass" usually means unit-only; verify E2E coverage independently

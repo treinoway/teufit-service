@@ -4,6 +4,8 @@ import {
   validateCategory,
   validateBodySegment,
   validateWeekDay,
+  resolvePrescriptionMode,
+  applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
 
 /**
@@ -343,6 +345,9 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     });
 
     for (const junctionRow of template.trainingTemplateExerciseTemplates) {
+      const resolvedMode = resolvePrescriptionMode(junctionRow.prescriptionMode, junctionRow);
+      const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, junctionRow);
+
       await tx.exercise.create({
         data: {
           trainingId: createdTraining.id,
@@ -352,8 +357,9 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
           videoUrl: junctionRow.videoUrl ?? null,
           order: junctionRow.order,
           sets: junctionRow.sets ?? null,
-          repetitions: junctionRow.repetitions ?? null,
-          duration: junctionRow.duration ?? null,
+          repetitions,
+          duration,
+          prescriptionMode: resolvedMode,
           hasLoad: junctionRow.hasLoad ?? false,
           suggestedLoad: junctionRow.suggestedLoad ?? null,
           restInterval: junctionRow.restInterval ?? null,

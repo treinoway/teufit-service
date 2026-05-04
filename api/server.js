@@ -40,6 +40,7 @@ import { dietProtocolTemplateRoutes } from './routes/diet-protocol-template-rout
 import { dietProtocolRoutes } from './routes/diet-protocol-route.js';
 import { dietMealRoutes } from './routes/diet-meal-route.js';
 import { dietFoodItemRoutes } from './routes/diet-food-item-route.js';
+import { studentDashboardRoutes } from './routes/student-dashboard-route.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 
@@ -291,6 +292,7 @@ export async function buildServer(options = {}) {
     await fastify.register(dietProtocolRoutes);
     await fastify.register(dietMealRoutes);
     await fastify.register(dietFoodItemRoutes);
+    await fastify.register(studentDashboardRoutes);
   });
 
   return fastify;

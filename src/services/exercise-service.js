@@ -1,5 +1,13 @@
 import { prisma } from '../db.js';
-import { buildError, validateExerciseType, validateRepetitions } from '../helpers/training-validators.js';
+import {
+  buildError,
+  validateExerciseType,
+  validateRepetitions,
+  validatePrescriptionMode,
+  applyPrescriptionModeExclusivity,
+  resolvePrescriptionMode,
+} from '../helpers/training-validators.js';
+import { PrescriptionMode } from '../constants/training.js';
 
 /**
  * Verify training ownership (trainer context)
@@ -22,6 +30,9 @@ async function verifyTrainingOwnership(trainingId, trainerId) {
 }
 
 function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
+
   return {
     trainingId,
     exerciseTemplateId: exerciseTemplateId || null,
@@ -30,12 +41,21 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
     videoUrl: data.videoUrl || null,
     order: data.order !== undefined ? data.order : 0,
     sets: data.sets ?? null,
-    repetitions: data.repetitions ?? null,
-    duration: data.duration ?? null,
+    repetitions,
+    duration,
+    prescriptionMode: resolvedMode,
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
     suggestedLoad: data.suggestedLoad ?? null,
     restInterval: data.restInterval ?? null,
     notes: data.notes ?? null,
+  };
+}
+
+function normalizeExercisePrescriptionMode(exercise) {
+  if (!exercise) return exercise;
+  return {
+    ...exercise,
+    prescriptionMode: resolvePrescriptionMode(exercise.prescriptionMode, exercise),
   };
 }
 
@@ -59,13 +79,14 @@ export async function createExercise(userId, trainingId, data) {
 
   await verifyTrainingOwnership(trainingId, trainer.id);
   validateExerciseType(data.type);
+  validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
   const exercise = await prisma.exercise.create({
     data: buildExerciseData(data, trainingId),
   });
 
-  return exercise;
+  return normalizeExercisePrescriptionMode(exercise);
 }
 
 /**
@@ -109,6 +130,9 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     sets: data.sets !== undefined ? data.sets : template.sets,
     repetitions: data.repetitions !== undefined ? data.repetitions : template.repetitions,
     duration: data.duration !== undefined ? data.duration : template.duration,
+    prescriptionMode: data.prescriptionMode !== undefined
+      ? data.prescriptionMode
+      : resolvePrescriptionMode(template.prescriptionMode, template),
     hasLoad: data.hasLoad !== undefined ? data.hasLoad : template.hasLoad,
     suggestedLoad: data.suggestedLoad !== undefined ? data.suggestedLoad : template.suggestedLoad,
     restInterval: data.restInterval !== undefined ? data.restInterval : template.restInterval,
@@ -122,7 +146,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     },
   });
 
-  return exercise;
+  return normalizeExercisePrescriptionMode(exercise);
 }
 
 /**
@@ -174,7 +198,7 @@ export async function getExercisesByTraining(userId, trainingId, context) {
     orderBy: { order: 'asc' },
   });
 
-  return exercises;
+  return exercises.map(normalizeExercisePrescriptionMode);
 }
 
 /**
@@ -225,7 +249,7 @@ export async function getExerciseById(userId, exerciseId, context) {
     throw buildError('INVALID_CONTEXT', 'Context must be either "trainer" or "assignee"');
   }
 
-  return exercise;
+  return normalizeExercisePrescriptionMode(exercise);
 }
 
 /**
@@ -264,6 +288,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.type) {
     validateExerciseType(data.type);
   }
+  validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
   const updateData = {};
@@ -272,19 +297,27 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.order !== undefined) updateData.order = data.order;
   if (data.sets !== undefined) updateData.sets = data.sets;
-  if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
-  if (data.duration !== undefined) updateData.duration = data.duration;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
+
+  if (data.prescriptionMode !== undefined) {
+    const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);
+    updateData.prescriptionMode = data.prescriptionMode;
+    updateData.repetitions = repetitions;
+    updateData.duration = duration;
+  } else {
+    if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
+    if (data.duration !== undefined) updateData.duration = data.duration;
+  }
 
   const updated = await prisma.exercise.update({
     where: { id: exerciseId },
     data: updateData,
   });
 
-  return updated;
+  return normalizeExercisePrescriptionMode(updated);
 }
 
 /**

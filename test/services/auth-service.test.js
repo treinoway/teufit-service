@@ -6,6 +6,7 @@ vi.mock('../../src/db.js', () => {
     prisma: {
       user: {
         findUnique: vi.fn(),
+        findFirst: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
       },
@@ -20,6 +21,7 @@ vi.mock('../../src/db.js', () => {
         create: vi.fn(),
         findUnique: vi.fn(),
         update: vi.fn(),
+        updateMany: vi.fn(),
       },
       userWaitlist: {
         findUnique: vi.fn(),
@@ -221,7 +223,7 @@ describe('authService', () => {
 
   describe('signupWithEmailPassword', () => {
     it('normalizes email, hashes password, creates user and account in transaction', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       // Mock the transaction callback
       prisma.$transaction.mockImplementation(async (callback) => {
@@ -260,7 +262,9 @@ describe('authService', () => {
         password: 'password123',
       });
 
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: { equals: 'test@example.com', mode: 'insensitive' } },
+      });
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -306,7 +310,7 @@ describe('authService', () => {
     }
 
     it('logs in with correct credentials and does not expose passwordHash', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -318,13 +322,15 @@ describe('authService', () => {
       });
 
       const user = await loginWithEmailPassword({ email: 'TEST@EXAMPLE.COM', password: 'password123' });
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: { equals: 'test@example.com', mode: 'insensitive' } },
+      });
       expect(user.passwordHash).toBeUndefined();
       expect(user.id).toBe('u1');
     });
 
     it('rejects invalid credentials', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -342,7 +348,7 @@ describe('authService', () => {
     });
 
     it('rejects users without passwordHash (OAuth-only accounts)', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -360,7 +366,7 @@ describe('authService', () => {
 
   describe('password reset flow', () => {
     it('requestPasswordReset creates a token when user exists', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         deletedAt: null,
@@ -368,18 +374,24 @@ describe('authService', () => {
 
       const res = await requestPasswordReset({ email: 'test@example.com' });
 
+      expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', used: false },
+        data: { used: true },
+      });
       expect(prisma.passwordResetToken.create).toHaveBeenCalled();
       expect(typeof res.resetToken).toBe('string');
       expect(res.resetToken.length).toBeGreaterThan(0);
+      expect(res.deliveryEmail).toBe('test@example.com');
     });
 
     it('requestPasswordReset does nothing visible when user does not exist', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       const res = await requestPasswordReset({ email: 'missing@example.com' });
 
       expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
       expect(res.resetToken).toBeNull();
+      expect(res.deliveryEmail).toBeNull();
     });
 
     it('resetPasswordWithToken updates password and marks token as used when confirmation matches', async () => {

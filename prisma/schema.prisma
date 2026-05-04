@@ -305,6 +305,8 @@ model TrainingProtocol {
   protocolTemplate TrainingProtocolTemplate? @relation(fields: [protocolTemplateId], references: [id], onDelete: SetNull)
   trainings        Training[]
 
+  @@index([assigneeId, status, startDate(sort: Desc)])
+  @@index([trainerId])
   @@map("training_protocols")
 }
 
@@ -362,13 +364,14 @@ model ExerciseTemplate {
   videoUrl  String? @map("video_url") @db.Text
   isPublic  Boolean @default(false) @map("is_public")
 
-  sets          Int?
-  repetitions   Json?
-  duration      Int?
-  hasLoad       Boolean @default(false) @map("has_load")
-  suggestedLoad Float?  @map("suggested_load")
-  restInterval  Int?    @map("rest_interval")
-  notes         String? @db.Text
+  sets             Int?
+  repetitions      Json?
+  duration         Int?
+  prescriptionMode String? @map("prescription_mode") @db.Text
+  hasLoad          Boolean @default(false) @map("has_load")
+  suggestedLoad    Float?  @map("suggested_load")
+  restInterval     Int?    @map("rest_interval")
+  notes            String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -388,16 +391,17 @@ model TrainingTemplateExerciseTemplate {
   order              Int    @default(0)
 
   // Snapshot fields — copied from ExerciseTemplate at link time; independent after that
-  name          String  @db.Text
-  type          String  @db.Text
-  videoUrl      String? @map("video_url") @db.Text
-  sets          Int?
-  repetitions   Json?
-  duration      Int?
-  hasLoad       Boolean @default(false) @map("has_load")
-  suggestedLoad Float?  @map("suggested_load")
-  restInterval  Int?    @map("rest_interval")
-  notes         String? @db.Text
+  name             String  @db.Text
+  type             String  @db.Text
+  videoUrl         String? @map("video_url") @db.Text
+  sets             Int?
+  repetitions      Json?
+  duration         Int?
+  prescriptionMode String? @map("prescription_mode") @db.Text
+  hasLoad          Boolean @default(false) @map("has_load")
+  suggestedLoad    Float?  @map("suggested_load")
+  restInterval     Int?    @map("rest_interval")
+  notes            String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -419,13 +423,14 @@ model Exercise {
   videoUrl           String? @map("video_url") @db.Text
   order              Int     @default(0)
 
-  sets          Int?
-  repetitions   Json?
-  duration      Int?
-  hasLoad       Boolean @default(false) @map("has_load")
-  suggestedLoad Float?  @map("suggested_load")
-  restInterval  Int?    @map("rest_interval")
-  notes         String? @db.Text
+  sets             Int?
+  repetitions      Json?
+  duration         Int?
+  prescriptionMode String? @map("prescription_mode") @db.Text
+  hasLoad          Boolean @default(false) @map("has_load")
+  suggestedLoad    Float?  @map("suggested_load")
+  restInterval     Int?    @map("rest_interval")
+  notes            String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -435,6 +440,7 @@ model Exercise {
   exerciseTemplate ExerciseTemplate? @relation(fields: [exerciseTemplateId], references: [id], onDelete: SetNull)
   exerciseLogs     ExerciseLog[]
 
+  @@index([trainingId])
   @@map("exercises")
 }
 
@@ -487,6 +493,8 @@ model WorkoutSession {
   user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   exerciseLogs ExerciseLog[]
 
+  @@index([userId, status, startedAt(sort: Desc)])
+  @@index([userId, startedAt(sort: Desc)])
   @@map("workout_sessions")
 }
 
@@ -505,6 +513,7 @@ model ExerciseLog {
   exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
   setLogs        SetLog[]
 
+  @@index([workoutSessionId, exerciseId])
   @@map("exercise_logs")
 }
 
@@ -525,6 +534,7 @@ model SetLog {
 
   exerciseLog ExerciseLog @relation(fields: [exerciseLogId], references: [id], onDelete: Cascade)
 
+  @@index([exerciseLogId, completed])
   @@map("set_logs")
 }
 

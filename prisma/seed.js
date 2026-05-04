@@ -208,17 +208,17 @@ const caveiraSections = [
   },
 ];
 
-async function main() {
-  const existing = await prisma.anamnesis.findFirst({
+export async function seedPublicAnamnesis(client) {
+  const existing = await client.anamnesis.findFirst({
     where: { title: CAVEIRA_TEAM_TITLE, isGeneral: true, deletedAt: null },
   });
 
   if (existing) {
     console.log(`Seed skipped — public anamnesis "${CAVEIRA_TEAM_TITLE}" already exists (id: ${existing.id})`);
-    return;
+    return existing;
   }
 
-  const anamnesis = await prisma.anamnesis.create({
+  const anamnesis = await client.anamnesis.create({
     data: {
       trainerId: null,
       title: CAVEIRA_TEAM_TITLE,
@@ -247,11 +247,18 @@ async function main() {
   });
 
   console.log(`Seeded public anamnesis "${anamnesis.title}" (id: ${anamnesis.id})`);
+  return anamnesis;
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Run as script when invoked directly (e.g. via `npx prisma db seed`).
+const isDirectRun = import.meta.url === `file://${process.argv[1]}`;
+if (isDirectRun) {
+  seedPublicAnamnesis(prisma)
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

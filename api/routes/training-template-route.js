@@ -2,6 +2,7 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-template-service.js';
 import * as schema from '../schemas/training-template-route.schema.js';
+import { AppError } from '../../src/errors/app-error.js';
 
 export async function trainingTemplateRoutes(fastify) {
   // Create training template
@@ -169,6 +170,7 @@ export async function trainingTemplateRoutes(fastify) {
         );
         return reply.status(201).send(created);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (
           error.code === 'TEMPLATE_NOT_FOUND' ||
           error.code === 'TRAINER_PROFILE_MISSING' ||

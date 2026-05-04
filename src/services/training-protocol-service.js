@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { TrainingStatus, trainingStatusValues } from '../constants/training.js';
-import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
+import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 
@@ -504,6 +504,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
             sets: junctionRow.sets ?? null,
             repetitions: junctionRow.repetitions ?? null,
             duration: junctionRow.duration ?? null,
+            prescriptionMode: resolvePrescriptionMode(junctionRow.prescriptionMode, junctionRow),
             hasLoad: junctionRow.hasLoad ?? false,
             suggestedLoad: junctionRow.suggestedLoad ?? null,
             restInterval: junctionRow.restInterval ?? null,

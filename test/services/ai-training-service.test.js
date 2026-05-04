@@ -46,9 +46,15 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock the student dashboard service to isolate AI service executeTool for GET_STUDENT_PERFORMANCE
+vi.mock('../../src/services/student-dashboard-service.js', () => ({
+  buildAiPerformanceSnapshot: vi.fn(),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { importFromTemplate } from '../../src/services/training-protocol-service.js'
+import { buildAiPerformanceSnapshot } from '../../src/services/student-dashboard-service.js'
 import {
   buildTrainerContext,
   executeTool,
@@ -1787,6 +1793,470 @@ describe('ai-training-service', () => {
       const addTrainingTool = tools.find((t) => t.name === AI_TOOLS.ADD_TRAINING_TO_PROTOCOL)
       const exercisesDesc = addTrainingTool.input_schema.properties.trainings.items.properties.exercises.description
       expect(exercisesDesc).toContain('OBRIGATORIAMENTE devem aparecer neste array')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // prescriptionMode propagation through CREATE_TRAINING_TEMPLATE
+  // ---------------------------------------------------------------------------
+
+  describe('prescriptionMode propagation in CREATE_TRAINING_TEMPLATE', () => {
+    it('persists prescriptionMode="duration" and applies exclusivity when LLM emits a duration exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.exerciseTemplate.create.mockResolvedValue({
+        id: 'ex-duration-1',
+        trainerId: 'trainer-1',
+        name: 'Prancha Isométrica',
+        type: 'strength',
+        videoUrl: null,
+        sets: 3,
+        repetitions: null,
+        duration: 30,
+        prescriptionMode: 'duration',
+        hasLoad: false,
+        suggestedLoad: null,
+        restInterval: 60,
+        notes: null,
+      })
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'tt-duration-1',
+        name: 'Core Day',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      })
+
+      await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+        name: 'Core Day',
+        category: 'strength',
+        exercises: [
+          {
+            name: 'Prancha Isométrica',
+            type: 'strength',
+            sets: 3,
+            prescriptionMode: 'duration',
+            duration: 30,
+            restInterval: 60,
+          },
+        ],
+      })
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'duration',
+            duration: 30,
+            repetitions: null,
+          }),
+        }),
+      )
+    })
+
+    it('persists prescriptionMode="reps" and nulls duration when LLM emits a reps exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.exerciseTemplate.create.mockResolvedValue({
+        id: 'ex-reps-1',
+        trainerId: 'trainer-1',
+        name: 'Supino',
+        type: 'strength',
+        videoUrl: null,
+        sets: 4,
+        repetitions: { min: 8, max: 12 },
+        duration: null,
+        prescriptionMode: 'reps',
+        hasLoad: true,
+        suggestedLoad: 60,
+        restInterval: 90,
+        notes: null,
+      })
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'tt-reps-1',
+        name: 'Chest Day',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      })
+
+      await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+        name: 'Chest Day',
+        category: 'strength',
+        exercises: [
+          {
+            name: 'Supino',
+            type: 'strength',
+            sets: 4,
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+            hasLoad: true,
+            suggestedLoad: 60,
+            restInterval: 90,
+          },
+        ],
+      })
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+            duration: null,
+          }),
+        }),
+      )
+    })
+
+    it('defaults to prescriptionMode="reps" when LLM omits the field, and nulls duration', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.exerciseTemplate.create.mockResolvedValue({
+        id: 'ex-default-1',
+        trainerId: 'trainer-1',
+        name: 'Agachamento',
+        type: 'strength',
+        videoUrl: null,
+        sets: 4,
+        repetitions: { min: 10, max: 12 },
+        duration: null,
+        prescriptionMode: 'reps',
+        hasLoad: false,
+        suggestedLoad: null,
+        restInterval: 60,
+        notes: null,
+      })
+      prisma.trainingTemplate.create.mockResolvedValue({
+        id: 'tt-default-1',
+        name: 'Leg Day',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      })
+
+      await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+        name: 'Leg Day',
+        category: 'strength',
+        exercises: [
+          {
+            name: 'Agachamento',
+            type: 'strength',
+            sets: 4,
+            repetitions: { min: 10, max: 12 },
+            restInterval: 60,
+            // prescriptionMode intentionally omitted — LLM may forget it
+          },
+        ],
+      })
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'reps',
+            duration: null,
+          }),
+        }),
+      )
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // executeTool — GET_STUDENT_PERFORMANCE
+  // ---------------------------------------------------------------------------
+
+  describe(`executeTool — ${AI_TOOLS.GET_STUDENT_PERFORMANCE}`, () => {
+    const STUDENT_ID = 'student-uuid-1'
+
+    const makeSnapshot = (overrides = {}) => ({
+      studentId: STUDENT_ID,
+      studentName: 'João Silva',
+      window: { from: '2026-01-01T00:00:00.000Z', to: '2026-04-01T00:00:00.000Z', days: 90 },
+      sessionCounts: { completed: 3, in_progress: 1, abandoned: 1 },
+      totalSessions: 5,
+      completionRate: 0.75,
+      lastSessionAt: '2026-04-01T10:00:00.000Z',
+      currentProtocol: { id: 'protocol-1', name: 'Hypertrophy Block' },
+      topExercises: [],
+      ...overrides,
+    })
+
+    it('calls buildAiPerformanceSnapshot and returns { success: true, data: snapshot }', async () => {
+      const snapshot = makeSnapshot()
+      buildAiPerformanceSnapshot.mockResolvedValue(snapshot)
+
+      const result = await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, {
+        studentId: STUDENT_ID,
+      })
+
+      expect(buildAiPerformanceSnapshot).toHaveBeenCalledWith(
+        'trainer-user-1',
+        STUDENT_ID,
+        expect.objectContaining({ windowDays: 90, includeExerciseProgression: true }),
+      )
+      expect(result).toMatchObject({ success: true, data: snapshot })
+    })
+
+    it('passes provided windowDays to buildAiPerformanceSnapshot', async () => {
+      buildAiPerformanceSnapshot.mockResolvedValue(makeSnapshot({ window: { days: 30 } }))
+
+      await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, {
+        studentId: STUDENT_ID,
+        windowDays: 30,
+      })
+
+      expect(buildAiPerformanceSnapshot).toHaveBeenCalledWith(
+        'trainer-user-1',
+        STUDENT_ID,
+        expect.objectContaining({ windowDays: 30 }),
+      )
+    })
+
+    it('defaults windowDays = 90 and includeExerciseProgression = true when both are omitted', async () => {
+      buildAiPerformanceSnapshot.mockResolvedValue(makeSnapshot())
+
+      await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, {
+        studentId: STUDENT_ID,
+      })
+
+      expect(buildAiPerformanceSnapshot).toHaveBeenCalledWith(
+        'trainer-user-1',
+        STUDENT_ID,
+        { windowDays: 90, includeExerciseProgression: true },
+      )
+    })
+
+    it('passes includeExerciseProgression: false when explicitly set to false in toolInput', async () => {
+      buildAiPerformanceSnapshot.mockResolvedValue(makeSnapshot({ topExercises: [] }))
+
+      await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, {
+        studentId: STUDENT_ID,
+        includeExerciseProgression: false,
+      })
+
+      expect(buildAiPerformanceSnapshot).toHaveBeenCalledWith(
+        'trainer-user-1',
+        STUDENT_ID,
+        expect.objectContaining({ includeExerciseProgression: false }),
+      )
+    })
+
+    it('returns { success: false, error, messageCode } when student is not linked to trainer', async () => {
+      const { AppError } = await import('../../src/errors/app-error.js')
+      buildAiPerformanceSnapshot.mockRejectedValue(
+        new AppError({
+          httpStatus: 404,
+          error: 'STUDENT_NOT_FOUND',
+          messageCode: 'legacy.STUDENT_NOT_FOUND',
+          message: 'Student not found or not assigned to you',
+        }),
+      )
+
+      const result = await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, {
+        studentId: 'unlinked-student',
+      })
+
+      expect(result).toMatchObject({
+        success: false,
+        error: 'STUDENT_NOT_FOUND',
+        messageCode: 'legacy.STUDENT_NOT_FOUND',
+      })
+    })
+
+    it('re-throws non-AppError errors (does not swallow unexpected failures)', async () => {
+      const dbError = new Error('Database connection failed')
+      buildAiPerformanceSnapshot.mockRejectedValue(dbError)
+
+      await expect(
+        executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, { studentId: STUDENT_ID }),
+      ).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // First-turn enforcement — READ_ONLY_TOOLS exemption
+  // ---------------------------------------------------------------------------
+
+  describe('first-turn enforcement: read-only tools bypass the confirmation gate', () => {
+    function stubTrainerContext() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    }
+
+    function stubNewConversation(conversationId = 'conv-read-only') {
+      prisma.aiConversation.create.mockResolvedValue({ id: conversationId, userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-1' })
+      prisma.aiConversation.update.mockResolvedValue({})
+    }
+
+    it('executes get_student_performance on the first turn without requiring prior history', async () => {
+      stubTrainerContext()
+      stubNewConversation()
+
+      const snapshot = {
+        studentId: 'student-1',
+        studentName: 'Ana Lima',
+        window: { from: '2026-01-01T00:00:00.000Z', to: '2026-04-01T00:00:00.000Z', days: 90 },
+        sessionCounts: { completed: 2, in_progress: 0, abandoned: 0 },
+        totalSessions: 2,
+        completionRate: 1,
+        lastSessionAt: '2026-04-01T10:00:00.000Z',
+        currentProtocol: null,
+        topExercises: [],
+      }
+      buildAiPerformanceSnapshot.mockResolvedValue(snapshot)
+
+      anthropicCreate
+        .mockResolvedValueOnce({
+          stop_reason: 'tool_use',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tc-read-1',
+              name: AI_TOOLS.GET_STUDENT_PERFORMANCE,
+              input: { studentId: 'student-1' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'Ana completou 2 sessões recentemente.' }],
+        })
+
+      // Empty history — first turn. Tool should execute because it is read-only.
+      const result = await processAiChat('user-1', { message: 'Como está a aluna Ana?' })
+
+      expect(buildAiPerformanceSnapshot).toHaveBeenCalledTimes(1)
+      expect(result.actionsExecuted).toHaveLength(1)
+      expect(result.actionsExecuted[0].tool).toBe(AI_TOOLS.GET_STUDENT_PERFORMANCE)
+      expect(result.actionsExecuted[0].success).toBe(true)
+    })
+
+    it('still blocks write tools on first turn even when read-only tools are allowed', async () => {
+      stubTrainerContext()
+      stubNewConversation()
+
+      anthropicCreate.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tc-write-1',
+            name: AI_TOOLS.IMPORT_FROM_TEMPLATE,
+            input: {
+              templateId: 'tmpl-1',
+              assigneeId: 'student-1',
+              startDate: '2026-01-01',
+              expirationDate: '2026-06-01',
+            },
+          },
+        ],
+      })
+
+      // Empty history — first turn. Write tool should be blocked.
+      const result = await processAiChat('user-1', { message: 'Crie um protocolo agora' })
+
+      expect(importFromTemplate).not.toHaveBeenCalled()
+      expect(result.actionsExecuted).toEqual([])
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // summarizeToolResult — AI performance snapshot branch (via saveToolResultMessage)
+  // ---------------------------------------------------------------------------
+
+  describe('summarizeToolResult — AI performance snapshot saved to DB', () => {
+    function stubTrainerContextForRead() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      prisma.trainerStudent.findMany.mockResolvedValue([])
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+      prisma.trainingTemplate.findMany.mockResolvedValue([])
+      prisma.trainingProtocol.findMany.mockResolvedValue([])
+      prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    }
+
+    it('saves a tool_result message containing the summarized snapshot after get_student_performance executes', async () => {
+      // The service generates the assistant text locally (buildToolResultMessage)
+      // and calls saveToolResultMessage with the summarized snapshot. No second LLM call.
+      stubTrainerContextForRead()
+      prisma.aiConversation.create.mockResolvedValue({ id: 'conv-snap', userId: 'user-1', title: null })
+      prisma.aiMessage.create.mockResolvedValue({ id: 'msg-snap' })
+      prisma.aiConversation.update.mockResolvedValue({})
+
+      const snapshot = {
+        studentId: 'student-1',
+        studentName: 'Carlos Souza',
+        window: { from: '2026-01-01T00:00:00.000Z', to: '2026-04-01T00:00:00.000Z', days: 90 },
+        sessionCounts: { completed: 5, in_progress: 0, abandoned: 1 },
+        totalSessions: 6,
+        completionRate: 0.83,
+        lastSessionAt: '2026-04-01T10:00:00.000Z',
+        currentProtocol: { id: 'p-1', name: 'Força' },
+        topExercises: [
+          {
+            exerciseId: 'ex-1',
+            name: 'Supino',
+            hasLoad: true,
+            sessionCount: 5,
+            lastPerformedAt: '2026-04-01T10:00:00.000Z',
+            latestMaxLoad: 100,
+            latestAvgLoad: 90,
+            latestTotalVolume: 3600,
+            maxLoadDelta: 10,
+            maxLoadDeltaPct: 11.11,
+          },
+        ],
+      }
+      buildAiPerformanceSnapshot.mockResolvedValue(snapshot)
+
+      anthropicCreate
+        .mockResolvedValueOnce({
+          stop_reason: 'tool_use',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tc-snap-1',
+              name: AI_TOOLS.GET_STUDENT_PERFORMANCE,
+              input: { studentId: 'student-1' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'Carlos completou 5 de 6 sessões (83% de adesão).' }],
+        })
+
+      const result = await processAiChat('user-1', { message: 'Como está Carlos?' })
+
+      // The service returns actionsExecuted with the tool data
+      expect(result.actionsExecuted).toHaveLength(1)
+      expect(result.actionsExecuted[0]).toMatchObject({
+        tool: AI_TOOLS.GET_STUDENT_PERFORMANCE,
+        success: true,
+      })
+
+      // The final message comes from the second LLM call, not the deterministic fallback
+      expect(result.message).toBe('Carlos completou 5 de 6 sessões (83% de adesão).')
+
+      // aiMessage.create is called 4 times:
+      // 1. saveUserMessage (the user's message)
+      // 2. saveAssistantMessage (the first assistant turn with tool_use rawContent)
+      // 3. saveToolResultMessage (the tool_result turn)
+      // 4. saveAssistantMessage (the second assistant turn — LLM analysis text)
+      expect(prisma.aiMessage.create).toHaveBeenCalledTimes(4)
+
+      // Find the aiMessage.create call that saved the tool_result
+      const toolResultCall = prisma.aiMessage.create.mock.calls.find(
+        (args) => args[0].data?.role === 'tool_result',
+      )
+      expect(toolResultCall).toBeDefined()
+
+      // The tool_result content must be the summarized snapshot JSON
+      const savedContent = JSON.parse(toolResultCall[0].data.content)
+      expect(savedContent).toMatchObject({
+        success: true,
+        studentId: 'student-1',
+        studentName: 'Carlos Souza',
+        sessionCounts: snapshot.sessionCounts,
+        completionRate: snapshot.completionRate,
+        topExercises: expect.any(Array),
+      })
     })
   })
 })

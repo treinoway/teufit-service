@@ -260,6 +260,10 @@ export default {
     // Admin
     'admin.grantNotAllowed': 'Sua conta não tem permissão para virar administrador.',
 
+    // Dashboard
+    'dashboard.invalidDateRange': 'Intervalo de datas inválido (dataInicial > dataFinal).',
+    'dashboard.windowTooLarge': 'Janela de datas excede o máximo de 365 dias.',
+
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
     'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',

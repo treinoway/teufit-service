@@ -2184,7 +2184,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates",
@@ -2197,6 +2197,34 @@
               ]
             },
             "description": "Create a reusable exercise template. Requires TRAINER role. Type: strength, cardio, mobility, stretching. Duration in seconds."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Exercise Template (duration)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Prancha Isom\\u00e9trica\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"duration\",\n  \"sets\": 3,\n  \"duration\": 30,\n  \"restInterval\": 60\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates"
+              ]
+            },
+            "description": "Create a reusable exercise template using duration-based prescription. Sets duration in seconds; repetitions must be omitted. Requires TRAINER role."
           },
           "response": []
         },
@@ -2278,7 +2306,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70,\n  \"restInterval\": 120\n}"
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70,\n  \"restInterval\": 120\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -2346,7 +2374,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
@@ -2467,7 +2495,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Front Squat\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
+              "raw": "{\n  \"name\": \"Front Squat\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
@@ -7235,6 +7263,340 @@
             "description": "Get a single non-deleted video by its UUID. Requires authenticated user (TRAINER or ADMIN)."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Student Dashboard - Trainer",
+      "description": "Trainer-facing dashboard endpoints for viewing a linked student's activity, session history, and exercise progression.",
+      "item": [
+        {
+          "name": "Get Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "app-timezone",
+                "value": "America/Sao_Paulo",
+                "description": "IANA timezone for daily activity bucketing (e.g. America/Sao_Paulo). Defaults to America/Sao_Paulo.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "dashboard", "summary"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime. Start of window. Defaults to 90 days before dateTo."
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime. End of window. Defaults to now."
+                }
+              ]
+            },
+            "description": "Returns session counts by status, completionRate, lastSessionAt, active protocol, and derived stats: maxStreakDays, sessionsPerWeek, daysSinceLastSession. Accepts app-timezone header (IANA) to bucket streak dates in the student's local timezone — defaults to America/Sao_Paulo. Requires TRAINER role. Student must be linked to the trainer."
+          },
+          "response": [
+            {
+              "name": "Get Dashboard Summary - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/summary",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "summary"],
+                  "variable": [{"key": "studentId", "value": ""}]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"sessionCounts\": { \"completed\": 24, \"in_progress\": 1, \"abandoned\": 3 },\n  \"totalSessions\": 28,\n  \"completionRate\": 0.89,\n  \"lastSessionAt\": \"2026-04-30T09:00:00.000Z\",\n  \"currentProtocol\": { \"id\": \"uuid\", \"name\": \"Hypertrophy Block\", \"startDate\": \"2026-01-01\", \"expirationDate\": \"2026-06-30\" },\n  \"maxStreakDays\": 5,\n  \"sessionsPerWeek\": 3.2,\n  \"daysSinceLastSession\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Recent Sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/recent-sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "dashboard", "recent-sessions"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true,
+                  "description": "Max sessions to return (1–50)"
+                }
+              ]
+            },
+            "description": "Returns most-recent workout sessions ordered newest-first. Each session now includes avgRpe (mean RPE of completed sets, null when none recorded) and noteText (session notes, null when empty). Requires TRAINER role."
+          },
+          "response": [
+            {
+              "name": "Get Recent Sessions - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/recent-sessions",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "recent-sessions"],
+                  "variable": [{"key": "studentId", "value": ""}]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": [\n    {\n      \"id\": \"uuid\",\n      \"trainingId\": \"uuid\",\n      \"trainingName\": \"Peito\",\n      \"status\": \"completed\",\n      \"startedAt\": \"2026-04-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-04-30T10:00:00.000Z\",\n      \"durationSeconds\": 3600,\n      \"avgRpe\": 8.0,\n      \"noteText\": \"Pesadão hoje, mas concluí\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Exercise Progression (List)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/exercise-progression",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "dashboard", "exercise-progression"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true,
+                  "description": "Max exercises to return (1–20)"
+                },
+                {
+                  "key": "includeDurationOnly",
+                  "value": "false",
+                  "disabled": true,
+                  "description": "Include exercises with hasLoad=false"
+                }
+              ]
+            },
+            "description": "Returns per-exercise aggregates sorted by lastPerformedAt DESC. Each entry now includes loadHistory: array of up to 6 maxLoad values (most-recent first), with null entries for sessions that had no completed sets with load. Requires TRAINER role."
+          },
+          "response": [
+            {
+              "name": "Get Exercise Progression - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/exercise-progression",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "exercise-progression"],
+                  "variable": [{"key": "studentId", "value": ""}]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": [\n    {\n      \"exerciseId\": \"uuid\",\n      \"exerciseName\": \"Bench Press\",\n      \"hasLoad\": true,\n      \"prescriptionMode\": \"reps\",\n      \"trainingId\": \"uuid\",\n      \"trainingName\": \"Peito\",\n      \"sessionCount\": 6,\n      \"lastPerformedAt\": \"2026-04-30T09:00:00.000Z\",\n      \"latest\": { \"date\": \"2026-04-30T09:00:00.000Z\", \"maxLoad\": 90.0, \"avgLoad\": 82.5, \"totalVolume\": 2475.0, \"completedSets\": 4, \"totalReps\": 30, \"avgRpe\": 8.5 },\n      \"trend\": { \"maxLoadDelta\": 10.0, \"maxLoadDeltaPct\": 12.5 },\n      \"loadHistory\": [90.0, 85.0, 82.5, 80.0, 77.5, 80.0]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Exercise Progression (Detail)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/exercise-progression/:exerciseId",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "dashboard", "exercise-progression", ":exerciseId"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "exerciseId",
+                  "value": "",
+                  "description": "Exercise UUID"
+                }
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime"
+                },
+                {
+                  "key": "sessionLimit",
+                  "value": "10",
+                  "disabled": true,
+                  "description": "Max sessions to return (1–30)"
+                }
+              ]
+            },
+            "description": "Returns per-session breakdown for a single exercise including set-level detail. Returns empty sessions array (not 404) when no logs exist in the window. Requires TRAINER role."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Activity",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "app-timezone",
+                "value": "America/Sao_Paulo",
+                "description": "IANA timezone for daily activity bucketing (e.g. America/Sao_Paulo, America/New_York). Defaults to America/Sao_Paulo.",
+                "disabled": true
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/daily-activity",
+              "host": ["{{baseUrl}}"],
+              "path": ["trainer", "students", ":studentId", "dashboard", "daily-activity"],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                }
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime. Start of window. Defaults to 90 days before dateTo."
+                },
+                {
+                  "key": "dateTo",
+                  "value": null,
+                  "disabled": true,
+                  "description": "ISO 8601 datetime. End of window. Defaults to now."
+                }
+              ]
+            },
+            "description": "Returns one row per calendar day in the student's timezone where the student had at least one session. Days with zero sessions are omitted — the frontend treats absence as empty. Aggregates volume and set counts from completed set logs only. Timezone is controlled via app-timezone header (IANA, defaults to America/Sao_Paulo). Status is always 'done' in V1. Requires TRAINER role."
+          },
+          "response": [
+            {
+              "name": "Get Daily Activity - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/daily-activity",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "daily-activity"],
+                  "variable": [{"key": "studentId", "value": ""}]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": [\n    {\n      \"date\": \"2026-04-15\",\n      \"status\": \"done\",\n      \"sessionCount\": 1,\n      \"sessionIds\": [\"uuid\"],\n      \"totalVolumeKg\": 1812.0,\n      \"completedSets\": 12,\n      \"totalSets\": 14\n    },\n    {\n      \"date\": \"2026-04-17\",\n      \"status\": \"done\",\n      \"sessionCount\": 2,\n      \"sessionIds\": [\"uuid1\", \"uuid2\"],\n      \"totalVolumeKg\": 3200.5,\n      \"completedSets\": 24,\n      \"totalSets\": 26\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Daily Activity - 200 OK (empty window)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/daily-activity",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "daily-activity"],
+                  "variable": [{"key": "studentId", "value": ""}]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": []\n}"
+            },
+            {
+              "name": "Get Daily Activity - 400 Invalid Date Range",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/dashboard/daily-activity?dateFrom=2026-04-10T00:00:00.000Z&dateTo=2026-04-01T00:00:00.000Z",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["trainer", "students", ":studentId", "dashboard", "daily-activity"],
+                  "variable": [{"key": "studentId", "value": ""}],
+                  "query": [
+                    {"key": "dateFrom", "value": "2026-04-10T00:00:00.000Z"},
+                    {"key": "dateTo", "value": "2026-04-01T00:00:00.000Z"}
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"error\": \"INVALID_DATE_RANGE\",\n  \"messageCode\": \"dashboard.invalidDateRange\",\n  \"message\": \"Invalid date range (dateFrom must be before dateTo)\",\n  \"details\": null\n}"
+            }
+          ]
         }
       ]
     }

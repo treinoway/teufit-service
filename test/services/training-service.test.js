@@ -418,6 +418,147 @@ describe('training-service', () => {
       );
     });
 
+    it('snapshots prescriptionMode from junction row and applies exclusivity for reps mode', async () => {
+      const junctionRow = makeJunctionRow({
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+        duration: null,
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+            duration: null,
+          }),
+        }),
+      );
+    });
+
+    it('snapshots prescriptionMode from junction row and applies exclusivity for duration mode', async () => {
+      const junctionRow = makeJunctionRow({
+        prescriptionMode: 'duration',
+        duration: 45,
+        repetitions: null,
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'duration',
+            duration: 45,
+            repetitions: null,
+          }),
+        }),
+      );
+    });
+
+    it('regression C1: cleans dirty junction row that has both repetitions and duration set when mode is duration', async () => {
+      // Simulates legacy data: junction row has both fields populated
+      const junctionRow = makeJunctionRow({
+        prescriptionMode: 'duration',
+        duration: 30,
+        repetitions: { min: 10, max: 10 }, // dirty — should be nulled by exclusivity
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'duration',
+            duration: 30,
+            repetitions: null,
+          }),
+        }),
+      );
+    });
+
+    it('regression C1: cleans dirty junction row that has both repetitions and duration set when mode is reps', async () => {
+      const junctionRow = makeJunctionRow({
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+        duration: 45, // dirty — should be nulled by exclusivity
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'reps',
+            repetitions: { min: 8, max: 12 },
+            duration: null,
+          }),
+        }),
+      );
+    });
+
+    it('regression C1: infers duration mode from junction row with null prescriptionMode when duration set and repetitions null', async () => {
+      const junctionRow = makeJunctionRow({
+        prescriptionMode: null,
+        duration: 60,
+        repetitions: null,
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            prescriptionMode: 'duration',
+            duration: 60,
+            repetitions: null,
+          }),
+        }),
+      );
+    });
+
     it('rolls back when one of the exercise.create calls rejects', async () => {
       const junctionRow1 = makeJunctionRow({ order: 0 });
       const junctionRow2 = makeJunctionRow({ exerciseTemplateId: 'et-2', order: 1 });

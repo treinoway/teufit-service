@@ -5,7 +5,11 @@ import {
   validateBodySegment,
   validateExerciseType,
   validateRepetitions,
+  validatePrescriptionMode,
+  applyPrescriptionModeExclusivity,
+  resolvePrescriptionMode,
 } from '../helpers/training-validators.js';
+import { PrescriptionMode } from '../constants/training.js';
 
 /**
  * Build junction row create/update data by merging caller overrides with template snapshot.
@@ -18,6 +22,17 @@ import {
  * @returns {object} Junction row create data
  */
 function buildJunctionCreateData(e, index, template) {
+  const resolvedMode = e.prescriptionMode !== undefined
+    ? e.prescriptionMode
+    : resolvePrescriptionMode(template.prescriptionMode, template);
+
+  const baseRepetitions = e.repetitions !== undefined ? e.repetitions : template.repetitions;
+  const baseDuration = e.duration !== undefined ? e.duration : template.duration;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, {
+    repetitions: baseRepetitions,
+    duration: baseDuration,
+  });
+
   return {
     exerciseTemplateId: e.exerciseTemplateId,
     order: e.order !== undefined ? e.order : index,
@@ -25,8 +40,9 @@ function buildJunctionCreateData(e, index, template) {
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
     sets: e.sets !== undefined ? e.sets : template.sets,
-    repetitions: e.repetitions !== undefined ? e.repetitions : template.repetitions,
-    duration: e.duration !== undefined ? e.duration : template.duration,
+    repetitions,
+    duration,
+    prescriptionMode: resolvedMode,
     hasLoad: e.hasLoad !== undefined ? e.hasLoad : template.hasLoad,
     suggestedLoad: e.suggestedLoad !== undefined ? e.suggestedLoad : template.suggestedLoad,
     restInterval: e.restInterval !== undefined ? e.restInterval : template.restInterval,
@@ -436,13 +452,21 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.sets !== undefined) updateData.sets = data.sets;
-  if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
-  if (data.duration !== undefined) updateData.duration = data.duration;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.order !== undefined) updateData.order = data.order;
+
+  if (data.prescriptionMode !== undefined) {
+    const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);
+    updateData.prescriptionMode = data.prescriptionMode;
+    updateData.repetitions = repetitions;
+    updateData.duration = duration;
+  } else {
+    if (data.repetitions !== undefined) updateData.repetitions = data.repetitions;
+    if (data.duration !== undefined) updateData.duration = data.duration;
+  }
 
   // 5. Update and return the updated junction row with exerciseTemplate for reference
   const updated = await prisma.trainingTemplateExerciseTemplate.update({
@@ -509,8 +533,11 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
   const { trainer } = await assertTrainerOwnsTemplate(userId, templateId);
 
   validateExerciseType(data.type);
+  validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
   const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
 
   const junction = await prisma.$transaction(async (tx) => {
@@ -522,8 +549,9 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         videoUrl: data.videoUrl ?? null,
         isPublic: data.isPublic !== undefined ? data.isPublic : false,
         sets: data.sets ?? null,
-        repetitions: data.repetitions ?? null,
-        duration: data.duration ?? null,
+        repetitions,
+        duration,
+        prescriptionMode: resolvedMode,
         hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
         suggestedLoad: data.suggestedLoad ?? null,
         restInterval: data.restInterval ?? null,
@@ -542,6 +570,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         sets: exerciseTemplate.sets,
         repetitions: exerciseTemplate.repetitions,
         duration: exerciseTemplate.duration,
+        prescriptionMode: exerciseTemplate.prescriptionMode,
         hasLoad: exerciseTemplate.hasLoad,
         suggestedLoad: exerciseTemplate.suggestedLoad,
         restInterval: exerciseTemplate.restInterval,
@@ -580,6 +609,8 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
   }
 
   const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
+  const resolvedMode = resolvePrescriptionMode(exerciseTemplate.prescriptionMode, exerciseTemplate);
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exerciseTemplate);
 
   const junction = await prisma.trainingTemplateExerciseTemplate.create({
     data: {
@@ -590,8 +621,9 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
       type: exerciseTemplate.type,
       videoUrl: exerciseTemplate.videoUrl,
       sets: exerciseTemplate.sets,
-      repetitions: exerciseTemplate.repetitions,
-      duration: exerciseTemplate.duration,
+      repetitions,
+      duration,
+      prescriptionMode: resolvedMode,
       hasLoad: exerciseTemplate.hasLoad,
       suggestedLoad: exerciseTemplate.suggestedLoad,
       restInterval: exerciseTemplate.restInterval,

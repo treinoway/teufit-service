@@ -1,4 +1,4 @@
-import { trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
+import { trainingCategoryValues, bodySegmentValues, weekDayValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -164,6 +164,7 @@ export const importedExerciseResponseSchema = {
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
     order: { type: 'integer' },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',

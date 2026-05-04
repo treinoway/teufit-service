@@ -100,8 +100,9 @@ async function resolveSetLog(setLogId, exerciseLogId) {
 
 /**
  * Verify that the trainer owns the student-trainer relationship.
+ * Exported so the student-dashboard-service can reuse it.
  */
-async function resolveTrainerStudent(trainerId, studentId) {
+export async function resolveTrainerStudent(trainerId, studentId) {
   const trainer = await prisma.trainer.findUnique({
     where: { userId: trainerId },
     select: { id: true },

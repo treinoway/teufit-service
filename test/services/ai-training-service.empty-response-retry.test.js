@@ -50,9 +50,14 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('../../src/services/student-dashboard-service.js', () => ({
+  buildAiPerformanceSnapshot: vi.fn(),
+}))
+
 import { prisma } from '../../src/db.js'
 import { processAiChat, processAiChatStream } from '../../src/services/ai-training-service.js'
-import { AI_RETRY } from '../../src/constants/ai.js'
+import { buildAiPerformanceSnapshot } from '../../src/services/student-dashboard-service.js'
+import { AI_RETRY, AI_TOOLS } from '../../src/constants/ai.js'
 
 // ---------------------------------------------------------------------------
 // Shared response shapes
@@ -386,5 +391,366 @@ describe('processAiChatStream — empty LLM response retry', () => {
 
     const doneEvent = events.find((e) => e.event === 'done')
     expect(doneEvent.data.message).toBe('Terceira tentativa!')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// processAiChat — read-only tool second LLM call (get_student_performance)
+// ---------------------------------------------------------------------------
+
+const PERFORMANCE_SNAPSHOT = Object.freeze({
+  studentId: 'student-perf-1',
+  studentName: 'Joao Silva',
+  window: 90,
+  sessionCounts: { completed: 8, in_progress: 0, abandoned: 2 },
+  totalSessions: 10,
+  completionRate: 0.8,
+  lastSessionAt: '2026-04-10T10:00:00.000Z',
+  currentProtocol: { id: 'proto-1', name: 'Hipertrofia' },
+  topExercises: [
+    {
+      exerciseId: 'ex-1',
+      name: 'Supino Reto',
+      hasLoad: true,
+      sessionCount: 6,
+      lastPerformedAt: '2026-04-10T10:00:00.000Z',
+      latestMaxLoad: 80,
+      latestAvgLoad: 70,
+      latestTotalVolume: 2400,
+      maxLoadDelta: 5,
+      maxLoadDeltaPct: 6.67,
+    },
+  ],
+})
+
+const TOOL_USE_RESPONSE = Object.freeze({
+  stopReason: 'tool_use',
+  text: null,
+  toolCalls: [{ id: 'tc-perf-unit-1', name: AI_TOOLS.GET_STUDENT_PERFORMANCE, input: { studentId: 'student-perf-1' } }],
+  rawContent: [{ type: 'tool_use', id: 'tc-perf-unit-1', name: AI_TOOLS.GET_STUDENT_PERFORMANCE, input: { studentId: 'student-perf-1' } }],
+})
+
+const ANALYSIS_RESPONSE = Object.freeze({
+  stopReason: 'end_turn',
+  text: 'Joao completou 8 de 10 sessoes (80% de adesao). Progressao de carga no Supino Reto: +5kg.',
+  toolCalls: [],
+  rawContent: [{ type: 'text', text: 'Joao completou 8 de 10 sessoes (80% de adesao). Progressao de carga no Supino Reto: +5kg.' }],
+})
+
+describe('processAiChat — read-only tool second LLM call', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prisma.$transaction.mockImplementation(async (fn) => {
+      if (typeof fn === 'function') return fn(prisma)
+      return Promise.all(fn.map((p) => p))
+    })
+    buildAiPerformanceSnapshot.mockResolvedValue({ ...PERFORMANCE_SNAPSHOT })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns the second LLM analysis text when get_student_performance executes successfully', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    mockChat
+      .mockResolvedValueOnce(TOOL_USE_RESPONSE)
+      .mockResolvedValueOnce(ANALYSIS_RESPONSE)
+
+    const result = await processAiChat('user-1', { message: 'Como esta o Joao?' })
+
+    expect(result.actionsExecuted).toHaveLength(1)
+    expect(result.actionsExecuted[0].tool).toBe(AI_TOOLS.GET_STUDENT_PERFORMANCE)
+    expect(result.actionsExecuted[0].success).toBe(true)
+    expect(result.message).toBe(ANALYSIS_RESPONSE.text)
+  })
+
+  it('makes exactly two LLM chat calls for get_student_performance (tool then analysis)', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    mockChat
+      .mockResolvedValueOnce(TOOL_USE_RESPONSE)
+      .mockResolvedValueOnce(ANALYSIS_RESPONSE)
+
+    await processAiChat('user-1', { message: 'Como esta o Joao?' })
+
+    expect(mockChat).toHaveBeenCalledTimes(2)
+
+    // Second call must include the tool_result in its messages
+    const secondCallMessages = mockChat.mock.calls[1][0].messages
+    const hasToolResult = secondCallMessages.some(
+      (m) => m.role === 'user' && Array.isArray(m.content) &&
+        m.content.some((b) => b.type === 'tool_result'),
+    )
+    expect(hasToolResult).toBe(true)
+  })
+
+  it('saves 4 DB records: user msg + first assistant (tool_use rawContent) + tool_result + second assistant (analysis)', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    mockChat
+      .mockResolvedValueOnce(TOOL_USE_RESPONSE)
+      .mockResolvedValueOnce(ANALYSIS_RESPONSE)
+
+    await processAiChat('user-1', { message: 'Como esta o Joao?' })
+
+    expect(prisma.aiMessage.create).toHaveBeenCalledTimes(4)
+
+    const calls = prisma.aiMessage.create.mock.calls
+    const roles = calls.map((c) => c[0].data.role)
+    expect(roles).toContain('user')
+    expect(roles).toContain('tool_result')
+    // Two assistant saves: first with rawContent (tool_use), second without (analysis text)
+    const assistantCalls = calls.filter((c) => c[0].data.role === 'assistant')
+    expect(assistantCalls).toHaveLength(2)
+    // First assistant save has rawContent
+    expect(assistantCalls[0][0].data.rawContent).toBeDefined()
+    // Second assistant save is the analysis text, no rawContent
+    expect(assistantCalls[1][0].data.rawContent).toBeUndefined()
+    expect(assistantCalls[1][0].data.content).toBe(ANALYSIS_RESPONSE.text)
+  })
+
+  it('falls back to deterministic paragraph when second LLM call returns empty text', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    vi.useFakeTimers()
+
+    mockChat
+      .mockResolvedValueOnce(TOOL_USE_RESPONSE)
+      .mockResolvedValue({
+        stopReason: 'end_turn',
+        text: null,
+        toolCalls: [],
+        rawContent: null,
+      })
+
+    const promise = processAiChat('user-1', { message: 'Como esta o Joao?' })
+    await vi.runAllTimersAsync()
+    const result = await promise
+
+    // Must NOT be the generic "Acao executada com sucesso!" default
+    expect(result.message).not.toBe('Ação executada com sucesso!')
+    // Must contain the student name from the snapshot
+    expect(result.message).toContain('Joao Silva')
+    // Must NOT be empty
+    expect(result.message.length).toBeGreaterThan(10)
+  })
+
+  it('does NOT make a second LLM call for write tools (import_from_template regression guard)', async () => {
+    // Existing conversation history so enforcement gate allows tool execution
+    prisma.aiConversation.findUnique.mockResolvedValue({
+      id: 'conv-write',
+      userId: 'user-1',
+      title: 'Test',
+      messages: [
+        { role: 'user', content: 'Cria um protocolo' },
+        { role: 'assistant', content: 'Confirma?' },
+      ].reverse(),
+    })
+    prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+    prisma.trainerStudent.findMany.mockResolvedValue([])
+    prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+    prisma.trainingTemplate.findMany.mockResolvedValue([])
+    prisma.trainingProtocol.findMany.mockResolvedValue([])
+    prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    prisma.aiMessage.create.mockResolvedValue({ id: 'msg-x' })
+    prisma.aiConversation.update.mockResolvedValue({})
+
+    // importFromTemplate resolves successfully (write tool executes)
+    const { importFromTemplate } = await import('../../src/services/training-protocol-service.js')
+    importFromTemplate.mockResolvedValueOnce({ id: 'new-proto-1', name: 'Protocolo Teste' })
+
+    const writeToolResponse = {
+      stopReason: 'tool_use',
+      text: null,
+      toolCalls: [{ id: 'tc-write-2', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: { templateId: 't1', assigneeId: 'a1', startDate: '2026-01-01', expirationDate: '2026-06-01' } }],
+      rawContent: [{ type: 'tool_use', id: 'tc-write-2', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: {} }],
+    }
+
+    mockChat.mockResolvedValueOnce(writeToolResponse)
+
+    await processAiChat('user-1', { message: 'Confirmo', conversationId: 'conv-write' })
+
+    // Only one LLM call — write tools skip the second call
+    expect(mockChat).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// processAiChatStream — read-only tool second LLM call (get_student_performance)
+// ---------------------------------------------------------------------------
+
+describe('processAiChatStream — read-only tool second LLM call', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prisma.$transaction.mockImplementation(async (fn) => {
+      if (typeof fn === 'function') return fn(prisma)
+      return Promise.all(fn.map((p) => p))
+    })
+    buildAiPerformanceSnapshot.mockResolvedValue({ ...PERFORMANCE_SNAPSHOT })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function makeToolUseStream() {
+    return async function* () {
+      // No text_delta — tool_use response has no text content
+      yield {
+        type: 'complete',
+        response: TOOL_USE_RESPONSE,
+      }
+    }
+  }
+
+  function makeAnalysisStream(text) {
+    return async function* () {
+      const chunks = text.match(/.{1,20}/g) || [text]
+      for (const chunk of chunks) {
+        yield { type: 'text_delta', content: chunk }
+      }
+      yield {
+        type: 'complete',
+        response: {
+          stopReason: 'end_turn',
+          text,
+          toolCalls: [],
+          rawContent: [{ type: 'text', text }],
+        },
+      }
+    }
+  }
+
+  function makeEmptyStream() {
+    return async function* () {
+      yield {
+        type: 'complete',
+        response: { stopReason: 'end_turn', text: null, toolCalls: [], rawContent: null },
+      }
+    }
+  }
+
+  it('yields text_delta chunks from second LLM call and done event with analysis text', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    const analysisText = 'Joao completou 8 de 10 sessoes com 80% de adesao.'
+
+    mockChatStream
+      .mockImplementationOnce(makeToolUseStream())
+      .mockImplementationOnce(makeAnalysisStream(analysisText))
+
+    const events = []
+    for await (const event of processAiChatStream('user-1', { message: 'Como esta o Joao?' })) {
+      events.push(event)
+    }
+
+    const textDeltas = events.filter((e) => e.event === 'text_delta')
+    expect(textDeltas.length).toBeGreaterThan(0)
+    const fullText = textDeltas.map((e) => e.data.content).join('')
+    expect(fullText).toBe(analysisText)
+
+    const doneEvent = events.find((e) => e.event === 'done')
+    expect(doneEvent).toBeDefined()
+    expect(doneEvent.data.message).toBe(analysisText)
+    expect(doneEvent.data.actionsExecuted).toHaveLength(1)
+    expect(doneEvent.data.actionsExecuted[0].tool).toBe(AI_TOOLS.GET_STUDENT_PERFORMANCE)
+  })
+
+  it('calls chatStream twice for get_student_performance (first stream then analysis stream)', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    const analysisText = 'Analise de desempenho do Joao.'
+
+    mockChatStream
+      .mockImplementationOnce(makeToolUseStream())
+      .mockImplementationOnce(makeAnalysisStream(analysisText))
+
+    // eslint-disable-next-line no-unused-vars
+    for await (const _ of processAiChatStream('user-1', { message: 'Desempenho' })) { /* drain */ }
+
+    expect(mockChatStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to deterministic text when follow-up stream returns empty, yields it as text_delta', async () => {
+    stubTrainerContext()
+    stubNewConversation()
+
+    vi.useFakeTimers()
+
+    mockChatStream
+      .mockImplementationOnce(makeToolUseStream())
+      .mockImplementation(makeEmptyStream())
+
+    const eventsPromise = (async () => {
+      const events = []
+      for await (const event of processAiChatStream('user-1', { message: 'Como esta?' })) {
+        events.push(event)
+      }
+      return events
+    })()
+    await vi.runAllTimersAsync()
+    const events = await eventsPromise
+
+    const textDeltas = events.filter((e) => e.event === 'text_delta')
+    expect(textDeltas.length).toBeGreaterThan(0)
+    const fallbackText = textDeltas.map((e) => e.data.content).join('')
+    expect(fallbackText).not.toBe('Ação executada com sucesso!')
+    expect(fallbackText).toContain('Joao Silva')
+
+    const doneEvent = events.find((e) => e.event === 'done')
+    expect(doneEvent.data.message).toBe(fallbackText)
+  })
+
+  it('does NOT call chatStream a second time for write tools (regression guard)', async () => {
+    // Existing conversation so enforcement gate allows write tool execution
+    prisma.aiConversation.findUnique.mockResolvedValue({
+      id: 'conv-write-stream',
+      userId: 'user-1',
+      title: 'Test',
+      messages: [
+        { role: 'user', content: 'Cria um protocolo' },
+        { role: 'assistant', content: 'Confirma?' },
+      ].reverse(),
+    })
+    prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+    prisma.trainerStudent.findMany.mockResolvedValue([])
+    prisma.trainingProtocolTemplate.findMany.mockResolvedValue([])
+    prisma.trainingTemplate.findMany.mockResolvedValue([])
+    prisma.trainingProtocol.findMany.mockResolvedValue([])
+    prisma.exerciseTemplate.findMany.mockResolvedValue([])
+    prisma.aiMessage.create.mockResolvedValue({ id: 'msg-ws' })
+    prisma.aiConversation.update.mockResolvedValue({})
+
+    // importFromTemplate resolves successfully (write tool executes)
+    const { importFromTemplate } = await import('../../src/services/training-protocol-service.js')
+    importFromTemplate.mockResolvedValueOnce({ id: 'new-proto-s', name: 'Protocolo Stream' })
+
+    const writeToolStreamResponse = async function* () {
+      yield {
+        type: 'complete',
+        response: {
+          stopReason: 'tool_use',
+          text: null,
+          toolCalls: [{ id: 'tc-write-s', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: { templateId: 't1', assigneeId: 'a1', startDate: '2026-01-01', expirationDate: '2026-06-01' } }],
+          rawContent: [{ type: 'tool_use', id: 'tc-write-s', name: AI_TOOLS.IMPORT_FROM_TEMPLATE, input: {} }],
+        },
+      }
+    }
+
+    mockChatStream.mockImplementationOnce(writeToolStreamResponse)
+
+    // eslint-disable-next-line no-unused-vars
+    for await (const _ of processAiChatStream('user-1', { message: 'Confirmo', conversationId: 'conv-write-stream' })) { /* drain */ }
+
+    // Write tools skip the second chatStream call
+    expect(mockChatStream).toHaveBeenCalledTimes(1)
   })
 })

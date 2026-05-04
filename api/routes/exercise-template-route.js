@@ -2,6 +2,7 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/exercise-template-service.js';
 import * as schema from '../schemas/exercise-template-route.schema.js';
+import { AppError } from '../../src/errors/app-error.js';
 
 export async function exerciseTemplateRoutes(fastify) {
   // Create exercise template
@@ -16,6 +17,7 @@ export async function exerciseTemplateRoutes(fastify) {
         const template = await service.createExerciseTemplate(request.user.id, request.body);
         return reply.status(201).send(template);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
@@ -103,6 +105,7 @@ export async function exerciseTemplateRoutes(fastify) {
         const updated = await service.updateExerciseTemplate(request.user.id, request.params.id, request.body);
         return reply.send(updated);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (error.code === 'EXERCISE_TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }

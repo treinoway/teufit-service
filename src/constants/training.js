@@ -75,6 +75,11 @@ export const ExerciseLogStatus = Object.freeze({
   SKIPPED: 'skipped',
 });
 
+export const PrescriptionMode = Object.freeze({
+  REPS: 'reps',
+  DURATION: 'duration',
+});
+
 // Export arrays of values for validation
 export const weekDayValues = Object.freeze(Object.values(WeekDays));
 export const trainingCategoryValues = Object.freeze(Object.values(TrainingCategory));
@@ -86,6 +91,7 @@ export const exerciseTypeValues = Object.freeze(Object.values(ExerciseType));
 export const protocolTypeValues = Object.freeze(Object.values(ProtocolType));
 export const workoutSessionStatusValues = Object.freeze(Object.values(WorkoutSessionStatus));
 export const exerciseLogStatusValues = Object.freeze(Object.values(ExerciseLogStatus));
+export const prescriptionModeValues = Object.freeze(Object.values(PrescriptionMode));
 
 // Workouts Today error codes and message codes
 export const WorkoutsTodayErrorCode = Object.freeze({
@@ -96,4 +102,21 @@ export const WorkoutsTodayErrorCode = Object.freeze({
 export const WorkoutsTodayMessageCode = Object.freeze({
   NO_ACTIVE_PROTOCOL: 'workoutsToday.noActiveProtocol',
   EMPTY_PROTOCOL: 'workoutsToday.emptyProtocol',
+});
+
+export const DASHBOARD_DEFAULTS = Object.freeze({
+  WINDOW_DAYS_DEFAULT: 90,
+  WINDOW_DAYS_MAX: 365,
+  RECENT_SESSIONS_DEFAULT: 10,
+  RECENT_SESSIONS_MAX: 50,
+  EXERCISES_LIST_DEFAULT: 20,
+  EXERCISES_LIST_MAX: 20,
+  SESSIONS_PER_EXERCISE_DEFAULT: 10,
+  SESSIONS_PER_EXERCISE_MAX: 30,
+  AI_SNAPSHOT_TOP_EXERCISES: 10,
+});
+
+export const DashboardMessageCode = Object.freeze({
+  INVALID_DATE_RANGE: 'dashboard.invalidDateRange',
+  WINDOW_TOO_LARGE: 'dashboard.windowTooLarge',
 });

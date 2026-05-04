@@ -1,4 +1,4 @@
-import { weekDayValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues } from '../../src/constants/training.js';
+import { weekDayValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -27,6 +27,7 @@ const exerciseTemplateRefSchema = {
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',
@@ -55,6 +56,7 @@ const trainingTemplateExerciseTemplateSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {
       type: 'object',

@@ -25,6 +25,14 @@ export default {
         max: 5,
         timeWindow: '1 minute',
       },
+      forgotPassword: {
+        max: 3,
+        timeWindow: '1 hour',
+      },
+      resetPassword: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
     },
     postalCode: {
       max: 10,
