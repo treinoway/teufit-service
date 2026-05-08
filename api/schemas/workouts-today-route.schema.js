@@ -23,21 +23,33 @@ const pendingTrainingSchema = {
   },
 };
 
+const workoutEntrySchema = {
+  type: 'object',
+  required: ['protocol', 'isRestDay'],
+  properties: {
+    protocol: protocolSummarySchema,
+    targetTraining: {
+      ...trainingWithExercisesResponseSchema,
+      nullable: true,
+    },
+    isRestDay: { type: 'boolean' },
+    nextScheduledDate: { type: 'string', format: 'date', nullable: true },
+  },
+};
+
 export const getWorkoutsTodaySchema = {
   tags: ['Workouts Today'],
-  summary: 'Get the workout the authenticated student should do today',
+  summary: 'Get the workout(s) the authenticated student should do today',
   security: [{ bearerAuth: [] }],
   response: {
     200: {
       type: 'object',
+      required: ['workouts'],
       properties: {
-        protocol: protocolSummarySchema,
-        targetTraining: {
-          ...trainingWithExercisesResponseSchema,
-          nullable: true,
+        workouts: {
+          type: 'array',
+          items: workoutEntrySchema,
         },
-        isRestDay: { type: 'boolean' },
-        nextScheduledDate: { type: 'string', format: 'date', nullable: true },
         pendingTraining: pendingTrainingSchema,
       },
     },

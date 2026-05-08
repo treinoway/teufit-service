@@ -1,66 +1,105 @@
-# Frontend Brief — Dashboard Timezone Support
+# Frontend Brief — Workouts Today: Multi-Protocol Support (treinoway-web)
 
-**Backend branch**: staging · **Generated**: 2026-05-03
+**Backend branch**: staging · **Generated**: 2026-05-08 · **Target**: `treinoway-web` (React 19 SPA)
 
-## Elevator pitch
-The student-dashboard summary and daily-activity endpoints now bucket session dates in the student's local timezone rather than UTC, so a session logged at 22h on Wednesday in Brazil is counted on Wednesday — not Thursday — fixing incorrect streak counts and calendar grids for Brazilian users.
+## Context for treinoway-web
 
-## User story
-As a trainer, I want the student's daily activity calendar and streak count to reflect the student's actual local calendar days, so I can trust that the streak and heatmap accurately represent the student's consistency.
+`treinoway-web` does not currently consume `GET /my/workouts/today`. This brief documents the new contract so any future student-facing "Workout of the Day" screen (or any feature that surfaces today's training in the web app) implements it correctly from the start. No existing screen needs migration.
 
-## User flows
-1. **Entry point**: Trainer opens a student's dashboard (Student Profile → Activity / Dashboard tab)
-2. **Happy path**:
-   - App sends `app-timezone` header on the `/dashboard/summary` and `/dashboard/daily-activity` requests (e.g. `America/Sao_Paulo`)
-   - Daily activity grid shows the correct local day for each session
-   - Max streak count is computed from local-calendar days, not UTC days
-3. **Branches**: If the header is omitted or invalid, the server silently falls back to `America/Sao_Paulo` — no error state is produced
+If/when this endpoint is wired into the web app, the consumer must follow the contract below — the response shape is an envelope, not a flat object.
 
-## UI states to cover
-- **No new visual states required** — the fix is transparent to rendered UI
-- **Audit needed**: verify `app-timezone` is already included in dashboard requests; if not, add it using the device locale or user profile timezone
-- **Fallback behavior**: missing or garbage `app-timezone` header → server uses `America/Sao_Paulo`, no error
+## API contract — GET /my/workouts/today
 
-## API contract
+- **Auth**: Bearer token (student role). Use the shared Axios instance at `src/api/axios.js` so token refresh + error normalization work automatically.
+- **Headers**: `app-language` (`pt-BR` default; backend appends `*Label` siblings on categorical fields). `app-timezone` optional.
+- **Success 200** envelope:
+  ```json
+  {
+    "workouts": [
+      {
+        "protocol": {
+          "id": "uuid",
+          "name": "Hipertrofia",
+          "startDate": "2025-01-01",
+          "expirationDate": "2025-06-30"
+        },
+        "targetTraining": {
+          "id": "uuid",
+          "name": "Treino A - Peito e Tríceps",
+          "category": "strength",
+          "categoryLabel": "Força",
+          "weekDay": "monday",
+          "weekDayLabel": "Segunda-feira",
+          "order": 0,
+          "exercises": []
+        },
+        "isRestDay": false,
+        "nextScheduledDate": null
+      },
+      {
+        "protocol": { "id": "uuid", "name": "Mobilidade", "startDate": "2025-02-01", "expirationDate": null },
+        "targetTraining": null,
+        "isRestDay": true,
+        "nextScheduledDate": "2025-05-10"
+      }
+    ],
+    "pendingTraining": {
+      "sessionId": "uuid",
+      "trainingId": "uuid",
+      "startedAt": "2025-05-08T10:00:00.000Z",
+      "status": "in_progress",
+      "statusLabel": "Em andamento"
+    }
+  }
+  ```
 
-### GET /trainer/students/:studentId/dashboard/summary
-- **Auth**: Bearer token, TRAINER role, student linked to trainer
-- **New header**:
-  - `app-timezone` (optional): IANA timezone string (e.g. `America/Sao_Paulo`). Defaults to `America/Sao_Paulo`.
-- **Timezone effect**: `maxStreakDays` is computed from consecutive local-calendar dates, not UTC dates
-- **Success** (200): unchanged shape — no new fields
-- **Errors** (unchanged):
-  - `400` · `INVALID_DATE_RANGE` · `dashboard.invalidDateRange`
-  - `400` · `WINDOW_TOO_LARGE` · `dashboard.windowTooLarge`
-  - `403` · wrong role or student not linked
-  - `404` · student not found
+  Invariants:
+  - `pendingTraining` lives at envelope root — once per response, never inside entries.
+  - `pendingTraining` is `null` when no in-progress session.
+  - `targetTraining` is `null` on rest days.
+  - `nextScheduledDate` is `null` on training days or when no future date computed.
+  - `workouts` ordered by `protocol.startDate` desc.
+  - Date-only fields (`startDate`, `expirationDate`, `nextScheduledDate`) are `"YYYY-MM-DD"` strings — do not pass to `new Date()` without timezone-safe parsing.
 
-### GET /trainer/students/:studentId/dashboard/daily-activity
-- **Auth**: Bearer token, TRAINER role, student linked to trainer
-- **New header**:
-  - `app-timezone` (optional): IANA timezone string. Defaults to `America/Sao_Paulo`.
-- **Timezone effect**: each row's `date` (YYYY-MM-DD) is now the local-calendar date in the provided timezone, not UTC date
-- **Success** (200): unchanged shape — no new fields
-- **Errors**: same as summary
+- **Errors** (Axios interceptor in `src/api/axios.js` will set `error.userMessage` from `messageCode`):
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized`
+  - `404` · `NO_ACTIVE_PROTOCOL` · `workoutsToday.noActiveProtocol`
+  - `404` · `EMPTY_PROTOCOL` · `workoutsToday.emptyProtocol`
+  - `429` · `RATE_LIMIT_EXCEEDED` · `rateLimit.exceeded`
+  - `500` · `INTERNAL_SERVER_ERROR` · `server.internalError`
 
-### Other dashboard endpoints (unchanged)
-`/dashboard/recent-sessions`, `/dashboard/exercise-progression`, `/dashboard/exercise-progression/:exerciseId` — no `app-timezone` support, return raw timestamps.
+## Cardinality rules for the consumer
 
-## i18n keys required
-No new message codes introduced in this change.
+1. Iterate `response.data.workouts` — do not read protocol/training/rest-day fields from the response root.
+2. Read `response.data.pendingTraining` once at the top level to drive a resume banner — do not read it from inside workout entries.
+3. Single-protocol case (most common) renders as one card. Multi-protocol is the rare case (e.g. strength + mobility from the same trainer); render one card per entry.
+4. Rest-day entries should not show a "start workout" CTA; they show `nextScheduledDate` when non-null.
 
-## Acceptance criteria
-- [ ] `app-timezone` header is sent on every `/dashboard/summary` and `/dashboard/daily-activity` request
-- [ ] A session logged at 22:30 local time on day D appears under date D in the daily activity grid, not D+1
-- [ ] The max streak counter correctly counts consecutive local-calendar days
-- [ ] Omitting `app-timezone` produces the same result as sending `America/Sao_Paulo`
-- [ ] Sending an invalid timezone string falls back gracefully — no 400 error
+## i18n keys (treinoway-web `src/i18n/`)
 
-## Out of scope
-- Trainer-side timezone preference setting
-- Displaying the student's timezone label in the UI
-- Any timezone handling for recent-sessions or exercise-progression views (those use raw timestamps)
+Add to both `pt-BR.js` and `en-US.js` if/when this screen is built:
 
-## Open design questions
-- Should `app-timezone` be derived from the device locale or a user profile setting? Product decision needed.
-- If trainer and student are in different timezones, whose timezone should the heatmap use? (Backend currently uses whatever the client sends.)
+- `workoutsToday.noActiveProtocol` — "Você ainda não tem um protocolo ativo." / "You don't have an active training protocol yet."
+- `workoutsToday.emptyProtocol` — "Seu protocolo ainda não tem treinos configurados." / "Your protocol has no trainings configured yet."
+
+Categorical labels (`categoryLabel`, `weekDayLabel`, `statusLabel`) come pre-translated from the backend via the `app-language` header — display them directly, no client-side translation needed.
+
+## Styling notes
+
+Follow `treinoway-web/CLAUDE.md` Rule 2: all styling via `src/index.css` design tokens and component classes. No new CSS files, no Tailwind, no CSS modules.
+
+## Acceptance criteria (when the screen is built)
+
+- [ ] Consumer iterates `response.data.workouts`; never reads protocol/training fields from response root.
+- [ ] Resume banner driven by `response.data.pendingTraining`, rendered at most once per screen.
+- [ ] Single active protocol renders one card.
+- [ ] Two active protocols render two cards ordered by `protocol.startDate` desc.
+- [ ] Rest-day cards show `nextScheduledDate` when non-null; no start CTA.
+- [ ] 404 `NO_ACTIVE_PROTOCOL` and `EMPTY_PROTOCOL` map to distinct empty states using the i18n keys above.
+- [ ] Date-only fields rendered without timezone shift bugs (use `formatDateOnly`-equivalent parsing on the client).
+
+## Out of scope for web
+
+- Student dashboard (`student-dashboard-service`) `currentProtocol` field — still returns single most-recent protocol; not changed in this PR.
+- Trainer branding resolution — unchanged.
+- Workout session start/resume flow — separate feature.

@@ -1,6 +1,6 @@
 export default {
   auth: {
-    accessTokenTtlSeconds: 60, // 1 minute
+    accessTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
   },
   rateLimit: {

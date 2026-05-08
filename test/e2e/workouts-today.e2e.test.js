@@ -96,7 +96,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
    * Creates an active protocol with the given trainings directly via Prisma.
    * Each entry in `trainingDefs` should have { name, category, weekDay?, order? }.
    */
-  async function createActiveProtocol(trainerId, studentId, trainingDefs = []) {
+  async function createActiveProtocol(trainerId, studentId, trainingDefs = [], protocolOverrides = {}) {
     const protocol = await prisma.trainingProtocol.create({
       data: {
         trainerId,
@@ -104,6 +104,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
         name: 'Test Protocol',
         status: 'active',
         startDate: new Date('2025-01-01'),
+        ...protocolOverrides,
       },
     });
 
@@ -153,7 +154,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     expect(res.json().messageCode).toBe(WorkoutsTodayMessageCode.NO_ACTIVE_PROTOCOL);
   });
 
-  it('returns 200 with targetTraining when weekDay protocol matches today', async () => {
+  it('returns 200 with workouts array and targetTraining when weekDay protocol matches today', async () => {
     const { trainerId } = await createTrainerWithToken();
     const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
     await linkStudentToTrainer(trainerId, studentId);
@@ -171,11 +172,12 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.targetTraining).not.toBeNull();
-    expect(body.targetTraining.weekDay).toBe(today);
-    expect(body.isRestDay).toBe(false);
+    expect(body.workouts).toHaveLength(1);
+    expect(body.workouts[0].targetTraining).not.toBeNull();
+    expect(body.workouts[0].targetTraining.weekDay).toBe(today);
+    expect(body.workouts[0].isRestDay).toBe(false);
     // i18n label sibling must be present
-    expect(body.targetTraining.weekDayLabel).toBeTruthy();
+    expect(body.workouts[0].targetTraining.weekDayLabel).toBeTruthy();
   });
 
   it('returns 200 with correct first training for order-based protocol', async () => {
@@ -197,10 +199,11 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.targetTraining).not.toBeNull();
-    expect(body.targetTraining.order).toBe(0);
-    expect(body.isRestDay).toBe(false);
-    expect(body.nextScheduledDate).toBeNull();
+    expect(body.workouts).toHaveLength(1);
+    expect(body.workouts[0].targetTraining).not.toBeNull();
+    expect(body.workouts[0].targetTraining.order).toBe(0);
+    expect(body.workouts[0].isRestDay).toBe(false);
+    expect(body.workouts[0].nextScheduledDate).toBeNull();
   });
 
   it('returns 200 with isRestDay: true and nextScheduledDate for rest day', async () => {
@@ -222,15 +225,16 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.isRestDay).toBe(true);
-    expect(body.targetTraining).toBeNull();
+    expect(body.workouts).toHaveLength(1);
+    expect(body.workouts[0].isRestDay).toBe(true);
+    expect(body.workouts[0].targetTraining).toBeNull();
     // nextScheduledDate should be a YYYY-MM-DD string (the next matching day)
-    if (body.nextScheduledDate !== null) {
-      expect(body.nextScheduledDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    if (body.workouts[0].nextScheduledDate !== null) {
+      expect(body.workouts[0].nextScheduledDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 
-  it('returns 200 with pendingTraining populated when an in_progress session exists', async () => {
+  it('returns 200 with pendingTraining at envelope root when an in_progress session exists', async () => {
     const { trainerId } = await createTrainerWithToken();
     const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
     await linkStudentToTrainer(trainerId, studentId);
@@ -256,12 +260,17 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
+
+    // pendingTraining is at the envelope root
     expect(body.pendingTraining).not.toBeNull();
     expect(body.pendingTraining.sessionId).toBe(session.id);
     expect(body.pendingTraining.trainingId).toBe(trainings[0].id);
     expect(body.pendingTraining.startedAt).toBeTruthy();
     expect(body.pendingTraining.status).toBe('in_progress');
     expect(body.pendingTraining.statusLabel).toBeTruthy();
+
+    // pendingTraining must NOT appear inside workout entries
+    expect(body.workouts[0]).not.toHaveProperty('pendingTraining');
   });
 
   it('returns translated labels based on app-language header', async () => {
@@ -293,8 +302,8 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     const enBody = enRes.json();
 
     // category 'strength' → 'Força' in pt-BR, 'Strength' in en-US
-    expect(ptBody.targetTraining.categoryLabel).toBe('Força');
-    expect(enBody.targetTraining.categoryLabel).toBe('Strength');
+    expect(ptBody.workouts[0].targetTraining.categoryLabel).toBe('Força');
+    expect(enBody.workouts[0].targetTraining.categoryLabel).toBe('Strength');
   });
 
   it('returns 200 (not 400) when app-timezone header is invalid', async () => {
@@ -317,5 +326,45 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
 
     // Must not 400 — falls back to America/Sao_Paulo
     expect(res.statusCode).toBe(200);
+  });
+
+  it('returns one workout entry per active protocol for a student with multiple protocols', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    // Two active protocols — different start dates so ordering is deterministic
+    await createActiveProtocol(
+      trainerId,
+      studentId,
+      [{ name: 'Strength A', category: 'strength', weekDay: null, order: 0 }],
+      { name: 'Strength Protocol', startDate: new Date('2025-02-01') },
+    );
+    await createActiveProtocol(
+      trainerId,
+      studentId,
+      [{ name: 'Mobility A', category: 'flexibility', weekDay: null, order: 0 }],
+      { name: 'Mobility Protocol', startDate: new Date('2025-01-01') },
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: { authorization: `Bearer ${studentToken}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // One entry per protocol
+    expect(body.workouts).toHaveLength(2);
+
+    // Ordered by startDate desc: Strength (2025-02-01) first, Mobility (2025-01-01) second
+    expect(body.workouts[0].protocol.name).toBe('Strength Protocol');
+    expect(body.workouts[1].protocol.name).toBe('Mobility Protocol');
+
+    // pendingTraining at envelope level
+    expect(body).toHaveProperty('pendingTraining');
+    expect(body.pendingTraining).toBeNull();
   });
 });

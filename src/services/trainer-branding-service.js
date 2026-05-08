@@ -184,6 +184,11 @@ export async function getBrandingByTrainerId({ trainerId }) {
  * - Returns { gymName, trainerName, trainerAvatarUrl, branding } or null
  */
 export async function getStudentTrainerBranding({ studentUserId }) {
+  // findFirst is intentional: we pick the trainer from the most recent active protocol.
+  // The assumption is that when a student has multiple active protocols, they all belong
+  // to the same trainer (a trainer assigns both, e.g. strength + mobility). In the rare
+  // case of two different trainers, we show the most-recently-created protocol's trainer,
+  // which is the best approximation without a formal "primary trainer" concept.
   const activeProtocol = await prisma.trainingProtocol.findFirst({
     where: {
       assigneeId: studentUserId,
