@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { AppError } from '../errors/app-error.js';
 import {
   buildError,
   validateExerciseType,
@@ -318,6 +319,117 @@ export async function updateExercise(userId, exerciseId, data) {
   });
 
   return normalizeExercisePrescriptionMode(updated);
+}
+
+/**
+ * Reorder all exercises within a training atomically.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string} trainingId - Training ID
+ * @param {string[]} exerciseIds - Full ordered list of exercise IDs in the desired order
+ * @returns {Promise<{trainingId: string, exercises: Array<{id: string, name: string, order: number}>}>}
+ */
+export async function reorderExercisesInTraining(userId, trainingId, exerciseIds) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  const training = await prisma.training.findUnique({
+    where: { id: trainingId },
+    select: {
+      id: true,
+      deletedAt: true,
+      trainingProtocol: {
+        select: { trainerId: true, deletedAt: true },
+      },
+      exercises: {
+        where: { deletedAt: null },
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  if (!training || training.deletedAt || training.trainingProtocol?.deletedAt) {
+    throw buildError('TRAINING_NOT_FOUND', 'Training not found', 404);
+  }
+
+  if (training.trainingProtocol.trainerId !== trainer.id) {
+    throw buildError('FORBIDDEN_NOT_PROTOCOL_OWNER', 'You do not own this training', 403);
+  }
+
+  const activeExercises = training.exercises;
+  const activeExerciseIds = new Set(activeExercises.map((e) => e.id));
+
+  const validationDetails = validateExerciseIdsForReorder(exerciseIds, activeExerciseIds);
+  if (validationDetails) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      message: 'Invalid exerciseIds for reorder',
+      details: validationDetails,
+    });
+  }
+
+  const activeExerciseById = Object.fromEntries(activeExercises.map((e) => [e.id, e]));
+
+  await prisma.$transaction((tx) =>
+    Promise.all(
+      exerciseIds.map((id, index) =>
+        tx.exercise.update({
+          where: { id },
+          data: { order: index },
+        }),
+      ),
+    ),
+  );
+
+  return {
+    trainingId,
+    exercises: exerciseIds.map((id, index) => ({
+      id,
+      name: activeExerciseById[id].name,
+      order: index,
+    })),
+  };
+}
+
+function validateExerciseIdsForReorder(exerciseIds, activeExerciseIds) {
+  if (!exerciseIds || exerciseIds.length === 0) {
+    return { reason: 'exerciseIds must be a non-empty array' };
+  }
+
+  const seen = new Set();
+  const duplicates = [];
+  for (const id of exerciseIds) {
+    if (seen.has(id)) {
+      duplicates.push(id);
+    }
+    seen.add(id);
+  }
+  if (duplicates.length > 0) {
+    return { reason: 'duplicate IDs', duplicates };
+  }
+
+  const unknownIds = exerciseIds.filter((id) => !activeExerciseIds.has(id));
+  if (unknownIds.length > 0) {
+    return { reason: 'unknown or soft-deleted exercise IDs', unknownIds };
+  }
+
+  if (exerciseIds.length !== activeExerciseIds.size) {
+    return {
+      reason: 'length mismatch',
+      expected: activeExerciseIds.size,
+      received: exerciseIds.length,
+    };
+  }
+
+  return null;
 }
 
 /**

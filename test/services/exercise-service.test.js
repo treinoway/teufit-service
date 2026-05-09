@@ -11,6 +11,7 @@ vi.mock('../../src/db.js', () => ({
     },
     training: { findUnique: vi.fn() },
     exerciseTemplate: { findUnique: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -20,6 +21,7 @@ import {
   getExerciseById,
   updateExercise,
   deleteExercise,
+  reorderExercisesInTraining,
 } from '../../src/services/exercise-service.js';
 
 const makeExercise = (overrides = {}) => ({
@@ -470,6 +472,229 @@ describe('exercise-service', () => {
         code: 'EXERCISE_NOT_FOUND',
         statusCode: 404,
       });
+    });
+  });
+
+  describe('reorderExercisesInTraining', () => {
+    const makeTrainingWithExercises = (exercises = [], overrides = {}) => ({
+      id: 'tr1',
+      deletedAt: null,
+      trainingProtocol: {
+        id: 'p1',
+        trainerId: 't1',
+        deletedAt: null,
+      },
+      exercises,
+      ...overrides,
+    });
+
+    const activeExercises = [
+      { id: 'ex1', name: 'Squat' },
+      { id: 'ex2', name: 'Lunge' },
+      { id: 'ex3', name: 'Deadlift' },
+    ];
+
+    function setupHappyPath(exerciseIds = ['ex3', 'ex1', 'ex2']) {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      return { txMock, exerciseIds };
+    }
+
+    it('returns trainingId and exercises in new order on success', async () => {
+      const { exerciseIds } = setupHappyPath(['ex3', 'ex1', 'ex2']);
+
+      const result = await reorderExercisesInTraining('u1', 'tr1', exerciseIds);
+
+      expect(result).toEqual({
+        trainingId: 'tr1',
+        exercises: [
+          { id: 'ex3', name: 'Deadlift', order: 0 },
+          { id: 'ex1', name: 'Squat', order: 1 },
+          { id: 'ex2', name: 'Lunge', order: 2 },
+        ],
+      });
+    });
+
+    it('updates each exercise with its index as order inside a transaction', async () => {
+      const { txMock } = setupHappyPath(['ex3', 'ex1', 'ex2']);
+
+      await reorderExercisesInTraining('u1', 'tr1', ['ex3', 'ex1', 'ex2']);
+
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+      expect(txMock.exercise.update).toHaveBeenCalledTimes(3);
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex3' }, data: { order: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex1' }, data: { order: 1 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex2' }, data: { order: 2 } });
+    });
+
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws TRAINING_NOT_FOUND when training does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(null);
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1']),
+      ).rejects.toMatchObject({ code: 'TRAINING_NOT_FOUND', statusCode: 404 });
+    });
+
+    it('throws TRAINING_NOT_FOUND when training is soft-deleted', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(
+        makeTrainingWithExercises(activeExercises, { deletedAt: new Date() }),
+      );
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
+      ).rejects.toMatchObject({ code: 'TRAINING_NOT_FOUND', statusCode: 404 });
+    });
+
+    it('throws TRAINING_NOT_FOUND when protocol is soft-deleted', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(
+        makeTrainingWithExercises(activeExercises, {
+          trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: new Date() },
+        }),
+      );
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
+      ).rejects.toMatchObject({ code: 'TRAINING_NOT_FOUND', statusCode: 404 });
+    });
+
+    it('throws FORBIDDEN_NOT_PROTOCOL_OWNER when trainer does not own the protocol', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(
+        makeTrainingWithExercises(activeExercises, {
+          trainingProtocol: { id: 'p1', trainerId: 'other-trainer', deletedAt: null },
+        }),
+      );
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_NOT_PROTOCOL_OWNER', statusCode: 403 });
+    });
+
+    it('throws VALIDATION_ERROR with details when exerciseIds is empty', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', []),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ reason: expect.stringContaining('non-empty') }),
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws VALIDATION_ERROR with duplicates detail when exerciseIds contains duplicates', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex1']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ reason: 'duplicate IDs', duplicates: ['ex1'] }),
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws VALIDATION_ERROR when fewer IDs are passed than active exercises', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ reason: 'length mismatch', expected: 3, received: 2 }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR when more IDs are passed than active exercises', async () => {
+      // Any extra ID is by definition unknown — unknown-ID check fires before length-mismatch.
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3', 'ex-extra']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({
+          reason: 'unknown or soft-deleted exercise IDs',
+          unknownIds: ['ex-extra'],
+        }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR with unknownIds detail when an ID does not belong to this training', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex-foreign']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ reason: 'unknown or soft-deleted exercise IDs', unknownIds: ['ex-foreign'] }),
+      });
+    });
+
+    it('excludes soft-deleted exercises from the active count and rejects them if passed', async () => {
+      const exercisesWithDeleted = [
+        { id: 'ex1', name: 'Squat' },
+        { id: 'ex2', name: 'Lunge' },
+        // ex-deleted is intentionally absent because the query uses `deletedAt: null`
+      ];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(exercisesWithDeleted));
+
+      // Passing the soft-deleted ID: length matches (2) but the ID is not in the active set
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex-deleted']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ reason: 'unknown or soft-deleted exercise IDs' }),
+      });
+    });
+
+    it('rolls back all updates when the transaction callback throws', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
+
+      const dbError = new Error('DB constraint violation');
+      prisma.$transaction.mockRejectedValue(dbError);
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
+      ).rejects.toThrow('DB constraint violation');
     });
   });
 });
