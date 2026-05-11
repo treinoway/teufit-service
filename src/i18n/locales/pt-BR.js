@@ -269,6 +269,8 @@ export default {
     'exercise.supersetMembershipInvalid': 'Os exercícios do bi-set devem ser contíguos na sequência do treino.',
     'exercise.supersetMinMembers': 'Um bi-set requer no mínimo 2 exercícios.',
     'exercise.supersetMaxMembers': 'Um bi-set não pode ter mais de 6 exercícios.',
+    'exercise.alreadyInSuperset': 'Um ou mais exercícios já pertencem a um bi-set.',
+    'exercise.supersetGroupNotFound': 'Bi-set não encontrado ou sem membros ativos.',
 
     // Substitute exercises
     'exercise.substituteSameTraining': 'O exercício substituto deve pertencer ao mesmo treino que o exercício principal.',

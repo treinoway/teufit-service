@@ -150,6 +150,57 @@ export async function exerciseRoutes(fastify) {
     },
   );
 
+  // POST /trainer/trainings/:trainingId/supersets — Create a superset (bi-set)
+  fastify.post(
+    '/trainer/trainings/:trainingId/supersets',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createSupersetSchema,
+    },
+    async (request, reply) => {
+      const result = await service.createSuperset(
+        request.user.id,
+        request.params.trainingId,
+        request.body.exerciseIds,
+      );
+      return reply.status(201).send(result);
+    },
+  );
+
+  // DELETE /trainer/trainings/:trainingId/supersets/:groupId — Dissolve a superset
+  fastify.delete(
+    '/trainer/trainings/:trainingId/supersets/:groupId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.dissolveSupersetSchema,
+    },
+    async (request, reply) => {
+      const result = await service.dissolveSuperset(
+        request.user.id,
+        request.params.trainingId,
+        request.params.groupId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // PATCH /trainer/trainings/:trainingId/exercises/order — Reorder exercises in a training
+  fastify.patch(
+    '/trainer/trainings/:trainingId/exercises/order',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.reorderExercisesInTrainingSchema,
+    },
+    async (request, reply) => {
+      const result = await service.reorderExercisesInTraining(
+        request.user.id,
+        request.params.trainingId,
+        request.body.exerciseIds,
+      );
+      return reply.send(result);
+    },
+  );
+
   // ========== MY ROUTES (ASSIGNEE) ==========
 
   // GET /my/trainings/:trainingId/exercises — Get exercises by training (assignee context)

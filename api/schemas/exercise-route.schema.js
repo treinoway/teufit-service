@@ -323,6 +323,137 @@ export const reorderSubstitutesSchema = {
   },
 };
 
+const supersetMemberResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    order: { type: 'integer' },
+    supersetOrder: { type: 'integer' },
+  },
+};
+
+export const createSupersetSchema = {
+  tags: ['Exercises - Trainer'],
+  summary: 'Create a superset (bi-set) from existing exercises',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['trainingId'],
+    properties: { trainingId: { type: 'string', format: 'uuid' } },
+  },
+  body: {
+    type: 'object',
+    required: ['exerciseIds'],
+    properties: {
+      exerciseIds: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        minItems: 2,
+        maxItems: 6,
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    201: {
+      type: 'object',
+      properties: {
+        supersetGroupId: { type: 'string', format: 'uuid' },
+        trainingId: { type: 'string', format: 'uuid' },
+        members: {
+          type: 'array',
+          items: supersetMemberResponseSchema,
+        },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const dissolveSupersetSchema = {
+  tags: ['Exercises - Trainer'],
+  summary: 'Dissolve a superset group',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['trainingId', 'groupId'],
+    properties: {
+      trainingId: { type: 'string', format: 'uuid' },
+      groupId: { type: 'string', format: 'uuid' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        supersetGroupId: { type: 'string', format: 'uuid' },
+        trainingId: { type: 'string', format: 'uuid' },
+        dissolvedCount: { type: 'integer' },
+      },
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const reorderExercisesInTrainingSchema = {
+  tags: ['Exercises - Trainer'],
+  summary: 'Reorder all exercises within a training',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['trainingId'],
+    properties: { trainingId: { type: 'string', format: 'uuid' } },
+  },
+  body: {
+    type: 'object',
+    required: ['exerciseIds'],
+    properties: {
+      exerciseIds: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        minItems: 1,
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        trainingId: { type: 'string', format: 'uuid' },
+        exercises: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              name: { type: 'string' },
+              order: { type: 'integer' },
+            },
+          },
+        },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const reorderSupersetMembersSchema = {
   tags: ['Exercises - Trainer'],
   summary: 'Reorder exercises within a superset group',

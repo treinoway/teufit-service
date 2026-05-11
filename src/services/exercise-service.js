@@ -16,6 +16,7 @@ import {
   SupersetMessageCode,
   SubstituteMessageCode,
 } from '../constants/training.js';
+import { randomUUID } from 'crypto';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -932,4 +933,197 @@ export async function reorderSupersetMembers(userId, trainingId, supersetGroupId
     name: memberById[id].name,
     supersetOrder: index,
   }));
+}
+
+// ─── Create superset ─────────────────────────────────────────────────────────
+
+/**
+ * Atomically group existing exercises into a new superset (bi-set).
+ *
+ * The array order defines both supersetOrder (0-based) and the training-level
+ * order: members are made contiguous starting at the minimum current order of
+ * any selected exercise. Non-member exercises that occupy positions inside that
+ * target block are shifted upward to make room.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} trainingId - Training ID (from URL param)
+ * @param {string[]} exerciseIds - Ordered list of 2–6 principal exercise IDs
+ * @returns {Promise<{ supersetGroupId, trainingId, members }>}
+ */
+export async function createSuperset(userId, trainingId, exerciseIds) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  await verifyTrainingOwnership(trainingId, trainer.id);
+
+  if (!exerciseIds || exerciseIds.length < SupersetConstraints.MIN_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MIN_MEMBERS,
+      message: `A superset group requires at least ${SupersetConstraints.MIN_MEMBERS} members`,
+    });
+  }
+
+  if (exerciseIds.length > SupersetConstraints.MAX_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MAX_MEMBERS,
+      message: `A superset group cannot have more than ${SupersetConstraints.MAX_MEMBERS} members`,
+    });
+  }
+
+  const supersetGroupId = randomUUID();
+
+  const updatedMembers = await prisma.$transaction(async (tx) => {
+    const allActive = await tx.exercise.findMany({
+      where: { trainingId, deletedAt: null },
+      orderBy: { order: 'asc' },
+    });
+
+    // Validate each exercise ID exists in this training and is a principal
+    const memberMap = new Map();
+    for (const id of exerciseIds) {
+      const exercise = allActive.find((e) => e.id === id);
+      if (!exercise) {
+        throw new AppError({
+          httpStatus: 404,
+          error: 'EXERCISE_NOT_FOUND',
+          messageCode: 'resource.notFound',
+          message: `Exercise ${id} not found in training`,
+        });
+      }
+      if (exercise.substituteForExerciseId !== null) {
+        throw new AppError({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+          message: 'Substitute exercises cannot belong to a superset group',
+        });
+      }
+      if (exercise.supersetGroupId !== null) {
+        throw new AppError({
+          httpStatus: 409,
+          error: 'EXERCISE_ALREADY_IN_SUPERSET',
+          messageCode: SupersetMessageCode.ALREADY_IN_SUPERSET,
+          message: 'One or more exercises already belong to a superset group',
+        });
+      }
+      memberMap.set(id, exercise);
+    }
+
+    // Determine the contiguous target block starting at the lowest current order
+    // of any selected member. Members are placed at [blockStart, blockStart+N-1]
+    // in the caller's array order. Non-member principals that currently sit inside
+    // that range are shifted to start immediately after the block, preserving
+    // their relative sequence.
+    const memberIds = new Set(exerciseIds);
+    const memberCurrentOrders = exerciseIds.map((id) => memberMap.get(id).order);
+    const blockStart = Math.min(...memberCurrentOrders);
+    const blockSize = exerciseIds.length;
+    const blockEnd = blockStart + blockSize - 1;
+
+    // Non-member principals at or after blockStart, in ascending order. Their
+    // relative sequence is preserved but they are re-indexed starting at
+    // blockEnd + 1 to make room for the contiguous member block.
+    const nonMembersAtOrAfterBlock = allActive
+      .filter((e) => !memberIds.has(e.id) && e.substituteForExerciseId === null && e.order >= blockStart)
+      .sort((a, b) => a.order - b.order);
+
+    // Pre-build ascending-index map for O(1) lookup inside the descending loop.
+    const ascendingIndexById = new Map(nonMembersAtOrAfterBlock.map((e, i) => [e.id, i]));
+
+    // Process in descending target-order to avoid transient collisions (higher
+    // values written first so in-flight rows are never stomped by a later write).
+    const sortedDescending = [...nonMembersAtOrAfterBlock].sort((a, b) => b.order - a.order);
+    for (const ex of sortedDescending) {
+      const targetOrder = blockEnd + 1 + ascendingIndexById.get(ex.id);
+      if (targetOrder !== ex.order) {
+        await tx.exercise.update({
+          where: { id: ex.id },
+          data: { order: targetOrder },
+        });
+      }
+    }
+
+    // Assign members their contiguous orders and superset fields
+    const results = [];
+    for (let i = 0; i < exerciseIds.length; i += 1) {
+      const id = exerciseIds[i];
+      const updated = await tx.exercise.update({
+        where: { id },
+        data: {
+          supersetGroupId,
+          supersetOrder: i,
+          order: blockStart + i,
+        },
+        select: { id: true, name: true, order: true, supersetOrder: true },
+      });
+      results.push(updated);
+    }
+
+    return results;
+  });
+
+  return {
+    supersetGroupId,
+    trainingId,
+    members: updatedMembers,
+  };
+}
+
+// ─── Dissolve superset ───────────────────────────────────────────────────────
+
+/**
+ * Dissolve a superset group: members become standalone exercises retaining
+ * their current `order`. No rearrangement is applied.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} trainingId - Training ID (from URL param)
+ * @param {string} groupId - Superset group UUID
+ * @returns {Promise<{ supersetGroupId, trainingId, dissolvedCount }>}
+ */
+export async function dissolveSuperset(userId, trainingId, groupId) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  await verifyTrainingOwnership(trainingId, trainer.id);
+
+  const members = await prisma.exercise.findMany({
+    where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+    select: { id: true },
+  });
+
+  if (members.length === 0) {
+    throw new AppError({
+      httpStatus: 404,
+      error: 'SUPERSET_GROUP_NOT_FOUND',
+      messageCode: SupersetMessageCode.GROUP_NOT_FOUND,
+      message: 'Superset group not found or has no active members',
+    });
+  }
+
+  await prisma.exercise.updateMany({
+    where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+    data: { supersetGroupId: null, supersetOrder: 0 },
+  });
+
+  return {
+    supersetGroupId: groupId,
+    trainingId,
+    dissolvedCount: members.length,
+  };
 }

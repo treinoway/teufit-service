@@ -265,6 +265,8 @@ export default {
     'exercise.supersetMembershipInvalid': 'Superset exercises must be contiguous in the training sequence.',
     'exercise.supersetMinMembers': 'A superset requires at least 2 exercises.',
     'exercise.supersetMaxMembers': 'A superset cannot have more than 6 exercises.',
+    'exercise.alreadyInSuperset': 'One or more exercises already belong to a superset group.',
+    'exercise.supersetGroupNotFound': 'Superset group not found or has no active members.',
 
     // Substitute exercises
     'exercise.substituteSameTraining': 'The substitute exercise must belong to the same training as the principal.',

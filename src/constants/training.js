@@ -104,6 +104,8 @@ export const SupersetMessageCode = Object.freeze({
   MEMBERSHIP_INVALID: 'exercise.supersetMembershipInvalid',
   MIN_MEMBERS: 'exercise.supersetMinMembers',
   MAX_MEMBERS: 'exercise.supersetMaxMembers',
+  ALREADY_IN_SUPERSET: 'exercise.alreadyInSuperset',
+  GROUP_NOT_FOUND: 'exercise.supersetGroupNotFound',
 });
 
 export const SubstituteMessageCode = Object.freeze({
