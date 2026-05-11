@@ -1,8 +1,36 @@
 import { prisma } from '../db.js';
-import { WorkoutSessionStatus, ExerciseLogStatus } from '../constants/training.js';
+import { WorkoutSessionStatus, ExerciseLogStatus, SubstituteMessageCode } from '../constants/training.js';
 import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
 import { awardWorkoutCompletionPoints } from './gamification-service.js';
+
+// ─── Shared selects ──────────────────────────────────────────────────────────
+
+/**
+ * The exercise select used in all session-detail queries.
+ * Includes substitutes[] so the student app can render swap options without an extra fetch.
+ */
+const exerciseSelectWithSubstitutes = {
+  select: {
+    id: true,
+    name: true,
+    type: true,
+    sets: true,
+    repetitions: true,
+    duration: true,
+    prescriptionMode: true,
+    hasLoad: true,
+    suggestedLoad: true,
+    restInterval: true,
+    videoUrl: true,
+    notes: true,
+    substitutes: {
+      where: { deletedAt: null },
+      orderBy: { substituteOrder: 'asc' },
+      select: { id: true, name: true, type: true, substituteOrder: true },
+    },
+  },
+};
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -16,7 +44,8 @@ async function resolveAssigneeTraining(trainingId, userId) {
     include: {
       trainingProtocol: { select: { id: true, assigneeId: true, deletedAt: true } },
       exercises: {
-        where: { deletedAt: null },
+        // Only principals — substitutes are logged on-demand when the student swaps
+        where: { deletedAt: null, substituteForExerciseId: null },
         select: { id: true, order: true },
         orderBy: { order: 'asc' },
       },
@@ -186,7 +215,7 @@ export async function startSession(userId, trainingId, data = null) {
         exerciseLogs: {
           orderBy: { order: 'asc' },
           include: {
-            exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
+            exercise: exerciseSelectWithSubstitutes,
             setLogs: { orderBy: { setNumber: 'asc' } },
           },
         },
@@ -256,7 +285,7 @@ export async function getSession(userId, sessionId) {
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
-          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
+          exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },
         },
       },
@@ -316,7 +345,7 @@ export async function updateSession(userId, sessionId, data) {
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
-          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
+          exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },
         },
       },
@@ -507,6 +536,96 @@ export async function listStudentSessions(trainerId, studentId, filters = {}) {
 }
 
 /**
+ * Substitute an exercise log with a substitute exercise.
+ *
+ * Marks the principal ExerciseLog status as 'substituted' and sets
+ * substitutedByExerciseId. Creates a new ExerciseLog for the substitute
+ * exercise in the same session, ordered immediately after the principal.
+ * Idempotent: re-calling with the same substituteExerciseId is a no-op.
+ *
+ * @param {string} userId
+ * @param {string} sessionId
+ * @param {string} exerciseLogId - The principal ExerciseLog ID
+ * @param {string} substituteExerciseId - The Exercise.id of the substitute to use
+ * @returns {Promise<object>} The new ExerciseLog for the substitute exercise
+ */
+export async function substituteExerciseLog(userId, sessionId, exerciseLogId, substituteExerciseId) {
+  const principalLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+
+  // Idempotent: if already substituted with the same exercise, return existing log
+  if (
+    principalLog.status === ExerciseLogStatus.SUBSTITUTED &&
+    principalLog.substitutedByExerciseId === substituteExerciseId
+  ) {
+    const existing = await prisma.exerciseLog.findFirst({
+      where: { workoutSessionId: sessionId, exerciseId: substituteExerciseId },
+      include: { setLogs: { orderBy: { setNumber: 'asc' } } },
+    });
+    if (existing) return existing;
+  }
+
+  if (principalLog.status === ExerciseLogStatus.SUBSTITUTED) {
+    throw new AppError({
+      httpStatus: 409,
+      error: 'EXERCISE_LOG_ALREADY_SUBSTITUTED',
+      messageCode: SubstituteMessageCode.LOG_ALREADY_SUBSTITUTED,
+      message: 'This exercise log has already been substituted',
+      details: { substitutedByExerciseId: principalLog.substitutedByExerciseId },
+    });
+  }
+
+  // Load the substitute Exercise and validate it is a substitute for the principal exercise
+  const substituteExercise = await prisma.exercise.findUnique({
+    where: { id: substituteExerciseId },
+  });
+
+  if (!substituteExercise || substituteExercise.deletedAt) {
+    throw buildError('EXERCISE_NOT_FOUND', 'Substitute exercise not found', 404);
+  }
+
+  if (substituteExercise.substituteForExerciseId !== principalLog.exerciseId) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.NOT_FOUND,
+      message: 'The specified exercise is not a substitute for this exercise log',
+    });
+  }
+
+  const newLog = await prisma.$transaction(async (tx) => {
+    // Shift all logs after the principal up by 1 so the substitute lands at an integer slot
+    await tx.exerciseLog.updateMany({
+      where: {
+        workoutSessionId: sessionId,
+        order: { gt: principalLog.order },
+      },
+      data: { order: { increment: 1 } },
+    });
+
+    // Mark principal as substituted
+    await tx.exerciseLog.update({
+      where: { id: exerciseLogId },
+      data: {
+        status: ExerciseLogStatus.SUBSTITUTED,
+        substitutedByExerciseId: substituteExerciseId,
+      },
+    });
+
+    return tx.exerciseLog.create({
+      data: {
+        workoutSessionId: sessionId,
+        exerciseId: substituteExerciseId,
+        status: ExerciseLogStatus.PENDING,
+        order: principalLog.order + 1,
+      },
+      include: { setLogs: { orderBy: { setNumber: 'asc' } } },
+    });
+  });
+
+  return newLog;
+}
+
+/**
  * Get full detail of a student's workout session (trainer view).
  *
  * @param {string} trainerId - User ID of the trainer
@@ -524,7 +643,7 @@ export async function getStudentSession(trainerId, studentId, sessionId) {
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
-          exercise: { select: { id: true, name: true, type: true, sets: true, repetitions: true, hasLoad: true, suggestedLoad: true, restInterval: true, videoUrl: true, notes: true } },
+          exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },
         },
       },

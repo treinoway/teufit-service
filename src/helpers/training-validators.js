@@ -10,6 +10,9 @@ import {
   exerciseLogStatusValues,
   prescriptionModeValues,
   PrescriptionMode,
+  SupersetConstraints,
+  SupersetMessageCode,
+  SubstituteMessageCode,
 } from '../constants/training.js';
 import { AppError } from '../errors/app-error.js';
 
@@ -195,4 +198,146 @@ export function applyPrescriptionModeExclusivity(mode, data) {
     repetitions: data.repetitions ?? null,
     duration: null,
   };
+}
+
+/**
+ * Validate that a set of exercises can form or extend a valid superset group.
+ *
+ * Rules enforced:
+ * - Between MIN_MEMBERS and MAX_MEMBERS members.
+ * - All members must belong to the same trainingId.
+ * - No member may be a substitute exercise (substituteForExerciseId must be null).
+ * - Members must be contiguous in the training's main `order` sequence
+ *   (i.e. their order values form a consecutive block with no gaps occupied by other exercises).
+ *
+ * @param {object[]} memberExercises - The exercises that will form the group (full rows from DB).
+ * @param {object[]} allTrainingExercises - All active (non-deleted) exercises in the training.
+ * @param {string} trainingId - Expected trainingId.
+ */
+export function validateSupersetMembership(memberExercises, allTrainingExercises, trainingId) {
+  if (memberExercises.length < SupersetConstraints.MIN_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MIN_MEMBERS,
+      message: `A superset group requires at least ${SupersetConstraints.MIN_MEMBERS} members`,
+    });
+  }
+
+  if (memberExercises.length > SupersetConstraints.MAX_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MAX_MEMBERS,
+      message: `A superset group cannot have more than ${SupersetConstraints.MAX_MEMBERS} members`,
+    });
+  }
+
+  for (const exercise of memberExercises) {
+    if (exercise.trainingId !== trainingId) {
+      throw new AppError({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+        message: 'All superset members must belong to the same training',
+      });
+    }
+
+    if (exercise.substituteForExerciseId !== null) {
+      throw new AppError({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+        message: 'Substitute exercises cannot belong to a superset group',
+      });
+    }
+  }
+
+  assertSupersetContiguity(memberExercises, allTrainingExercises);
+}
+
+/**
+ * Assert that the given member exercises form a contiguous block in the training's
+ * main `order` sequence (no non-member exercises in between them).
+ *
+ * @param {object[]} memberExercises - The exercises that form or will form the group.
+ * @param {object[]} allTrainingExercises - All active exercises in the training.
+ */
+export function assertSupersetContiguity(memberExercises, allTrainingExercises) {
+  if (memberExercises.length === 0) return;
+
+  const memberIds = new Set(memberExercises.map((e) => e.id));
+  const memberOrders = memberExercises.map((e) => e.order).sort((a, b) => a - b);
+  const minOrder = memberOrders[0];
+  const maxOrder = memberOrders[memberOrders.length - 1];
+
+  // Collect all non-substitute active exercises in the order range
+  const exercisesInRange = allTrainingExercises.filter(
+    (e) => e.order >= minOrder && e.order <= maxOrder && e.substituteForExerciseId === null,
+  );
+
+  // Every exercise in that range must be a member of this group
+  for (const exercise of exercisesInRange) {
+    if (!memberIds.has(exercise.id)) {
+      throw new AppError({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+        message: 'Superset members must be contiguous in the training exercise order — no non-member exercises may appear between them',
+      });
+    }
+  }
+}
+
+/**
+ * Validate that a candidate exercise can be added as a substitute for a principal exercise.
+ *
+ * Rules enforced:
+ * - Principal and candidate must be in the same training.
+ * - Principal cannot itself be a substitute (no chains).
+ * - Candidate cannot belong to a superset group.
+ * - Candidate cannot already be a substitute for another (or the same) principal.
+ *
+ * @param {object} principal - The principal Exercise DB row.
+ * @param {object} candidate - The candidate substitute Exercise DB row.
+ */
+export function validateSubstituteConstraint(principal, candidate) {
+  if (candidate.trainingId !== principal.trainingId) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.SAME_TRAINING,
+      message: 'The substitute exercise must belong to the same training as the principal',
+    });
+  }
+
+  if (principal.substituteForExerciseId) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.CANNOT_CHAIN,
+      message: 'A substitute exercise cannot itself have substitutes (no chaining)',
+    });
+  }
+
+  // The CANDIDATE (substitute) cannot belong to a superset group.
+  // The principal CAN be in a superset: when a student swaps a bi-set member,
+  // only that one slot is replaced in the session flow.
+  if (candidate.supersetGroupId) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.CANNOT_BE_IN_SUPERSET,
+      message: 'Substitute cannot be in a superset',
+    });
+  }
+
+  if (candidate.substituteForExerciseId) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.ALREADY_SUBSTITUTE,
+      message: 'This exercise is already a substitute for another exercise',
+    });
+  }
 }

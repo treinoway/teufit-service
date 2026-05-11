@@ -11,8 +11,12 @@ vi.mock('../../src/db.js', () => ({
       update: vi.fn(),
       count: vi.fn(),
     },
+    exercise: {
+      findUnique: vi.fn(),
+    },
     exerciseLog: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     setLog: {
@@ -40,8 +44,13 @@ import {
   deleteSetLog,
   listStudentSessions,
   getStudentSession,
+  substituteExerciseLog,
 } from '../../src/services/workout-session-service.js';
-import { WorkoutSessionStatus, ExerciseLogStatus } from '../../src/constants/training.js';
+import {
+  WorkoutSessionStatus,
+  ExerciseLogStatus,
+  SubstituteMessageCode,
+} from '../../src/constants/training.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -662,6 +671,148 @@ describe('workout-session-service', () => {
       const result = await getStudentSession('trainer-user-1', 'student-1', 'session-1');
 
       expect(result).toEqual(session);
+    });
+  });
+
+  // ── substituteExerciseLog ─────────────────────────────────────────────────
+
+  describe('substituteExerciseLog', () => {
+    const makePrincipalLog = (overrides = {}) =>
+      makeExerciseLog({
+        id: 'elog-1',
+        exerciseId: 'ex-1',
+        order: 2,
+        status: ExerciseLogStatus.PENDING,
+        substitutedByExerciseId: null,
+        workoutSession: makeSession({ userId: 'user-1' }),
+        ...overrides,
+      });
+
+    const makeSubstituteExercise = (overrides = {}) => ({
+      id: 'sub-ex-1',
+      substituteForExerciseId: 'ex-1',
+      deletedAt: null,
+      ...overrides,
+    });
+
+    const makeNewLog = (overrides = {}) => ({
+      id: 'elog-new',
+      workoutSessionId: 'session-1',
+      exerciseId: 'sub-ex-1',
+      status: ExerciseLogStatus.PENDING,
+      // C1 fix: order is now principal.order + 1 (integer), not + 0.5 (float)
+      order: 3,
+      setLogs: [],
+      ...overrides,
+    });
+
+    it('throws EXERCISE_LOG_NOT_FOUND when principal log does not exist', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(null);
+
+      await expect(
+        substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_LOG_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws EXERCISE_NOT_FOUND when substitute exercise does not exist', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makePrincipalLog());
+      prisma.exercise.findUnique.mockResolvedValue(null);
+
+      await expect(
+        substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws EXERCISE_NOT_FOUND when substitute exercise is soft-deleted', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makePrincipalLog());
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeSubstituteExercise({ deletedAt: new Date() }),
+      );
+
+      await expect(
+        substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws VALIDATION_ERROR when exercise is not a substitute for the principal', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makePrincipalLog());
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeSubstituteExercise({ substituteForExerciseId: 'other-ex' }),
+      );
+
+      await expect(
+        substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1'),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
+        messageCode: SubstituteMessageCode.NOT_FOUND,
+        statusCode: 400,
+      });
+    });
+
+    it('throws EXERCISE_LOG_ALREADY_SUBSTITUTED (409) when log is already substituted with a different exercise', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(
+        makePrincipalLog({
+          status: ExerciseLogStatus.SUBSTITUTED,
+          substitutedByExerciseId: 'other-sub-ex',
+        }),
+      );
+
+      await expect(
+        substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_LOG_ALREADY_SUBSTITUTED',
+        messageCode: SubstituteMessageCode.LOG_ALREADY_SUBSTITUTED,
+        statusCode: 409,
+      });
+    });
+
+    it('returns existing new log idempotently when already substituted with same exercise', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(
+        makePrincipalLog({
+          status: ExerciseLogStatus.SUBSTITUTED,
+          substitutedByExerciseId: 'sub-ex-1',
+        }),
+      );
+      const existingLog = makeNewLog();
+      prisma.exerciseLog.findFirst.mockResolvedValue(existingLog);
+
+      const result = await substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1');
+
+      expect(result).toEqual(existingLog);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('creates new log and marks principal as substituted on success', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makePrincipalLog());
+      prisma.exercise.findUnique.mockResolvedValue(makeSubstituteExercise());
+      const newLog = makeNewLog();
+
+      // C1 fix: tx now calls updateMany (shift) before update (mark substituted) and create
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exerciseLog: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue(newLog),
+          },
+        };
+        return fn(tx);
+      });
+
+      const result = await substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1');
+
+      expect(result).toEqual(newLog);
+      // C1: order is now an integer (principal.order + 1 = 3), not a float
+      expect(result.order).toBe(3);
     });
   });
 });

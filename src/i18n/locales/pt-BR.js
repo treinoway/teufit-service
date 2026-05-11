@@ -73,6 +73,7 @@ export default {
       pending: 'Pendente',
       completed: 'Concluído',
       skipped: 'Pulado',
+      substituted: 'Substituído',
     },
     challengeParticipantMode: {
       explicit: 'Explícito',
@@ -263,6 +264,19 @@ export default {
     // Dashboard
     'dashboard.invalidDateRange': 'Intervalo de datas inválido (dataInicial > dataFinal).',
     'dashboard.windowTooLarge': 'Janela de datas excede o máximo de 365 dias.',
+
+    // Superset / bi-set
+    'exercise.supersetMembershipInvalid': 'Os exercícios do bi-set devem ser contíguos na sequência do treino.',
+    'exercise.supersetMinMembers': 'Um bi-set requer no mínimo 2 exercícios.',
+    'exercise.supersetMaxMembers': 'Um bi-set não pode ter mais de 6 exercícios.',
+
+    // Substitute exercises
+    'exercise.substituteSameTraining': 'O exercício substituto deve pertencer ao mesmo treino que o exercício principal.',
+    'exercise.substituteCannotChain': 'Um exercício substituto não pode ter substitutos (sem encadeamento).',
+    'exercise.substituteCannotBeInSuperset': 'Exercícios de um bi-set não podem ser usados como substitutos.',
+    'exercise.substitutedAlready': 'Este exercício já é substituto de outro exercício.',
+    'exercise.substituteNotFound': 'Substituto não encontrado.',
+    'exercise.logAlreadySubstituted': 'Este registro de exercício já foi substituído.',
 
     // Video library
     'video.notFound': 'Vídeo não encontrado.',

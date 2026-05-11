@@ -133,6 +133,8 @@ describe('training-template-service', () => {
               {
                 exerciseTemplateId: 'et1',
                 order: 0,
+                supersetGroupId: null,
+                supersetOrder: 0,
                 name: 'Squat',
                 type: 'strength',
                 videoUrl: null,
@@ -148,6 +150,8 @@ describe('training-template-service', () => {
               {
                 exerciseTemplateId: 'et2',
                 order: 1,
+                supersetGroupId: null,
+                supersetOrder: 0,
                 name: 'Lunge',
                 type: 'strength',
                 videoUrl: null,
@@ -256,6 +260,8 @@ describe('training-template-service', () => {
               {
                 exerciseTemplateId: 'et2',
                 order: 0,
+                supersetGroupId: null,
+                supersetOrder: 0,
                 name: 'Deadlift',
                 type: 'strength',
                 videoUrl: null,

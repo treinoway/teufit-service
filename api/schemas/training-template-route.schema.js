@@ -34,6 +34,9 @@ const trainingTemplateExerciseTemplateSchema = {
     trainingTemplateId: { type: 'string', format: 'uuid' },
     exerciseTemplateId: { type: 'string', format: 'uuid' },
     order: { type: 'integer' },
+    // Bi-set / superset grouping fields (C3)
+    supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+    supersetOrder: { type: 'integer' },
     // Snapshot fields — independent copy of the exercise at link time
     name: { type: 'string' },
     type: { type: 'string' },
@@ -138,6 +141,9 @@ export const createTrainingTemplateSchema = {
           properties: {
             exerciseTemplateId: { type: 'string', format: 'uuid' },
             order: { type: 'integer' },
+            // Bi-set / superset grouping (C3)
+            supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+            supersetOrder: { type: 'integer', minimum: 0 },
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
@@ -159,7 +165,7 @@ export const createTrainingTemplateSchema = {
           },
           additionalProperties: false,
         },
-        description: 'Optional list of { exerciseTemplateId, order?, ...snapshotOverrides }; alternative to exerciseTemplateIds',
+        description: 'Optional list of { exerciseTemplateId, order?, supersetGroupId?, supersetOrder?, ...snapshotOverrides }; alternative to exerciseTemplateIds',
       },
     },
     additionalProperties: false,
@@ -254,6 +260,9 @@ export const updateTrainingTemplateSchema = {
           properties: {
             exerciseTemplateId: { type: 'string', format: 'uuid' },
             order: { type: 'integer' },
+            // Bi-set / superset grouping (C3)
+            supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+            supersetOrder: { type: 'integer', minimum: 0 },
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
@@ -329,6 +338,9 @@ export const createTrainingTemplateExerciseSchema = {
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
       isPublic: { type: 'boolean' },
+      // Bi-set / superset grouping (C3)
+      supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+      supersetOrder: { type: 'integer', minimum: 0 },
       sets: { type: 'integer', nullable: true, minimum: 1 },
       repetitions: {
         type: 'object',
@@ -376,6 +388,9 @@ export const createTrainingTemplateExerciseFromTemplateSchema = {
     properties: {
       exerciseTemplateId: { type: 'string', format: 'uuid' },
       order: { type: 'integer', minimum: 0 },
+      // Bi-set / superset grouping (C3)
+      supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+      supersetOrder: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
   },
@@ -432,6 +447,9 @@ export const updateTrainingTemplateExerciseSchema = {
       type: { type: 'string' },
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
+      // Bi-set / superset grouping (C3)
+      supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+      supersetOrder: { type: 'integer', minimum: 0 },
       sets: { type: 'integer', nullable: true },
       repetitions: {
         type: 'object',

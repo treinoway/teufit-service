@@ -73,6 +73,12 @@ export const ExerciseLogStatus = Object.freeze({
   PENDING: 'pending',
   COMPLETED: 'completed',
   SKIPPED: 'skipped',
+  SUBSTITUTED: 'substituted',
+});
+
+export const SupersetConstraints = Object.freeze({
+  MIN_MEMBERS: 2,
+  MAX_MEMBERS: 6,
 });
 
 export const PrescriptionMode = Object.freeze({
@@ -92,6 +98,22 @@ export const protocolTypeValues = Object.freeze(Object.values(ProtocolType));
 export const workoutSessionStatusValues = Object.freeze(Object.values(WorkoutSessionStatus));
 export const exerciseLogStatusValues = Object.freeze(Object.values(ExerciseLogStatus));
 export const prescriptionModeValues = Object.freeze(Object.values(PrescriptionMode));
+
+// Superset and substitute error/message codes
+export const SupersetMessageCode = Object.freeze({
+  MEMBERSHIP_INVALID: 'exercise.supersetMembershipInvalid',
+  MIN_MEMBERS: 'exercise.supersetMinMembers',
+  MAX_MEMBERS: 'exercise.supersetMaxMembers',
+});
+
+export const SubstituteMessageCode = Object.freeze({
+  SAME_TRAINING: 'exercise.substituteSameTraining',
+  CANNOT_CHAIN: 'exercise.substituteCannotChain',
+  CANNOT_BE_IN_SUPERSET: 'exercise.substituteCannotBeInSuperset',
+  ALREADY_SUBSTITUTE: 'exercise.substitutedAlready',
+  NOT_FOUND: 'exercise.substituteNotFound',
+  LOG_ALREADY_SUBSTITUTED: 'exercise.logAlreadySubstituted',
+});
 
 // Workouts Today error codes and message codes
 export const WorkoutsTodayErrorCode = Object.freeze({

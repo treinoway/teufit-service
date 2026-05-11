@@ -36,6 +36,9 @@ function buildJunctionCreateData(e, index, template) {
   return {
     exerciseTemplateId: e.exerciseTemplateId,
     order: e.order !== undefined ? e.order : index,
+    // Bi-set / superset grouping — passed through from caller input (C3)
+    supersetGroupId: e.supersetGroupId !== undefined ? e.supersetGroupId : null,
+    supersetOrder: e.supersetOrder !== undefined ? e.supersetOrder : 0,
     name: e.name !== undefined ? e.name : template.name,
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
@@ -457,6 +460,8 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.order !== undefined) updateData.order = data.order;
+  if (data.supersetGroupId !== undefined) updateData.supersetGroupId = data.supersetGroupId;
+  if (data.supersetOrder !== undefined) updateData.supersetOrder = data.supersetOrder;
 
   if (data.prescriptionMode !== undefined) {
     const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);
@@ -564,6 +569,8 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         trainingTemplateId: templateId,
         exerciseTemplateId: exerciseTemplate.id,
         order,
+        supersetGroupId: data.supersetGroupId ?? null,
+        supersetOrder: data.supersetOrder ?? 0,
         name: exerciseTemplate.name,
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
@@ -617,6 +624,8 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
       trainingTemplateId: templateId,
       exerciseTemplateId: exerciseTemplate.id,
       order,
+      supersetGroupId: data.supersetGroupId ?? null,
+      supersetOrder: data.supersetOrder ?? 0,
       name: exerciseTemplate.name,
       type: exerciseTemplate.type,
       videoUrl: exerciseTemplate.videoUrl,

@@ -162,6 +162,24 @@ export async function workoutSessionRoutes(fastify) {
     },
   );
 
+  // POST /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/substitute
+  fastify.post(
+    '/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/substitute',
+    {
+      preHandler: [authenticate],
+      schema: schema.substituteExerciseLogSchema,
+    },
+    async (request, reply) => {
+      const newLog = await service.substituteExerciseLog(
+        request.user.id,
+        request.params.sessionId,
+        request.params.exerciseLogId,
+        request.body.substituteExerciseId,
+      );
+      return reply.status(201).send(newLog);
+    },
+  );
+
   // ═══════════════════════════════════════════════════════════
   // TRAINER ROUTES — /trainer/students/:studentId/
   // ═══════════════════════════════════════════════════════════

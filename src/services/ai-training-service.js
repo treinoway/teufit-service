@@ -142,7 +142,7 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios inline (campo "exercises") OU por ID de template existente (campo "exerciseTemplateIds"). Inclua TUDO em uma unica chamada — exercicios no campo "exercises" e/ou "exerciseTemplateIds", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez.
 5. EDICAO (PATCH): As tools update_* alteram APENAS os campos informados. Campos omitidos permanecem inalterados. Ao editar, confirme ao treinador SOMENTE o que sera alterado — nao liste campos que nao mudarao.
 6. REFS DE EDICAO: [TRAINING_REF:id] e [EXERCISE_REF:id] sao as tags para identificar treinos e exercicios dentro de protocolos ativos. Use-os para preencher os parametros trainingId e exerciseId das tools de edicao. NUNCA exiba essas tags nas respostas.
-6a. REORDENACAO DE EXERCICIOS: Para reordenar exercicios dentro de um treino, use EXCLUSIVAMENTE a tool reorder_exercises_in_training com a lista COMPLETA de [EXERCISE_REF:id]s na nova ordem desejada. NUNCA use update_exercise para alterar ordem — esse campo nao existe em update_exercise.
+6a. REORDENACAO DE EXERCICIOS: Para reordenar exercicios dentro de um treino, use EXCLUSIVAMENTE a tool reorder_exercises_in_training com a lista COMPLETA de [EXERCISE_REF:id]s de exercicios PRINCIPAIS (nao substitutos) na nova ordem desejada. NUNCA use update_exercise para alterar ordem — esse campo nao existe em update_exercise. IMPORTANTE: membros de um mesmo grupo de superset (bi-set, tri-set) devem aparecer CONTIGUOS na lista; exercicios substitutos (substituteForExerciseId preenchido) NAO aparecem na lista de reordenacao.
 7. FIDELIDADE DESCRICAO -> TOOL CALL: Se na sua mensagem anterior voce descreveu exercicios, treinos ou campos especificos (ex: "vou criar treino Peito com supino, crucifixo e voador com 3 series de 10 reps"), ao executar a tool esses EXATOS itens DEVEM aparecer nos parametros correspondentes. Nunca descreva uma acao e depois chame a tool com campos vazios ou diferentes do que prometeu — isso quebra a confianca do treinador. A tool call e o contrato do que voce prometeu. Se prometeu exercicios, eles OBRIGATORIAMENTE devem estar no campo "exercises" da chamada.
 
 === REGRAS DE RESPOSTA ===
@@ -735,7 +735,7 @@ const TOOLS = [
   {
     name: AI_TOOLS.REORDER_EXERCISES_IN_TRAINING,
     description:
-      'Reordena TODOS os exercicios de um treino de forma atomica. Esta e a UNICA forma de alterar a ordem dos exercicios — NUNCA use update_exercise para isso. O treinador deve passar a lista COMPLETA de exercicios do treino na nova ordem desejada; listas parciais sao rejeitadas. Ferramenta de escrita: requer confirmacao do treinador antes de executar (regra 1).',
+      'Reordena TODOS os exercicios principais de um treino de forma atomica. Esta e a UNICA forma de alterar a ordem dos exercicios — NUNCA use update_exercise para isso. O treinador deve passar a lista COMPLETA de exercicios PRINCIPAIS (nao substitutos) do treino na nova ordem desejada; listas parciais sao rejeitadas. REGRAS DE SUPERSET/BI-SET: exercicios de um mesmo grupo de superset (mesmo supersetGroupId) DEVEM permanecer contiguos na lista — nenhum exercicio de outro grupo ou solo pode aparecer entre eles; caso contrario a operacao sera rejeitada com erro. IDs de exercicios substitutos (substituteForExerciseId preenchido) NAO devem aparecer na lista — substitutos nao tem ordem propria na sequencia principal. Ferramenta de escrita: requer confirmacao do treinador antes de executar (regra 1).',
     input_schema: {
       type: 'object',
       required: ['trainingId', 'exerciseIds'],
@@ -745,7 +745,7 @@ const TOOLS = [
           type: 'array',
           items: { type: 'string' },
           minItems: 1,
-          description: 'Lista COMPLETA de [EXERCISE_REF:id]s dos exercicios do treino na nova ordem desejada. Deve conter TODOS os exercicios ativos do treino, sem duplicatas.',
+          description: 'Lista COMPLETA de [EXERCISE_REF:id]s dos exercicios PRINCIPAIS (nao substitutos) do treino na nova ordem desejada. Deve conter TODOS os exercicios principais ativos, sem duplicatas. Membros de um mesmo grupo de superset devem aparecer consecutivos.',
         },
       },
     },

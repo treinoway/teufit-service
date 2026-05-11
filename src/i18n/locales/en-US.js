@@ -69,6 +69,7 @@ export default {
       pending: 'Pending',
       completed: 'Completed',
       skipped: 'Skipped',
+      substituted: 'Substituted',
     },
     challengeParticipantMode: {
       explicit: 'Explicit',
@@ -259,6 +260,19 @@ export default {
 
     // Admin
     'admin.grantNotAllowed': 'Your account is not allowed to become an administrator.',
+
+    // Superset / bi-set
+    'exercise.supersetMembershipInvalid': 'Superset exercises must be contiguous in the training sequence.',
+    'exercise.supersetMinMembers': 'A superset requires at least 2 exercises.',
+    'exercise.supersetMaxMembers': 'A superset cannot have more than 6 exercises.',
+
+    // Substitute exercises
+    'exercise.substituteSameTraining': 'The substitute exercise must belong to the same training as the principal.',
+    'exercise.substituteCannotChain': 'A substitute exercise cannot itself have substitutes (no chaining allowed).',
+    'exercise.substituteCannotBeInSuperset': 'Exercises belonging to a superset group cannot be used as substitutes.',
+    'exercise.substitutedAlready': 'This exercise is already a substitute for another exercise.',
+    'exercise.substituteNotFound': 'Substitute not found.',
+    'exercise.logAlreadySubstituted': 'This exercise log has already been substituted.',
 
     // Video library
     'video.notFound': 'Video not found.',

@@ -892,4 +892,238 @@ e2eDescribe('e2e: workout-sessions', () => {
       expect(exerciseLogs[0].exercise.typeLabel).toBe('Força');
     });
   });
+
+  // ─── POST /my/workout-sessions/:sessionId/exercise-logs/:logId/substitute ──
+
+  describe('POST /my/workout-sessions/:sessionId/exercise-logs/:logId/substitute', () => {
+    async function setupSessionWithSubstitute() {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+      // Create principal exercise
+      const exResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 4 },
+      });
+      expect(exResponse.statusCode).toBe(201);
+      const principalExerciseId = exResponse.json().id;
+
+      // Create substitute exercise
+      const subResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Dumbbell Press', type: 'strength', sets: 4 },
+      });
+      expect(subResponse.statusCode).toBe(201);
+      const substituteExerciseId = subResponse.json().id;
+
+      // Start session
+      const sessionResponse = await startSession(studentToken, trainingId);
+      expect(sessionResponse.statusCode).toBe(201);
+      const sessionBody = sessionResponse.json();
+      const sessionId = sessionBody.id;
+      const exerciseLogId = sessionBody.exerciseLogs[0].id;
+
+      return { studentToken, sessionId, exerciseLogId, principalExerciseId, substituteExerciseId };
+    }
+
+    it('creates new exercise log for substitute and marks principal as substituted', async () => {
+      const { studentToken, sessionId, exerciseLogId, substituteExerciseId } =
+        await setupSessionWithSubstitute();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const newLog = response.json();
+      expect(newLog).toHaveProperty('id');
+      expect(newLog).toHaveProperty('exerciseId', substituteExerciseId);
+      expect(newLog).toHaveProperty('workoutSessionId', sessionId);
+      expect(newLog).toHaveProperty('status', ExerciseLogStatus.PENDING);
+      expect(newLog).toHaveProperty('setLogs');
+
+      // Verify principal log is now substituted
+      const sessionResponse = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+      const body = sessionResponse.json();
+      const principalLog = body.exerciseLogs.find((l) => l.id === exerciseLogId);
+      expect(principalLog.status).toBe(ExerciseLogStatus.SUBSTITUTED);
+    });
+
+    it('is idempotent — re-calling with same substituteExerciseId returns existing log', async () => {
+      const { studentToken, sessionId, exerciseLogId, substituteExerciseId } =
+        await setupSessionWithSubstitute();
+
+      const r1 = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId },
+      });
+      const r2 = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId },
+      });
+
+      expect(r1.statusCode).toBe(201);
+      expect(r2.statusCode).toBe(201);
+      expect(r1.json().id).toBe(r2.json().id);
+    });
+
+    it('returns 409 when log is already substituted with a different exercise', async () => {
+      const { trainerToken, studentToken, sessionId, exerciseLogId, principalExerciseId } =
+        await (async () => {
+          const { accessToken: trainerToken } = await createTrainerWithToken();
+          const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+          const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+          const exResponse = await app.inject({
+            method: 'POST',
+            url: `/trainer/trainings/${trainingId}/exercises`,
+            headers: { authorization: `Bearer ${trainerToken}` },
+            payload: { name: 'Bench Press', type: 'strength', sets: 4 },
+          });
+          const principalExerciseId = exResponse.json().id;
+
+          const sub1Response = await app.inject({
+            method: 'POST',
+            url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+            headers: { authorization: `Bearer ${trainerToken}` },
+            payload: { name: 'Sub A', type: 'strength' },
+          });
+          const sub2Response = await app.inject({
+            method: 'POST',
+            url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+            headers: { authorization: `Bearer ${trainerToken}` },
+            payload: { name: 'Sub B', type: 'strength' },
+          });
+
+          const sessionBody = (await startSession(studentToken, trainingId)).json();
+          return {
+            trainerToken,
+            studentToken,
+            sessionId: sessionBody.id,
+            exerciseLogId: sessionBody.exerciseLogs[0].id,
+            principalExerciseId,
+            subAId: sub1Response.json().id,
+            subBId: sub2Response.json().id,
+          };
+        })();
+
+      const sub1Response = await app.inject({
+        method: 'POST',
+        url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Sub C', type: 'strength' },
+      });
+      const subCId = sub1Response.json().id;
+
+      // First substitution succeeds
+      const r1 = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId: subCId },
+      });
+      expect(r1.statusCode).toBe(201);
+
+      // Attempting with a different substitute fails
+      const differentSubResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Sub D', type: 'strength' },
+      });
+      const subDId = differentSubResponse.json().id;
+
+      const r2 = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId: subDId },
+      });
+      expect(r2.statusCode).toBe(409);
+      expect(r2.json().messageCode).toBe('exercise.logAlreadySubstituted');
+    });
+
+    it('returns 400 when exercise is not a valid substitute for the log', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+      const exResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 4 },
+      });
+      const principalExerciseId = exResponse.json().id;
+
+      // Create a second unrelated exercise (not a substitute)
+      const otherExResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Squat', type: 'strength', sets: 4 },
+      });
+      const unrelatedExerciseId = otherExResponse.json().id;
+
+      const sessionBody = (await startSession(studentToken, trainingId)).json();
+      const sessionId = sessionBody.id;
+      const exerciseLogId = sessionBody.exerciseLogs.find(
+        (l) => l.exerciseId === principalExerciseId,
+      ).id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId: unrelatedExerciseId },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().messageCode).toBe('exercise.substituteNotFound');
+    });
+
+    it('returns 404 for non-existent exercise log', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+      const sessionBody = (await startSession(studentToken, trainingId)).json();
+      const sessionId = sessionBody.id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/00000000-0000-0000-0000-000000000000/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId: '00000000-0000-0000-0000-000000000001' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/my/workout-sessions/session-id/exercise-logs/log-id/substitute',
+        payload: { substituteExerciseId: '00000000-0000-0000-0000-000000000000' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
 });

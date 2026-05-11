@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../db.js';
 import {
   buildError,
@@ -344,6 +345,15 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
       },
     });
 
+    // Build a map of old supersetGroupId → fresh UUID so that every import
+    // produces its own group IDs and two imports of the same template never collide.
+    const supersetGroupIdMap = new Map();
+    for (const junctionRow of template.trainingTemplateExerciseTemplates) {
+      if (junctionRow.supersetGroupId && !supersetGroupIdMap.has(junctionRow.supersetGroupId)) {
+        supersetGroupIdMap.set(junctionRow.supersetGroupId, randomUUID());
+      }
+    }
+
     for (const junctionRow of template.trainingTemplateExerciseTemplates) {
       const resolvedMode = resolvePrescriptionMode(junctionRow.prescriptionMode, junctionRow);
       const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, junctionRow);
@@ -356,6 +366,10 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
           type: junctionRow.type,
           videoUrl: junctionRow.videoUrl ?? null,
           order: junctionRow.order,
+          supersetGroupId: junctionRow.supersetGroupId
+            ? supersetGroupIdMap.get(junctionRow.supersetGroupId)
+            : null,
+          supersetOrder: junctionRow.supersetOrder ?? 0,
           sets: junctionRow.sets ?? null,
           repetitions,
           duration,

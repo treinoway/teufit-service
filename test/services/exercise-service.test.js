@@ -6,8 +6,10 @@ vi.mock('../../src/db.js', () => ({
     exercise: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     training: { findUnique: vi.fn() },
     exerciseTemplate: { findUnique: vi.fn() },
@@ -22,7 +24,11 @@ import {
   updateExercise,
   deleteExercise,
   reorderExercisesInTraining,
+  addSubstitute,
+  reorderSubstitutes,
+  reorderSupersetMembers,
 } from '../../src/services/exercise-service.js';
+import { SupersetMessageCode, SubstituteMessageCode } from '../../src/constants/training.js';
 
 const makeExercise = (overrides = {}) => ({
   id: 'ex1',
@@ -695,6 +701,446 @@ describe('exercise-service', () => {
       await expect(
         reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'ex3']),
       ).rejects.toThrow('DB constraint violation');
+    });
+  });
+
+  // ─── reorderExercisesInTraining — substitute + superset rules ────────────────
+
+  describe('reorderExercisesInTraining — substitute and superset validation', () => {
+    it('rejects when a substitute ID is included in the payload', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+        exercises: [
+          { id: 'ex1', name: 'Squat', substituteForExerciseId: null, supersetGroupId: null },
+          { id: 'ex2', name: 'Lunge', substituteForExerciseId: null, supersetGroupId: null },
+          { id: 'sub1', name: 'Leg Press', substituteForExerciseId: 'ex1', supersetGroupId: null },
+        ],
+      });
+
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex2', 'sub1']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ substituteIds: ['sub1'] }),
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects reorder that splits a superset group', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+        exercises: [
+          { id: 'ex1', name: 'Bench', substituteForExerciseId: null, supersetGroupId: 'group-a' },
+          { id: 'ex2', name: 'Flye', substituteForExerciseId: null, supersetGroupId: 'group-a' },
+          { id: 'ex3', name: 'Squat', substituteForExerciseId: null, supersetGroupId: null },
+        ],
+      });
+
+      // Attempt to split the group: ex3 placed between ex1 and ex2
+      await expect(
+        reorderExercisesInTraining('u1', 'tr1', ['ex1', 'ex3', 'ex2']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+        statusCode: 400,
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('accepts reorder that keeps superset group members contiguous', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+        exercises: [
+          { id: 'ex1', name: 'Bench', substituteForExerciseId: null, supersetGroupId: 'group-a' },
+          { id: 'ex2', name: 'Flye', substituteForExerciseId: null, supersetGroupId: 'group-a' },
+          { id: 'ex3', name: 'Squat', substituteForExerciseId: null, supersetGroupId: null },
+        ],
+      });
+
+      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      // Move the superset group after ex3 — still contiguous
+      const result = await reorderExercisesInTraining('u1', 'tr1', ['ex3', 'ex1', 'ex2']);
+
+      expect(result.trainingId).toBe('tr1');
+      expect(result.exercises).toHaveLength(3);
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── deleteExercise — cascade behavior ───────────────────────────────────────
+
+  describe('deleteExercise — cascade and superset cleanup', () => {
+    it('soft-deletes all substitutes when principal is deleted', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeExercise({ substituteForExerciseId: null, supersetGroupId: null }),
+      );
+
+      const txMock = {
+        exercise: {
+          update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      await deleteExercise('u1', 'ex1');
+
+      expect(txMock.exercise.updateMany).toHaveBeenCalledWith({
+        where: { substituteForExerciseId: 'ex1', deletedAt: null },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      });
+    });
+
+    it('clears supersetGroupId on remaining member when group drops to 1', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeExercise({ substituteForExerciseId: null, supersetGroupId: 'group-a', trainingId: 'tr1' }),
+      );
+
+      // clearGroupIfUndersized now runs inside the transaction (Minor fix).
+      // The txMock must include findMany (returns 1 remaining member) and updateMany.
+      const txUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+      const txMock = {
+        exercise: {
+          update: vi.fn().mockResolvedValue({}),
+          updateMany: txUpdateMany,
+          findMany: vi.fn().mockResolvedValue([{ id: 'ex2' }]), // 1 remaining → clear
+        },
+      };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      await deleteExercise('u1', 'ex1');
+
+      // The group-clear updateMany is called inside the transaction
+      expect(txUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ supersetGroupId: 'group-a', deletedAt: null }),
+          data: { supersetGroupId: null, supersetOrder: 0 },
+        }),
+      );
+    });
+
+    it('does not clear supersetGroupId when group still has 2+ members', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeExercise({ substituteForExerciseId: null, supersetGroupId: 'group-a', trainingId: 'tr1' }),
+      );
+
+      // 2 remaining members → group survives, updateMany for group-clear NOT called
+      const txUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
+      const txMock = {
+        exercise: {
+          update: vi.fn().mockResolvedValue({}),
+          updateMany: txUpdateMany,
+          findMany: vi.fn().mockResolvedValue([{ id: 'ex2' }, { id: 'ex3' }]), // 2 remaining
+        },
+      };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      await deleteExercise('u1', 'ex1');
+
+      // updateMany is only called to soft-delete substitutes (substituteForExerciseId filter),
+      // not for the group-clear path.
+      const groupClearCall = txUpdateMany.mock.calls.find(
+        ([arg]) => arg?.data?.supersetGroupId === null,
+      );
+      expect(groupClearCall).toBeUndefined();
+    });
+  });
+
+  // ─── addSubstitute ────────────────────────────────────────────────────────────
+
+  describe('addSubstitute', () => {
+    const makePrincipal = (overrides = {}) => ({
+      id: 'principal-1',
+      trainingId: 'tr1',
+      deletedAt: null,
+      substituteForExerciseId: null,
+      supersetGroupId: null,
+      training: {
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+      },
+      ...overrides,
+    });
+
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' }),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
+    });
+
+    it('throws EXERCISE_NOT_FOUND when principal does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(null);
+
+      await expect(
+        addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' }),
+      ).rejects.toMatchObject({ code: 'EXERCISE_NOT_FOUND', statusCode: 404 });
+    });
+
+    it('throws FORBIDDEN_NOT_PROTOCOL_OWNER when trainer does not own the training', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makePrincipal({ training: { deletedAt: null, trainingProtocol: { trainerId: 'other-trainer', deletedAt: null } } }),
+      );
+
+      await expect(
+        addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_NOT_PROTOCOL_OWNER', statusCode: 403 });
+    });
+
+    it('throws VALIDATION_ERROR with substituteCannotChain when principal is itself a substitute', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makePrincipal({ substituteForExerciseId: 'some-other-principal' }),
+      );
+
+      await expect(
+        addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: SubstituteMessageCode.CANNOT_CHAIN,
+        statusCode: 400,
+      });
+    });
+
+    // P1 fix: principal in superset is now ALLOWED (per plan edge case #4).
+    // The constraint is on the CANDIDATE (substitute), not the principal.
+    it('does NOT throw when principal is in a superset (P1 fix: bi-set member can have substitutes)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makePrincipal({ supersetGroupId: 'group-a' }),
+      );
+
+      const created = { id: 'sub-1', name: 'Alt', substituteOrder: 0, substituteForExerciseId: 'principal-1', prescriptionMode: 'reps' };
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exercise: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue(created),
+          },
+        };
+        return fn(tx);
+      });
+
+      const result = await addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' });
+      expect(result).toEqual(created);
+    });
+
+    it('assigns substituteOrder 0 for the first substitute', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipal());
+      const created = { id: 'sub-1', name: 'Alt', substituteOrder: 0, substituteForExerciseId: 'principal-1', prescriptionMode: 'reps' };
+
+      // findFirst + create now run inside $transaction (Minor race-condition fix)
+      const txCreate = vi.fn().mockResolvedValue(created);
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exercise: {
+            findFirst: vi.fn().mockResolvedValue(null), // no existing substitutes
+            create: txCreate,
+          },
+        };
+        return fn(tx);
+      });
+
+      const result = await addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' });
+
+      expect(result).toEqual(created);
+      expect(txCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          substituteForExerciseId: 'principal-1',
+          substituteOrder: 0,
+          trainingId: 'tr1',
+        }),
+      });
+    });
+
+    it('assigns substituteOrder 1 when one substitute already exists', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipal());
+      const created = { id: 'sub-2', substituteOrder: 1, prescriptionMode: 'reps' };
+
+      // findFirst + create now run inside $transaction (Minor race-condition fix)
+      const txCreate = vi.fn().mockResolvedValue(created);
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exercise: {
+            findFirst: vi.fn().mockResolvedValue({ substituteOrder: 0 }), // one existing
+            create: txCreate,
+          },
+        };
+        return fn(tx);
+      });
+
+      await addSubstitute('u1', 'principal-1', { name: 'Alt 2', type: 'strength' });
+
+      expect(txCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ substituteOrder: 1 }),
+      });
+    });
+  });
+
+  // ─── reorderSubstitutes ───────────────────────────────────────────────────────
+
+  describe('reorderSubstitutes', () => {
+    const makePrincipalRow = (overrides = {}) => ({
+      id: 'principal-1',
+      trainingId: 'tr1',
+      deletedAt: null,
+      substituteForExerciseId: null,
+      training: { deletedAt: null, trainingProtocol: { trainerId: 't1', deletedAt: null } },
+      ...overrides,
+    });
+
+    it('throws EXERCISE_NOT_FOUND when principal does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(null);
+
+      await expect(
+        reorderSubstitutes('u1', 'principal-1', ['sub1', 'sub2']),
+      ).rejects.toMatchObject({ code: 'EXERCISE_NOT_FOUND', statusCode: 404 });
+    });
+
+    it('throws VALIDATION_ERROR when list length does not match active substitutes', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'sub1', name: 'Alt 1' },
+        { id: 'sub2', name: 'Alt 2' },
+      ]);
+
+      await expect(
+        reorderSubstitutes('u1', 'principal-1', ['sub1']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        statusCode: 400,
+        details: expect.objectContaining({ expected: 2, received: 1 }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR when unknown substitute IDs are provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'sub1', name: 'Alt 1' },
+        { id: 'sub2', name: 'Alt 2' },
+      ]);
+
+      await expect(
+        reorderSubstitutes('u1', 'principal-1', ['sub1', 'sub-unknown']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        details: expect.objectContaining({ unknownIds: ['sub-unknown'] }),
+      });
+    });
+
+    it('updates substituteOrder in a transaction and returns result array', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'sub1', name: 'Alt 1' },
+        { id: 'sub2', name: 'Alt 2' },
+      ]);
+
+      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      const result = await reorderSubstitutes('u1', 'principal-1', ['sub2', 'sub1']);
+
+      expect(result).toEqual([
+        { id: 'sub2', name: 'Alt 2', substituteOrder: 0 },
+        { id: 'sub1', name: 'Alt 1', substituteOrder: 1 },
+      ]);
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'sub2' }, data: { substituteOrder: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'sub1' }, data: { substituteOrder: 1 } });
+    });
+  });
+
+  // ─── reorderSupersetMembers ───────────────────────────────────────────────────
+
+  describe('reorderSupersetMembers', () => {
+    it('throws EXERCISE_NOT_FOUND (superset group not found) when no active members exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([]); // no members
+
+      await expect(
+        reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex1', 'ex2']),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('throws VALIDATION_ERROR when list length does not match active members', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1', name: 'Bench' },
+        { id: 'ex2', name: 'Flye' },
+      ]);
+
+      await expect(
+        reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex1']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        details: expect.objectContaining({ expected: 2, received: 1 }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR with unknownIds when ID not in group', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1', name: 'Bench' },
+        { id: 'ex2', name: 'Flye' },
+      ]);
+
+      await expect(
+        reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex1', 'ex-unknown']),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        details: expect.objectContaining({ unknownIds: ['ex-unknown'] }),
+      });
+    });
+
+    it('updates supersetOrder in a transaction and returns result array', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1', name: 'Bench' },
+        { id: 'ex2', name: 'Flye' },
+      ]);
+
+      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      const result = await reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex2', 'ex1']);
+
+      expect(result).toEqual([
+        { id: 'ex2', name: 'Flye', supersetOrder: 0 },
+        { id: 'ex1', name: 'Bench', supersetOrder: 1 },
+      ]);
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex2' }, data: { supersetOrder: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex1' }, data: { supersetOrder: 1 } });
     });
   });
 });

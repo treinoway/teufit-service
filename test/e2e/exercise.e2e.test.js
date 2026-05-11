@@ -1035,4 +1035,305 @@ e2eDescribe('e2e: exercises', () => {
       expect(exercise.typeLabel).toBe('Força');
     });
   });
+
+  // ─── Substitute Exercises ──────────────────────────────────────────────────
+
+  describe('Substitute Exercises', () => {
+    async function setupTrainingWithExercise() {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+      const exResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 4 },
+      });
+      expect(exResponse.statusCode).toBe(201);
+      const principalId = exResponse.json().id;
+
+      return { trainerToken, trainingId, principalId };
+    }
+
+    describe('POST /trainer/exercises/:id/substitutes', () => {
+      it('creates a substitute exercise under a principal', async () => {
+        const { trainerToken, principalId } = await setupTrainingWithExercise();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Dumbbell Press', type: 'strength', sets: 4 },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('id');
+        expect(body).toHaveProperty('substituteForExerciseId', principalId);
+        expect(body).toHaveProperty('substituteOrder', 0);
+      });
+
+      it('assigns incrementing substituteOrder for multiple substitutes', async () => {
+        const { trainerToken, principalId } = await setupTrainingWithExercise();
+
+        const r1 = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub A', type: 'strength' },
+        });
+        const r2 = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub B', type: 'strength' },
+        });
+
+        expect(r1.json().substituteOrder).toBe(0);
+        expect(r2.json().substituteOrder).toBe(1);
+      });
+
+      it('returns 404 when principal exercise does not exist', async () => {
+        const { trainerToken } = await setupTrainingWithExercise();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercises/00000000-0000-0000-0000-000000000000/substitutes',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub', type: 'strength' },
+        });
+
+        expect(response.statusCode).toBe(404);
+      });
+
+      it('rejects when principal is itself a substitute (no chaining)', async () => {
+        const { trainerToken, principalId } = await setupTrainingWithExercise();
+
+        const subResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub A', type: 'strength' },
+        });
+        const subId = subResponse.json().id;
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${subId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub B', type: 'strength' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().messageCode).toBe('exercise.substituteCannotChain');
+      });
+
+      it('allows adding a substitute to a principal that is itself a superset member (per plan edge case #4)', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const groupId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+        const ex1 = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', order: 0, supersetGroupId: groupId, supersetOrder: 0 },
+        });
+        expect(ex1.statusCode).toBe(201);
+        const ex2 = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Cable Fly', type: 'strength', order: 1, supersetGroupId: groupId, supersetOrder: 1 },
+        });
+        expect(ex2.statusCode).toBe(201);
+
+        const supersetMemberId = ex1.json().id;
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${supersetMemberId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub for superset member', type: 'strength' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json().substituteForExerciseId).toBe(supersetMemberId);
+        expect(response.json().supersetGroupId).toBeNull();
+      });
+
+      it('returns substitutes[] nested under principal in GET exercises', async () => {
+        const { trainerToken, trainingId, principalId } = await setupTrainingWithExercise();
+
+        await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Dumbbell Press', type: 'strength' },
+        });
+
+        const listResponse = await app.inject({
+          method: 'GET',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+        });
+
+        expect(listResponse.statusCode).toBe(200);
+        const exercises = listResponse.json();
+        // Only principals appear at top level
+        expect(exercises).toHaveLength(1);
+        expect(exercises[0].substitutes).toHaveLength(1);
+        expect(exercises[0].substitutes[0].name).toBe('Dumbbell Press');
+      });
+    });
+
+    describe('PATCH /trainer/exercises/:id/substitutes/order', () => {
+      it('reorders substitutes', async () => {
+        const { trainerToken, principalId } = await setupTrainingWithExercise();
+
+        const sub1 = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub A', type: 'strength' },
+        });
+        const sub2 = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub B', type: 'strength' },
+        });
+
+        const idA = sub1.json().id;
+        const idB = sub2.json().id;
+
+        const reorderResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${principalId}/substitutes/order`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { substituteIds: [idB, idA] },
+        });
+
+        expect(reorderResponse.statusCode).toBe(200);
+        const updated = reorderResponse.json();
+        expect(updated[0].id).toBe(idB);
+        expect(updated[0].substituteOrder).toBe(0);
+        expect(updated[1].id).toBe(idA);
+        expect(updated[1].substituteOrder).toBe(1);
+      });
+
+      it('returns 400 when substituteIds list length mismatches', async () => {
+        const { trainerToken, principalId } = await setupTrainingWithExercise();
+
+        await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Sub A', type: 'strength' },
+        });
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${principalId}/substitutes/order`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { substituteIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'] },
+        });
+
+        expect(response.statusCode).toBe(400);
+      });
+    });
+  });
+
+  // ─── Superset / Bi-set ────────────────────────────────────────────────────
+
+  describe('Superset (bi-set)', () => {
+    async function setupTrainingWithTwoExercises() {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+      const ex1 = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength' },
+      });
+      const ex2 = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Cable Fly', type: 'strength' },
+      });
+
+      return {
+        trainerToken,
+        trainingId,
+        exerciseId1: ex1.json().id,
+        exerciseId2: ex2.json().id,
+      };
+    }
+
+    describe('PATCH /trainer/trainings/:trainingId/supersets/:groupId/order', () => {
+      it('reorders exercises within an existing superset group', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        // Create both exercises with the same supersetGroupId at creation time
+        const groupId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+        const ex1 = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', order: 0, supersetGroupId: groupId, supersetOrder: 0 },
+        });
+        expect(ex1.statusCode).toBe(201);
+        const exerciseId1 = ex1.json().id;
+
+        const ex2 = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Cable Fly', type: 'strength', order: 1, supersetGroupId: groupId, supersetOrder: 1 },
+        });
+        expect(ex2.statusCode).toBe(201);
+        const exerciseId2 = ex2.json().id;
+
+        const reorderResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/trainings/${trainingId}/supersets/${groupId}/order`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { exerciseIds: [exerciseId2, exerciseId1] },
+        });
+
+        expect(reorderResponse.statusCode).toBe(200);
+        const updated = reorderResponse.json();
+        expect(updated[0].id).toBe(exerciseId2);
+        expect(updated[0].supersetOrder).toBe(0);
+        expect(updated[1].id).toBe(exerciseId1);
+        expect(updated[1].supersetOrder).toBe(1);
+      });
+
+      it('returns 404 when superset group does not exist', async () => {
+        const { trainerToken, trainingId } = await setupTrainingWithTwoExercises();
+        const fakeGroupId = '00000000-0000-0000-0000-000000000000';
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/trainings/${trainingId}/supersets/${fakeGroupId}/order`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            exerciseIds: [
+              '00000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000002',
+            ],
+          },
+        });
+
+        expect(response.statusCode).toBe(404);
+      });
+    });
+  });
 });

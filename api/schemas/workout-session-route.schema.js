@@ -22,12 +22,25 @@ const setLogSchema = {
   },
 };
 
+// Minimal substitute shape exposed inside session exercise objects — shown in the swap picker
+const substituteExerciseMinimalSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    ...i18nField('type', 'exerciseType'),
+    substituteOrder: { type: 'integer' },
+  },
+};
+
 const exerciseLogSchema = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
     workoutSessionId: { type: 'string', format: 'uuid' },
     exerciseId: { type: 'string', format: 'uuid' },
+    // null until the student substitutes this log during a session
+    substitutedByExerciseId: { type: 'string', format: 'uuid', nullable: true },
     ...i18nField('status', 'exerciseLogStatus'),
     order: { type: 'integer' },
     notes: { type: 'string', nullable: true },
@@ -47,6 +60,8 @@ const exerciseLogSchema = {
         restInterval: { type: 'integer', nullable: true },
         videoUrl: { type: 'string', nullable: true },
         notes: { type: 'string', nullable: true },
+        // swap options available to the student for this exercise
+        substitutes: { type: 'array', items: substituteExerciseMinimalSchema },
       },
     },
     setLogs: { type: 'array', items: setLogSchema },
@@ -456,6 +471,40 @@ export const getStudentSessionSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── Substitute exercise log ──────────────────────────────────────────────────
+
+export const substituteExerciseLogSchema = {
+  tags: ['Workout Sessions'],
+  summary: 'Substitute an exercise with an alternative during a workout session',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['sessionId', 'exerciseLogId'],
+    properties: {
+      sessionId: { type: 'string', format: 'uuid' },
+      exerciseLogId: { type: 'string', format: 'uuid' },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['substituteExerciseId'],
+    properties: {
+      substituteExerciseId: { type: 'string', format: 'uuid' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    201: exerciseLogSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
