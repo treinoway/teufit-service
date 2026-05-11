@@ -18,12 +18,14 @@ vi.mock('../../src/db.js', () => ({
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     setLog: {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+      count: vi.fn(),
     },
     trainer: { findUnique: vi.fn() },
     trainerStudent: { findUnique: vi.fn() },
@@ -45,6 +47,7 @@ import {
   listStudentSessions,
   getStudentSession,
   substituteExerciseLog,
+  undoSubstituteExerciseLog,
 } from '../../src/services/workout-session-service.js';
 import {
   WorkoutSessionStatus,
@@ -813,6 +816,158 @@ describe('workout-session-service', () => {
       expect(result).toEqual(newLog);
       // C1: order is now an integer (principal.order + 1 = 3), not a float
       expect(result.order).toBe(3);
+    });
+  });
+
+  // ── undoSubstituteExerciseLog ─────────────────────────────────────────────
+
+  describe('undoSubstituteExerciseLog', () => {
+    const makeSubstituteLog = (overrides = {}) =>
+      makeExerciseLog({
+        id: 'elog-sub',
+        exerciseId: 'sub-ex-1',
+        order: 3,
+        status: ExerciseLogStatus.PENDING,
+        substitutedByExerciseId: null,
+        workoutSession: makeSession({ userId: 'user-1' }),
+        ...overrides,
+      });
+
+    const makePrincipalForUndo = (overrides = {}) => ({
+      id: 'elog-principal',
+      workoutSessionId: 'session-1',
+      exerciseId: 'ex-1',
+      status: ExerciseLogStatus.SUBSTITUTED,
+      order: 2,
+      substitutedByExerciseId: 'sub-ex-1',
+      ...overrides,
+    });
+
+    it('throws EXERCISE_LOG_NOT_FOUND (404) when substitute log does not exist', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(null);
+
+      await expect(
+        undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_LOG_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
+    it('throws FORBIDDEN_NOT_YOUR_SESSION (403) when session does not belong to user', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(
+        makeSubstituteLog({
+          workoutSession: makeSession({ userId: 'other-user' }),
+        }),
+      );
+
+      await expect(
+        undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub'),
+      ).rejects.toMatchObject({
+        code: 'FORBIDDEN_NOT_YOUR_SESSION',
+        statusCode: 403,
+      });
+    });
+
+    it('throws VALIDATION_ERROR / exercise.undoNotSubstitute (400) when no principal log references this substitute', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makeSubstituteLog());
+      prisma.exerciseLog.findFirst.mockResolvedValue(null);
+
+      await expect(
+        undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub'),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: SubstituteMessageCode.UNDO_NOT_SUBSTITUTE,
+        httpStatus: 400,
+      });
+    });
+
+    it('throws VALIDATION_ERROR / exercise.undoHasSets (400) when the substitute log already has set logs', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makeSubstituteLog());
+      prisma.exerciseLog.findFirst.mockResolvedValue(makePrincipalForUndo());
+      prisma.setLog.count.mockResolvedValue(1);
+
+      await expect(
+        undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub'),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: SubstituteMessageCode.UNDO_HAS_SETS,
+        httpStatus: 400,
+      });
+    });
+
+    it('executes the correct transaction operations on success', async () => {
+      const substituteLog = makeSubstituteLog();
+      const principalLog = makePrincipalForUndo();
+
+      prisma.exerciseLog.findUnique.mockResolvedValue(substituteLog);
+      prisma.exerciseLog.findFirst.mockResolvedValue(principalLog);
+      prisma.setLog.count.mockResolvedValue(0);
+
+      const txUpdate = vi.fn().mockResolvedValue({});
+      const txDelete = vi.fn().mockResolvedValue({});
+      const txUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exerciseLog: {
+            update: txUpdate,
+            delete: txDelete,
+            updateMany: txUpdateMany,
+          },
+        };
+        return fn(tx);
+      });
+
+      await undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub');
+
+      // Principal must be reset
+      expect(txUpdate).toHaveBeenCalledWith({
+        where: { id: principalLog.id },
+        data: { status: ExerciseLogStatus.PENDING, substitutedByExerciseId: null },
+      });
+
+      // Substitute must be hard-deleted
+      expect(txDelete).toHaveBeenCalledWith({ where: { id: substituteLog.id } });
+
+      // Downstream logs must be shifted back
+      expect(txUpdateMany).toHaveBeenCalledWith({
+        where: { workoutSessionId: 'session-1', order: { gt: substituteLog.order } },
+        data: { order: { decrement: 1 } },
+      });
+    });
+
+    it('returns undefined (204-compatible) on success', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makeSubstituteLog());
+      prisma.exerciseLog.findFirst.mockResolvedValue(makePrincipalForUndo());
+      prisma.setLog.count.mockResolvedValue(0);
+
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exerciseLog: {
+            update: vi.fn().mockResolvedValue({}),
+            delete: vi.fn().mockResolvedValue({}),
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+        };
+        return fn(tx);
+      });
+
+      const result = await undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('throws EXERCISE_LOG_NOT_FOUND (404) on re-call after successful undo (idempotent 404)', async () => {
+      // After undo the substitute log is deleted, so findUnique returns null on the second call
+      prisma.exerciseLog.findUnique.mockResolvedValue(null);
+
+      await expect(
+        undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub'),
+      ).rejects.toMatchObject({
+        code: 'EXERCISE_LOG_NOT_FOUND',
+        statusCode: 404,
+      });
     });
   });
 });

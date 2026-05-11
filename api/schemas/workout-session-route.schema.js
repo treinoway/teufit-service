@@ -476,6 +476,31 @@ export const getStudentSessionSchema = {
   },
 };
 
+// ─── Undo substitute exercise log ────────────────────────────────────────────
+
+export const undoSubstituteExerciseLogSchema = {
+  tags: ['Workout Sessions'],
+  summary: 'Undo a substitute exercise swap (within the 15-second window before any set is logged)',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['sessionId', 'exerciseLogId'],
+    properties: {
+      sessionId: { type: 'string', format: 'uuid' },
+      exerciseLogId: { type: 'string', format: 'uuid' },
+    },
+  },
+  response: {
+    204: { type: 'null' },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 // ─── Substitute exercise log ──────────────────────────────────────────────────
 
 export const substituteExerciseLogSchema = {

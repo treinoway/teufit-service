@@ -1126,4 +1126,144 @@ e2eDescribe('e2e: workout-sessions', () => {
       expect(response.statusCode).toBe(401);
     });
   });
+
+  // ─── DELETE /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId ─────
+
+  describe('DELETE /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId', () => {
+    async function setupSwappedSession() {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+      // Principal exercise
+      const exResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 4 },
+      });
+      expect(exResponse.statusCode).toBe(201);
+      const principalExerciseId = exResponse.json().id;
+
+      // Substitute exercise
+      const subResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Dumbbell Press', type: 'strength', sets: 4 },
+      });
+      expect(subResponse.statusCode).toBe(201);
+      const substituteExerciseId = subResponse.json().id;
+
+      // Start session
+      const sessionResponse = await startSession(studentToken, trainingId);
+      expect(sessionResponse.statusCode).toBe(201);
+      const sessionBody = sessionResponse.json();
+      const sessionId = sessionBody.id;
+      const principalLogId = sessionBody.exerciseLogs[0].id;
+
+      // Perform the swap
+      const swapResponse = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${principalLogId}/substitute`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { substituteExerciseId },
+      });
+      expect(swapResponse.statusCode).toBe(201);
+      const substituteLogId = swapResponse.json().id;
+
+      return { studentToken, sessionId, principalLogId, substituteLogId, substituteExerciseId };
+    }
+
+    it('returns 204 and fully undoes the swap', async () => {
+      const { studentToken, sessionId, principalLogId, substituteLogId, substituteExerciseId } =
+        await setupSwappedSession();
+
+      const undoResponse = await app.inject({
+        method: 'DELETE',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${substituteLogId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(undoResponse.statusCode).toBe(204);
+
+      // Re-fetch session and verify state
+      const sessionResponse = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+      expect(sessionResponse.statusCode).toBe(200);
+      const { exerciseLogs } = sessionResponse.json();
+
+      const principalLog = exerciseLogs.find((l) => l.id === principalLogId);
+      expect(principalLog).toBeDefined();
+      expect(principalLog.status).toBe(ExerciseLogStatus.PENDING);
+      expect(principalLog.substitutedByExerciseId).toBeNull();
+
+      const substituteLog = exerciseLogs.find((l) => l.exerciseId === substituteExerciseId);
+      expect(substituteLog).toBeUndefined();
+
+      // Verify no order gap — orders should be contiguous starting from 0
+      const orders = exerciseLogs.map((l) => l.order).sort((a, b) => a - b);
+      orders.forEach((order, index) => expect(order).toBe(index));
+    });
+
+    it('returns 400 with exercise.undoHasSets when the substitute log already has set logs', async () => {
+      const { studentToken, sessionId, substituteLogId } = await setupSwappedSession();
+
+      // Log a set on the substitute
+      const setResponse = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${substituteLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, completed: true },
+      });
+      expect(setResponse.statusCode).toBe(201);
+
+      const undoResponse = await app.inject({
+        method: 'DELETE',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${substituteLogId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(undoResponse.statusCode).toBe(400);
+      expect(undoResponse.json().messageCode).toBe('exercise.undoHasSets');
+    });
+
+    it('returns 400 with exercise.undoNotSubstitute when attempting to delete a plain principal log', async () => {
+      const { studentToken, sessionId, principalLogId } = await setupSwappedSession();
+
+      // Attempt to DELETE the principal log (not the substitute)
+      const undoResponse = await app.inject({
+        method: 'DELETE',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${principalLogId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(undoResponse.statusCode).toBe(400);
+      expect(undoResponse.json().messageCode).toBe('exercise.undoNotSubstitute');
+    });
+
+    it('returns 404 when the exercise log does not exist', async () => {
+      const { studentToken, sessionId } = await setupSwappedSession();
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/00000000-0000-0000-0000-000000000000`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/my/workout-sessions/00000000-0000-0000-0000-000000000001/exercise-logs/00000000-0000-0000-0000-000000000002',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
 });

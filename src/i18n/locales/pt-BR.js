@@ -279,6 +279,8 @@ export default {
     'exercise.substitutedAlready': 'Este exercício já é substituto de outro exercício.',
     'exercise.substituteNotFound': 'Substituto não encontrado.',
     'exercise.logAlreadySubstituted': 'Este registro de exercício já foi substituído.',
+    'exercise.undoHasSets': 'Não é possível desfazer a troca: séries já foram registradas para este exercício.',
+    'exercise.undoNotSubstitute': 'Este registro não é um substituto de exercício. Use este endpoint somente para desfazer trocas.',
 
     // Video library
     'video.notFound': 'Vídeo não encontrado.',

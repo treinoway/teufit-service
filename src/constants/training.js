@@ -115,6 +115,8 @@ export const SubstituteMessageCode = Object.freeze({
   ALREADY_SUBSTITUTE: 'exercise.substitutedAlready',
   NOT_FOUND: 'exercise.substituteNotFound',
   LOG_ALREADY_SUBSTITUTED: 'exercise.logAlreadySubstituted',
+  UNDO_HAS_SETS: 'exercise.undoHasSets',
+  UNDO_NOT_SUBSTITUTE: 'exercise.undoNotSubstitute',
 });
 
 // Workouts Today error codes and message codes

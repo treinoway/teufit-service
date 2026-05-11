@@ -162,6 +162,23 @@ export async function workoutSessionRoutes(fastify) {
     },
   );
 
+  // DELETE /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId — Undo substitute swap
+  fastify.delete(
+    '/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId',
+    {
+      preHandler: [authenticate],
+      schema: schema.undoSubstituteExerciseLogSchema,
+    },
+    async (request, reply) => {
+      await service.undoSubstituteExerciseLog(
+        request.user.id,
+        request.params.sessionId,
+        request.params.exerciseLogId,
+      );
+      return reply.status(204).send();
+    },
+  );
+
   // POST /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/substitute
   fastify.post(
     '/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId/substitute',

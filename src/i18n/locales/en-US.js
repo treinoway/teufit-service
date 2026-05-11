@@ -275,6 +275,8 @@ export default {
     'exercise.substitutedAlready': 'This exercise is already a substitute for another exercise.',
     'exercise.substituteNotFound': 'Substitute not found.',
     'exercise.logAlreadySubstituted': 'This exercise log has already been substituted.',
+    'exercise.undoHasSets': 'Cannot undo swap: sets have already been logged for this exercise.',
+    'exercise.undoNotSubstitute': 'This log is not a substitute exercise. Use this endpoint only to undo swaps.',
 
     // Video library
     'video.notFound': 'Video not found.',

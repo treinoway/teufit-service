@@ -3366,6 +3366,45 @@
             "description": "Swap a principal exercise log for one of its substitute exercises. Marks the principal log as 'substituted' and creates a new ExerciseLog for the substitute. Idempotent: re-calling with the same substituteExerciseId returns the existing new log. Returns 409 if already substituted with a different exercise."
           },
           "response": []
+        },
+        {
+          "name": "Undo Substitute Exercise Log",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "workout-sessions",
+                ":sessionId",
+                "exercise-logs",
+                ":exerciseLogId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "",
+                  "description": "WorkoutSession UUID"
+                },
+                {
+                  "key": "exerciseLogId",
+                  "value": "",
+                  "description": "ExerciseLog UUID of the SUBSTITUTE (the log created by the swap, not the principal)"
+                }
+              ]
+            },
+            "description": "Undo a substitute exercise swap within the 15-second window before any set is logged. Deletes the substitute ExerciseLog, resets the principal log back to PENDING, and closes the order gap. Returns 400 if any SetLog exists on the substitute, or if the log is not actually a substitute. Returns 204 No Content on success."
+          },
+          "response": []
         }
       ]
     },

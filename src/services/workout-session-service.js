@@ -626,6 +626,78 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
 }
 
 /**
+ * Undo a substitute exercise swap within the 15-second window before any set is logged.
+ *
+ * Finds the principal ExerciseLog whose `substitutedByExerciseId` matches the
+ * substitute log's `exerciseId`, resets the principal to PENDING, hard-deletes the
+ * substitute log, and shifts all downstream logs (order > substituteLog.order) back by -1.
+ *
+ * @param {string} userId
+ * @param {string} sessionId
+ * @param {string} exerciseLogId - The substitute ExerciseLog ID (NOT the principal)
+ * @returns {Promise<void>}
+ */
+export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId) {
+  const substituteLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+
+  // Confirm the candidate log is actually a substitute (a principal in the same session
+  // must reference its exerciseId via substitutedByExerciseId).
+  const principalLog = await prisma.exerciseLog.findFirst({
+    where: {
+      workoutSessionId: sessionId,
+      substitutedByExerciseId: substituteLog.exerciseId,
+    },
+  });
+
+  if (!principalLog) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.UNDO_NOT_SUBSTITUTE,
+      message: 'This log is not a substitute exercise. Use this endpoint only to undo swaps.',
+    });
+  }
+
+  const setCount = await prisma.setLog.count({
+    where: { exerciseLogId },
+  });
+
+  if (setCount > 0) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SubstituteMessageCode.UNDO_HAS_SETS,
+      message: 'Cannot undo swap: sets have already been logged for this exercise.',
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Reset principal: clear substitution marker and restore PENDING status
+    await tx.exerciseLog.update({
+      where: { id: principalLog.id },
+      data: {
+        status: ExerciseLogStatus.PENDING,
+        substitutedByExerciseId: null,
+      },
+    });
+
+    // Hard-delete the substitute log (no deletedAt column on ExerciseLog)
+    await tx.exerciseLog.delete({
+      where: { id: exerciseLogId },
+    });
+
+    // Shift all logs after the deleted substitute back by -1
+    await tx.exerciseLog.updateMany({
+      where: {
+        workoutSessionId: sessionId,
+        order: { gt: substituteLog.order },
+      },
+      data: { order: { decrement: 1 } },
+    });
+  });
+}
+
+/**
  * Get full detail of a student's workout session (trainer view).
  *
  * @param {string} trainerId - User ID of the trainer
