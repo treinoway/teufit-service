@@ -534,6 +534,21 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
   const principalExercises = activeExercises.filter((e) => !e.substituteForExerciseId);
   const principalIds = new Set(principalExercises.map((e) => e.id));
 
+  console.info('[reorderExercisesInTraining] input', JSON.stringify({
+    userId,
+    trainingId,
+    receivedExerciseIds: exerciseIds,
+    receivedCount: Array.isArray(exerciseIds) ? exerciseIds.length : null,
+    principalIds: [...principalIds],
+    principalCount: principalIds.size,
+    activeExercises: activeExercises.map((e) => ({
+      id: e.id,
+      name: e.name,
+      substituteForExerciseId: e.substituteForExerciseId,
+      supersetGroupId: e.supersetGroupId,
+    })),
+  }));
+
   // Reject if any substitute ID is included
   const substituteIds = activeExercises
     .filter((e) => Boolean(e.substituteForExerciseId))
@@ -542,6 +557,11 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
     substituteIds.includes(id),
   );
   if (substituteIdsInPayload.length > 0) {
+    console.warn('[reorderExercisesInTraining] rejected: substitute IDs in payload', JSON.stringify({
+      trainingId,
+      substituteIdsInPayload,
+      substituteIds,
+    }));
     throw new AppError({
       httpStatus: 400,
       error: 'VALIDATION_ERROR',
@@ -553,6 +573,12 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
 
   const validationDetails = validateExerciseIdsForReorder(exerciseIds, principalIds);
   if (validationDetails) {
+    console.warn('[reorderExercisesInTraining] rejected: invalid exerciseIds', JSON.stringify({
+      trainingId,
+      receivedExerciseIds: exerciseIds,
+      principalIds: [...principalIds],
+      validationDetails,
+    }));
     throw new AppError({
       httpStatus: 400,
       error: 'VALIDATION_ERROR',

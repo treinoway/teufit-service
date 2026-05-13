@@ -1819,6 +1819,12 @@ async function executeTool(userId, toolName, toolInput) {
       }
 
       case AI_TOOLS.REORDER_EXERCISES_IN_TRAINING: {
+        console.info('[AI][reorder] tool invocation', JSON.stringify({
+          userId,
+          rawToolInput: toolInput,
+          sanitizedTrainingId: input.trainingId,
+          sanitizedExerciseIds: input.exerciseIds,
+        }));
         result = await reorderExercisesInTraining(userId, input.trainingId, input.exerciseIds);
         break;
       }
