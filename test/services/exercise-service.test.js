@@ -774,7 +774,13 @@ describe('exercise-service', () => {
         error: 'VALIDATION_ERROR',
         messageCode: 'validation.failed',
         statusCode: 400,
-        details: expect.objectContaining({ reason: 'length mismatch', expected: 3, received: 2 }),
+        details: expect.objectContaining({
+          reason: expect.stringContaining('length mismatch'),
+          expected: 3,
+          received: 2,
+          missingIds: expect.any(Array),
+          extraIds: expect.any(Array),
+        }),
       });
     });
 

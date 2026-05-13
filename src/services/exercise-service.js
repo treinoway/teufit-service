@@ -669,10 +669,15 @@ function validateExerciseIdsForReorder(exerciseIds, principalIds) {
   }
 
   if (exerciseIds.length !== principalIds.size) {
+    const receivedSet = new Set(exerciseIds);
+    const missingIds = [...principalIds].filter((id) => !receivedSet.has(id));
+    const extraIds = exerciseIds.filter((id) => !principalIds.has(id));
     return {
-      reason: 'length mismatch',
+      reason: 'length mismatch — exerciseIds must contain every active principal exercise of the training, in the desired order',
       expected: principalIds.size,
       received: exerciseIds.length,
+      missingIds,
+      extraIds,
     };
   }
 
