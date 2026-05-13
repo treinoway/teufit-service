@@ -291,6 +291,10 @@ export default {
     'video.tagsExceeded': 'Quantidade máxima de tags excedida.',
   },
 
+  notes: {
+    autoCompleted24h: '[Treino concluído automaticamente após 24h sem atividade]',
+  },
+
   validation: {
     required: 'O campo {field} é obrigatório.',
     type: 'O campo {field} tem um tipo inválido.',

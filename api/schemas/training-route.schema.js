@@ -15,6 +15,7 @@ export const trainingResponseSchema = {
     ...i18nField('weekDay', 'weekDay', { nullable: true }),
     order: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
+    estimatedDurationSeconds: { type: 'integer', minimum: 0 },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },

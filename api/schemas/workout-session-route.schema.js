@@ -86,18 +86,21 @@ const workoutSessionSchema = {
   },
 };
 
+const workoutSessionTrainingSummarySchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    ...i18nField('category', 'trainingCategory'),
+    estimatedDurationSeconds: { type: 'integer', minimum: 0, nullable: true },
+  },
+};
+
 const workoutSessionDetailSchema = {
   type: 'object',
   properties: {
     ...workoutSessionSchema.properties,
-    training: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', format: 'uuid' },
-        name: { type: 'string' },
-        ...i18nField('category', 'trainingCategory'),
-      },
-    },
+    training: workoutSessionTrainingSummarySchema,
     exerciseLogs: { type: 'array', items: exerciseLogSchema },
   },
 };
@@ -106,14 +109,7 @@ const workoutSessionListItemSchema = {
   type: 'object',
   properties: {
     ...workoutSessionSchema.properties,
-    training: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', format: 'uuid' },
-        name: { type: 'string' },
-        ...i18nField('category', 'trainingCategory'),
-      },
-    },
+    training: workoutSessionTrainingSummarySchema,
   },
 };
 

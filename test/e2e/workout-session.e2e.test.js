@@ -394,6 +394,28 @@ e2eDescribe('e2e: workout-sessions', () => {
       const body = response.json();
       expect(body.exerciseLogs[0].exercise.restInterval).toBeNull();
     });
+
+    it('exposes estimatedDurationSeconds on the nested training object', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      // Creating the exercise triggers recomputeTrainingDuration, making estimatedDurationSeconds non-zero
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.training).toHaveProperty('estimatedDurationSeconds');
+      expect(typeof body.training.estimatedDurationSeconds).toBe('number');
+      expect(body.training.estimatedDurationSeconds).toBeGreaterThan(0);
+    });
   });
 
   // ─── PATCH /my/workout-sessions/:sessionId ────────────────────────────────

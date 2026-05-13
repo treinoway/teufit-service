@@ -13,7 +13,8 @@ export async function workoutsTodayRoutes(fastify) {
     },
     async (request, reply) => {
       const timeZone = resolveTimeZone(request.headers['app-timezone']);
-      const result = await getTodayWorkout(request.user.id, { timeZone });
+      const language = request.language;
+      const result = await getTodayWorkout(request.user.id, { timeZone, language, logger: request.log });
       return reply.send(result);
     },
   );

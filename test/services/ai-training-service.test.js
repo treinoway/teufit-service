@@ -51,10 +51,17 @@ vi.mock('../../src/services/student-dashboard-service.js', () => ({
   buildAiPerformanceSnapshot: vi.fn(),
 }))
 
+// Mock exercise-service to isolate executeTool for REORDER_EXERCISES_IN_TRAINING
+vi.mock('../../src/services/exercise-service.js', () => ({
+  reorderExercisesInTraining: vi.fn(),
+  updateExercise: vi.fn(),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { importFromTemplate } from '../../src/services/training-protocol-service.js'
 import { buildAiPerformanceSnapshot } from '../../src/services/student-dashboard-service.js'
+import { reorderExercisesInTraining } from '../../src/services/exercise-service.js'
 import {
   buildTrainerContext,
   executeTool,
@@ -63,6 +70,8 @@ import {
   getConversation,
   deleteConversation,
   didPreviousAssistantMessageListExercises,
+  unwrapRefTag,
+  sanitizeToolInputIds,
 } from '../../src/services/ai-training-service.js'
 import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY } from '../../src/constants/ai.js'
 
@@ -2257,6 +2266,156 @@ describe('ai-training-service', () => {
         completionRate: snapshot.completionRate,
         topExercises: expect.any(Array),
       })
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // unwrapRefTag
+  // ---------------------------------------------------------------------------
+
+  describe('unwrapRefTag', () => {
+    it('strips [TYPE_REF:value] wrapper and returns the inner value', () => {
+      expect(unwrapRefTag('[EXERCISE_REF:abc-123]')).toBe('abc-123')
+      expect(unwrapRefTag('[TRAINING_REF:xyz-456]')).toBe('xyz-456')
+      expect(unwrapRefTag('[ASSIGNEE_REF:00000000-0000-0000-0000-000000000001]')).toBe(
+        '00000000-0000-0000-0000-000000000001',
+      )
+    })
+
+    it('passes through a raw UUID unchanged', () => {
+      const uuid = '00000000-0000-0000-0000-000000000001'
+      expect(unwrapRefTag(uuid)).toBe(uuid)
+    })
+
+    it('trims leading/trailing whitespace before matching', () => {
+      expect(unwrapRefTag('  [EXERCISE_REF:abc-123]  ')).toBe('abc-123')
+      expect(unwrapRefTag('  raw-id  ')).toBe('raw-id')
+    })
+
+    it('returns null as-is', () => {
+      expect(unwrapRefTag(null)).toBeNull()
+    })
+
+    it('returns undefined as-is', () => {
+      expect(unwrapRefTag(undefined)).toBeUndefined()
+    })
+
+    it('does not strip malformed tags (missing closing bracket)', () => {
+      // Pattern requires exactly [...] — partial tags are left as-is
+      expect(unwrapRefTag('[EXERCISE_REF:abc-123')).toBe('[EXERCISE_REF:abc-123')
+    })
+
+    it('does not strip when tag has no colon separator', () => {
+      expect(unwrapRefTag('[EXERCISE_REFabc-123]')).toBe('[EXERCISE_REFabc-123]')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // sanitizeToolInputIds
+  // ---------------------------------------------------------------------------
+
+  describe('sanitizeToolInputIds', () => {
+    it('unwraps wrapped scalar *Id fields', () => {
+      const result = sanitizeToolInputIds({
+        trainingId: '[TRAINING_REF:train-1]',
+        exerciseId: '[EXERCISE_REF:ex-1]',
+        name: 'Treino A',
+      })
+      expect(result.trainingId).toBe('train-1')
+      expect(result.exerciseId).toBe('ex-1')
+      expect(result.name).toBe('Treino A')
+    })
+
+    it('unwraps wrapped array *Ids fields', () => {
+      const result = sanitizeToolInputIds({
+        exerciseIds: ['[EXERCISE_REF:ex-1]', '[EXERCISE_REF:ex-2]', 'ex-3'],
+      })
+      expect(result.exerciseIds).toEqual(['ex-1', 'ex-2', 'ex-3'])
+    })
+
+    it('passes through already-raw IDs unchanged', () => {
+      const raw = { trainingId: 'train-abc', exerciseIds: ['ex-1', 'ex-2'] }
+      const result = sanitizeToolInputIds(raw)
+      expect(result.trainingId).toBe('train-abc')
+      expect(result.exerciseIds).toEqual(['ex-1', 'ex-2'])
+    })
+
+    it('handles mixed wrapped and raw entries in an *Ids array', () => {
+      const result = sanitizeToolInputIds({
+        exerciseIds: ['[EXERCISE_REF:wrapped-1]', 'raw-2', '[EXERCISE_REF:wrapped-3]'],
+      })
+      expect(result.exerciseIds).toEqual(['wrapped-1', 'raw-2', 'wrapped-3'])
+    })
+
+    it('returns null/undefined *Id values as-is', () => {
+      const result = sanitizeToolInputIds({ trainingId: null, exerciseId: undefined })
+      expect(result.trainingId).toBeNull()
+      expect(result.exerciseId).toBeUndefined()
+    })
+
+    it('returns the input unchanged when it is null', () => {
+      expect(sanitizeToolInputIds(null)).toBeNull()
+    })
+
+    it('does not mutate the original input object', () => {
+      const original = { trainingId: '[TRAINING_REF:t-1]', exerciseIds: ['[EXERCISE_REF:e-1]'] }
+      sanitizeToolInputIds(original)
+      expect(original.trainingId).toBe('[TRAINING_REF:t-1]')
+      expect(original.exerciseIds[0]).toBe('[EXERCISE_REF:e-1]')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // executeTool — reorder_exercises_in_training ref-tag sanitization
+  // ---------------------------------------------------------------------------
+
+  describe(`executeTool ${AI_TOOLS.REORDER_EXERCISES_IN_TRAINING} ref-tag sanitization`, () => {
+    it('strips [EXERCISE_REF:...] wrappers from exerciseIds before calling reorderExercisesInTraining', async () => {
+      reorderExercisesInTraining.mockResolvedValue({ success: true })
+
+      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
+        trainingId: '[TRAINING_REF:train-abc]',
+        exerciseIds: [
+          '[EXERCISE_REF:ex-1]',
+          '[EXERCISE_REF:ex-2]',
+          '[EXERCISE_REF:ex-3]',
+        ],
+      })
+
+      expect(reorderExercisesInTraining).toHaveBeenCalledWith(
+        'user-1',
+        'train-abc',
+        ['ex-1', 'ex-2', 'ex-3'],
+      )
+    })
+
+    it('passes raw UUIDs through unchanged when no wrapper is present', async () => {
+      reorderExercisesInTraining.mockResolvedValue({ success: true })
+
+      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
+        trainingId: 'train-abc',
+        exerciseIds: ['ex-1', 'ex-2'],
+      })
+
+      expect(reorderExercisesInTraining).toHaveBeenCalledWith('user-1', 'train-abc', [
+        'ex-1',
+        'ex-2',
+      ])
+    })
+
+    it('handles a mix of wrapped and raw exerciseIds in the same call', async () => {
+      reorderExercisesInTraining.mockResolvedValue({ success: true })
+
+      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
+        trainingId: 'train-abc',
+        exerciseIds: ['[EXERCISE_REF:ex-1]', 'ex-2', '[EXERCISE_REF:ex-3]'],
+      })
+
+      expect(reorderExercisesInTraining).toHaveBeenCalledWith('user-1', 'train-abc', [
+        'ex-1',
+        'ex-2',
+        'ex-3',
+      ])
     })
   })
 })

@@ -467,4 +467,80 @@ e2eDescribe('e2e: training protocols', () => {
       expect(protocol.trainings[0].categoryLabel).toBe('Força');
     });
   });
+
+  // ==================== estimatedDurationSeconds serialization ====================
+
+  describe('estimatedDurationSeconds — present on nested trainings', () => {
+    async function buildProtocolWithTrainingAndExercise(trainerToken, assigneeId) {
+      const protocolResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { assigneeId, name: 'Protocolo Duração', startDate: '2025-02-01' },
+      });
+      expect(protocolResponse.statusCode).toBe(201);
+      const { id: protocolId } = protocolResponse.json();
+
+      const trainingResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/protocols/${protocolId}/trainings`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Treino Duração', category: 'strength' },
+      });
+      expect(trainingResponse.statusCode).toBe(201);
+      const { id: trainingId } = trainingResponse.json();
+
+      // Creating the exercise triggers recomputeTrainingDuration, making estimatedDurationSeconds non-zero
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 4, hasLoad: true },
+      });
+
+      return { protocolId, trainingId };
+    }
+
+    it('GET /trainer/protocols/:id exposes estimatedDurationSeconds on nested trainings', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId } = await createAssigneeWithToken();
+
+      const { protocolId, trainingId } = await buildProtocolWithTrainingAndExercise(trainerToken, assigneeId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings).toHaveLength(1);
+      expect(body.trainings[0].id).toBe(trainingId);
+      expect(body.trainings[0]).toHaveProperty('estimatedDurationSeconds');
+      expect(typeof body.trainings[0].estimatedDurationSeconds).toBe('number');
+      expect(body.trainings[0].estimatedDurationSeconds).toBeGreaterThan(0);
+    });
+
+    it('GET /my/protocols/:id exposes estimatedDurationSeconds on nested trainings', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken();
+
+      const { protocolId, trainingId } = await buildProtocolWithTrainingAndExercise(trainerToken, assigneeId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/protocols/${protocolId}`,
+        headers: { authorization: `Bearer ${assigneeToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.trainings).toHaveLength(1);
+      expect(body.trainings[0].id).toBe(trainingId);
+      expect(body.trainings[0]).toHaveProperty('estimatedDurationSeconds');
+      expect(typeof body.trainings[0].estimatedDurationSeconds).toBe('number');
+      expect(body.trainings[0].estimatedDurationSeconds).toBeGreaterThan(0);
+    });
+  });
 });

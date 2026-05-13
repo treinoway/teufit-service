@@ -86,6 +86,14 @@ export const PrescriptionMode = Object.freeze({
   DURATION: 'duration',
 });
 
+export const WorkoutDurationConstants = Object.freeze({
+  SECONDS_PER_REP: 3,
+  TRANSITION_SECONDS: 40,
+  WARMUP_OVERHEAD_SECONDS: 300,
+  DEFAULT_REST_SECONDS: 60,
+  DEFAULT_REPS_FALLBACK: 12,
+});
+
 // Export arrays of values for validation
 export const weekDayValues = Object.freeze(Object.values(WeekDays));
 export const trainingCategoryValues = Object.freeze(Object.values(TrainingCategory));
@@ -128,6 +136,13 @@ export const WorkoutsTodayErrorCode = Object.freeze({
 export const WorkoutsTodayMessageCode = Object.freeze({
   NO_ACTIVE_PROTOCOL: 'workoutsToday.noActiveProtocol',
   EMPTY_PROTOCOL: 'workoutsToday.emptyProtocol',
+});
+
+// Auto-completion of stale pending workout sessions
+export const AUTO_COMPLETE_PENDING_AFTER_MS = 24 * 60 * 60 * 1000;
+
+export const WorkoutSessionNoteMessageCode = Object.freeze({
+  AUTO_COMPLETED_24H: 'notes.autoCompleted24h',
 });
 
 export const DASHBOARD_DEFAULTS = Object.freeze({

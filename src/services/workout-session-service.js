@@ -211,7 +211,7 @@ export async function startSession(userId, trainingId, data = null) {
     return tx.workoutSession.findUnique({
       where: { id: created.id },
       include: {
-        training: { select: { id: true, name: true, category: true } },
+        training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
         exerciseLogs: {
           orderBy: { order: 'asc' },
           include: {
@@ -261,7 +261,7 @@ export async function listSessions(userId, filters = {}) {
       skip,
       take: limit,
       include: {
-        training: { select: { id: true, name: true, category: true } },
+        training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       },
     }),
     prisma.workoutSession.count({ where }),
@@ -281,7 +281,7 @@ export async function getSession(userId, sessionId) {
   const session = await prisma.workoutSession.findUnique({
     where: { id: sessionId },
     include: {
-      training: { select: { id: true, name: true, category: true } },
+      training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
@@ -341,7 +341,7 @@ export async function updateSession(userId, sessionId, data) {
     where: { id: sessionId },
     data: updateData,
     include: {
-      training: { select: { id: true, name: true, category: true } },
+      training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {
@@ -526,7 +526,7 @@ export async function listStudentSessions(trainerId, studentId, filters = {}) {
       skip,
       take: limit,
       include: {
-        training: { select: { id: true, name: true, category: true } },
+        training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       },
     }),
     prisma.workoutSession.count({ where }),
@@ -711,7 +711,7 @@ export async function getStudentSession(trainerId, studentId, sessionId) {
   const session = await prisma.workoutSession.findUnique({
     where: { id: sessionId },
     include: {
-      training: { select: { id: true, name: true, category: true } },
+      training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
         orderBy: { order: 'asc' },
         include: {

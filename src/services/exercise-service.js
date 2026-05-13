@@ -16,6 +16,7 @@ import {
   SupersetMessageCode,
   SubstituteMessageCode,
 } from '../constants/training.js';
+import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { randomUUID } from 'crypto';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
@@ -129,8 +130,12 @@ export async function createExercise(userId, trainingId, data) {
     return normalizeExercisePrescriptionMode(exercise);
   }
 
-  const exercise = await prisma.exercise.create({
-    data: buildExerciseData(data, trainingId),
+  const exercise = await prisma.$transaction(async (tx) => {
+    const created = await tx.exercise.create({
+      data: buildExerciseData(data, trainingId),
+    });
+    await recomputeTrainingDuration(tx, trainingId);
+    return created;
   });
 
   return normalizeExercisePrescriptionMode(exercise);
@@ -220,9 +225,11 @@ async function createSupersetMemberAtomically(trainingId, data) {
       }
     }
 
-    return tx.exercise.create({
+    const created = await tx.exercise.create({
       data: buildExerciseData({ ...data, order: resolvedOrder }, trainingId),
     });
+    await recomputeTrainingDuration(tx, trainingId);
+    return created;
   });
 }
 
@@ -270,11 +277,15 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     notes: data.notes !== undefined ? data.notes : template.notes,
   };
 
-  const exercise = await prisma.exercise.create({
-    data: {
-      ...buildExerciseData(exerciseData, trainingId, template.id),
-      exerciseTemplateId: template.id,
-    },
+  const exercise = await prisma.$transaction(async (tx) => {
+    const created = await tx.exercise.create({
+      data: {
+        ...buildExerciseData(exerciseData, trainingId, template.id),
+        exerciseTemplateId: template.id,
+      },
+    });
+    await recomputeTrainingDuration(tx, trainingId);
+    return created;
   });
 
   return normalizeExercisePrescriptionMode(exercise);
@@ -466,10 +477,17 @@ export async function updateExercise(userId, exerciseId, data) {
     if (data.duration !== undefined) updateData.duration = data.duration;
   }
 
+  const durationAffectingFields = ['sets', 'repetitions', 'duration', 'prescriptionMode', 'restInterval'];
+  const shouldRecompute = durationAffectingFields.some((field) => data[field] !== undefined);
+
   const updated = await prisma.exercise.update({
     where: { id: exerciseId },
     data: updateData,
   });
+
+  if (shouldRecompute) {
+    await recomputeTrainingDuration(prisma, exercise.trainingId);
+  }
 
   return normalizeExercisePrescriptionMode(updated);
 }
@@ -698,6 +716,11 @@ export async function deleteExercise(userId, exerciseId) {
           data: { supersetGroupId: null, supersetOrder: 0 },
         });
       }
+    }
+
+    // Recompute duration only when a principal was deleted (substitutes have no contribution)
+    if (exercise.substituteForExerciseId === null) {
+      await recomputeTrainingDuration(tx, exercise.trainingId);
     }
   });
 

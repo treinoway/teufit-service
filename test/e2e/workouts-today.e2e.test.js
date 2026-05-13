@@ -178,6 +178,9 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     expect(body.workouts[0].isRestDay).toBe(false);
     // i18n label sibling must be present
     expect(body.workouts[0].targetTraining.weekDayLabel).toBeTruthy();
+    // estimatedDurationSeconds must be present and be a non-negative integer
+    expect(body.workouts[0].targetTraining.estimatedDurationSeconds).toBeTypeOf('number');
+    expect(body.workouts[0].targetTraining.estimatedDurationSeconds).toBeGreaterThanOrEqual(0);
   });
 
   it('returns 200 with correct first training for order-based protocol', async () => {
@@ -366,5 +369,56 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     // pendingTraining at envelope level
     expect(body).toHaveProperty('pendingTraining');
     expect(body.pendingTraining).toBeNull();
+  });
+
+  it('auto-completes a stale in_progress session (>24h) and returns pendingTraining: null', async () => {
+    const { trainerId } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+    await linkStudentToTrainer(trainerId, studentId);
+
+    const { trainings } = await createActiveProtocol(trainerId, studentId, [
+      { name: 'Training A', category: 'strength', weekDay: null, order: 0 },
+    ]);
+
+    // Seed a session whose startedAt is 25h in the past
+    const staleStartedAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    const session = await prisma.workoutSession.create({
+      data: {
+        trainingId: trainings[0].id,
+        userId: studentId,
+        status: 'in_progress',
+        startedAt: staleStartedAt,
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: getUrl(),
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+        'app-language': 'pt-BR',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // Stale session must not appear as pending
+    expect(body.pendingTraining).toBeNull();
+
+    // Session in DB must be completed
+    const updatedSession = await prisma.workoutSession.findUnique({
+      where: { id: session.id },
+      select: { status: true, finishedAt: true, durationSeconds: true, notes: true },
+    });
+
+    expect(updatedSession.status).toBe('completed');
+    expect(updatedSession.durationSeconds).toBe(86400);
+
+    const expectedFinishedAt = new Date(staleStartedAt.getTime() + 24 * 60 * 60 * 1000);
+    // Allow 1s tolerance for floating-point/timing
+    expect(Math.abs(updatedSession.finishedAt.getTime() - expectedFinishedAt.getTime())).toBeLessThan(1000);
+
+    expect(updatedSession.notes).toBe('[Treino concluído automaticamente após 24h sem atividade]');
   });
 });

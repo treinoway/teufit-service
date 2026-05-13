@@ -3,13 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainingProtocol: { findMany: vi.fn() },
-    workoutSession: { findFirst: vi.fn() },
+    workoutSession: { findFirst: vi.fn(), update: vi.fn() },
   },
 }));
 
 import { prisma } from '../../src/db.js';
 import { getTodayWorkout } from '../../src/services/workouts-today-service.js';
-import { WorkoutsTodayMessageCode } from '../../src/constants/training.js';
+import {
+  WorkoutsTodayMessageCode,
+  AUTO_COMPLETE_PENDING_AFTER_MS,
+  WorkoutSessionStatus,
+} from '../../src/constants/training.js';
 
 // ─── Factories ───────────────────────────────────────────────────────────────
 
@@ -314,7 +318,12 @@ describe('workouts-today-service', () => {
 
       prisma.trainingProtocol.findMany.mockResolvedValue([proto1, proto2]);
 
-      const session = makeSession({ id: 'sess-active', trainingId: 'tr-p1' });
+      // startedAt within 24h of the mocked system time so the session stays pending (not auto-completed)
+      const session = makeSession({
+        id: 'sess-active',
+        trainingId: 'tr-p1',
+        startedAt: new Date('2025-04-14T08:00:00Z'),
+      });
       // First call: pending session. Second call: order-mode completed lookup.
       prisma.workoutSession.findFirst
         .mockResolvedValueOnce(session)
@@ -388,6 +397,201 @@ describe('workouts-today-service', () => {
       const callArgs = prisma.trainingProtocol.findMany.mock.calls[0][0];
       expect(callArgs.orderBy).toEqual({ startDate: 'desc' });
       expect(callArgs.where).toMatchObject({ status: 'active', deletedAt: null });
+    });
+  });
+
+  // ── Auto-completion of stale pending sessions ─────────────────────────────
+
+  describe('auto-completion of stale pending sessions', () => {
+    const STALE_START = new Date(Date.now() - AUTO_COMPLETE_PENDING_AFTER_MS - 1000);
+    const FRESH_START = new Date(Date.now() - AUTO_COMPLETE_PENDING_AFTER_MS + 60_000);
+
+    function makeStaleSession(overrides = {}) {
+      return {
+        id: 'sess-stale',
+        trainingId: 'tr-0',
+        startedAt: STALE_START,
+        status: 'in_progress',
+        notes: null,
+        ...overrides,
+      };
+    }
+
+    function makeProtocolWithOrderTraining() {
+      const t0 = makeTraining({ id: 'tr-0', weekDay: null, order: 0 }, 0);
+      return makeProtocol([t0]);
+    }
+
+    beforeEach(() => {
+      prisma.workoutSession.update.mockResolvedValue({});
+    });
+
+    it('auto-completes session older than 24h and sets pendingTraining to null', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession())   // pending lookup
+        .mockResolvedValueOnce(null);                // order-mode completed lookup
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(prisma.workoutSession.update).toHaveBeenCalledOnce();
+      expect(result.pendingTraining).toBeNull();
+    });
+
+    it('sets finishedAt = startedAt + 24h (not now)', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      const staleSession = makeStaleSession();
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(staleSession)
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', defaultOptions);
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      const expectedFinishedAt = new Date(staleSession.startedAt.getTime() + AUTO_COMPLETE_PENDING_AFTER_MS);
+      expect(updateArgs.data.finishedAt).toEqual(expectedFinishedAt);
+    });
+
+    it('sets durationSeconds = 86400', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession())
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', defaultOptions);
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      expect(updateArgs.data.durationSeconds).toBe(86400);
+    });
+
+    it('sets status = completed', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession())
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', defaultOptions);
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      expect(updateArgs.data.status).toBe(WorkoutSessionStatus.COMPLETED);
+    });
+
+    it('appends pt-BR note when notes is null', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession({ notes: null }))
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', { ...defaultOptions, language: 'pt-BR' });
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      expect(updateArgs.data.notes).toBe('[Treino concluído automaticamente após 24h sem atividade]');
+    });
+
+    it('appends en-US note when language is en-US and notes is null', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession({ notes: null }))
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', { ...defaultOptions, language: 'en-US' });
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      expect(updateArgs.data.notes).toBe('[Workout auto-completed after 24h of inactivity]');
+    });
+
+    it('appends note with \\n\\n separator when session already has notes', async () => {
+      const existingNotes = 'User felt tired today.';
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession({ notes: existingNotes }))
+        .mockResolvedValueOnce(null);
+
+      await getTodayWorkout('user-1', { ...defaultOptions, language: 'pt-BR' });
+
+      const updateArgs = prisma.workoutSession.update.mock.calls[0][0];
+      expect(updateArgs.data.notes).toBe(
+        `${existingNotes}\n\n[Treino concluído automaticamente após 24h sem atividade]`,
+      );
+    });
+
+    it('does not auto-complete session that is less than 24h old', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      const freshSession = {
+        id: 'sess-fresh',
+        trainingId: 'tr-0',
+        startedAt: FRESH_START,
+        status: 'in_progress',
+        notes: null,
+      };
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(freshSession)
+        .mockResolvedValueOnce(null);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(prisma.workoutSession.update).not.toHaveBeenCalled();
+      expect(result.pendingTraining).not.toBeNull();
+      expect(result.pendingTraining.sessionId).toBe('sess-fresh');
+    });
+
+    it('treats session exactly 24h old as stale (>= threshold)', async () => {
+      const exactlyStaleStart = new Date(Date.now() - AUTO_COMPLETE_PENDING_AFTER_MS);
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession({ startedAt: exactlyStaleStart }))
+        .mockResolvedValueOnce(null);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(prisma.workoutSession.update).toHaveBeenCalledOnce();
+      expect(result.pendingTraining).toBeNull();
+    });
+
+    it('no pending session → update never called, pendingTraining null', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(prisma.workoutSession.update).not.toHaveBeenCalled();
+      expect(result.pendingTraining).toBeNull();
+    });
+
+    it('degrades gracefully when update fails — returns still-pending session', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocolWithOrderTraining()]);
+      const staleSession = makeStaleSession();
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(staleSession)
+        .mockResolvedValueOnce(null);
+      prisma.workoutSession.update.mockRejectedValueOnce(new Error('DB connection lost'));
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      // Must not throw; pending session surfaces in response
+      expect(result.pendingTraining).not.toBeNull();
+      expect(result.pendingTraining.sessionId).toBe('sess-stale');
+    });
+
+    it('order-mode resolution runs after auto-completion so newly completed session is considered', async () => {
+      // Protocol with two trainings in order mode.
+      // The stale session was for tr-0 → auto-completed → next should be tr-1.
+      const t0 = makeTraining({ id: 'tr-0', weekDay: null, order: 0 }, 0);
+      const t1 = makeTraining({ id: 'tr-1', weekDay: null, order: 1 }, 1);
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocol([t0, t1])]);
+
+      prisma.workoutSession.findFirst
+        .mockResolvedValueOnce(makeStaleSession({ trainingId: 'tr-0' })) // pending lookup
+        .mockResolvedValueOnce({ training: { order: 0 } });              // order-mode sees completed tr-0
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(prisma.workoutSession.update).toHaveBeenCalledOnce();
+      expect(result.pendingTraining).toBeNull();
+      // order-mode picks tr-1 (next after order 0)
+      expect(result.workouts[0].targetTraining.id).toBe('tr-1');
     });
   });
 });

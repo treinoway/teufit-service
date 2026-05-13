@@ -29,6 +29,7 @@ const trainingItemSchema = {
     ...i18nField('bodySegment', 'bodySegment', { nullable: true }),
     ...i18nField('weekDay', 'weekDay', { nullable: true }),
     order: { type: 'integer' },
+    estimatedDurationSeconds: { type: 'integer', minimum: 0, nullable: true },
     notes: { type: 'string', nullable: true },
   },
 };

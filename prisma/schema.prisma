@@ -342,7 +342,8 @@ model Training {
   bodySegment        String? @map("body_segment") @db.Text
   weekDay            String? @map("week_day") @db.Text
   order              Int     @default(0)
-  notes              String? @db.Text
+  notes                    String? @db.Text
+  estimatedDurationSeconds Int     @default(0) @map("estimated_duration_seconds")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

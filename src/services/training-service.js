@@ -8,6 +8,7 @@ import {
   resolvePrescriptionMode,
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
+import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 
 /**
  * Verify protocol ownership (trainer context)
@@ -69,6 +70,7 @@ export async function createTraining(userId, protocolId, data) {
       weekDay: data.weekDay || null,
       order: data.order !== undefined ? data.order : 0,
       notes: data.notes || null,
+      estimatedDurationSeconds: 0,
     },
   });
 
@@ -381,6 +383,8 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
         },
       });
     }
+
+    await recomputeTrainingDuration(tx, createdTraining.id);
 
     return tx.training.findUnique({
       where: { id: createdTraining.id },

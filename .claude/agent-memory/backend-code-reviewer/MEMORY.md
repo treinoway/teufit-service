@@ -1,3 +1,5 @@
 - [i18n legacy-error translation gap](project_i18n_legacy_error_gap.md) — legacy `.code` errors bypass translation and return English to pt-BR clients until migrated to stable messageCodes
 - [Exercise field copy flow checklist](feedback_exercise_copy_flows.md) — full list of sites that snapshot Exercise fields; backend-engineer reliably misses one (esp. `training-service.importFromTemplate`)
 - [backend-engineer skips E2E tests](feedback_e2e_test_gap.md) — "all tests pass" usually means unit-only; verify E2E coverage independently
+- [Mocked Prisma masks DB violations](feedback_mocked_prisma_hides_bugs.md) — fractional writes to Int cols & FK cascade collisions hide behind `$transaction` mocks
+- [Shared schemas leak forbidden fields](feedback_shared_schema_leaks.md) — reused `*BodyProperties` blocks let invariants slip past validation on specialized routes

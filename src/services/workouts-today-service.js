@@ -1,7 +1,13 @@
 import { prisma } from '../db.js';
 import { AppError } from '../errors/app-error.js';
 import { formatDateOnly, getWeekdayInTimeZone, addDaysMs } from '../helpers/date-helpers.js';
-import { WorkoutsTodayErrorCode, WorkoutsTodayMessageCode } from '../constants/training.js';
+import {
+  WorkoutsTodayErrorCode,
+  WorkoutsTodayMessageCode,
+  AUTO_COMPLETE_PENDING_AFTER_MS,
+  WorkoutSessionStatus,
+} from '../constants/training.js';
+import { translate } from '../i18n/index.js';
 
 // ─── Error factories ─────────────────────────────────────────────────────────
 
@@ -21,6 +27,66 @@ function emptyProtocolError() {
     messageCode: WorkoutsTodayMessageCode.EMPTY_PROTOCOL,
     message: 'Your active protocol does not have any workouts yet.',
   });
+}
+
+// ─── Auto-completion helper ───────────────────────────────────────────────────
+
+/**
+ * Appends the localized auto-completion note to the session's existing notes.
+ * If notes is null or empty, the note becomes the entire value.
+ * If notes already has content, the note is appended with a blank line separator.
+ *
+ * @param {string | null} existingNotes
+ * @param {string} autoNote
+ * @returns {string}
+ */
+function buildAutoCompletionNotes(existingNotes, autoNote) {
+  if (!existingNotes || existingNotes.trim() === '') {
+    return autoNote;
+  }
+  return `${existingNotes}\n\n${autoNote}`;
+}
+
+/**
+ * Attempts to auto-complete a pending workout session that has been in_progress
+ * for at least AUTO_COMPLETE_PENDING_AFTER_MS milliseconds.
+ *
+ * The finishedAt is set to startedAt + 24h (not now) so that durationSeconds
+ * always equals exactly 24 * 60 * 60, regardless of when this call runs.
+ *
+ * On DB failure the error is logged and the function returns false, allowing
+ * the caller to degrade gracefully and still return the pending session.
+ *
+ * @param {object} session - The pending session { id, startedAt, notes }
+ * @param {string} language - Resolved locale tag
+ * @param {import('@fastify/type-provider-typebox').FastifyBaseLogger} [logger]
+ * @returns {Promise<boolean>} true when the update succeeded, false on failure
+ */
+async function tryAutoCompleteSession(session, language, logger) {
+  const finishedAt = new Date(session.startedAt.getTime() + AUTO_COMPLETE_PENDING_AFTER_MS);
+  const durationSeconds = AUTO_COMPLETE_PENDING_AFTER_MS / 1000;
+  const autoNote = translate('notes', 'autoCompleted24h', language);
+  const notes = buildAutoCompletionNotes(session.notes, autoNote);
+
+  try {
+    await prisma.workoutSession.update({
+      where: { id: session.id },
+      data: {
+        status: WorkoutSessionStatus.COMPLETED,
+        finishedAt,
+        durationSeconds,
+        notes,
+      },
+    });
+    return true;
+  } catch (error) {
+    // Graceful degradation: log and let the caller return the still-pending session.
+    // A second concurrent call will retry and is idempotent in practice.
+    if (logger) {
+      logger.warn({ err: error, sessionId: session.id }, 'workouts-today: failed to auto-complete stale session');
+    }
+    return false;
+  }
 }
 
 // ─── Per-protocol resolution helpers ─────────────────────────────────────────
@@ -124,11 +190,15 @@ async function resolveProtocolWorkout(protocol, userId, todayWeekday, today, tim
  * Protocols with no trainings are skipped. If all active protocols are empty, throws EMPTY_PROTOCOL.
  * The single pending in-progress session is reported once at the top level, not per-protocol.
  *
+ * If the pending session has been in_progress for >= 24h, it is auto-completed before the
+ * order-mode resolution runs, so the newly completed session is correctly considered when
+ * determining the next training.
+ *
  * @param {string} userId
- * @param {{ timeZone: string }} options
- * @returns {Promise<{ workouts: Array<object> }>}
+ * @param {{ timeZone: string, language?: string, logger?: object }} options
+ * @returns {Promise<{ workouts: Array<object>, pendingTraining: object|null }>}
  */
-export async function getTodayWorkout(userId, { timeZone }) {
+export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', logger } = {}) {
   const protocols = await prisma.trainingProtocol.findMany({
     where: { assigneeId: userId, status: 'active', deletedAt: null },
     orderBy: { startDate: 'desc' },
@@ -154,17 +224,38 @@ export async function getTodayWorkout(userId, { timeZone }) {
   const pendingSession = await prisma.workoutSession.findFirst({
     where: { userId, status: 'in_progress', deletedAt: null },
     orderBy: { startedAt: 'desc' },
-    select: { id: true, trainingId: true, startedAt: true, status: true },
+    select: { id: true, trainingId: true, startedAt: true, status: true, notes: true },
   });
 
-  const pendingTraining = pendingSession
-    ? {
+  // Auto-complete sessions that have been in_progress for >= 24h.
+  // Order-mode resolution runs AFTER this update so the newly completed session
+  // is visible to resolveOrderMode's findFirst({ status: 'completed' }) query.
+  let pendingTraining = null;
+  if (pendingSession) {
+    const isStale =
+      Date.now() - pendingSession.startedAt.getTime() >= AUTO_COMPLETE_PENDING_AFTER_MS;
+
+    if (isStale) {
+      const completed = await tryAutoCompleteSession(pendingSession, language, logger);
+      // Only suppress pendingTraining if the update succeeded.
+      // On failure, degrade gracefully and keep showing the session as pending.
+      if (!completed) {
+        pendingTraining = {
+          sessionId: pendingSession.id,
+          trainingId: pendingSession.trainingId,
+          startedAt: pendingSession.startedAt,
+          status: pendingSession.status,
+        };
+      }
+    } else {
+      pendingTraining = {
         sessionId: pendingSession.id,
         trainingId: pendingSession.trainingId,
         startedAt: pendingSession.startedAt,
         status: pendingSession.status,
-      }
-    : null;
+      };
+    }
+  }
 
   const today = new Date();
   const todayWeekday = getWeekdayInTimeZone(today, timeZone);

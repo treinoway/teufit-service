@@ -11,13 +11,14 @@ vi.mock('../../src/db.js', () => ({
     },
     trainingProtocol: { findUnique: vi.fn() },
     trainingTemplate: { findUnique: vi.fn() },
-    exercise: { create: vi.fn() },
+    exercise: { create: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
 
 import { prisma } from '../../src/db.js';
 import {
+  createTraining,
   getTrainingById,
   updateTraining,
   deleteTraining,
@@ -258,6 +259,9 @@ describe('training-service', () => {
 
     beforeEach(() => {
       prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+      // recomputeTrainingDuration calls tx.exercise.findMany and tx.training.update
+      prisma.exercise.findMany.mockResolvedValue([]);
+      prisma.training.update.mockResolvedValue({});
     });
 
     it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
@@ -658,6 +662,88 @@ describe('training-service', () => {
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );
+    });
+  });
+
+  describe('createTraining — estimated duration', () => {
+    it('persists estimatedDurationSeconds: 0 on create', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      const created = { id: 'tr-1', estimatedDurationSeconds: 0 };
+      prisma.training.create.mockResolvedValue(created);
+
+      const result = await createTraining('u1', 'p1', { name: 'Leg Day', category: 'strength' });
+
+      expect(result).toEqual(created);
+      expect(prisma.training.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ estimatedDurationSeconds: 0 }),
+        }),
+      );
+    });
+  });
+
+  describe('importFromTemplate — estimated duration', () => {
+    const makeJunctionRow = (overrides = {}) => ({
+      exerciseTemplateId: 'et-1',
+      name: 'Squat',
+      type: 'strength',
+      order: 0,
+      sets: 3,
+      repetitions: { min: 8, max: 12 },
+      duration: null,
+      prescriptionMode: 'reps',
+      hasLoad: false,
+      suggestedLoad: null,
+      restInterval: 60,
+      notes: null,
+      videoUrl: null,
+      supersetGroupId: null,
+      supersetOrder: 0,
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+      prisma.exercise.findMany.mockResolvedValue([]);
+      prisma.training.update.mockResolvedValue({});
+    });
+
+    it('calls training.update with estimatedDurationSeconds after import', async () => {
+      const junction = makeJunctionRow({ sets: 3, repetitions: { min: 10, max: 10 }, restInterval: 60 });
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Leg Day',
+        description: null,
+        category: 'strength',
+        bodySegment: null,
+        deletedAt: null,
+        isPublic: false,
+        trainingTemplateExerciseTemplates: [junction],
+      });
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.exercise.create.mockResolvedValue({ id: 'ex-1' });
+      prisma.exercise.findMany.mockResolvedValue([
+        { sets: 3, repetitions: { min: 10, max: 10 }, duration: null, prescriptionMode: 'reps', restInterval: 60, substituteForExerciseId: null },
+      ]);
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.training.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'tr-1' },
+          data: { estimatedDurationSeconds: expect.any(Number) },
+        }),
+      );
+
+      const updateCall = prisma.training.update.mock.calls.find(
+        ([arg]) => arg?.data?.estimatedDurationSeconds !== undefined,
+      );
+      expect(updateCall[0].data.estimatedDurationSeconds).toBeGreaterThan(0);
     });
   });
 

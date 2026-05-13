@@ -252,6 +252,62 @@ When adding a mode-driven mutual exclusivity field (e.g. `prescriptionMode`):
 - Unit tests mock `$queryRaw` and cannot assert on template-literal params. Test that: (a) option accepted without throw, (b) dates returned by mock are passed through as-is (no JS re-bucketing). E2E layer is where actual bucketing correctness must be verified.
 - Dashboard indexes added: `@@index([assigneeId, status, startDate(sort: Desc)])` + `@@index([trainerId])` on `TrainingProtocol`; `@@index([trainingId])` on `Exercise`. Migration: `20260503231518_add_protocol_and_exercise_indexes`.
 
+## Truthy checks for nullable Prisma fields in services (2026-05-10)
+Use `if (field)` / `if (!field)` (truthy) instead of `=== null` / `!== null` for nullable DB fields.
+Prisma returns `null` from DB but unit test mocks may return `undefined`. Truthy checks handle both.
+ESLint flags `if (Boolean(field))` as `no-extra-boolean-cast` — use plain `if (field)`.
+
+## validateSubstituteConstraint: CANNOT_BE_IN_SUPERSET checks CANDIDATE, not principal (2026-05-10 — P1 fix)
+- `substituteCannotBeInSuperset`: checks `candidate.supersetGroupId` (the substitute being added) — bi-set PRINCIPALS CAN have substitutes
+- `substituteCannotChain`: checks `principal.substituteForExerciseId` — principals that are themselves substitutes cannot have sub-substitutes
+- Plan edge case #4: "If student substitutes a bi-set member, the substitute log replaces only that member in the workout flow."
+
+## addSubstitute: findFirst + create inside $transaction (2026-05-10)
+Both the `substituteOrder` lookup and the `create` must run inside a single `$transaction` to prevent race conditions. Test mocks must provide `tx.exercise.findFirst` and `tx.exercise.create`.
+
+## deleteExercise: clearGroupIfUndersized inside $transaction (2026-05-10)
+`clearGroupIfUndersized` logic (check remaining count + updateMany) now runs inside the delete transaction. Test mocks must provide `tx.exercise.findMany` to return the remaining members after the delete step.
+
+## Float order in ExerciseLog is invalid — use integer shift (2026-05-10 — C1 fix)
+`ExerciseLog.order` is `Int`. Never use `order + 0.5`. Pattern: `updateMany` to shift logs with `order > principalLog.order` by `+1`, then `create` at `principalLog.order + 1`. All in a single `$transaction`.
+
+## Session response: exercise.substitutes[] is the authoritative source for swap options (2026-05-10 — C4 fix)
+All session-returning service functions (startSession, getSession, updateSession, getStudentSession) must include `substitutes: { where: { deletedAt: null }, orderBy: { substituteOrder: 'asc' } }` in the exercise select. The frontend reads swap options from `exerciseLogs[].exercise.substitutes[]`, NOT from `/my/trainings/:trainingId/exercises`.
+
+## updateExercise schema does not accept supersetGroupId (2026-05-10)
+`exerciseUpdateBodyProperties` excludes `supersetGroupId` and `supersetOrder` to prevent bypassing contiguity validation. Set them only at exercise creation time (`POST .../exercises`).
+
+## reorderSupersetMembersSchema has minItems: 2 (2026-05-10)
+Sending an empty `exerciseIds` array returns 400, not 404. Always pass at least 2 valid UUIDs to reach the service-layer 404 for a non-existent group.
+
+## Existing test mocks with old timestamps break when staleness logic is added (2026-05-12)
+When adding time-based staleness checks (e.g. `Date.now() - startedAt >= 24h`), existing test mocks that use hardcoded historical timestamps (e.g. `new Date('2025-04-01')`) will unexpectedly trigger the stale branch. Fix: update `makeSession()` callers in the affected tests to pass `startedAt` within the fresh window relative to the mocked system time. Use `vi.setSystemTime` consistently and pass explicit `startedAt` that is clearly within the fresh range.
+
+## logger not threaded: routes MUST pass `request.log` to services (2026-05-12)
+When a service accepts an optional `logger` param for graceful-degradation logging (e.g. `tryAutoCompleteSession`), the route handler MUST pass `logger: request.log`. Without it, failures are silently swallowed with no observability. Pattern:
+```js
+const result = await myService(userId, { ..., logger: request.log });
+```
+
+## Transaction wrapping for recompute hooks (2026-05-13)
+When wrapping an existing non-transactional create in `prisma.$transaction` to add a recompute step, all test cases that stub `prisma.exercise.create.mockResolvedValue(x)` must be migrated to provide a `txMock` with `exercise.create`, `exercise.findMany`, and `training.update`. Failing to do so causes `TypeError: Cannot read properties of undefined (reading 'update')`.
+
+## trainingResponseSchema propagation (2026-05-13)
+Adding `estimatedDurationSeconds` to `trainingResponseSchema.properties` automatically propagates to `trainingWithExercisesResponseSchema` (spread) and from there to `workouts-today-route.schema.js`. No other schema files needed updating.
+
+## Fastify serializer drops fields missing from schema — two-layer check required (2026-05-12)
+`fast-json-stringify` silently strips response fields not declared in `properties`. When a field is stored in DB but never reaches the frontend, check:
+1. **Schema** (`api/schemas/`) — is the field declared in `properties`?
+2. **Service Prisma `select`** — if using `select: { ... }`, is the field explicitly listed?
+
+Example: `estimatedDurationSeconds` was stored but dropped because:
+- Protocol schemas: `trainingItemSchema` didn't declare it → schema fix alone was sufficient (protocol service uses `include:` not `select:`)
+- Workout-session service: all 6 call sites used `training: { select: { id, name, category } }` → field was never fetched from DB
+
+Key distinction: `include: { relation: { where, orderBy } }` returns ALL scalar fields; `include: { relation: { select: { ... } } }` returns ONLY listed fields.
+
+When two inline object shapes are identical, extract to a named const to prevent future drift.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.
