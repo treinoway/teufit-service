@@ -2369,53 +2369,16 @@ describe('ai-training-service', () => {
   // executeTool — reorder_exercises_in_training ref-tag sanitization
   // ---------------------------------------------------------------------------
 
-  describe(`executeTool ${AI_TOOLS.REORDER_EXERCISES_IN_TRAINING} ref-tag sanitization`, () => {
-    it('strips [EXERCISE_REF:...] wrappers from exerciseIds before calling reorderExercisesInTraining', async () => {
-      reorderExercisesInTraining.mockResolvedValue({ success: true })
-
-      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
-        trainingId: '[TRAINING_REF:train-abc]',
-        exerciseIds: [
-          '[EXERCISE_REF:ex-1]',
-          '[EXERCISE_REF:ex-2]',
-          '[EXERCISE_REF:ex-3]',
-        ],
-      })
-
-      expect(reorderExercisesInTraining).toHaveBeenCalledWith(
-        'user-1',
-        'train-abc',
-        ['ex-1', 'ex-2', 'ex-3'],
-      )
-    })
-
-    it('passes raw UUIDs through unchanged when no wrapper is present', async () => {
-      reorderExercisesInTraining.mockResolvedValue({ success: true })
-
-      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
+  describe(`executeTool ${AI_TOOLS.REORDER_EXERCISES_IN_TRAINING} (disabled)`, () => {
+    it('returns AI_TOOL_DISABLED error and does not call reorderExercisesInTraining', async () => {
+      const result = await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
         trainingId: 'train-abc',
         exerciseIds: ['ex-1', 'ex-2'],
       })
 
-      expect(reorderExercisesInTraining).toHaveBeenCalledWith('user-1', 'train-abc', [
-        'ex-1',
-        'ex-2',
-      ])
-    })
-
-    it('handles a mix of wrapped and raw exerciseIds in the same call', async () => {
-      reorderExercisesInTraining.mockResolvedValue({ success: true })
-
-      await executeTool('user-1', AI_TOOLS.REORDER_EXERCISES_IN_TRAINING, {
-        trainingId: 'train-abc',
-        exerciseIds: ['[EXERCISE_REF:ex-1]', 'ex-2', '[EXERCISE_REF:ex-3]'],
-      })
-
-      expect(reorderExercisesInTraining).toHaveBeenCalledWith('user-1', 'train-abc', [
-        'ex-1',
-        'ex-2',
-        'ex-3',
-      ])
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('AI_TOOL_DISABLED')
+      expect(reorderExercisesInTraining).not.toHaveBeenCalled()
     })
   })
 })
