@@ -107,3 +107,30 @@ export const EXTRA_CARDIO_TRAINING = Object.freeze({
 
 // Training level rotation (cycles through students).
 export const TRAINING_LEVEL_CYCLE = Object.freeze(['beginner', 'intermediate', 'advanced']);
+
+// ─── Subscription Plans & Assignments ────────────────────────────────────────
+// 4 plans + 7 active assignments (3 students left without a plan so the
+// empty state is exercisable). Mixed recurrences, discounts, and payment
+// statuses (paid / pending / overdue) so Financeiro dashboard has real data.
+
+export const SUBSCRIPTION_PLANS = Object.freeze([
+  { key: 'mensal_standard', name: 'Mensal Standard', recurrence: 'monthly',    price: 150,  discountPercent: null, discountAmount: null },
+  { key: 'mensal_premium',  name: 'Mensal Premium',  recurrence: 'monthly',    price: 250,  discountPercent: 10,   discountAmount: null },
+  { key: 'trimestral',      name: 'Trimestral',      recurrence: 'quarterly',  price: 405,  discountPercent: null, discountAmount: 30  },
+  { key: 'anual_vip',       name: 'Anual VIP',       recurrence: 'annual',     price: 1500, discountPercent: 15,   discountAmount: null },
+]);
+
+// Per-student assignment. studentIndex matches STUDENTS array position (0-based).
+// startMonthsAgo: how long ago the subscription started.
+// paidCycles: number of past cycles to mark as PAID (rest stay PENDING).
+// If paidCycles < totalCycles - 1, the older pending cycles will appear as
+// "Atrasado" on the dashboard (derived client-side from cycleEndDate < today).
+export const SUBSCRIPTION_ASSIGNMENTS = Object.freeze([
+  { studentIndex: 0, planKey: 'mensal_standard', startMonthsAgo: 6, paidCycles: 5, discountPercent: null, discountAmount: null },
+  { studentIndex: 1, planKey: 'mensal_premium',  startMonthsAgo: 4, paidCycles: 2, discountPercent: null, discountAmount: null },
+  { studentIndex: 2, planKey: 'trimestral',      startMonthsAgo: 6, paidCycles: 1, discountPercent: null, discountAmount: null },
+  { studentIndex: 3, planKey: 'mensal_standard', startMonthsAgo: 3, paidCycles: 3, discountPercent: null, discountAmount: null },
+  { studentIndex: 4, planKey: 'anual_vip',       startMonthsAgo: 2, paidCycles: 1, discountPercent: null, discountAmount: null },
+  { studentIndex: 5, planKey: 'mensal_premium',  startMonthsAgo: 5, paidCycles: 3, discountPercent: 20,   discountAmount: null }, // override discount
+  { studentIndex: 6, planKey: 'mensal_standard', startMonthsAgo: 1, paidCycles: 0, discountPercent: null, discountAmount: null },
+]);

@@ -8,6 +8,7 @@ import {
   maybeMarkProfileComplete,
   maybeMarkFirstStudentLinked,
 } from './trainer-onboarding-service.js';
+import { markBriefingDirty } from './briefing-service.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -208,6 +209,12 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
 
   await maybeMarkFirstStudentLinked({ trainerId });
 
+  // Roster change affects activeStudents and inactiveStudents KPIs.
+  // Blocking is intentional here — roster mutations are infrequent and the
+  // extra latency is negligible vs. the risk of losing the dirty signal.
+  // Hot-path mutations (set logs, sessions) use fire-and-forget instead.
+  await markBriefingDirty(prisma, trainerId);
+
   const avatarUrl = await s3BucketHandler.resolveUrl(student.avatarUrl);
 
   return {
@@ -369,6 +376,12 @@ export async function unlinkStudent({ trainerId, studentId }) {
   await prisma.trainerStudent.delete({
     where: { trainerId_studentId: { trainerId, studentId } },
   });
+
+  // Roster change affects activeStudents and inactiveStudents KPIs.
+  // Blocking is intentional here — roster mutations are infrequent and the
+  // extra latency is negligible vs. the risk of losing the dirty signal.
+  // Hot-path mutations (set logs, sessions) use fire-and-forget instead.
+  await markBriefingDirty(prisma, trainerId);
 }
 
 /**

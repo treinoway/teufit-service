@@ -48,6 +48,10 @@ export async function cleanDatabase() {
     'foods',
     'food_groups',
     'user_preferences',
+    'subscription_payments',
+    'student_subscriptions',
+    'subscription_plans',
+    'trainer_briefing_snapshots',
     'users',
     'user_waitlist',
   ];

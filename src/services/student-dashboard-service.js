@@ -558,30 +558,49 @@ export async function getDailyActivity(trainerUserId, studentId, { dateFrom, dat
   const dateWindow = resolveWindow({ dateFrom, dateTo });
 
   const rows = await prisma.$queryRaw`
+    WITH sessions_with_date AS (
+      SELECT
+        ws.id,
+        ws.status,
+        DATE(ws.started_at AT TIME ZONE ${timeZone}) AS session_date
+      FROM workout_sessions ws
+      WHERE ws.user_id = ${studentId}::uuid
+        AND ws.deleted_at IS NULL
+        AND ws.started_at >= ${dateWindow.from}
+        AND ws.started_at <= ${dateWindow.to}
+    )
     SELECT
-      TO_CHAR(DATE(ws.started_at AT TIME ZONE ${timeZone}), 'YYYY-MM-DD') AS date,
-      COUNT(DISTINCT ws.id) AS session_count,
-      ARRAY_AGG(DISTINCT ws.id::text) AS session_ids,
+      TO_CHAR(swd.session_date, 'YYYY-MM-DD') AS date,
+      COUNT(DISTINCT swd.id) AS session_count,
+      ARRAY_AGG(DISTINCT swd.id::text) AS session_ids,
+      BOOL_OR(swd.status = 'completed') AS has_completed,
+      BOOL_OR(swd.status = 'abandoned') AS has_abandoned,
       COALESCE(SUM(sl.load * sl.repetitions) FILTER (WHERE sl.completed = TRUE), 0) AS total_volume_kg,
       COUNT(*) FILTER (WHERE sl.completed = TRUE) AS completed_sets,
       COUNT(sl.id) AS total_sets
-    FROM workout_sessions ws
-    LEFT JOIN exercise_logs el ON el.workout_session_id = ws.id
+    FROM sessions_with_date swd
+    LEFT JOIN exercise_logs el ON el.workout_session_id = swd.id
     LEFT JOIN set_logs sl ON sl.exercise_log_id = el.id
-    WHERE ws.user_id = ${studentId}::uuid
-      AND ws.deleted_at IS NULL
-      AND ws.started_at >= ${dateWindow.from}
-      AND ws.started_at <= ${dateWindow.to}
-    GROUP BY DATE(ws.started_at AT TIME ZONE ${timeZone})
-    ORDER BY date ASC
+    GROUP BY swd.session_date
+    ORDER BY swd.session_date ASC
   `;
+
+  const resolveDayStatus = (row) => {
+    const completedSets = Number(row.completed_sets);
+    const totalSets = Number(row.total_sets);
+    if (row.has_completed) {
+      return totalSets > 0 && completedSets < totalSets ? 'partial' : 'completed';
+    }
+    if (row.has_abandoned) return 'abandoned';
+    return 'partial';
+  };
 
   const data = rows.map((row) => ({
     date: row.date,
-    status: 'done',
+    status: resolveDayStatus(row),
     sessionCount: Number(row.session_count),
     sessionIds: row.session_ids,
-    totalVolumeKg: round2(Number(row.total_volume_kg)),
+    volumeKg: round2(Number(row.total_volume_kg)),
     completedSets: Number(row.completed_sets),
     totalSets: Number(row.total_sets),
   }));

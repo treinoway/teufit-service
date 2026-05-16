@@ -856,10 +856,10 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
       expect(data).toHaveLength(1);
       expect(data[0]).toMatchObject({
         date: expect.any(String),
-        status: 'done',
+        status: expect.stringMatching(/^(completed|partial|abandoned)$/),
         sessionCount: 1,
         sessionIds: [sessionId],
-        totalVolumeKg: expect.any(Number),
+        volumeKg: expect.any(Number),
         completedSets: expect.any(Number),
         totalSets: expect.any(Number),
       });

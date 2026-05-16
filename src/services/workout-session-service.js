@@ -3,6 +3,30 @@ import { WorkoutSessionStatus, ExerciseLogStatus, SubstituteMessageCode } from '
 import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
 import { awardWorkoutCompletionPoints } from './gamification-service.js';
+import { markBriefingDirty } from './briefing-service.js';
+
+// ─── Briefing invalidation helper ────────────────────────────────────────────
+
+/**
+ * Resolve the trainer's Trainer.id from a training ID, then mark the briefing dirty.
+ * Fire-and-forget safe: errors are logged and swallowed — never fail the main operation.
+ *
+ * @param {string} trainingId
+ */
+async function invalidateBriefingForTraining(trainingId) {
+  try {
+    const training = await prisma.training.findUnique({
+      where: { id: trainingId },
+      select: { trainingProtocol: { select: { trainerId: true } } },
+    });
+    const trainerId = training?.trainingProtocol?.trainerId;
+    if (trainerId) {
+      await markBriefingDirty(prisma, trainerId);
+    }
+  } catch (err) {
+    console.error('[briefing] Failed to mark briefing dirty after session write:', err);
+  }
+}
 
 // ─── Shared selects ──────────────────────────────────────────────────────────
 
@@ -223,6 +247,9 @@ export async function startSession(userId, trainingId, data = null) {
     });
   });
 
+  // Starting a session changes the adherence denominator — mark dirty after tx
+  invalidateBriefingForTraining(trainingId).catch(() => {});
+
   return session;
 }
 
@@ -359,6 +386,11 @@ export async function updateSession(userId, sessionId, data) {
       .catch((err) => console.error('Failed to award workout completion points', err));
   }
 
+  // Status changes affect adherence, activeStudents, and inactiveStudents KPIs
+  if (data.status !== undefined) {
+    invalidateBriefingForTraining(updated.trainingId).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -370,12 +402,15 @@ export async function updateSession(userId, sessionId, data) {
  * @returns {Promise<object>}
  */
 export async function deleteSession(userId, sessionId) {
-  await resolveUserSession(sessionId, userId);
+  const session = await resolveUserSession(sessionId, userId);
 
   const deleted = await prisma.workoutSession.update({
     where: { id: sessionId },
     data: { deletedAt: new Date() },
   });
+
+  // Removing a session affects adherence denominator
+  invalidateBriefingForTraining(session.trainingId).catch(() => {});
 
   return deleted;
 }
@@ -415,7 +450,7 @@ export async function updateExerciseLog(userId, sessionId, exerciseLogId, data) 
  * @returns {Promise<object>}
  */
 export async function createSetLog(userId, sessionId, exerciseLogId, data) {
-  await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
 
   const setLog = await prisma.setLog.create({
     data: {
@@ -431,6 +466,11 @@ export async function createSetLog(userId, sessionId, exerciseLogId, data) {
     },
   });
 
+  // Set logs with load affect stagnant progress KPI
+  if (data.load != null) {
+    invalidateBriefingForTraining(exerciseLog.workoutSession.trainingId).catch(() => {});
+  }
+
   return setLog;
 }
 
@@ -445,7 +485,7 @@ export async function createSetLog(userId, sessionId, exerciseLogId, data) {
  * @returns {Promise<object>}
  */
 export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, data) {
-  await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
   await resolveSetLog(setLogId, exerciseLogId);
 
   const updateData = {};
@@ -463,6 +503,13 @@ export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, d
     data: updateData,
   });
 
+  // Load changes affect stagnant progress KPI.
+  // != null: skip explicit nulls (clearing the load doesn't change the PR
+  // history) — match createSetLog at L470.
+  if (data.load != null) {
+    invalidateBriefingForTraining(exerciseLog.workoutSession.trainingId).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -476,12 +523,15 @@ export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, d
  * @returns {Promise<object>}
  */
 export async function deleteSetLog(userId, sessionId, exerciseLogId, setLogId) {
-  await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
   await resolveSetLog(setLogId, exerciseLogId);
 
   const deleted = await prisma.setLog.delete({
     where: { id: setLogId },
   });
+
+  // Removing a set log can affect load-based PR calculations
+  invalidateBriefingForTraining(exerciseLog.workoutSession.trainingId).catch(() => {});
 
   return deleted;
 }

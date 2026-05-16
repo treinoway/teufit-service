@@ -36,7 +36,22 @@
       "key": "videoId",
       "value": "",
       "type": "string",
-      "description": "Video UUID \u2014 used in /admin/videos/:videoId and /videos/:videoId endpoints"
+      "description": "Video UUID — used in /admin/videos/:videoId and /videos/:videoId endpoints"
+    },
+    {
+      "key": "subscriptionPlanId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentSubscriptionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subscriptionPaymentId",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -700,7 +715,7 @@
           },
           "response": [
             {
-              "name": "Get Current User (minimal \u2014 no include param) - 200 OK",
+              "name": "Get Current User (minimal — no include param) - 200 OK",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
@@ -723,7 +738,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"Jo\u00e3o\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false\n}"
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false\n}"
             },
             {
               "name": "Get Current User with trainerOnboarding - 200 OK",
@@ -771,7 +786,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthDate\": \"1990-01-15\",\n  \"address\": {\n    \"line1\": \"123 Main St\",\n    \"line2\": \"Apt 4B\",\n    \"neighborhood\": \"Downtown\",\n    \"city\": \"S\u00e3o Paulo\",\n    \"state\": \"S\u00e3o Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johndoe\",\n    \"whatsapp\": \"+5511999999999\",\n    \"linkedin\": \"https://linkedin.com/in/johndoe\"\n  },\n  \"preferences\": {\n    \"rawPreferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true\n    }\n  }\n}"
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"gender\": \"male\",\n  \"birthDate\": \"1990-01-15\",\n  \"address\": {\n    \"line1\": \"123 Main St\",\n    \"line2\": \"Apt 4B\",\n    \"neighborhood\": \"Downtown\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-100\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johndoe\",\n    \"whatsapp\": \"+5511999999999\",\n    \"linkedin\": \"https://linkedin.com/in/johndoe\"\n  },\n  \"preferences\": {\n    \"rawPreferences\": {\n      \"theme\": \"dark\",\n      \"notifications\": true\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/me/profile",
@@ -816,7 +831,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"Jo\u00e3o\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
             }
           ]
         },
@@ -942,7 +957,7 @@
                 "trainers"
               ]
             },
-            "description": "Returns all active trainers visible to any authenticated user. No role restriction required \u2014 both students and trainers can call this endpoint."
+            "description": "Returns all active trainers visible to any authenticated user. No role restriction required — both students and trainers can call this endpoint."
           },
           "response": [
             {
@@ -975,7 +990,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/jane.jpg\",\n    \"serviceMode\": \"online\",\n    \"serviceModeLabel\": \"Online\",\n    \"address\": {\n      \"city\": \"S\u00e3o Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"Brazil\"\n    },\n    \"socialNetworks\": {\n      \"instagram\": \"@janedoe\",\n      \"whatsapp\": \"+5511999999999\"\n    }\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Doe\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/jane.jpg\",\n    \"serviceMode\": \"online\",\n    \"serviceModeLabel\": \"Online\",\n    \"address\": {\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"country\": \"Brazil\"\n    },\n    \"socialNetworks\": {\n      \"instagram\": \"@janedoe\",\n      \"whatsapp\": \"+5511999999999\"\n    }\n  }\n]"
             }
           ]
         },
@@ -991,7 +1006,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Trainer\",\n    \"birthDate\": \"1985-05-20\",\n    \"professionalDocument\": \"CREF 123456-G/SP\",\n    \"gymName\": \"Fitness Center\",\n    \"notes\": \"Specializes in strength training\",\n    \"serviceMode\": \"hybrid\"\n  },\n  \"address\": {\n    \"line1\": \"456 Gym Street\",\n    \"neighborhood\": \"Fitness District\",\n    \"city\": \"S\u00e3o Paulo\",\n    \"state\": \"S\u00e3o Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-200\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johntrainer\",\n    \"whatsapp\": \"+5511988888888\",\n    \"youtube\": \"https://youtube.com/@johntrainer\",\n    \"linkedin\": \"https://linkedin.com/in/johntrainer\"\n  }\n}"
+              "raw": "{\n  \"trainer\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Trainer\",\n    \"birthDate\": \"1985-05-20\",\n    \"professionalDocument\": \"CREF 123456-G/SP\",\n    \"gymName\": \"Fitness Center\",\n    \"notes\": \"Specializes in strength training\",\n    \"serviceMode\": \"hybrid\"\n  },\n  \"address\": {\n    \"line1\": \"456 Gym Street\",\n    \"neighborhood\": \"Fitness District\",\n    \"city\": \"São Paulo\",\n    \"state\": \"São Paulo\",\n    \"stateCode\": \"SP\",\n    \"country\": \"Brazil\",\n    \"countryCode\": \"BR\",\n    \"postalCode\": \"01310-200\"\n  },\n  \"socials\": {\n    \"instagram\": \"@johntrainer\",\n    \"whatsapp\": \"+5511988888888\",\n    \"youtube\": \"https://youtube.com/@johntrainer\",\n    \"linkedin\": \"https://linkedin.com/in/johntrainer\"\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer",
@@ -2136,7 +2151,7 @@
                 }
               ]
             },
-            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row \u2014 the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership."
+            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership."
           },
           "response": []
         },
@@ -2774,11 +2789,11 @@
                 "today"
               ]
             },
-            "description": "Returns the training(s) the student should do today \u2014 one entry per active protocol.\n\n- weekDay mode: if any training in a protocol has a weekDay set, picks the one matching today's weekday in the given timezone. Returns isRestDay: true and nextScheduledDate when no match.\n- order mode: if no training has a weekDay, picks the next training after the last completed session, cycling back to the first.\n\nThe in_progress WorkoutSession (if any) is returned once as `pendingTraining` at the envelope root \u2014 not inside each workout entry.\n\n**Errors**:\n- 404 workoutsToday.noActiveProtocol \u2014 student has no active protocol\n- 404 workoutsToday.emptyProtocol \u2014 all active protocols have no trainings"
+            "description": "Returns the training(s) the student should do today — one entry per active protocol.\n\n- weekDay mode: if any training in a protocol has a weekDay set, picks the one matching today's weekday in the given timezone. Returns isRestDay: true and nextScheduledDate when no match.\n- order mode: if no training has a weekDay, picks the next training after the last completed session, cycling back to the first.\n\nThe in_progress WorkoutSession (if any) is returned once as `pendingTraining` at the envelope root — not inside each workout entry.\n\n**Errors**:\n- 404 workoutsToday.noActiveProtocol — student has no active protocol\n- 404 workoutsToday.emptyProtocol — all active protocols have no trainings"
           },
           "response": [
             {
-              "name": "200 \u2014 Two active protocols, one in_progress session",
+              "name": "200 — Two active protocols, one in_progress session",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -2819,7 +2834,7 @@
               "body": "{\n  \"workouts\": [\n    {\n      \"protocol\": {\n        \"id\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n        \"name\": \"Strength Protocol\",\n        \"startDate\": \"2025-01-01\",\n        \"expirationDate\": \"2025-06-30\"\n      },\n      \"targetTraining\": {\n        \"id\": \"a1b2c3d4-0000-0000-0000-000000000010\",\n        \"name\": \"Treino A - Peito e Tr\\u00edceps\",\n        \"category\": \"strength\",\n        \"categoryLabel\": \"Strength\",\n        \"weekDay\": \"monday\",\n        \"weekDayLabel\": \"Monday\",\n        \"order\": 0,\n        \"estimatedDurationSeconds\": 2580,\n        \"exercises\": []\n      },\n      \"isRestDay\": false,\n      \"nextScheduledDate\": null\n    },\n    {\n      \"protocol\": {\n        \"id\": \"a1b2c3d4-0000-0000-0000-000000000002\",\n        \"name\": \"Mobility Protocol\",\n        \"startDate\": \"2024-12-01\",\n        \"expirationDate\": null\n      },\n      \"targetTraining\": null,\n      \"isRestDay\": true,\n      \"nextScheduledDate\": \"2025-05-12\"\n    }\n  ],\n  \"pendingTraining\": {\n    \"sessionId\": \"a1b2c3d4-0000-0000-0000-000000000099\",\n    \"trainingId\": \"a1b2c3d4-0000-0000-0000-000000000010\",\n    \"startedAt\": \"2025-05-08T09:00:00.000Z\",\n    \"status\": \"in_progress\",\n    \"statusLabel\": \"In progress\"\n  }\n}"
             },
             {
-              "name": "200 \u2014 Single protocol, rest day, no pending session",
+              "name": "200 — Single protocol, rest day, no pending session",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -2856,7 +2871,7 @@
               "body": "{\n  \"workouts\": [\n    {\n      \"protocol\": {\n        \"id\": \"a1b2c3d4-0000-0000-0000-000000000001\",\n        \"name\": \"Strength Protocol\",\n        \"startDate\": \"2025-01-01\",\n        \"expirationDate\": \"2025-06-30\"\n      },\n      \"targetTraining\": null,\n      \"isRestDay\": true,\n      \"nextScheduledDate\": \"2025-05-10\"\n    }\n  ],\n  \"pendingTraining\": null\n}"
             },
             {
-              "name": "404 \u2014 No active protocol",
+              "name": "404 — No active protocol",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -2894,7 +2909,7 @@
     },
     {
       "name": "Workout Sessions",
-      "description": "Workout session logging \u2014 start, track, and finish workout sessions in real time.",
+      "description": "Workout session logging — start, track, and finish workout sessions in real time.",
       "item": [
         {
           "name": "Start Workout Session",
@@ -4488,7 +4503,7 @@
                 }
               }
             },
-            "description": "Update title and/or description of a public anamnesis. No student-link guard \u2014 admins can edit freely. Requires ADMIN role."
+            "description": "Update title and/or description of a public anamnesis. No student-link guard — admins can edit freely. Requires ADMIN role."
           },
           "response": []
         },
@@ -5306,7 +5321,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"Cria um protocolo para o Jo\u00e3o usando o template Hipertrofia\",\n  \"conversationHistory\": [],\n  \"historySignature\": \"\"\n}",
+              "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"conversationHistory\": [],\n  \"historySignature\": \"\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5324,7 +5339,7 @@
                 "chat"
               ]
             },
-            "description": "Send a message to the AI training assistant. The assistant can create and manage protocols, trainings, and exercises on behalf of the trainer.\n\nRequires TRAINER role. Rate limited: 10 requests/minute.\n\nThe `historySignature` field is an HMAC returned by the server in each response \u2014 pass it back with subsequent turns to allow the server to verify the conversation history has not been tampered with."
+            "description": "Send a message to the AI training assistant. The assistant can create and manage protocols, trainings, and exercises on behalf of the trainer.\n\nRequires TRAINER role. Rate limited: 10 requests/minute.\n\nThe `historySignature` field is an HMAC returned by the server in each response — pass it back with subsequent turns to allow the server to verify the conversation history has not been tampered with."
           },
           "response": []
         },
@@ -5340,7 +5355,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"Sim, pode criar\",\n  \"conversationHistory\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Cria um protocolo para o Jo\u00e3o usando o template Hipertrofia\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Vou criar um protocolo de Hipertrofia para o Jo\u00e3o...\"\n    }\n  ],\n  \"historySignature\": \"abc123...\"\n}",
+              "raw": "{\n  \"message\": \"Sim, pode criar\",\n  \"conversationHistory\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Cria um protocolo para o João usando o template Hipertrofia\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Vou criar um protocolo de Hipertrofia para o João...\"\n    }\n  ],\n  \"historySignature\": \"abc123...\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5358,7 +5373,7 @@
                 "chat"
               ]
             },
-            "description": "Confirmation turn in a multi-turn conversation. The trainer confirms a pending action proposed by the assistant in the previous turn.\n\nThe `conversationHistory` must contain the prior turns, and the `historySignature` must match the value returned by the server at the end of the previous turn \u2014 otherwise the request is rejected with 400.\n\nRequires TRAINER role. Rate limited: 10 requests/minute."
+            "description": "Confirmation turn in a multi-turn conversation. The trainer confirms a pending action proposed by the assistant in the previous turn.\n\nThe `conversationHistory` must contain the prior turns, and the `historySignature` must match the value returned by the server at the end of the previous turn — otherwise the request is rejected with 400.\n\nRequires TRAINER role. Rate limited: 10 requests/minute."
           },
           "response": []
         }
@@ -5546,7 +5561,7 @@
                 "logo"
               ]
             },
-            "description": "Upload a logo image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP \u2014 max 5MB. Requires TRAINER role."
+            "description": "Upload a logo image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP — max 5MB. Requires TRAINER role."
           },
           "response": []
         },
@@ -5583,7 +5598,7 @@
                 "cover"
               ]
             },
-            "description": "Upload a cover image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP \u2014 max 5MB. Requires TRAINER role."
+            "description": "Upload a cover image for the trainer branding. Branding must be created first via PUT /trainer/branding. Accepts JPEG, PNG, WebP — max 5MB. Requires TRAINER role."
           },
           "response": []
         },
@@ -5720,7 +5735,7 @@
                 "config"
               ]
             },
-            "description": "Create or update gamification configuration for the trainer. These values are snapshotted into challenges at create-time. rankingMode has been removed \u2014 rankings are now per-challenge."
+            "description": "Create or update gamification configuration for the trainer. These values are snapshotted into challenges at create-time. rankingMode has been removed — rankings are now per-challenge."
           },
           "response": []
         },
@@ -5855,7 +5870,7 @@
           "response": []
         },
         {
-          "name": "Get Trainer Ranking [GONE \u2014 410]",
+          "name": "Get Trainer Ranking [GONE — 410]",
           "request": {
             "method": "GET",
             "header": [
@@ -5875,7 +5890,7 @@
                 "ranking"
               ]
             },
-            "description": "DEPRECATED \u2014 returns 410 Gone. The global ranking has been removed. Use GET /trainer/challenges/:id/ranking for per-challenge rankings."
+            "description": "DEPRECATED — returns 410 Gone. The global ranking has been removed. Use GET /trainer/challenges/:id/ranking for per-challenge rankings."
           },
           "response": []
         }
@@ -5958,7 +5973,7 @@
           "response": []
         },
         {
-          "name": "Get My Ranking [GONE \u2014 410]",
+          "name": "Get My Ranking [GONE — 410]",
           "request": {
             "method": "GET",
             "header": [
@@ -5978,7 +5993,7 @@
                 "ranking"
               ]
             },
-            "description": "DEPRECATED \u2014 returns 410 Gone. The global ranking has been removed. Use GET /my/challenges/:id/ranking for per-challenge rankings."
+            "description": "DEPRECATED — returns 410 Gone. The global ranking has been removed. Use GET /my/challenges/:id/ranking for per-challenge rankings."
           },
           "response": []
         }
@@ -6388,7 +6403,7 @@
                 "preview-participants"
               ]
             },
-            "description": "Dry-run participant filter \u2014 preview which students would be selected"
+            "description": "Dry-run participant filter — preview which students would be selected"
           },
           "response": []
         }
@@ -6603,7 +6618,7 @@
                 "food-groups"
               ]
             },
-            "description": "List all food groups (e.g. Cereais, Carnes, Latic\u00ednios)."
+            "description": "List all food groups (e.g. Cereais, Carnes, Laticínios)."
           },
           "response": []
         }
@@ -6630,7 +6645,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"patientId\": \"00000000-0000-0000-0000-000000000001\",\n  \"notes\": \"Paciente encaminhado pelo m\u00e9dico. Objetivo: emagrecimento.\"\n}",
+              "raw": "{\n  \"patientId\": \"00000000-0000-0000-0000-000000000001\",\n  \"notes\": \"Paciente encaminhado pelo médico. Objetivo: emagrecimento.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6780,7 +6795,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso\",\n  \"description\": \"Protocolo base para emagrecimento com restri\u00e7\u00e3o de carboidratos\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"meals\": [\n    {\n      \"name\": \"Caf\u00e9 da manh\u00e3\",\n      \"mealType\": \"breakfast\",\n      \"order\": 0,\n      \"scheduledTime\": \"07:00\",\n      \"foodItems\": [\n        {\n          \"foodName\": \"Ovos mexidos\",\n          \"quantityG\": 120,\n          \"unit\": \"g\",\n          \"energyKcal\": 186,\n          \"proteinG\": 14,\n          \"carbohydratesG\": 2,\n          \"totalFatG\": 14\n        }\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso\",\n  \"description\": \"Protocolo base para emagrecimento com restrição de carboidratos\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"meals\": [\n    {\n      \"name\": \"Café da manhã\",\n      \"mealType\": \"breakfast\",\n      \"order\": 0,\n      \"scheduledTime\": \"07:00\",\n      \"foodItems\": [\n        {\n          \"foodName\": \"Ovos mexidos\",\n          \"quantityG\": 120,\n          \"unit\": \"g\",\n          \"energyKcal\": 186,\n          \"proteinG\": 14,\n          \"carbohydratesG\": 2,\n          \"totalFatG\": 14\n        }\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6877,7 +6892,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso (Revisada)\",\n  \"description\": \"Vers\u00e3o atualizada com ajuste cal\u00f3rico\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\"\n}",
+              "raw": "{\n  \"name\": \"Dieta Low Carb Perda de Peso (Revisada)\",\n  \"description\": \"Versão atualizada com ajuste calórico\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6962,7 +6977,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Protocolo Emagrecimento - Jo\u00e3o\",\n  \"description\": \"Dieta personalizada para perda de gordura\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"tmbFormula\": \"mifflin_st_jeor\",\n  \"activityLevel\": \"moderadamente_ativo\",\n  \"tmbKcal\": 1750,\n  \"getKcal\": 2712,\n  \"dailyCaloricTarget\": 2200,\n  \"notes\": \"Evitar gl\u00faten\"\n}",
+              "raw": "{\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Protocolo Emagrecimento - João\",\n  \"description\": \"Dieta personalizada para perda de gordura\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dietType\": \"low_carb\",\n  \"goalType\": \"weight_loss\",\n  \"tmbFormula\": \"mifflin_st_jeor\",\n  \"activityLevel\": \"moderadamente_ativo\",\n  \"tmbKcal\": 1750,\n  \"getKcal\": 2712,\n  \"dailyCaloricTarget\": 2200,\n  \"notes\": \"Evitar glúten\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7001,7 +7016,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"templateId\": \"00000000-0000-0000-0000-000000000002\",\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Low Carb - Maria (Abril 2026)\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dailyCaloricTarget\": 1800,\n  \"notes\": \"Adaptada para intoler\u00e2ncia \u00e0 lactose\"\n}",
+              "raw": "{\n  \"templateId\": \"00000000-0000-0000-0000-000000000002\",\n  \"assigneeId\": \"00000000-0000-0000-0000-000000000001\",\n  \"name\": \"Low Carb - Maria (Abril 2026)\",\n  \"startDate\": \"2026-04-20\",\n  \"expirationDate\": \"2026-07-20\",\n  \"dailyCaloricTarget\": 1800,\n  \"notes\": \"Adaptada para intolerância à lactose\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7113,7 +7128,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Protocolo Emagrecimento - Jo\u00e3o (Revisado)\",\n  \"status\": \"active\",\n  \"dailyCaloricTarget\": 2000,\n  \"notes\": \"Ajuste ap\u00f3s retorno da consulta\"\n}",
+              "raw": "{\n  \"name\": \"Protocolo Emagrecimento - João (Revisado)\",\n  \"status\": \"active\",\n  \"dailyCaloricTarget\": 2000,\n  \"notes\": \"Ajuste após retorno da consulta\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7264,7 +7279,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Almo\u00e7o\",\n  \"mealType\": \"lunch\",\n  \"order\": 2,\n  \"scheduledTime\": \"12:30\",\n  \"notes\": \"Principal refei\u00e7\u00e3o do dia\"\n}",
+              "raw": "{\n  \"name\": \"Almoço\",\n  \"mealType\": \"lunch\",\n  \"order\": 2,\n  \"scheduledTime\": \"12:30\",\n  \"notes\": \"Principal refeição do dia\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7312,7 +7327,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Almo\u00e7o Refor\u00e7ado\",\n  \"scheduledTime\": \"13:00\",\n  \"notes\": \"Aumentar prote\u00edna\"\n}",
+              "raw": "{\n  \"name\": \"Almoço Reforçado\",\n  \"scheduledTime\": \"13:00\",\n  \"notes\": \"Aumentar proteína\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7423,7 +7438,7 @@
                 }
               ]
             },
-            "description": "Add a food item to a diet meal. foodId links to the food catalog (optional \u2014 free-text foodName is supported). Required: quantityG."
+            "description": "Add a food item to a diet meal. foodId links to the food catalog (optional — free-text foodName is supported). Required: quantityG."
           },
           "response": []
         },
@@ -7445,7 +7460,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"quantityG\": 200,\n  \"energyKcal\": 220,\n  \"proteinG\": 4.1,\n  \"carbohydratesG\": 48.4,\n  \"totalFatG\": 0.3,\n  \"notes\": \"Aumentar por\u00e7\u00e3o\"\n}",
+              "raw": "{\n  \"quantityG\": 200,\n  \"energyKcal\": 220,\n  \"proteinG\": 4.1,\n  \"carbohydratesG\": 48.4,\n  \"totalFatG\": 0.3,\n  \"notes\": \"Aumentar porção\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7646,7 +7661,7 @@
                 }
               ]
             },
-            "description": "Returns session counts by status, completionRate, lastSessionAt, active protocol, and derived stats: maxStreakDays, sessionsPerWeek, daysSinceLastSession. Accepts app-timezone header (IANA) to bucket streak dates in the student's local timezone \u2014 defaults to America/Sao_Paulo. Requires TRAINER role. Student must be linked to the trainer."
+            "description": "Returns session counts by status, completionRate, lastSessionAt, active protocol, and derived stats: maxStreakDays, sessionsPerWeek, daysSinceLastSession. Accepts app-timezone header (IANA) to bucket streak dates in the student's local timezone — defaults to America/Sao_Paulo. Requires TRAINER role. Student must be linked to the trainer."
           },
           "response": [
             {
@@ -7727,7 +7742,7 @@
                   "key": "limit",
                   "value": "10",
                   "disabled": true,
-                  "description": "Max sessions to return (1\u201350)"
+                  "description": "Max sessions to return (1–50)"
                 }
               ]
             },
@@ -7767,7 +7782,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": [\n    {\n      \"id\": \"uuid\",\n      \"trainingId\": \"uuid\",\n      \"trainingName\": \"Peito\",\n      \"status\": \"completed\",\n      \"startedAt\": \"2026-04-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-04-30T10:00:00.000Z\",\n      \"durationSeconds\": 3600,\n      \"avgRpe\": 8.0,\n      \"noteText\": \"Pesad\u00e3o hoje, mas conclu\u00ed\"\n    }\n  ]\n}"
+              "body": "{\n  \"window\": { \"from\": \"2026-01-31T14:00:00.000Z\", \"to\": \"2026-05-01T14:00:00.000Z\" },\n  \"data\": [\n    {\n      \"id\": \"uuid\",\n      \"trainingId\": \"uuid\",\n      \"trainingName\": \"Peito\",\n      \"status\": \"completed\",\n      \"startedAt\": \"2026-04-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-04-30T10:00:00.000Z\",\n      \"durationSeconds\": 3600,\n      \"avgRpe\": 8.0,\n      \"noteText\": \"Pesadão hoje, mas concluí\"\n    }\n  ]\n}"
             }
           ]
         },
@@ -7812,7 +7827,7 @@
                   "key": "limit",
                   "value": "20",
                   "disabled": true,
-                  "description": "Max exercises to return (1\u201320)"
+                  "description": "Max exercises to return (1–20)"
                 },
                 {
                   "key": "includeDurationOnly",
@@ -7909,7 +7924,7 @@
                   "key": "sessionLimit",
                   "value": "10",
                   "disabled": true,
-                  "description": "Max sessions to return (1\u201330)"
+                  "description": "Max sessions to return (1–30)"
                 }
               ]
             },
@@ -7963,7 +7978,7 @@
                 }
               ]
             },
-            "description": "Returns one row per calendar day in the student's timezone where the student had at least one session. Days with zero sessions are omitted \u2014 the frontend treats absence as empty. Aggregates volume and set counts from completed set logs only. Timezone is controlled via app-timezone header (IANA, defaults to America/Sao_Paulo). Status is always 'done' in V1. Requires TRAINER role."
+            "description": "Returns one row per calendar day in the student's timezone where the student had at least one session. Days with zero sessions are omitted — the frontend treats absence as empty. Aggregates volume and set counts from completed set logs only. Timezone is controlled via app-timezone header (IANA, defaults to America/Sao_Paulo). Status is always 'done' in V1. Requires TRAINER role."
           },
           "response": [
             {
@@ -8082,6 +8097,581 @@
               "body": "{\n  \"error\": \"INVALID_DATE_RANGE\",\n  \"messageCode\": \"dashboard.invalidDateRange\",\n  \"message\": \"Invalid date range (dateFrom must be before dateTo)\",\n  \"details\": null\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Subscription Plans",
+      "item": [
+        {
+          "name": "Create Subscription Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans"
+              ]
+            },
+            "description": "Create a subscription plan. recurrence: monthly|quarterly|semiannual|annual. Optionally set discountPercent OR discountAmount (not both).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Plano Mensal\",\n  \"recurrence\": \"monthly\",\n  \"price\": 150.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Subscription Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans"
+              ]
+            },
+            "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Subscription Plan by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans/{{subscriptionPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans",
+                "{{subscriptionPlanId}}"
+              ]
+            },
+            "description": "Get a single subscription plan by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Subscription Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans/{{subscriptionPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans",
+                "{{subscriptionPlanId}}"
+              ]
+            },
+            "description": "Update subscription plan fields. Archived plans cannot be edited.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Plano Mensal Premium\",\n  \"price\": 180.0,\n  \"discountPercent\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Archive Subscription Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans/{{subscriptionPlanId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans",
+                "{{subscriptionPlanId}}",
+                "archive"
+              ]
+            },
+            "description": "Soft-delete a subscription plan. Existing subscriptions are NOT affected."
+          },
+          "response": []
+        },
+        {
+          "name": "Unarchive Subscription Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscription-plans/{{subscriptionPlanId}}/unarchive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscription-plans",
+                "{{subscriptionPlanId}}",
+                "unarchive"
+              ]
+            },
+            "description": "Restore an archived subscription plan."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Student Subscriptions",
+      "item": [
+        {
+          "name": "Assign Plan to Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "Assign a subscription plan to a student. Cancels any existing active subscription. Auto-creates first payment cycle. Response includes firstPayment.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{subscriptionPlanId}}\",\n  \"startDate\": \"2026-06-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Subscriptions (History)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "List all subscriptions (active and cancelled) for a specific student."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Subscription for Student",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/{{studentId}}/subscriptions/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                "{{studentId}}",
+                "subscriptions",
+                "active"
+              ]
+            },
+            "description": "Get the current active subscription for a student, or null if none."
+          },
+          "response": []
+        },
+        {
+          "name": "List All Subscriptions (Trainer Dashboard)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscriptions"
+              ]
+            },
+            "description": "List all subscriptions across all students. Filters: ?status=active|cancelled, ?planId=uuid"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Subscription by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscriptions",
+                "{{studentSubscriptionId}}"
+              ]
+            },
+            "description": "Get a single subscription by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscriptions",
+                "{{studentSubscriptionId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancel a student's subscription. Existing pending payments are NOT deleted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Cliente solicitou cancelamento\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscription Payments",
+      "item": [
+        {
+          "name": "Create Payment Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscriptions",
+                "{{studentSubscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "Create a new billing cycle payment. cycleEndDate is auto-computed from recurrence. dueDate defaults to cycleStartDate.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cycleStartDate\": \"2026-07-01\",\n  \"notes\": \"Segundo ciclo mensal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Payments for Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "subscriptions",
+                "{{studentSubscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "List all payment cycles for a subscription, ordered by cycleStartDate desc."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "payments",
+                "{{subscriptionPaymentId}}"
+              ]
+            },
+            "description": "Update payment fields: dueDate, amount, notes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-06-10\",\n  \"notes\": \"Pagamento via pix\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment as Paid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/mark-paid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "payments",
+                "{{subscriptionPaymentId}}",
+                "mark-paid"
+              ]
+            },
+            "description": "Mark a payment cycle as paid. Sets paidAt to current timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment as Pending",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/mark-pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "payments",
+                "{{subscriptionPaymentId}}",
+                "mark-pending"
+              ]
+            },
+            "description": "Undo a payment (set back to pending). Clears paidAt."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "payments",
+                "{{subscriptionPaymentId}}"
+              ]
+            },
+            "description": "Hard-delete a payment cycle record."
+          },
+          "response": []
         }
       ]
     }

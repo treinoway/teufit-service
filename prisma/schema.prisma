@@ -52,6 +52,7 @@ model User {
   metabolicProfile       PatientMetabolicProfile?
   dietProtocolsAsPatient DietProtocol[]
   videosCreated          Video[]
+  studentSubscriptions   StudentSubscription[]
 
   @@map("users")
 }
@@ -118,6 +119,9 @@ model Trainer {
   pointTransactions         PointTransaction[]
   pointBalances             PointBalance[]
   challenges                Challenge[]
+  subscriptionPlans         SubscriptionPlan[]
+  studentSubscriptions      StudentSubscription[]
+  briefingSnapshot          TrainerBriefingSnapshot?
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -1069,6 +1073,104 @@ model DietFoodItem {
   food Food?    @relation(fields: [foodId], references: [id], onDelete: SetNull)
 
   @@map("diet_food_items")
+}
+
+// ─── Subscription models ──────────────────────────────────────────────────────
+
+model SubscriptionPlan {
+  id              String   @id @default(uuid()) @db.Uuid
+  trainerId       String   @map("trainer_id") @db.Uuid
+  name            String   @db.Text
+  description     String?  @db.Text
+  recurrence      String   @db.Text
+  price           Decimal  @db.Decimal(10, 2)
+  discountPercent Decimal? @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount  Decimal? @map("discount_amount") @db.Decimal(10, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer       Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  subscriptions StudentSubscription[]
+
+  @@index([trainerId, deletedAt])
+  @@map("subscription_plans")
+}
+
+model StudentSubscription {
+  id                 String   @id @default(uuid()) @db.Uuid
+  trainerId          String   @map("trainer_id") @db.Uuid
+  studentId          String   @map("student_id") @db.Uuid
+  planId             String   @map("plan_id") @db.Uuid
+  recurrence         String   @db.Text
+  price              Decimal  @db.Decimal(10, 2)
+  discountPercent    Decimal? @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount     Decimal? @map("discount_amount") @db.Decimal(10, 2)
+  startDate          DateTime @map("start_date") @db.Date
+  status             String   @default("active") @db.Text
+  cancelledAt        DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason String?  @map("cancellation_reason") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer  Trainer              @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student  User                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments SubscriptionPayment[]
+
+  @@index([trainerId, status])
+  @@index([studentId, status])
+  @@index([planId])
+  @@map("student_subscriptions")
+}
+
+model SubscriptionPayment {
+  id             String   @id @default(uuid()) @db.Uuid
+  subscriptionId String   @map("subscription_id") @db.Uuid
+  cycleStartDate DateTime @map("cycle_start_date") @db.Date
+  cycleEndDate   DateTime @map("cycle_end_date") @db.Date
+  dueDate        DateTime @map("due_date") @db.Date
+  amount         Decimal  @db.Decimal(10, 2)
+  status         String   @default("pending") @db.Text
+  paidAt         DateTime? @map("paid_at") @db.Timestamptz(6)
+  notes          String?  @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subscription StudentSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, status])
+  @@index([dueDate])
+  @@map("subscription_payments")
+}
+
+// ─── Trainer Briefing Snapshot ────────────────────────────────────────────────
+
+model TrainerBriefingSnapshot {
+  id                String  @id @default(uuid()) @db.Uuid
+  trainerId         String  @unique @map("trainer_id") @db.Uuid
+  trainer           Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  // KPI counts — see briefing-service.js for exact formulas
+  activeStudents    Int     @map("active_students")
+  returningThisWeek Int     @map("returning_this_week")
+  stagnantProgress  Int     @map("stagnant_progress")
+  inactiveStudents  Int     @map("inactive_students")
+
+  // Adherence rates (0..100, two decimal places)
+  overallAdherence  Decimal @map("overall_adherence") @db.Decimal(5, 2)
+  adherenceDeltaPp  Decimal @map("adherence_delta_pp") @db.Decimal(5, 2)
+
+  computedAt DateTime @map("computed_at") @db.Timestamptz(6)
+  isDirty    Boolean  @default(false) @map("is_dirty")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("trainer_briefing_snapshots")
 }
 
 model Video {

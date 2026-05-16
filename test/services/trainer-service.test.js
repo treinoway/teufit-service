@@ -20,6 +20,9 @@ vi.mock('../../src/db.js', () => {
         create: vi.fn(),
         delete: vi.fn(),
       },
+      trainerBriefingSnapshot: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
     },
   };
 });

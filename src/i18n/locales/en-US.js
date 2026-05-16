@@ -151,6 +151,20 @@ export default {
       completed: 'Completed',
       archived: 'Archived',
     },
+    subscriptionRecurrence: {
+      monthly: 'Monthly',
+      quarterly: 'Quarterly',
+      semiannual: 'Semiannual',
+      annual: 'Annual',
+    },
+    subscriptionStatus: {
+      active: 'Active',
+      cancelled: 'Cancelled',
+    },
+    paymentStatus: {
+      pending: 'Pending',
+      paid: 'Paid',
+    },
   },
 
   errors: {
@@ -277,6 +291,15 @@ export default {
     'exercise.logAlreadySubstituted': 'This exercise log has already been substituted.',
     'exercise.undoHasSets': 'Cannot undo swap: sets have already been logged for this exercise.',
     'exercise.undoNotSubstitute': 'This log is not a substitute exercise. Use this endpoint only to undo swaps.',
+
+    // Subscription plans
+    'subscription.planNotFound': 'Subscription plan not found.',
+    'subscription.planArchived': 'This plan is archived and cannot be used.',
+    'subscription.bothDiscountsSet': 'Set only one discount type: percentage or fixed amount.',
+    'subscription.discountExceedsPrice': 'The discount cannot exceed the plan price.',
+    'subscription.notFound': 'Subscription not found.',
+    'subscription.cannotEditCancelled': 'Cannot edit a cancelled subscription.',
+    'subscription.paymentNotFound': 'Subscription payment not found.',
 
     // Video library
     'video.notFound': 'Video not found.',

@@ -21,6 +21,8 @@ import {
   PROTOCOL_TRAININGS,
   EXTRA_CARDIO_TRAINING,
   TRAINING_LEVEL_CYCLE,
+  SUBSCRIPTION_PLANS,
+  SUBSCRIPTION_ASSIGNMENTS,
 } from './dev-seed-data.js';
 import { Roles } from '../../src/constants/roles.js';
 import {
@@ -31,6 +33,8 @@ import {
   WorkoutSessionStatus,
   PrescriptionMode,
 } from '../../src/constants/training.js';
+import { PaymentStatus, SubscriptionStatus } from '../../src/constants/subscription.js';
+import { computeCycleEndDate } from '../../src/helpers/subscription-helpers.js';
 import { seedPublicAnamnesis } from '../seed.js';
 
 // ─── Guardrails ──────────────────────────────────────────────────────────────
@@ -96,6 +100,19 @@ function daysAgo(days, hour = 8, minuteJitter = 0) {
 
 function counts(label, n) {
   return `${label} (${n})`;
+}
+
+// Mirrors computeAmount in src/services/student-subscription-service.js but
+// stays in plain numbers (Prisma accepts JS numbers for Decimal fields).
+function computeNetAmount(price, discountPercent, discountAmount) {
+  const p = Number(price);
+  if (discountPercent != null) {
+    return Math.max(0, Math.round((p - (p * Number(discountPercent)) / 100) * 100) / 100);
+  }
+  if (discountAmount != null) {
+    return Math.max(0, Math.round((p - Number(discountAmount)) * 100) / 100);
+  }
+  return p;
 }
 
 // Spread N session offsets evenly over the last `windowDays` with jitter.
@@ -468,6 +485,97 @@ async function main() {
     }
   }
 
+  // 9. Subscription plans + per-student subscriptions + payment cycles.
+  const planByKey = new Map();
+  for (const planDef of SUBSCRIPTION_PLANS) {
+    const plan = await prisma.subscriptionPlan.create({
+      data: {
+        trainerId: trainer.id,
+        name: planDef.name,
+        recurrence: planDef.recurrence,
+        price: planDef.price,
+        discountPercent: planDef.discountPercent,
+        discountAmount: planDef.discountAmount,
+      },
+    });
+    planByKey.set(planDef.key, { ...planDef, id: plan.id });
+  }
+
+  let totalSubscriptions = 0;
+  let totalPayments = 0;
+  let paidPayments = 0;
+
+  for (const assignment of SUBSCRIPTION_ASSIGNMENTS) {
+    const student = students[assignment.studentIndex];
+    const plan = planByKey.get(assignment.planKey);
+    if (!plan) continue;
+
+    const effectiveDiscountPercent = assignment.discountPercent ?? plan.discountPercent;
+    const effectiveDiscountAmount =
+      assignment.discountPercent != null ? null : (assignment.discountAmount ?? plan.discountAmount);
+    const netAmount = computeNetAmount(plan.price, effectiveDiscountPercent, effectiveDiscountAmount);
+
+    // startDate = first day of month N months ago.
+    const today = new Date();
+    const startDate = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth() - assignment.startMonthsAgo,
+      1,
+    ));
+
+    const subscription = await prisma.studentSubscription.create({
+      data: {
+        trainerId: trainer.id,
+        studentId: student.id,
+        planId: plan.id,
+        recurrence: plan.recurrence,
+        price: plan.price,
+        discountPercent: effectiveDiscountPercent,
+        discountAmount: effectiveDiscountAmount,
+        startDate,
+        status: SubscriptionStatus.ACTIVE,
+      },
+    });
+    totalSubscriptions += 1;
+
+    // Build payment cycles from startDate forward until the cycle that contains today.
+    const todayMidnight = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    ));
+    const cycles = [];
+    let cycleStart = startDate;
+    while (cycleStart <= todayMidnight) {
+      const cycleEnd = computeCycleEndDate(cycleStart, plan.recurrence);
+      cycles.push({ start: cycleStart, end: cycleEnd });
+      // Next cycle starts the day after current cycle ends.
+      cycleStart = new Date(cycleEnd.getTime() + DAY_MS);
+    }
+
+    for (let idx = 0; idx < cycles.length; idx += 1) {
+      const cycle = cycles[idx];
+      const isPaid = idx < assignment.paidCycles;
+      const paidAt = isPaid
+        ? new Date(cycle.start.getTime() + randInt(0, 5) * DAY_MS)
+        : null;
+
+      await prisma.subscriptionPayment.create({
+        data: {
+          subscriptionId: subscription.id,
+          cycleStartDate: cycle.start,
+          cycleEndDate: cycle.end,
+          dueDate: cycle.start,
+          amount: netAmount,
+          status: isPaid ? PaymentStatus.PAID : PaymentStatus.PENDING,
+          paidAt,
+        },
+      });
+      totalPayments += 1;
+      if (isPaid) paidPayments += 1;
+    }
+  }
+
   // ─── Summary ───────────────────────────────────────────────────────────────
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log('Dev seed complete:');
@@ -478,6 +586,7 @@ async function main() {
   console.log(`  ✓ ${counts('Protocols', students.length)}`);
   console.log(`  ✓ ${counts('WorkoutSessions', totalSessions)}, ${counts('ExerciseLogs', totalExerciseLogs)}, ${counts('SetLogs', totalSetLogs)}`);
   console.log(`  ✓ Anamnesis assignments (5) + responses (3)`);
+  console.log(`  ✓ ${counts('SubscriptionPlans', SUBSCRIPTION_PLANS.length)}, ${counts('Subscriptions', totalSubscriptions)}, ${counts('Payments', totalPayments)} (${paidPayments} paid)`);
   console.log(`Done in ${elapsed}s.`);
 }
 

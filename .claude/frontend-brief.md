@@ -1,94 +1,71 @@
-# Frontend Brief — Estimated Workout Duration
+# Frontend Brief — Trainer Briefing (SEUS ALUNOS AGORA)
 
-**Backend branch**: staging · **Generated**: 2026-05-13
+**Backend branch**: staging · **Generated**: 2026-05-15
 
 ## Elevator pitch
-Students and trainers can now see how long a prescribed workout is expected to take before starting it. The estimated duration appears on every training card and workout detail screen.
+Trainers can now see a live snapshot of their student cohort's key activity metrics — active students, returning students, stagnant progress, inactive students, and adherence rate — directly inside the AI assistant view, replacing the current mock data.
 
 ## User story
-As a student, I want to see an estimated duration for my workout before I start it, so that I can plan my session around my available time.
+As a trainer, I want a real-time at-a-glance summary of my students' training activity so that I can quickly understand the health of my cohort before interacting with the AI assistant.
 
 ## User flows
-
-1. **Entry point**: Workout screen ("My Workouts Today") and any training detail view.
+1. **Entry point**: Trainer navigates to `/trainer/ai-assistant`. The "SEUS ALUNOS AGORA" card is already visible in the current UI (lines 567–594 of `AiAssistant.jsx`).
 2. **Happy path**:
-   1. Student opens the app and sees today's workout card.
-   2. The card shows an estimated duration (e.g., "≈ 45 min") below or next to the training name.
-   3. Student taps the training to view the full exercise list — the detail view also shows the estimated duration.
+   1. Page loads → frontend calls `GET /trainer/briefing`.
+   2. Response arrives → card populates with real numbers.
+   3. If `adherenceDeltaPp` is positive, show an upward trend indicator; if negative, show a downward one; if zero, neutral.
 3. **Branches**:
-   - If the training has no exercises, `estimatedDurationSeconds` is `0`. The UI should suppress the label (e.g., "–" or hide the field entirely) rather than showing "0 min".
-   - If the trainer adds or modifies exercises, the estimate updates automatically in the backend. Students see the updated figure on the next fetch.
+   - Fresh trainer with no students → all values are `0`; adherence shows `"0.00"`. No error state.
+   - Token expired → 401 → redirect to login (existing auth interceptor handles this).
+   - Trainer role missing → 403 → show generic permission error (existing error handling).
 
 ## UI states to cover
-
-- **Loading**: shimmer placeholder where the duration badge will appear.
-- **Empty / zero**: `estimatedDurationSeconds === 0` — no exercises yet. Do not display "0 min"; show a neutral placeholder or hide the field.
-- **Non-zero**: display a human-friendly rounded value. Convert seconds to minutes: `Math.round(estimatedDurationSeconds / 60)` — e.g., "≈ 42 min". For durations over 60 minutes you may show "1 h 15 min" — design decision for the UX team.
-- **Permissions**: the field appears for both trainers (viewing their protocol) and students (their assigned workout). No role restriction.
+- **Loading**: Show skeleton loaders for each of the 6 metric tiles while the fetch is in flight.
+- **Success**: Populate tiles with values from the response.
+- **Error**: If the fetch fails (non-401/403), show a subtle inline error message within the card without breaking the rest of the AI assistant page.
+- **Empty / fresh trainer**: All zeros are valid — do not show "no data" states. Zero is a legitimate value.
+- **Permissions**: 403 → do not render the card; show a permission-denied notice.
+- **Adherence delta sign**: `adherenceDeltaPp` is a string like `"4.00"` or `"-3.50"`. Parse as float to determine sign for the trend arrow/color.
 
 ## API contract
-
-### GET /my/workouts/today
-- **Auth**: student JWT required
+### GET /trainer/briefing
+- **Auth**: Bearer token required (`TRAINER` role)
+- **Request**: no body, no query params
 - **Success** (200):
   ```json
   {
-    "workouts": [
-      {
-        "protocol": { "id": "...", "name": "...", "startDate": "YYYY-MM-DD" },
-        "targetTraining": {
-          "id": "...",
-          "name": "Leg Day",
-          "estimatedDurationSeconds": 2580,
-          "category": "strength",
-          "categoryLabel": "Strength"
-        },
-        "isRestDay": false
-      }
-    ]
+    "activeStudents": 24,
+    "returningThisWeek": 2,
+    "stagnantProgress": 3,
+    "inactiveStudents": 2,
+    "overallAdherence": "87.00",
+    "adherenceDeltaPp": "4.00",
+    "computedAt": "2026-05-15T22:00:00.000Z"
   }
   ```
-- The field is also present on all other training endpoints:
-  - `GET /trainer/protocols/:id/trainings` (list)
-  - `GET /trainer/trainings/:id` (detail)
-  - `GET /my/protocols/:id/trainings`
-  - `GET /my/trainings/:id`
-  - `POST /trainer/protocols/:id/trainings/from-template` (201 response)
-
-### Field semantics
-- `estimatedDurationSeconds` is always a non-negative integer (never null, never negative).
-- `0` means no exercises are prescribed yet — treat as "unknown".
-- The formula: sum of (sets × reps × 3 s + rest intervals) per principal exercise, plus 40 s transition per exercise, plus 300 s warm-up overhead. Substitutes and soft-deleted exercises are excluded.
-- The value is recomputed server-side whenever exercises are added, updated (sets/reps/duration/mode/rest), or deleted. Order changes, substitute management, and training metadata edits do not change it.
+- **Errors** (status · error · messageCode · when):
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · token missing or expired
+  - `403` · `FORBIDDEN` · `auth.forbidden` · authenticated user is not a trainer
+  - `404` · `NOT_FOUND` · `trainer.notFound` · trainer profile not found for this user
+  - `500` · `INTERNAL_SERVER_ERROR` · `internal.serverError` · unexpected server failure
 
 ## i18n keys required
-
-No new `messageCode` values are required for this feature — the field is a number and formatting is purely client-side. Suggested display copy (add to your own i18n):
-
-- `training.estimatedDuration` → suggested copy: "≈ {{minutes}} min"
-- `training.estimatedDurationUnknown` → suggested copy: "–" (shown when value is 0)
+Stable messageCodes the frontend needs to translate for this feature:
+- `trainer.notFound` → suggested copy: "Trainer profile not found"
+- `auth.unauthorized` → already present in existing i18n
+- `auth.forbidden` → already present in existing i18n
 
 ## Acceptance criteria
-
-- [ ] `estimatedDurationSeconds` is visible on the workout card in the Today screen.
-- [ ] Duration is displayed in minutes (rounded), not in raw seconds.
-- [ ] When `estimatedDurationSeconds === 0`, the field shows a neutral placeholder rather than "0 min".
-- [ ] Duration value updates when the trainer modifies exercises (after re-fetching).
-- [ ] Duration appears in training detail view as well as the list/card view.
-
-## Out of scope
-
-- Per-student calibration from historical execution data.
-- Special accounting for bi-sets/supersets (treated as straight sets in the estimate).
-- Frontend-side recalculation — always read from the API response.
+- [ ] Card renders real numbers from the API instead of hardcoded mock values.
+- [ ] Each of the 6 metrics is displayed in its designated tile: active students, returning this week, stagnant progress, inactive students, overall adherence (%), adherence delta (pp).
+- [ ] Loading state is visible while the fetch is in flight (skeleton or spinner per tile).
+- [ ] `adherenceDeltaPp` drives a visual trend indicator: green/up for positive, red/down for negative, neutral for zero.
+- [ ] A fresh trainer with no students sees all zeros, no error message.
+- [ ] If the API returns 403, the card is hidden or shows a permission notice — does not crash the page.
+- [ ] `computedAt` is optionally displayed as a "last updated" timestamp in a human-readable format.
 
 ## Open design questions
-
-- Where exactly on the card should the duration badge appear — below the title, as a chip next to the category label, or in a meta row?
-- For durations over 60 minutes, display as "1 h 15 min" or just "75 min"?
-- Should the estimate be surfaced in push notifications ("Your 45-min leg workout is ready")?
-- Icon to use alongside the duration (clock, timer, stopwatch)?
-
-## Backfill note (important for staging/prod)
-
-Existing training records have `estimatedDurationSeconds = 0` (the column default). The script at `/scripts/backfill-training-duration.js` must be run once against staging and production after the backend deployment. Until then, all existing trainings will show `0` for this field. Trainings created or imported after the deployment will have correct values immediately.
+- Should `computedAt` be shown to the user ("Updated 2h ago"), hidden entirely, or surfaced only in a tooltip?
+- Does `stagnantProgress` need a tooltip explaining what "stagnant" means (no new load PR in 14 days)?
+- Visual weight of the trend arrow for `adherenceDeltaPp`: inline text (`+4pp`), coloured badge, or animated icon?
+- Should the card have a manual refresh button, or is the read-on-load data enough?

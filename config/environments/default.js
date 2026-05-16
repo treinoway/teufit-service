@@ -156,5 +156,28 @@ export default {
       update: { max: 30, timeWindow: '1 minute' },
       delete: { max: 20, timeWindow: '1 minute' },
     },
+    subscriptionPlan: {
+      create: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      getById: { max: 60, timeWindow: '1 minute' },
+      update: { max: 20, timeWindow: '1 minute' },
+      archive: { max: 10, timeWindow: '1 minute' },
+      unarchive: { max: 10, timeWindow: '1 minute' },
+    },
+    studentSubscription: {
+      assign: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      getActive: { max: 60, timeWindow: '1 minute' },
+      getById: { max: 60, timeWindow: '1 minute' },
+      cancel: { max: 10, timeWindow: '1 minute' },
+    },
+    subscriptionPayment: {
+      create: { max: 20, timeWindow: '1 minute' },
+      list: { max: 60, timeWindow: '1 minute' },
+      update: { max: 20, timeWindow: '1 minute' },
+      markPaid: { max: 30, timeWindow: '1 minute' },
+      markPending: { max: 30, timeWindow: '1 minute' },
+      delete: { max: 10, timeWindow: '1 minute' },
+    },
   },
 };

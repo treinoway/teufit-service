@@ -73,6 +73,8 @@ const makeDailyActivityRow = (overrides = {}) => ({
   date: '2026-04-15',
   session_count: 1n,
   session_ids: ['session-1'],
+  has_completed: true,
+  has_abandoned: false,
   total_volume_kg: 1812.0,
   completed_sets: 12n,
   total_sets: 14n,
@@ -859,21 +861,33 @@ describe('student-dashboard-service', () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0]).toMatchObject({
         date: '2026-04-15',
-        status: 'done',
+        status: 'partial',
         sessionCount: 1,
         sessionIds: ['session-1'],
-        totalVolumeKg: 1812,
+        volumeKg: 1812,
         completedSets: 12,
         totalSets: 14,
       });
     });
 
-    it('status is always "done"', async () => {
-      prisma.$queryRaw.mockResolvedValue([makeDailyActivityRow()]);
+    it('classifies day with completed session and all sets done as "completed"', async () => {
+      prisma.$queryRaw.mockResolvedValue([
+        makeDailyActivityRow({ has_completed: true, completed_sets: 14n, total_sets: 14n }),
+      ]);
 
       const result = await getDailyActivity(TRAINER_ID, STUDENT_ID, {});
 
-      expect(result.data[0].status).toBe('done');
+      expect(result.data[0].status).toBe('completed');
+    });
+
+    it('classifies day with only abandoned sessions as "abandoned"', async () => {
+      prisma.$queryRaw.mockResolvedValue([
+        makeDailyActivityRow({ has_completed: false, has_abandoned: true }),
+      ]);
+
+      const result = await getDailyActivity(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.data[0].status).toBe('abandoned');
     });
 
     it('aggregates correctly for a day with 2 sessions', async () => {
@@ -895,12 +909,12 @@ describe('student-dashboard-service', () => {
       expect(result.data[0].totalSets).toBe(26);
     });
 
-    it('totalVolumeKg is rounded to 2 decimals', async () => {
+    it('volumeKg is rounded to 2 decimals', async () => {
       prisma.$queryRaw.mockResolvedValue([makeDailyActivityRow({ total_volume_kg: 1812.345 })]);
 
       const result = await getDailyActivity(TRAINER_ID, STUDENT_ID, {});
 
-      expect(result.data[0].totalVolumeKg).toBe(1812.35);
+      expect(result.data[0].volumeKg).toBe(1812.35);
     });
 
     it('sessionCount is a JS number (not BigInt)', async () => {
@@ -921,7 +935,7 @@ describe('student-dashboard-service', () => {
 
       expect(result.data[0].completedSets).toBe(0);
       expect(result.data[0].totalSets).toBe(3);
-      expect(result.data[0].totalVolumeKg).toBe(0);
+      expect(result.data[0].volumeKg).toBe(0);
     });
 
     it('returns window with ISO datetime strings', async () => {

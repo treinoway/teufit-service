@@ -208,8 +208,37 @@ Challenge status (`scheduled/active/completed/cancelled`) is computed on read fr
 ## PointBalance increment is atomic
 `prisma.pointBalance.upsert({ update: { totalPoints: { increment: N } } })` generates atomic SQL. No race condition under concurrent awards.
 
-## Sub-agent invocation (2026-04-16)
+## Sub-agent invocation (2026-04-16, updated 2026-05-15)
 `test-writer`, `api-docs-sync`, `backend-code-reviewer` are project-level agents in `.claude/agents/`. They are NOT invokable via the `Skill` tool or `RemoteTrigger`. Write tests and update docs directly when these agents cannot be invoked by the Skill tool.
+
+## computeCycleEndDate — billing cycle date algorithm (2026-05-15)
+Shared helper: `src/helpers/subscription-helpers.js`. Two-path algorithm:
+1. If `startDay > lastDayOfTargetMonth` → return `Date.UTC(y, targetMonth, lastDayOfTargetMonth)` (overflow clamp — last day of target month).
+2. Otherwise → return `Date.UTC(y, targetMonth, startDay) - 24*60*60*1000` (next billing - 1 day).
+`targetMonth = d.getUTCMonth() + months` (0-indexed; JS handles year rollover automatically).
+`lastDayOfTargetMonth = new Date(Date.UTC(y, targetMonth+1, 0)).getUTCDate()` (day 0 trick).
+Examples: May 1 monthly → May 31. Jan 31 monthly → Feb 28/29. Aug 31 monthly → Sep 30. Feb 28 monthly (leap) → Mar 27.
+DO NOT use `Date.UTC(y, m+months, startDay, 12, 0, 0) - 1 day` — silently overflows on 31-day starts.
+
+## subscription-service import chain (2026-05-15)
+`subscription-payment-service` → imports `computeAmount` from `student-subscription-service`
+`student-subscription-service` → imports `validateDiscount` from `subscription-plan-service`
+`subscription-plan-service` → no service imports
+`validateDiscount` is EXPORTED from `subscription-plan-service.js`. Call it in `assignPlanToStudent` after resolving effective discounts to catch mutual-exclusion violations even when one side is 0.
+
+## Decimal.js not installed — use Prisma.Decimal (2026-05-15)
+`decimal.js` is NOT in `package.json`. Use `import { Prisma } from '@prisma/client'` → `const { Decimal } = Prisma` for currency arithmetic in services and test mocks.
+`Decimal('100.00').toString()` returns `'100'` not `'100.00'`. In tests that check money output, use `Number(result.price)` instead of string equality.
+
+## POST route with optional body schema must be nullable (2026-05-15)
+When a POST route body is optional (e.g. cancel with optional reason), either omit the `body` schema entirely or add `nullable: true` to the body object schema. Without it, a POST request with no body sends `null`, which fails Fastify's `{ type: 'object' }` validation with a 400 before the service is reached.
+
+## Partial unique indexes: raw SQL only (2026-05-15)
+Prisma does not support partial unique indexes (`WHERE ...`). After `prisma migrate dev`, apply the index manually:
+```
+docker exec treinoway_postgres psql -U treinoway_user -d treinoway_db -c "CREATE UNIQUE INDEX IF NOT EXISTS idx_name ON table (col) WHERE status = 'active';"
+```
+Also add the SQL to the migration file so it's part of the changeset in git.
 
 ## Onboarding milestone hooks: test mock requirements (2026-04-16)
 When adding `maybeMarkFirstProtocolCreated` (or any onboarding helper) to a NEW service, the service's test file must mock `trainer-onboarding-service.js`:
@@ -307,6 +336,16 @@ Example: `estimatedDurationSeconds` was stored but dropped because:
 Key distinction: `include: { relation: { where, orderBy } }` returns ALL scalar fields; `include: { relation: { select: { ... } } }` returns ONLY listed fields.
 
 When two inline object shapes are identical, extract to a named const to prevent future drift.
+
+## Briefing feature patterns (2026-05-15)
+- `TrainerBriefingSnapshot` table: one row per trainer, `trainer_briefing_snapshots`.
+- `briefing-service.js` receives prisma via injection — unit tests pass mock prisma directly, NO `vi.mock('../../src/db.js')`.
+- `computeReturningThisWeek` short-circuits: if `recentStudentIds.length === 0`, gap check is skipped → only 3 `workoutSession.findMany` calls total, not 4.
+- E2E 401/403 assertions: do NOT assert `body.error === 'UNAUTHORIZED'`. The auth middleware returns the message string in `error`. Use `toBeDefined()` only.
+- Add new table `trainer_briefing_snapshots` to `test/helpers/db-cleanup.js` before `users` table.
+- When adding `trainerBriefingSnapshot` to an existing `vi.mock` of `../../src/db.js`, add `updateMany: vi.fn().mockResolvedValue({ count: 0 })` to it.
+- Mark briefing dirty AFTER a `$transaction` commits, not inside it.
+- Cron enabled only when `NODE_ENV=production` OR `ENABLE_BRIEFING_CRON=true`. Do not enable in tests.
 
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`

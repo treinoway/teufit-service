@@ -3,6 +3,7 @@ import { TrainingStatus, trainingStatusValues } from '../constants/training.js';
 import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
+import { markBriefingDirty } from './briefing-service.js';
 
 /**
  * Validate status
@@ -351,6 +352,17 @@ export async function updateProtocol(userId, protocolId, data) {
       },
     },
   });
+
+  // Status change (e.g. to archived) or date window change affects adherence KPIs
+  const affectsBriefing =
+    data.status !== undefined ||
+    data.startDate !== undefined ||
+    data.expirationDate !== undefined;
+  if (affectsBriefing) {
+    markBriefingDirty(prisma, updated.trainerId).catch((err) =>
+      console.error('[briefing] Failed to mark dirty after protocol update:', err),
+    );
+  }
 
   return normalizeProtocolDateFields(updated);
 }

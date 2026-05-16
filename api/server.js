@@ -41,6 +41,11 @@ import { dietProtocolRoutes } from './routes/diet-protocol-route.js';
 import { dietMealRoutes } from './routes/diet-meal-route.js';
 import { dietFoodItemRoutes } from './routes/diet-food-item-route.js';
 import { studentDashboardRoutes } from './routes/student-dashboard-route.js';
+import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
+import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
+import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
+import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 
@@ -293,7 +298,22 @@ export async function buildServer(options = {}) {
     await fastify.register(dietMealRoutes);
     await fastify.register(dietFoodItemRoutes);
     await fastify.register(studentDashboardRoutes);
+    await fastify.register(subscriptionPlanRoutes);
+    await fastify.register(studentSubscriptionRoutes);
+    await fastify.register(subscriptionPaymentRoutes);
+    await fastify.register(trainerBriefingRoutes);
   });
+
+  // Daily briefing cron — enabled only in production or when ENABLE_BRIEFING_CRON=true.
+  // Intentionally disabled in test runs and local dev to avoid spurious background work.
+  // TODO(scaling): if running multiple instances, gate this with a leader-election or
+  // DB advisory lock so only one instance runs the cron.
+  const cronEnabled =
+    process.env.NODE_ENV === 'production' || process.env.ENABLE_BRIEFING_CRON === 'true';
+  if (cronEnabled) {
+    startBriefingCron(prisma, fastify.log);
+    fastify.log.info('[cron:briefing] daily 22:00 UTC refresh scheduled');
+  }
 
   return fastify;
 }

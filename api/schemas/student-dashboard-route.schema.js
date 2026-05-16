@@ -266,7 +266,7 @@ export const getDailyActivitySchema = {
               status: { type: 'string' },
               sessionCount: { type: 'integer' },
               sessionIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
-              totalVolumeKg: { type: 'number' },
+              volumeKg: { type: 'number' },
               completedSets: { type: 'integer' },
               totalSets: { type: 'integer' },
             },

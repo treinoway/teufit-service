@@ -155,6 +155,20 @@ export default {
       completed: 'Concluído',
       archived: 'Arquivado',
     },
+    subscriptionRecurrence: {
+      monthly: 'Mensal',
+      quarterly: 'Trimestral',
+      semiannual: 'Semestral',
+      annual: 'Anual',
+    },
+    subscriptionStatus: {
+      active: 'Ativo',
+      cancelled: 'Cancelado',
+    },
+    paymentStatus: {
+      pending: 'Pendente',
+      paid: 'Pago',
+    },
   },
 
   errors: {
@@ -281,6 +295,15 @@ export default {
     'exercise.logAlreadySubstituted': 'Este registro de exercício já foi substituído.',
     'exercise.undoHasSets': 'Não é possível desfazer a troca: séries já foram registradas para este exercício.',
     'exercise.undoNotSubstitute': 'Este registro não é um substituto de exercício. Use este endpoint somente para desfazer trocas.',
+
+    // Subscription plans
+    'subscription.planNotFound': 'Plano de assinatura não encontrado.',
+    'subscription.planArchived': 'Este plano está arquivado e não pode ser utilizado.',
+    'subscription.bothDiscountsSet': 'Defina apenas um tipo de desconto: percentual ou valor fixo.',
+    'subscription.discountExceedsPrice': 'O desconto não pode ser maior que o preço do plano.',
+    'subscription.notFound': 'Assinatura não encontrada.',
+    'subscription.cannotEditCancelled': 'Não é possível editar uma assinatura cancelada.',
+    'subscription.paymentNotFound': 'Pagamento de assinatura não encontrado.',
 
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
