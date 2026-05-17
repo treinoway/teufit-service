@@ -45,6 +45,8 @@ import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { platformPlanRoutes } from './routes/platform-plan-route.js';
+import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
@@ -251,6 +253,9 @@ export async function buildServer(options = {}) {
   // Register auth routes (public)
   await fastify.register(authRoutes);
 
+  // Register Asaas webhook route (public — no user auth, validated by webhook secret)
+  await fastify.register(asaasWebhookRoutes);
+
   // Health check endpoint (public)
   fastify.get('/', async () => {
     return { message: "i'm alive" };
@@ -302,6 +307,7 @@ export async function buildServer(options = {}) {
     await fastify.register(studentSubscriptionRoutes);
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
+    await fastify.register(platformPlanRoutes);
   });
 
   // Daily briefing cron — enabled only in production or when ENABLE_BRIEFING_CRON=true.

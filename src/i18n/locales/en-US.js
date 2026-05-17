@@ -301,6 +301,19 @@ export default {
     'subscription.cannotEditCancelled': 'Cannot edit a cancelled subscription.',
     'subscription.paymentNotFound': 'Subscription payment not found.',
 
+    // Platform plan (SaaS gating)
+    'platformPlan.studentCapExceeded': 'You have reached the student limit for your plan. Upgrade to unlock more slots.',
+    'platformPlan.aiNotAvailable': 'iArnold is not available on your plan. Upgrade to Pro or higher.',
+    'platformPlan.aiActionsExceeded': 'You have reached the monthly iArnold action limit for this student.',
+    'platformPlan.brandingNotAvailable': 'Brand customization is not available on your plan.',
+    'platformPlan.championshipsNotAvailable': 'Championships are not available on your plan.',
+    'platformPlan.studentBlockedOnPlan': 'This student is blocked by your current plan limit. Upgrade to reactivate.',
+    'platformPlan.upgradeRequired': 'Upgrade your plan to access this feature.',
+    'platformPlan.checkoutFailed': 'Could not start checkout. Please try again.',
+    'platformPlan.paymentOverdue': 'There is an overdue payment. Please settle it to keep your plan active.',
+    'platformPlan.invalidTier': 'Invalid plan.',
+    'platformPlan.alreadyOnTier': 'You are already on this plan.',
+
     // Video library
     'video.notFound': 'Video not found.',
     'video.invalidUrl': 'Invalid URL. Please use a valid http(s) address.',

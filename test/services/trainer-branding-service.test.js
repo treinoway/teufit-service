@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanUseBranding: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainerBranding: {
@@ -32,6 +37,7 @@ import {
   getBrandingByTrainerId,
   getStudentTrainerBranding,
 } from '../../src/services/trainer-branding-service.js';
+import { assertCanUseBranding } from '../../src/services/platform-plan-service.js';
 
 const TRAINER_ID = 'trainer-uuid-1';
 
@@ -50,6 +56,8 @@ const baseBranding = {
 describe('trainer-branding-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertCanUseBranding.mockResolvedValue(undefined);
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
   });
 

@@ -60,6 +60,12 @@ vi.mock('../../src/services/exercise-service.js', () => ({
   updateExercise: vi.fn(),
 }))
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanUseAi: vi.fn().mockResolvedValue(undefined),
+  recordAiAction: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { updateProtocolTemplate } from '../../src/services/training-protocol-template-service.js'
@@ -70,10 +76,14 @@ import { updateTraining } from '../../src/services/training-service.js'
 import { updateExercise } from '../../src/services/exercise-service.js'
 import { buildTrainerContext, executeTool } from '../../src/services/ai-training-service.js'
 import { AI_TOOLS, AI_LIMITS } from '../../src/constants/ai.js'
+import { assertCanUseAi, recordAiAction } from '../../src/services/platform-plan-service.js'
 
 describe('ai-training-service — update tools & enriched context', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertCanUseAi.mockResolvedValue(undefined)
+    recordAiAction.mockResolvedValue(undefined)
     Anthropic.mockImplementation(function () {
       this.messages = { create: vi.fn() }
     })

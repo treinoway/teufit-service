@@ -8,6 +8,11 @@ import {
 
 const { Decimal } = Prisma;
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
 
 const mockTx = {
@@ -42,6 +47,7 @@ import {
   cancelSubscription,
   computeAmount,
 } from '../../src/services/student-subscription-service.js';
+import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 const TRAINER_USER_ID = 'trainer-user-uuid';
 const TRAINER_ID = 'trainer-record-uuid';
@@ -102,6 +108,8 @@ function makePaymentRecord(overrides = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // Re-apply platform-plan-service mocks after resetAllMocks.
+  assertStudentActiveOnPlan.mockResolvedValue(undefined);
   mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   mockPrisma.trainerStudent.findFirst.mockResolvedValue({ id: 'link-uuid' });
   mockTx.studentSubscription.updateMany.mockResolvedValue({ count: 0 });

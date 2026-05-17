@@ -8,7 +8,13 @@ import {
   maybeMarkProfileComplete,
   maybeMarkFirstStudentLinked,
 } from './trainer-onboarding-service.js';
-import { markBriefingDirty } from './briefing-service.js';
+import {
+  markBriefingDirty,
+  countWeekdayOccurrences,
+  WEEKDAY_TO_INT,
+  DAY_MS,
+} from './briefing-service.js';
+import { assertStudentCap } from './platform-plan-service.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -203,6 +209,8 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
     });
   }
 
+  await assertStudentCap(prisma, trainerId);
+
   await prisma.trainerStudent.create({
     data: { trainerId, studentId: student.id },
   });
@@ -244,13 +252,94 @@ export async function listStudents({ trainerId }) {
     orderBy: { createdAt: 'asc' },
   });
 
+  if (links.length === 0) return [];
+
+  const studentIds = links.map((l) => l.studentId);
+
+  // Adherence is computed on-read (not denormalized) because the denominator
+  // grows with the calendar day even when no write happens — denorm would lie.
+  // Two batched queries fixed, regardless of roster size:
+  //   1) protocols + trainings for all students
+  //   2) completed-session counts grouped by user for the current month
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const [protocols, completedGroups] = await Promise.all([
+    prisma.trainingProtocol.findMany({
+      where: {
+        assigneeId: { in: studentIds },
+        status: 'active',
+        deletedAt: null,
+        startDate: { lt: now },
+        OR: [
+          { expirationDate: null },
+          { expirationDate: { gte: monthStart } },
+        ],
+      },
+      select: {
+        assigneeId: true,
+        startDate: true,
+        expirationDate: true,
+        trainings: {
+          where: { deletedAt: null, weekDay: { not: null } },
+          select: { weekDay: true },
+        },
+      },
+    }),
+    prisma.workoutSession.groupBy({
+      by: ['userId'],
+      where: {
+        userId: { in: studentIds },
+        status: 'completed',
+        deletedAt: null,
+        startedAt: { gte: monthStart, lt: now },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  // Aggregate expected sessions per student in JS — no extra queries.
+  const expectedByStudent = new Map();
+  for (const proto of protocols) {
+    if (proto.trainings.length === 0) continue;
+    const effectiveStart = proto.startDate > monthStart ? proto.startDate : monthStart;
+    const expirationExclusive = proto.expirationDate
+      ? new Date(proto.expirationDate.getTime() + DAY_MS)
+      : null;
+    const effectiveEnd = expirationExclusive && expirationExclusive < now ? expirationExclusive : now;
+    const weekDayInts = new Set(
+      proto.trainings.map((t) => WEEKDAY_TO_INT[t.weekDay]).filter((n) => n !== undefined),
+    );
+    const occurrences = countWeekdayOccurrences(effectiveStart, effectiveEnd, weekDayInts);
+    expectedByStudent.set(
+      proto.assigneeId,
+      (expectedByStudent.get(proto.assigneeId) ?? 0) + occurrences,
+    );
+  }
+
+  const completedByStudent = new Map(
+    completedGroups.map((g) => [g.userId, g._count._all]),
+  );
+
+  function adherenceFor(studentId) {
+    const expected = expectedByStudent.get(studentId) ?? 0;
+    if (expected === 0) return null;
+    const completed = completedByStudent.get(studentId) ?? 0;
+    const pct = (completed / expected) * 100;
+    return Math.round(Math.min(pct, 100) * 100) / 100;
+  }
+
   return Promise.all(
-    links.map(async ({ student }) => ({
-      id: student.id,
-      email: student.email,
-      firstName: student.firstName,
-      lastName: student.lastName,
-      avatarUrl: await s3BucketHandler.resolveUrl(student.avatarUrl),
+    links.map(async (link) => ({
+      id: link.student.id,
+      email: link.student.email,
+      firstName: link.student.firstName,
+      lastName: link.student.lastName,
+      avatarUrl: await s3BucketHandler.resolveUrl(link.student.avatarUrl),
+      adherence: adherenceFor(link.studentId),
+      lastWorkoutAt: link.lastWorkoutAt,
+      currentPrLoad: link.currentPrLoad,
+      currentPrAt: link.currentPrAt,
     })),
   );
 }

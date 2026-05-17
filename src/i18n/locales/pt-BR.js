@@ -305,6 +305,19 @@ export default {
     'subscription.cannotEditCancelled': 'Não é possível editar uma assinatura cancelada.',
     'subscription.paymentNotFound': 'Pagamento de assinatura não encontrado.',
 
+    // Platform plan (SaaS gating)
+    'platformPlan.studentCapExceeded': 'Você atingiu o limite de alunos do seu plano. Atualize para liberar mais espaço.',
+    'platformPlan.aiNotAvailable': 'O iArnold não está disponível no seu plano. Atualize para Pro ou superior.',
+    'platformPlan.aiActionsExceeded': 'Você atingiu o limite mensal de ações do iArnold para este aluno.',
+    'platformPlan.brandingNotAvailable': 'Personalização de marca não está disponível no seu plano.',
+    'platformPlan.championshipsNotAvailable': 'Campeonatos não estão disponíveis no seu plano.',
+    'platformPlan.studentBlockedOnPlan': 'Este aluno está bloqueado pelo limite do seu plano atual. Atualize para reativar.',
+    'platformPlan.upgradeRequired': 'Atualize seu plano para acessar esta funcionalidade.',
+    'platformPlan.checkoutFailed': 'Não foi possível iniciar o checkout. Tente novamente.',
+    'platformPlan.paymentOverdue': 'Há um pagamento em atraso. Regularize para manter o plano ativo.',
+    'platformPlan.invalidTier': 'Plano inválido.',
+    'platformPlan.alreadyOnTier': 'Você já está neste plano.',
+
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
     'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',

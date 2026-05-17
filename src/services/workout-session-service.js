@@ -28,6 +28,50 @@ async function invalidateBriefingForTraining(trainingId) {
   }
 }
 
+// ─── Denormalization hooks (TrainerStudent hot-path fields) ──────────────────
+// These keep TrainerStudent.lastWorkoutAt / currentPrLoad / currentPrAt fresh
+// so the students list endpoint can serve them without aggregation queries.
+// Both helpers are fire-and-forget; errors must never fail the main op.
+
+/**
+ * Update lastWorkoutAt for all TrainerStudent rows referencing this student,
+ * only when the new finishedAt is strictly greater than the stored value
+ * (prevents an older edit from overwriting a fresher signal).
+ */
+async function bumpLastWorkoutAt(studentId, finishedAt) {
+  try {
+    await prisma.trainerStudent.updateMany({
+      where: {
+        studentId,
+        OR: [{ lastWorkoutAt: null }, { lastWorkoutAt: { lt: finishedAt } }],
+      },
+      data: { lastWorkoutAt: finishedAt },
+    });
+  } catch (err) {
+    console.error('[denorm] Failed to bump lastWorkoutAt:', err);
+  }
+}
+
+/**
+ * Conditionally promote currentPrLoad/currentPrAt if `load` strictly exceeds
+ * the stored PR. Failed sets (completed=false) are not eligible for PR.
+ */
+async function maybePromotePr(studentId, load, completed) {
+  if (load == null) return;
+  if (completed === false) return;
+  try {
+    await prisma.trainerStudent.updateMany({
+      where: {
+        studentId,
+        OR: [{ currentPrLoad: null }, { currentPrLoad: { lt: load } }],
+      },
+      data: { currentPrLoad: load, currentPrAt: new Date() },
+    });
+  } catch (err) {
+    console.error('[denorm] Failed to promote PR:', err);
+  }
+}
+
 // ─── Shared selects ──────────────────────────────────────────────────────────
 
 /**
@@ -384,6 +428,11 @@ export async function updateSession(userId, sessionId, data) {
   if (data.status === WorkoutSessionStatus.COMPLETED) {
     awardWorkoutCompletionPoints({ prisma, userId, workoutSession: updated })
       .catch((err) => console.error('Failed to award workout completion points', err));
+
+    // Denormalize lastWorkoutAt on TrainerStudent for the students-list hot path.
+    if (updated.finishedAt) {
+      bumpLastWorkoutAt(userId, updated.finishedAt).catch(() => {});
+    }
   }
 
   // Status changes affect adherence, activeStudents, and inactiveStudents KPIs
@@ -471,6 +520,9 @@ export async function createSetLog(userId, sessionId, exerciseLogId, data) {
     invalidateBriefingForTraining(exerciseLog.workoutSession.trainingId).catch(() => {});
   }
 
+  // Denormalize PR on TrainerStudent for the students-list hot path.
+  maybePromotePr(userId, data.load, setLog.completed).catch(() => {});
+
   return setLog;
 }
 
@@ -509,6 +561,11 @@ export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, d
   if (data.load != null) {
     invalidateBriefingForTraining(exerciseLog.workoutSession.trainingId).catch(() => {});
   }
+
+  // Denormalize PR on TrainerStudent for the students-list hot path.
+  // updated.completed reflects current persisted state — required since the
+  // user may not have included `completed` in this patch.
+  maybePromotePr(userId, data.load, updated.completed).catch(() => {});
 
   return updated;
 }

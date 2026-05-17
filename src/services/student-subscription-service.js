@@ -9,6 +9,7 @@ import {
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { computeCycleEndDate } from '../helpers/subscription-helpers.js';
 import { validateDiscount } from './subscription-plan-service.js';
+import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 
 const { Decimal } = Prisma;
 
@@ -109,6 +110,7 @@ export async function assignPlanToStudent(prisma, userId, studentId, data) {
   const trainer = await resolveTrainerOrThrow(prisma, userId);
 
   await verifyTrainerStudentLink(prisma, trainer.id, studentId);
+  await assertStudentActiveOnPlan(prisma, trainer.id, studentId);
 
   // Verify plan exists, belongs to trainer, and is not archived
   const plan = await prisma.subscriptionPlan.findFirst({

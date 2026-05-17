@@ -7,6 +7,7 @@ import {
   BRANDING_S3_PREFIXES,
 } from '../constants/branding.js';
 import { TrainingStatus } from '../constants/training.js';
+import { assertCanUseBranding } from './platform-plan-service.js';
 
 const MIME_TO_EXTENSION = {
   'image/jpeg': 'jpg',
@@ -75,6 +76,8 @@ async function resolveBrandingUrls(branding) {
  * - Returns the branding record with resolved S3 URLs
  */
 export async function upsertBranding({ trainerId, data }) {
+  await assertCanUseBranding(prisma, trainerId);
+
   validatePrimaryColor(data.primaryColor);
   validateSecondaryColor(data.secondaryColor);
   validateWelcomeMessage(data.welcomeMessage);
@@ -106,6 +109,8 @@ export async function upsertBranding({ trainerId, data }) {
  * - Returns updated branding with resolved S3 URLs
  */
 export async function uploadBrandingImage({ trainerId, imageType, file }) {
+  await assertCanUseBranding(prisma, trainerId);
+
   const branding = await prisma.trainerBranding.findUnique({
     where: { trainerId },
   });

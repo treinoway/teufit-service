@@ -8674,6 +8674,264 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Platform Plan",
+      "item": [
+        {
+          "name": "Get Platform Plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/platform-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "platform-plan"
+              ]
+            },
+            "description": "Get the current platform subscription plan, limits, and usage breakdown for the authenticated trainer."
+          },
+          "response": []
+        },
+        {
+          "name": "Checkout — Start Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/platform-plan/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "platform-plan",
+                "checkout"
+              ]
+            },
+            "description": "Create a checkout for a platform plan. tier: PRO|PLATINUM|DIAMOND. billingType: PIX|CREDIT_CARD|BOLETO|UNDEFINED. Returns checkoutUrl for the first payment.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": \"PRO\",\n  \"billingType\": \"PIX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Plan (at period end)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/platform-plan/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "platform-plan",
+                "cancel"
+              ]
+            },
+            "description": "Schedule cancellation at the end of the current billing period. Subscription remains active until currentPeriodEnd."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Plan Tier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/platform-plan/change",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "platform-plan",
+                "change"
+              ]
+            },
+            "description": "Upgrade or downgrade to a new tier. Downgrade immediately soft-blocks excess students (older ones first). tier: PRO|PLATINUM|DIAMOND.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tier\": \"PLATINUM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (Asaas)",
+      "item": [
+        {
+          "name": "Webhook — PAYMENT_CONFIRMED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "asaas-access-token",
+                "value": "{{asaasWebhookSecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/asaas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "asaas"
+              ]
+            },
+            "description": "Simulates an Asaas PAYMENT_CONFIRMED webhook. This flips the trainer tier to the target tier (parsed from externalReference) and sets status=ACTIVE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"PAYMENT_CONFIRMED\",\n  \"payment\": {\n    \"id\": \"pay_sandbox_001\",\n    \"subscription\": \"sub_sandbox_001\",\n    \"value\": 49.9,\n    \"dueDate\": \"2026-05-16\",\n    \"billingType\": \"PIX\",\n    \"externalReference\": \"tier:PRO:trainer:{{trainerId}}\",\n    \"status\": \"CONFIRMED\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Webhook — PAYMENT_OVERDUE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "asaas-access-token",
+                "value": "{{asaasWebhookSecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/asaas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "asaas"
+              ]
+            },
+            "description": "Simulates an Asaas PAYMENT_OVERDUE webhook. Sets subscription status=PAST_DUE. After 7 days without PAYMENT_CONFIRMED, the trainer is automatically downgraded to FREE on next plan read.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"PAYMENT_OVERDUE\",\n  \"payment\": {\n    \"id\": \"pay_sandbox_002\",\n    \"subscription\": \"sub_sandbox_001\",\n    \"value\": 49.9,\n    \"dueDate\": \"2026-05-01\",\n    \"billingType\": \"PIX\",\n    \"status\": \"OVERDUE\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Webhook — SUBSCRIPTION_DELETED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "asaas-access-token",
+                "value": "{{asaasWebhookSecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/asaas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "asaas"
+              ]
+            },
+            "description": "Simulates an Asaas SUBSCRIPTION_DELETED webhook. Immediately downgrades trainer to FREE and triggers student soft-block enforcement.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"SUBSCRIPTION_DELETED\",\n  \"subscription\": {\n    \"id\": \"sub_sandbox_001\",\n    \"status\": \"INACTIVE\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

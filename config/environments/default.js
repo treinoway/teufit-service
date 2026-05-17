@@ -3,6 +3,11 @@ export default {
     accessTokenTtlSeconds: 60 * 15, // 15 minutes
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
   },
+  asaas: {
+    apiKey: process.env.ASAAS_API_KEY,
+    webhookSecret: process.env.ASAAS_WEBHOOK_SECRET,
+    env: process.env.ASAAS_ENV || 'sandbox',
+  },
   rateLimit: {
     global: {
       max: 100,
@@ -178,6 +183,12 @@ export default {
       markPaid: { max: 30, timeWindow: '1 minute' },
       markPending: { max: 30, timeWindow: '1 minute' },
       delete: { max: 10, timeWindow: '1 minute' },
+    },
+    platformPlan: {
+      get: { max: 30, timeWindow: '1 minute' },
+      checkout: { max: 5, timeWindow: '1 minute' },
+      cancel: { max: 5, timeWindow: '1 minute' },
+      change: { max: 5, timeWindow: '1 minute' },
     },
   },
 };

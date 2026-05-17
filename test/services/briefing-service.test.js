@@ -35,6 +35,10 @@ function buildMockPrisma(overrides = {}) {
       findMany: vi.fn().mockResolvedValue([]),
       ...overrides.trainerStudent,
     },
+    trainingProtocol: {
+      findMany: vi.fn().mockResolvedValue([]),
+      ...overrides.trainingProtocol,
+    },
     workoutSession: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
@@ -161,20 +165,52 @@ describe('computeBriefing', () => {
     expect(result.inactiveStudents).toBe(2);
   });
 
-  it('counts returningThisWeek: student had session in last 7d but NOT in 7-14d window', async () => {
+  // Dispatch workoutSession.findMany results based on the shape of `where`.
+  // Branches of computeBriefing run via Promise.all so call order is not stable;
+  // routing by the query's distinguishing fields makes the test deterministic.
+  function workoutSessionFindManyMock({ active, recent, gap, preGap, inactive }) {
+    return vi.fn().mockImplementation(({ where }) => {
+      const { startedAt } = where;
+      if (startedAt?.gte && startedAt?.lt) {
+        // Bounded window: gap (7..14d ago).
+        return gap ?? [];
+      }
+      if (startedAt?.lt && !startedAt?.gte) {
+        // < bound only: pre-gap (older than 14d).
+        return preGap ?? [];
+      }
+      if (startedAt?.gte && where.user) {
+        // gte-only with user trainers filter → resolveActiveStudentIds (30d).
+        return active ?? [];
+      }
+      if (startedAt?.gte && Array.isArray(where.userId?.in)) {
+        // gte + userId IN: could be recent (7d) or inactive (7d).
+        // Distinguish by whether the inactive branch is set.
+        // The two are run with different gte values; if same, use heuristic by call shape.
+        // Both queries use the same shape — disambiguate by call count.
+        if (!workoutSessionFindManyMock._recentReturned) {
+          workoutSessionFindManyMock._recentReturned = true;
+          return recent ?? [];
+        }
+        return inactive ?? [];
+      }
+      return [];
+    });
+  }
+
+  it('counts returningThisWeek: student had session in last 7d but NOT in 7-14d window AND has pre-gap history', async () => {
+    workoutSessionFindManyMock._recentReturned = false;
     const studentA = 'student-a';
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
-          // resolveActiveStudentIds
-          .mockResolvedValueOnce([{ userId: studentA }])
-          // returningThisWeek: recent 7d → studentA present
-          .mockResolvedValueOnce([{ userId: studentA }])
-          // returningThisWeek: gap 7-14d → studentA NOT present (came back after gap)
-          .mockResolvedValueOnce([])
-          // inactiveStudents: studentA active
-          .mockResolvedValueOnce([{ userId: studentA }]),
+        findMany: workoutSessionFindManyMock({
+          active: [{ userId: studentA }],
+          recent: [{ userId: studentA }],
+          gap: [],
+          preGap: [{ userId: studentA }], // has history older than 14d
+          inactive: [{ userId: studentA }],
+        }),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: {
@@ -186,6 +222,32 @@ describe('computeBriefing', () => {
     const result = await computeBriefing(prisma, TRAINER_ID);
 
     expect(result.returningThisWeek).toBe(1);
+  });
+
+  it('does NOT count as returning when student has no pre-gap history (first sessions ever)', async () => {
+    workoutSessionFindManyMock._recentReturned = false;
+    const studentA = 'student-a';
+
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: workoutSessionFindManyMock({
+          active: [{ userId: studentA }],
+          recent: [{ userId: studentA }],
+          gap: [],
+          preGap: [], // no history older than 14d
+          inactive: [{ userId: studentA }],
+        }),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    const result = await computeBriefing(prisma, TRAINER_ID);
+
+    expect(result.returningThisWeek).toBe(0);
   });
 
   it('does not count as returning when student was active in the gap window', async () => {
@@ -322,60 +384,246 @@ describe('computeBriefing', () => {
     expect(result.stagnantProgress).toBe(1);
   });
 
-  // Dispatch `count` results by month + status so test ordering is independent
-  // of Promise.all internal scheduling. Current month and prior month differ in
-  // their `where.startedAt.gte`; completed vs total differ in `where.status`.
-  function adherenceCountMock({ currentCompleted, currentTotal, priorCompleted, priorTotal }) {
+  // Adherence count dispatch: numerator only (completed). Current vs prior month
+  // distinguished by `where.startedAt.gte` value.
+  function adherenceCountMock({ currentCompleted, priorCompleted }) {
     return vi.fn().mockImplementation(({ where }) => {
       const gte = where.startedAt?.gte;
       const currentMonthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
       const isCurrentMonth = gte instanceof Date && gte.getTime() >= currentMonthStart.getTime();
-      const isCompleted = where.status != null;
-      if (isCurrentMonth) return isCompleted ? currentCompleted : currentTotal;
-      return isCompleted ? priorCompleted : priorTotal;
+      return isCurrentMonth ? currentCompleted : priorCompleted;
     });
   }
 
-  it('computes overallAdherence: 4 completed out of 4 total → 100', async () => {
+  // Build a protocol fixture that started before the test month and never expires,
+  // training on every weekday so expected = number of days in window.
+  function buildAllDaysProtocol(assigneeId) {
+    return {
+      startDate: new Date(Date.UTC(2020, 0, 1)),
+      expirationDate: null,
+      trainings: [
+        { weekDay: 'monday' },
+        { weekDay: 'tuesday' },
+        { weekDay: 'wednesday' },
+        { weekDay: 'thursday' },
+        { weekDay: 'friday' },
+        { weekDay: 'saturday' },
+        { weekDay: 'sunday' },
+      ],
+      _assigneeId: assigneeId,
+    };
+  }
+
+  it('computes overallAdherence: completed/expected → 100 when fully adherent', async () => {
+    // Fake time to a known date so we can predict expected count.
+    // 2026-05-15 12:00 UTC → window [May 1 00:00, May 15 12:00).
+    // With every weekday active, expected = 15 (days 1..15 inclusive).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0)));
+
+    const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]), // active students: 0
-        count: adherenceCountMock({
-          currentCompleted: 4,
-          currentTotal: 4,
-          priorCompleted: 0,
-          priorTotal: 0,
-        }),
+        findMany: vi.fn().mockResolvedValue([]), // active students irrelevant
+        count: adherenceCountMock({ currentCompleted: 15, priorCompleted: 0 }),
       },
-      trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([buildAllDaysProtocol(studentA)]),
+      },
       setLog: { findMany: vi.fn().mockResolvedValue([]) },
     });
 
     const result = await computeBriefing(prisma, TRAINER_ID);
 
     expect(result.overallAdherence).toBe(100);
+    vi.useRealTimers();
   });
 
-  it('computes adherenceDeltaPp as current minus prior month adherence', async () => {
+  it('caps adherence at 100% when completed exceeds expected', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0)));
+
+    const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
         findMany: vi.fn().mockResolvedValue([]),
-        count: adherenceCountMock({
-          currentCompleted: 8,
-          currentTotal: 10, // 80%
-          priorCompleted: 3,
-          priorTotal: 5,    // 60%
-        }),
+        count: adherenceCountMock({ currentCompleted: 30, priorCompleted: 0 }), // expected=15
       },
-      trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([buildAllDaysProtocol(studentA)]),
+      },
       setLog: { findMany: vi.fn().mockResolvedValue([]) },
     });
 
     const result = await computeBriefing(prisma, TRAINER_ID);
 
-    // 80 - 60 = 20pp
+    expect(result.overallAdherence).toBe(100);
+    vi.useRealTimers();
+  });
+
+  it('returns 0 adherence when no active protocols (no expected sessions)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0)));
+
+    const studentA = 'student-a';
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: { findMany: vi.fn().mockResolvedValue([]) },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    const result = await computeBriefing(prisma, TRAINER_ID);
+
+    expect(result.overallAdherence).toBe(0);
+    expect(result.adherenceDeltaPp).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('computes adherenceDeltaPp as current minus prior month adherence', async () => {
+    // 2026-05-15 12:00 UTC. Window: May 1..15 (15 days), April 1..15 (15 days).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0)));
+
+    const studentA = 'student-a';
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        // expected = 15 both months. 12/15 = 80%, 9/15 = 60%.
+        count: adherenceCountMock({ currentCompleted: 12, priorCompleted: 9 }),
+      },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([buildAllDaysProtocol(studentA)]),
+      },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    const result = await computeBriefing(prisma, TRAINER_ID);
+
     expect(result.overallAdherence).toBe(80);
     expect(result.adherenceDeltaPp).toBe(20);
+    vi.useRealTimers();
+  });
+
+  it('resolves the active roster once via trainerStudent.findMany with activeOnPlan=true', async () => {
+    const trainerStudentFindMany = vi.fn().mockResolvedValue([]);
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      trainerStudent: { findMany: trainerStudentFindMany },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    await computeBriefing(prisma, TRAINER_ID);
+
+    // Single roster resolution shared across active/inactive/adherence KPIs.
+    expect(trainerStudentFindMany).toHaveBeenCalledTimes(1);
+    expect(trainerStudentFindMany).toHaveBeenCalledWith({
+      where: { trainerId: TRAINER_ID, activeOnPlan: true },
+      select: { studentId: true },
+    });
+  });
+
+  it('filters roster by activeOnPlan=true when counting inactive students', async () => {
+    const trainerStudentFindMany = vi.fn().mockResolvedValue([]);
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      trainerStudent: { findMany: trainerStudentFindMany },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    await computeBriefing(prisma, TRAINER_ID);
+
+    expect(trainerStudentFindMany).toHaveBeenCalledWith({
+      where: { trainerId: TRAINER_ID, activeOnPlan: true },
+      select: { studentId: true },
+    });
+  });
+
+  it('scopes adherence count queries to the pre-resolved roster via userId IN', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0)));
+
+    const studentA = 'student-a';
+    const count = vi.fn().mockResolvedValue(0);
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count,
+      },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([buildAllDaysProtocol(studentA)]),
+      },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    await computeBriefing(prisma, TRAINER_ID);
+
+    expect(count.mock.calls.length).toBeGreaterThan(0);
+    for (const call of count.mock.calls) {
+      // Roster is pre-resolved; no nested user.trainers.some join.
+      expect(call[0].where.userId).toEqual({ in: [studentA] });
+      expect(call[0].where.user).toBeUndefined();
+    }
+    vi.useRealTimers();
+  });
+
+  it('uses an aligned prior-month upper bound for the delta window', async () => {
+    // Provide roster + protocol so count is called for both months.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 17, 14, 0, 0))); // May 17 14:00
+
+    const studentA = 'student-a';
+    const count = vi.fn().mockResolvedValue(0);
+    const prisma = buildMockPrisma({
+      workoutSession: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count,
+      },
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([{ studentId: studentA }]),
+      },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([buildAllDaysProtocol(studentA)]),
+      },
+      setLog: { findMany: vi.fn().mockResolvedValue([]) },
+    });
+
+    await computeBriefing(prisma, TRAINER_ID);
+
+    const currentMonthStart = new Date(Date.UTC(2026, 4, 1));
+    const priorMonthUpperBounds = count.mock.calls
+      .map((c) => c[0].where.startedAt.lt)
+      .filter((d) => d < currentMonthStart);
+    expect(priorMonthUpperBounds.length).toBeGreaterThan(0);
+    // Today is May 17 → prior bound should be Apr 17 (same day-of-month).
+    for (const bound of priorMonthUpperBounds) {
+      expect(bound.getUTCMonth()).toBe(3); // April (0-indexed)
+      expect(bound.getUTCDate()).toBe(17);
+    }
+    vi.useRealTimers();
   });
 });
 

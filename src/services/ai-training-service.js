@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import { AppError } from "../errors/app-error.js";
 import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY } from "../constants/ai.js";
 import * as studentDashboardService from "./student-dashboard-service.js";
+import { assertCanUseAi, recordAiAction } from "./platform-plan-service.js";
 import {
   validateCategory,
   validateWeekDay,
@@ -2180,6 +2181,16 @@ export function sanitizeUserMessage(message) {
   return message.replace(/<\/?user_input>/gi, "");
 }
 
+/**
+ * Extract the student user ID from a tool input, if the tool operated on a student.
+ * Tools use either `studentId` or `assigneeId` to reference the student.
+ * Returns null for tools that have no student scope.
+ */
+function resolveToolStudentId(toolInput) {
+  const sanitized = sanitizeToolInputIds(toolInput);
+  return sanitized.studentId ?? sanitized.assigneeId ?? null;
+}
+
 // --- Main agentic loop ---
 
 export async function processAiChat(userId, { message, conversationId }) {
@@ -2189,6 +2200,8 @@ export async function processAiChat(userId, { message, conversationId }) {
     isNewConversation,
     context,
   } = await setupConversation(userId, { message, conversationId });
+
+  await assertCanUseAi(prisma, context.trainerId, null);
 
   const provider = getLlmProvider();
   const chatParams = {
@@ -2253,6 +2266,13 @@ export async function processAiChat(userId, { message, conversationId }) {
     console.info(
       `[AI] Tool execution done: success=${toolResult.success}, duration=${Date.now() - startExec}ms`,
     );
+
+    if (toolResult.success) {
+      const toolStudentId = resolveToolStudentId(toolCall.input);
+      recordAiAction(prisma, context.trainerId, toolStudentId, toolCall.name).catch((recordErr) => {
+        console.error("[AI] Failed to record AI action (non-critical):", recordErr.message);
+      });
+    }
 
     const actionsExecuted = [
       {
@@ -2366,6 +2386,8 @@ export async function* processAiChatStream(
     isNewConversation,
     context,
   } = await setupConversation(userId, { message, conversationId });
+
+  await assertCanUseAi(prisma, context.trainerId, null);
 
   yield { event: "status", data: { message: "Analisando seu pedido..." } };
 
@@ -2488,6 +2510,13 @@ export async function* processAiChatStream(
     console.info(
       `[AI][stream] Tool done: success=${toolResult.success}, duration=${Date.now() - startExec}ms`,
     );
+
+    if (toolResult.success) {
+      const toolStudentId = resolveToolStudentId(toolCall.input);
+      recordAiAction(prisma, context.trainerId, toolStudentId, toolCall.name).catch((recordErr) => {
+        console.error("[AI][stream] Failed to record AI action (non-critical):", recordErr.message);
+      });
+    }
 
     const actionsExecuted = [
       {

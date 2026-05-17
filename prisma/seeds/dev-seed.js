@@ -14,6 +14,8 @@ import pg from 'pg';
 
 import {
   TRAINER,
+  TRAINER_DIAMOND,
+  TRAINER_PLATINUM,
   STUDENTS,
   ADHERENCE_BUCKETS,
   EXERCISE_TEMPLATES,
@@ -35,6 +37,11 @@ import {
 } from '../../src/constants/training.js';
 import { PaymentStatus, SubscriptionStatus } from '../../src/constants/subscription.js';
 import { computeCycleEndDate } from '../../src/helpers/subscription-helpers.js';
+import {
+  PLATFORM_PLAN_TIERS,
+  PLATFORM_SUBSCRIPTION_STATUSES,
+  getBillingMonth,
+} from '../../src/constants/platform-plan.js';
 import { seedPublicAnamnesis } from '../seed.js';
 
 // ─── Guardrails ──────────────────────────────────────────────────────────────
@@ -158,7 +165,7 @@ async function main() {
     throw new Error('seedPublicAnamnesis ran but anamnesis still missing — check DB state.');
   }
 
-  // 2. Trainer.
+  // 2. Trainer (FREE plan — default).
   const trainerUser = await prisma.user.create({
     data: {
       email: TRAINER.email,
@@ -183,6 +190,123 @@ async function main() {
       firstProtocolCreatedAt: NOW,
     },
   });
+  // Ensure FREE plan subscription exists for the main trainer (self-sufficient after db:reset).
+  await prisma.platformSubscription.create({
+    data: {
+      trainerId: trainer.id,
+      tier: PLATFORM_PLAN_TIERS.FREE,
+      status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+    },
+  });
+
+  // 2a. DIAMOND trainer — premium features, currentPeriodEnd 30 days ahead.
+  const diamondTrainerUser = await prisma.user.create({
+    data: {
+      email: TRAINER_DIAMOND.email,
+      passwordHash: hashPassword(TRAINER_DIAMOND.password),
+      roles: [Roles.TRAINER],
+      status: 'active',
+      firstName: TRAINER_DIAMOND.firstName,
+      lastName: TRAINER_DIAMOND.lastName,
+      gender: TRAINER_DIAMOND.gender,
+      birthDate: new Date(TRAINER_DIAMOND.birthDate),
+    },
+  });
+  const diamondTrainer = await prisma.trainer.create({
+    data: {
+      userId: diamondTrainerUser.id,
+      professionalDocument: TRAINER_DIAMOND.professionalDocument,
+      gymName: TRAINER_DIAMOND.gymName,
+      serviceMode: TRAINER_DIAMOND.serviceMode,
+      notes: TRAINER_DIAMOND.notes,
+      profileCompletedAt: NOW,
+      firstStudentLinkedAt: NOW,
+      firstProtocolCreatedAt: NOW,
+    },
+  });
+  await prisma.platformSubscription.create({
+    data: {
+      trainerId: diamondTrainer.id,
+      tier: PLATFORM_PLAN_TIERS.DIAMOND,
+      status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+      currentPeriodStart: NOW,
+      currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY_MS),
+    },
+  });
+
+  // 2b. PLATINUM trainer — 50 students for downgrade soft-block testing.
+  const platinumTrainerUser = await prisma.user.create({
+    data: {
+      email: TRAINER_PLATINUM.email,
+      passwordHash: hashPassword(TRAINER_PLATINUM.password),
+      roles: [Roles.TRAINER],
+      status: 'active',
+      firstName: TRAINER_PLATINUM.firstName,
+      lastName: TRAINER_PLATINUM.lastName,
+      gender: TRAINER_PLATINUM.gender,
+      birthDate: new Date(TRAINER_PLATINUM.birthDate),
+    },
+  });
+  const platinumTrainer = await prisma.trainer.create({
+    data: {
+      userId: platinumTrainerUser.id,
+      professionalDocument: TRAINER_PLATINUM.professionalDocument,
+      gymName: TRAINER_PLATINUM.gymName,
+      serviceMode: TRAINER_PLATINUM.serviceMode,
+      notes: TRAINER_PLATINUM.notes,
+      profileCompletedAt: NOW,
+      firstStudentLinkedAt: NOW,
+      firstProtocolCreatedAt: NOW,
+    },
+  });
+  await prisma.platformSubscription.create({
+    data: {
+      trainerId: platinumTrainer.id,
+      tier: PLATFORM_PLAN_TIERS.PLATINUM,
+      status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+      currentPeriodStart: NOW,
+      currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY_MS),
+    },
+  });
+
+  // Seed 50 students for the PLATINUM trainer.
+  const platinumStudentPasswordHash = hashPassword('aluno123');
+  const platinumStudentIds = [];
+  for (let i = 0; i < 50; i += 1) {
+    const studentUser = await prisma.user.create({
+      data: {
+        email: `platinum_aluno${i + 1}@treinoway.local`,
+        passwordHash: platinumStudentPasswordHash,
+        roles: [],
+        status: 'active',
+        firstName: `Aluno${i + 1}`,
+        lastName: 'Platinum',
+        gender: i % 2 === 0 ? 'male' : 'female',
+        birthDate: new Date(`${1990 + (i % 10)}-${String((i % 12) + 1).padStart(2, '0')}-15`),
+      },
+    });
+    await prisma.trainerStudent.create({
+      data: { trainerId: platinumTrainer.id, studentId: studentUser.id },
+    });
+    platinumStudentIds.push(studentUser.id);
+  }
+
+  // Seed a few AiUsageEvent rows for the PLATINUM trainer (5 events across 3 students this month).
+  const billingMonth = getBillingMonth();
+  const aiEventStudents = platinumStudentIds.slice(0, 3);
+  const aiEventsPerStudent = [2, 2, 1]; // 5 total across 3 students
+  for (let s = 0; s < aiEventStudents.length; s += 1) {
+    for (let e = 0; e < aiEventsPerStudent[s]; e += 1) {
+      await prisma.aiUsageEvent.create({
+        data: {
+          trainerId: platinumTrainer.id,
+          studentId: aiEventStudents[s],
+          action: 'generate_training',
+          billingMonth,
+        },
+      });
+    }
+  }
 
   // 3. Students + TrainerStudent links.
   const studentPasswordHash = hashPassword('aluno123');
@@ -576,11 +700,54 @@ async function main() {
     }
   }
 
+  // ─── Denormalize TrainerStudent hot-path fields ────────────────────────────
+  // Seed bypasses service-layer hooks. Replicate the migration backfill so the
+  // students list (and any other consumer) sees lastWorkoutAt / currentPrLoad /
+  // currentPrAt populated after a fresh seed.
+  await prisma.$executeRawUnsafe(`
+    WITH last_completed AS (
+      SELECT user_id, MAX(finished_at) AS last_finished
+      FROM workout_sessions
+      WHERE status = 'completed' AND deleted_at IS NULL AND finished_at IS NOT NULL
+      GROUP BY user_id
+    )
+    UPDATE trainer_students ts
+    SET last_workout_at = lc.last_finished
+    FROM last_completed lc
+    WHERE ts.student_id = lc.user_id;
+  `);
+  await prisma.$executeRawUnsafe(`
+    WITH pr_per_student AS (
+      SELECT ws.user_id, MAX(sl.load) AS max_load
+      FROM set_logs sl
+      JOIN exercise_logs el ON el.id = sl.exercise_log_id
+      JOIN workout_sessions ws ON ws.id = el.workout_session_id
+      WHERE sl.load IS NOT NULL AND sl.completed = true AND ws.deleted_at IS NULL
+      GROUP BY ws.user_id
+    ),
+    pr_with_at AS (
+      SELECT ws.user_id, pr.max_load, MAX(sl.created_at) AS pr_at
+      FROM pr_per_student pr
+      JOIN workout_sessions ws ON ws.user_id = pr.user_id
+      JOIN exercise_logs el ON el.workout_session_id = ws.id
+      JOIN set_logs sl ON sl.exercise_log_id = el.id
+      WHERE sl.load = pr.max_load AND sl.completed = true AND ws.deleted_at IS NULL
+      GROUP BY ws.user_id, pr.max_load
+    )
+    UPDATE trainer_students ts
+    SET current_pr_load = p.max_load, current_pr_at = p.pr_at
+    FROM pr_with_at p
+    WHERE ts.student_id = p.user_id;
+  `);
+
   // ─── Summary ───────────────────────────────────────────────────────────────
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log('Dev seed complete:');
-  console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password}`);
+  console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password} [FREE]`);
+  console.log(`  ✓ DIAMOND trainer — ${TRAINER_DIAMOND.email} / ${TRAINER_DIAMOND.password}`);
+  console.log(`  ✓ PLATINUM trainer — ${TRAINER_PLATINUM.email} / ${TRAINER_PLATINUM.password} (50 students, 5 AI events)`);
   console.log(`  ✓ ${counts('Students', students.length)} — aluno1@treinoway.local … aluno${students.length}@treinoway.local / aluno123`);
+  console.log(`  ✓ 50 platinum students — platinum_aluno1@treinoway.local … platinum_aluno50@treinoway.local / aluno123`);
   console.log(`  ✓ ${counts('ExerciseTemplates', EXERCISE_TEMPLATES.length)} (public)`);
   console.log(`  ✓ ${counts('TrainingTemplate', 1)} — Full Body (public)`);
   console.log(`  ✓ ${counts('Protocols', students.length)}`);

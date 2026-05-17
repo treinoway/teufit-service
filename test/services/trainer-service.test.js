@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertStudentCap: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock Prisma client used by trainerService
 vi.mock('../../src/db.js', () => {
   return {
@@ -20,6 +25,12 @@ vi.mock('../../src/db.js', () => {
         create: vi.fn(),
         delete: vi.fn(),
       },
+      trainingProtocol: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      workoutSession: {
+        groupBy: vi.fn().mockResolvedValue([]),
+      },
       trainerBriefingSnapshot: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
@@ -36,10 +47,13 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId } from '../../src/services/trainer-service.js';
+import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertStudentCap.mockResolvedValue(undefined);
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
     prisma.trainer.updateMany.mockResolvedValue({ count: 0 });
   });
@@ -408,6 +422,10 @@ describe('listStudents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
+    // Default the adherence queries to empty so tests not focused on adherence
+    // don't need to wire them up explicitly.
+    prisma.trainingProtocol.findMany.mockResolvedValue([]);
+    prisma.workoutSession.groupBy.mockResolvedValue([]);
   });
 
   it('returns an empty array when the trainer has no linked students', async () => {
@@ -421,12 +439,22 @@ describe('listStudents', () => {
     expect(result).toEqual([]);
   });
 
-  it('returns mapped student profiles with resolved avatar URLs', async () => {
+  it('returns mapped student profiles with resolved avatar URLs and denormalized fields', async () => {
+    const prAt = new Date('2026-05-01T10:00:00Z');
+    const lastWorkout = new Date('2026-05-14T18:00:00Z');
     prisma.trainerStudent.findMany.mockResolvedValue([
       {
+        studentId: 's1',
+        lastWorkoutAt: lastWorkout,
+        currentPrLoad: 120,
+        currentPrAt: prAt,
         student: { id: 's1', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', avatarUrl: 's3://alice' },
       },
       {
+        studentId: 's2',
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
         student: { id: 's2', email: 'bob@example.com', firstName: 'Bob', lastName: 'B', avatarUrl: null },
       },
     ]);
@@ -436,10 +464,67 @@ describe('listStudents', () => {
 
     const result = await listStudents({ trainerId: 'trainer1' });
 
+    // No active protocols mocked → adherence is null (no expected sessions).
     expect(result).toEqual([
-      { id: 's1', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', avatarUrl: 'https://cdn.example.com/alice.jpg' },
-      { id: 's2', email: 'bob@example.com', firstName: 'Bob', lastName: 'B', avatarUrl: null },
+      {
+        id: 's1',
+        email: 'alice@example.com',
+        firstName: 'Alice',
+        lastName: 'A',
+        avatarUrl: 'https://cdn.example.com/alice.jpg',
+        adherence: null,
+        lastWorkoutAt: lastWorkout,
+        currentPrLoad: 120,
+        currentPrAt: prAt,
+      },
+      {
+        id: 's2',
+        email: 'bob@example.com',
+        firstName: 'Bob',
+        lastName: 'B',
+        avatarUrl: null,
+        adherence: null,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+      },
     ]);
+  });
+
+  it('computes adherence per student from batched protocol + groupBy queries', async () => {
+    // Fake time so weekday occurrences are predictable.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 4, 15, 12, 0, 0))); // May 15 noon
+
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+    // Protocol active all month, training every weekday → expected = 15.
+    prisma.trainingProtocol.findMany.mockResolvedValue([
+      {
+        assigneeId: 's1',
+        startDate: new Date(Date.UTC(2026, 0, 1)),
+        expirationDate: null,
+        trainings: [
+          { weekDay: 'monday' }, { weekDay: 'tuesday' }, { weekDay: 'wednesday' },
+          { weekDay: 'thursday' }, { weekDay: 'friday' }, { weekDay: 'saturday' }, { weekDay: 'sunday' },
+        ],
+      },
+    ]);
+    // 12 completed out of 15 expected → 80%.
+    prisma.workoutSession.groupBy.mockResolvedValue([{ userId: 's1', _count: { _all: 12 } }]);
+    s3BucketHandler.resolveUrl.mockResolvedValue(null);
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(result[0].adherence).toBe(80);
+    vi.useRealTimers();
   });
 });
 

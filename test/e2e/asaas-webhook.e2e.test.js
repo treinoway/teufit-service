@@ -1,0 +1,297 @@
+import 'dotenv/config';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { prisma } from '../../src/db.js';
+import { setupApp } from '../helpers/setup-app.js';
+import { cleanDatabase } from '../helpers/db-cleanup.js';
+
+const hasDatabaseUrl = !!process.env.DATABASE_URL;
+const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
+
+const WEBHOOK_SECRET = 'test-webhook-secret-123';
+
+e2eDescribe('e2e: asaas webhook route', () => {
+  let app;
+
+  beforeAll(async () => {
+    // Set webhook secret so validation is enabled
+    process.env.ASAAS_WEBHOOK_SECRET = WEBHOOK_SECRET;
+    process.env.ASAAS_ENV = 'sandbox';
+    app = await setupApp();
+  });
+
+  afterAll(async () => {
+    if (app) await app.close();
+    delete process.env.ASAAS_WEBHOOK_SECRET;
+  });
+
+  beforeEach(async () => {
+    await cleanDatabase();
+  });
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  async function createTrainerWithSubscription(tier = 'FREE', overrides = {}) {
+    const email = `trainer+webhook+${Date.now()}@example.com`;
+
+    const signupRes = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email, password: 'StrongPassw0rd!' },
+    });
+    expect(signupRes.statusCode).toBe(201);
+    const { user: { id: userId } } = signupRes.json();
+
+    const becomeRes = await app.inject({
+      method: 'PATCH',
+      url: '/become-trainer',
+      headers: { authorization: `Bearer ${signupRes.json().token.accessToken}` },
+    });
+    expect(becomeRes.statusCode).toBe(200);
+
+    const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
+    const trainerId = trainer.id;
+
+    await prisma.platformSubscription.upsert({
+      where: { trainerId },
+      create: {
+        trainerId,
+        tier,
+        status: 'ACTIVE',
+        asaasSubscriptionId: 'sub_webhook_test',
+        asaasCustomerId: 'cust_webhook_test',
+        ...overrides,
+      },
+      update: {
+        tier,
+        status: 'ACTIVE',
+        asaasSubscriptionId: 'sub_webhook_test',
+        asaasCustomerId: 'cust_webhook_test',
+        ...overrides,
+      },
+    });
+
+    return { userId, trainerId };
+  }
+
+  function webhookHeaders() {
+    return {
+      'content-type': 'application/json',
+      'asaas-access-token': WEBHOOK_SECRET,
+    };
+  }
+
+  async function sendWebhook(payload) {
+    return app.inject({
+      method: 'POST',
+      url: '/webhooks/asaas',
+      headers: webhookHeaders(),
+      payload,
+    });
+  }
+
+  // ─── Auth validation ───────────────────────────────────────────────────────
+
+  describe('webhook secret validation', () => {
+    it('returns 401 with wrong webhook secret', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/asaas',
+        headers: {
+          'content-type': 'application/json',
+          'asaas-access-token': 'wrong-secret',
+        },
+        payload: { event: 'PAYMENT_CONFIRMED' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 with missing webhook secret header', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/asaas',
+        headers: { 'content-type': 'application/json' },
+        payload: { event: 'PAYMENT_CONFIRMED' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 200 with correct secret', async () => {
+      const res = await sendWebhook({ event: 'SUBSCRIPTION_CREATED', subscription: { id: 'sub_test' } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().received).toBe(true);
+    });
+  });
+
+  // ─── Body validation ───────────────────────────────────────────────────────
+
+  describe('body validation', () => {
+    it('returns 400 when event field is missing', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/asaas',
+        headers: webhookHeaders(),
+        payload: { payment: { id: 'pay-1' } },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ─── PAYMENT_CONFIRMED ─────────────────────────────────────────────────────
+
+  describe('PAYMENT_CONFIRMED', () => {
+    it('flips tier to PRO and sets status=ACTIVE', async () => {
+      const { trainerId } = await createTrainerWithSubscription('FREE');
+
+      const res = await sendWebhook({
+        event: 'PAYMENT_CONFIRMED',
+        payment: {
+          id: 'pay_confirmed_001',
+          subscription: 'sub_webhook_test',
+          value: 49.90,
+          dueDate: '2026-05-16',
+          billingType: 'PIX',
+          externalReference: `tier:PRO:trainer:${trainerId}`,
+          status: 'CONFIRMED',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().received).toBe(true);
+
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      expect(sub.tier).toBe('PRO');
+      expect(sub.status).toBe('ACTIVE');
+      expect(sub.pastDueSince).toBeNull();
+
+      const payment = await prisma.platformSubscriptionPayment.findUnique({
+        where: { asaasPaymentId: 'pay_confirmed_001' },
+      });
+      expect(payment).not.toBeNull();
+      expect(payment.status).toBe('CONFIRMED');
+    });
+
+    it('is idempotent — processing same PAYMENT_CONFIRMED twice does not cause errors', async () => {
+      const { trainerId } = await createTrainerWithSubscription('FREE');
+
+      const payload = {
+        event: 'PAYMENT_CONFIRMED',
+        payment: {
+          id: 'pay_idem_001',
+          subscription: 'sub_webhook_test',
+          value: 49.90,
+          dueDate: '2026-05-16',
+          billingType: 'PIX',
+          externalReference: `tier:PRO:trainer:${trainerId}`,
+        },
+      };
+
+      const res1 = await sendWebhook(payload);
+      const res2 = await sendWebhook(payload);
+
+      expect(res1.statusCode).toBe(200);
+      expect(res2.statusCode).toBe(200);
+
+      // Tier should be PRO — not changed by second call
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      expect(sub.tier).toBe('PRO');
+    });
+  });
+
+  // ─── PAYMENT_OVERDUE ───────────────────────────────────────────────────────
+
+  describe('PAYMENT_OVERDUE', () => {
+    it('sets subscription status=PAST_DUE', async () => {
+      const { trainerId } = await createTrainerWithSubscription('PRO');
+
+      const res = await sendWebhook({
+        event: 'PAYMENT_OVERDUE',
+        payment: {
+          id: 'pay_overdue_001',
+          subscription: 'sub_webhook_test',
+          value: 49.90,
+          dueDate: '2026-05-01',
+          billingType: 'PIX',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      expect(sub.status).toBe('PAST_DUE');
+      expect(sub.pastDueSince).not.toBeNull();
+    });
+
+    it('does not immediately downgrade tier — grace period applies', async () => {
+      const { trainerId } = await createTrainerWithSubscription('PRO');
+
+      await sendWebhook({
+        event: 'PAYMENT_OVERDUE',
+        payment: {
+          id: 'pay_overdue_002',
+          subscription: 'sub_webhook_test',
+          value: 49.90,
+          dueDate: '2026-05-01',
+          billingType: 'PIX',
+        },
+      });
+
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      // tier stays PRO during grace period
+      expect(sub.tier).toBe('PRO');
+    });
+  });
+
+  // ─── SUBSCRIPTION_DELETED ──────────────────────────────────────────────────
+
+  describe('SUBSCRIPTION_DELETED', () => {
+    it('downgrades to FREE and sets status=CANCELED', async () => {
+      const { trainerId } = await createTrainerWithSubscription('PLATINUM');
+
+      const res = await sendWebhook({
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: {
+          id: 'sub_webhook_test',
+          status: 'INACTIVE',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      expect(sub.tier).toBe('FREE');
+      expect(sub.status).toBe('CANCELED');
+      expect(sub.asaasSubscriptionId).toBeNull();
+    });
+  });
+
+  // ─── Unknown events ────────────────────────────────────────────────────────
+
+  describe('Unknown event type', () => {
+    it('returns 200 and does not throw for unknown event', async () => {
+      const res = await sendWebhook({
+        event: 'SOME_FUTURE_ASAAS_EVENT',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().received).toBe(true);
+    });
+  });
+
+  // ─── Internal error resilience ─────────────────────────────────────────────
+
+  describe('Error resilience', () => {
+    it('returns 200 even for events with missing subscription reference', async () => {
+      // payment references a subscription not in our DB — should not throw
+      const res = await sendWebhook({
+        event: 'PAYMENT_CONFIRMED',
+        payment: {
+          id: 'pay_orphan_001',
+          subscription: 'sub_not_in_db',
+          value: 49.90,
+          dueDate: '2026-05-16',
+          billingType: 'PIX',
+        },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
+});

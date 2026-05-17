@@ -15,6 +15,46 @@ import { BriefingThresholds } from '../constants/briefing.js';
 import { WorkoutSessionStatus } from '../constants/training.js';
 import { NotFoundAppError } from '../errors/app-error.js';
 
+export const DAY_MS = 86400000;
+
+// Map WeekDays enum string → JS Date.getUTCDay() integer.
+export const WEEKDAY_TO_INT = Object.freeze({
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+});
+
+/**
+ * Count how many times any of `weekDayInts` falls in [start, endExclusive),
+ * using UTC day boundaries. `start` is snapped down to its UTC midnight before
+ * iterating so a mid-day `start` still includes that day.
+ *
+ * Example: start=2026-05-01 (Fri), end=2026-05-17 14:00, weekDayInts={1 (Mon)}
+ *   → Mondays in window: May 4, 11 → 2.
+ */
+export function countWeekdayOccurrences(start, endExclusive, weekDayInts) {
+  if (start >= endExclusive) return 0;
+  if (weekDayInts.size === 0) return 0;
+  const startMidnight = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+  );
+  const endMs = endExclusive.getTime();
+  let count = 0;
+  for (const dow of weekDayInts) {
+    const startDow = startMidnight.getUTCDay();
+    const offset = (dow - startDow + 7) % 7;
+    const firstMs = startMidnight.getTime() + offset * DAY_MS;
+    if (firstMs >= endMs) continue;
+    const span = endMs - firstMs;
+    count += Math.floor((span - 1) / (7 * DAY_MS)) + 1;
+  }
+  return count;
+}
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -43,36 +83,68 @@ function startOfPreviousMonth() {
 }
 
 /**
- * Return the first moment (UTC) of the current calendar month
- * (i.e., the exclusive upper bound of the previous month).
+ * Return the exclusive upper bound of the prior-month adherence window,
+ * aligned to the same day-of-month + time-of-day as `now`. This makes
+ * current-vs-prior month comparisons fair: dia 17 do mês compara dias 1-17
+ * em ambos, não 1-17 vs 1-30. Caps to last day of prior month when the
+ * current day-of-month doesn't exist there (e.g., Mar 31 vs Feb).
  */
-function endOfPreviousMonth() {
-  return startOfCurrentMonth();
+function priorMonthAlignedEnd(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const monthIdx = now.getUTCMonth() - 1;
+  const day = now.getUTCDate();
+  // Last day of prior month: day 0 of current month.
+  const lastDayOfPriorMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+  const cappedDay = Math.min(day, lastDayOfPriorMonth);
+  return new Date(Date.UTC(
+    year,
+    monthIdx,
+    cappedDay,
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds(),
+    now.getUTCMilliseconds(),
+  ));
 }
 
 // ─── KPI computation ─────────────────────────────────────────────────────────
 
 /**
- * Return the distinct set of studentIds who were active in the last
- * ACTIVE_WINDOW_DAYS days. Used by other KPI functions to scope their queries.
+ * Resolve the trainer's active roster (TrainerStudent rows with
+ * activeOnPlan=true). Called ONCE per briefing computation and shared across
+ * KPIs that need it (active, inactive, adherence) — avoids 3 redundant scans
+ * of trainer_students per refresh.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} trainerId
+ * @returns {Promise<string[]>} active student userIds
+ */
+async function resolveActiveRosterIds(prisma, trainerId) {
+  const rows = await prisma.trainerStudent.findMany({
+    where: { trainerId, activeOnPlan: true },
+    select: { studentId: true },
+  });
+  return rows.map((r) => r.studentId);
+}
+
+/**
+ * From an active roster, return the subset that completed at least one
+ * WorkoutSession in the last ACTIVE_WINDOW_DAYS days.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string[]} rosterIds
  * @returns {Promise<string[]>}
  */
-async function resolveActiveStudentIds(prisma, trainerId) {
+async function resolveActiveStudentIds(prisma, rosterIds) {
+  if (rosterIds.length === 0) return [];
   const since = daysAgo(BriefingThresholds.ACTIVE_WINDOW_DAYS);
 
   const rows = await prisma.workoutSession.findMany({
     where: {
+      userId: { in: rosterIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: since },
-      user: {
-        trainers: {
-          some: { trainerId },
-        },
-      },
     },
     select: { userId: true },
     distinct: ['userId'],
@@ -129,9 +201,24 @@ async function computeReturningThisWeek(prisma, trainerId, activeStudentIds) {
   });
 
   const studentIdsActiveInGap = new Set(hadSessionInGap.map((r) => r.userId));
-  const returning = recentStudentIds.filter((id) => !studentIdsActiveInGap.has(id));
+  const candidateIds = recentStudentIds.filter((id) => !studentIdsActiveInGap.has(id));
+  if (candidateIds.length === 0) return 0;
 
-  return returning.length;
+  // "Returning" requires prior history. A student's very first session ever
+  // is not "voltou após gap" — it's onboarding. Require at least one completed
+  // session older than the gap window (i.e., before 14d ago).
+  const hadPreGapHistory = await prisma.workoutSession.findMany({
+    where: {
+      userId: { in: candidateIds },
+      status: WorkoutSessionStatus.COMPLETED,
+      deletedAt: null,
+      startedAt: { lt: fourteenDaysAgo },
+    },
+    select: { userId: true },
+    distinct: ['userId'],
+  });
+
+  return hadPreGapHistory.length;
 }
 
 /**
@@ -169,6 +256,8 @@ async function computeStagnantProgress(prisma, activeStudentIds) {
   const setLogs = await prisma.setLog.findMany({
     where: {
       load: { not: null },
+      // Failed attempts (completed=false) don't represent a real PR — exclude.
+      completed: true,
       exerciseLog: {
         workoutSession: {
           userId: { in: activeStudentIds },
@@ -235,8 +324,9 @@ async function computeStagnantProgress(prisma, activeStudentIds) {
 
     const hasNewPr = Array.from(exerciseMap.values()).some(({ inWindowMax, preWindowMax }) => {
       if (inWindowMax === null) return false;
-      // If no pre-window data, treat the in-window load as a PR (first time loading)
-      if (preWindowMax === null) return true;
+      // No pre-window history for this exercise = no signal. Don't infer a PR
+      // from a first occurrence — wait until there's a baseline to compare.
+      if (preWindowMax === null) return false;
       return inWindowMax > preWindowMax;
     });
 
@@ -257,23 +347,15 @@ async function computeStagnantProgress(prisma, activeStudentIds) {
  * @param {string} trainerId
  * @returns {Promise<number>}
  */
-async function computeInactiveStudents(prisma, trainerId) {
+async function computeInactiveStudents(prisma, rosterIds) {
+  if (rosterIds.length === 0) return 0;
+
   const since = daysAgo(BriefingThresholds.INACTIVE_NO_SESSION_DAYS);
-
-  // All students on roster
-  const rosterRows = await prisma.trainerStudent.findMany({
-    where: { trainerId },
-    select: { studentId: true },
-  });
-
-  if (rosterRows.length === 0) return 0;
-
-  const rosterStudentIds = rosterRows.map((r) => r.studentId);
 
   // Students who DID complete a session in the window
   const activeSessions = await prisma.workoutSession.findMany({
     where: {
-      userId: { in: rosterStudentIds },
+      userId: { in: rosterIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: since },
@@ -283,51 +365,92 @@ async function computeInactiveStudents(prisma, trainerId) {
   });
 
   const activeSet = new Set(activeSessions.map((r) => r.userId));
-  const inactiveCount = rosterStudentIds.filter((id) => !activeSet.has(id)).length;
-
-  return inactiveCount;
+  return rosterIds.filter((id) => !activeSet.has(id)).length;
 }
 
 /**
  * Compute adherence rate for a given calendar month window.
- * adherence = (completed sessions in window) / (all non-deleted sessions in window) * 100
  *
- * WorkoutSession has no scheduledDate field. We use startedAt as the proxy for
- * the "session date" for both numerator and denominator.
+ *   adherence = completed_sessions / expected_sessions × 100
  *
- * Returns 0 if denominator is 0 (no sessions in month).
+ * Expected sessions are derived from each active student's active
+ * TrainingProtocols. For each protocol overlapping the window, each
+ * Training row (non-deleted, weekDay set) generates one expected session
+ * per occurrence of that weekDay inside the overlap.
+ *
+ * - Protocol `expirationDate` is treated as INCLUSIVE end-of-day.
+ * - Trainings without a weekDay are ignored (no expectation).
+ * - Result is capped at 100% — a student who logs extra sessions does not
+ *   inflate the adherence score, since the card semantics is "did the
+ *   planned sessions happen".
+ * - Returns 0 (not NaN) when expected_sessions is 0.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} trainerId
  * @param {Date} monthStart - inclusive lower bound (UTC)
- * @param {Date} monthEnd - exclusive upper bound (UTC, start of next month)
+ * @param {Date} monthEnd - exclusive upper bound (UTC)
  * @returns {Promise<number>} 0–100 adherence percentage
  */
-async function computeMonthlyAdherence(prisma, trainerId, monthStart, monthEnd) {
-  const baseWhere = {
-    deletedAt: null,
-    startedAt: { gte: monthStart, lt: monthEnd },
-    user: {
-      trainers: {
-        some: { trainerId },
-      },
-    },
-  };
+async function computeMonthlyAdherence(prisma, rosterIds, monthStart, monthEnd) {
+  if (rosterIds.length === 0) return 0;
 
-  const [completedCount, totalCount] = await Promise.all([
-    prisma.workoutSession.count({
+  // Pull expected sessions (protocols) and completed count in parallel — they
+  // don't depend on each other.
+  const [protocols, completed] = await Promise.all([
+    prisma.trainingProtocol.findMany({
       where: {
-        ...baseWhere,
-        status: WorkoutSessionStatus.COMPLETED,
+        assigneeId: { in: rosterIds },
+        status: 'active',
+        deletedAt: null,
+        startDate: { lt: monthEnd },
+        OR: [
+          { expirationDate: null },
+          { expirationDate: { gte: monthStart } },
+        ],
+      },
+      select: {
+        startDate: true,
+        expirationDate: true,
+        trainings: {
+          where: { deletedAt: null, weekDay: { not: null } },
+          select: { weekDay: true },
+        },
       },
     }),
     prisma.workoutSession.count({
-      where: baseWhere,
+      where: {
+        userId: { in: rosterIds },
+        status: WorkoutSessionStatus.COMPLETED,
+        deletedAt: null,
+        startedAt: { gte: monthStart, lt: monthEnd },
+      },
     }),
   ]);
 
-  if (totalCount === 0) return 0;
-  return Math.round((completedCount / totalCount) * 100 * 100) / 100;
+  let expected = 0;
+  for (const proto of protocols) {
+    if (proto.trainings.length === 0) continue;
+
+    const effectiveStart = proto.startDate > monthStart ? proto.startDate : monthStart;
+    // expirationDate is inclusive — convert to exclusive bound by adding a day.
+    const expirationExclusive = proto.expirationDate
+      ? new Date(proto.expirationDate.getTime() + DAY_MS)
+      : null;
+    const effectiveEnd =
+      expirationExclusive && expirationExclusive < monthEnd ? expirationExclusive : monthEnd;
+
+    const weekDayInts = new Set(
+      proto.trainings
+        .map((t) => WEEKDAY_TO_INT[t.weekDay])
+        .filter((n) => n !== undefined),
+    );
+    expected += countWeekdayOccurrences(effectiveStart, effectiveEnd, weekDayInts);
+  }
+
+  if (expected === 0) return 0;
+
+  const pct = (completed / expected) * 100;
+  return Math.round(Math.min(pct, 100) * 100) / 100;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -348,12 +471,18 @@ async function computeMonthlyAdherence(prisma, trainerId, monthStart, monthEnd) 
  * }>}
  */
 export async function computeBriefing(prisma, trainerId) {
+  const now = new Date();
   const currentMonthStart = startOfCurrentMonth();
   const previousMonthStart = startOfPreviousMonth();
-  const previousMonthEnd = endOfPreviousMonth();
+  // Align prior-month upper bound to the same day-of-month + time as `now`
+  // so the delta compares equivalent windows (dia 1..N vs dia 1..N).
+  const previousMonthAlignedEnd = priorMonthAlignedEnd(now);
 
-  // activeStudentIds is shared across multiple KPIs — resolve first
-  const activeStudentIds = await resolveActiveStudentIds(prisma, trainerId);
+  // Resolve active roster ONCE — shared by active, inactive, adherence (×2).
+  // Then resolve activeStudentIds (subset who trained in last 30d) — shared
+  // by returning + stagnant.
+  const rosterIds = await resolveActiveRosterIds(prisma, trainerId);
+  const activeStudentIds = await resolveActiveStudentIds(prisma, rosterIds);
 
   const [
     returningThisWeek,
@@ -364,9 +493,9 @@ export async function computeBriefing(prisma, trainerId) {
   ] = await Promise.all([
     computeReturningThisWeek(prisma, trainerId, activeStudentIds),
     computeStagnantProgress(prisma, activeStudentIds),
-    computeInactiveStudents(prisma, trainerId),
-    computeMonthlyAdherence(prisma, trainerId, currentMonthStart, new Date()),
-    computeMonthlyAdherence(prisma, trainerId, previousMonthStart, previousMonthEnd),
+    computeInactiveStudents(prisma, rosterIds),
+    computeMonthlyAdherence(prisma, rosterIds, currentMonthStart, now),
+    computeMonthlyAdherence(prisma, rosterIds, previousMonthStart, previousMonthAlignedEnd),
   ]);
 
   const adherenceDeltaPp = Math.round((currentAdherence - previousAdherence) * 100) / 100;

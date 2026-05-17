@@ -16,6 +16,7 @@ import {
   validateParentLink,
   normalizeChoiceAnswersForVisibility,
 } from './anamnesis-shared.js';
+import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -701,6 +702,7 @@ export async function deleteQuestion(userId, anamnesisId, sectionId, questionId)
  */
 export async function linkAnamnesisToStudent(userId, studentId, data) {
   const trainer = await verifyTrainerStudentLink(userId, studentId);
+  await assertStudentActiveOnPlan(prisma, trainer.id, studentId);
   const anamnesis = await findAnamnesisOrThrow(data.anamnesisId);
 
   if (!anamnesis.isGeneral && anamnesis.trainerId !== trainer.id) {
@@ -782,6 +784,7 @@ export async function listStudentAnamneses(userId, studentId) {
  */
 export async function unlinkAnamnesisFromStudent(userId, studentId, anamnesisId) {
   const trainer = await verifyTrainerStudentLink(userId, studentId);
+  await assertStudentActiveOnPlan(prisma, trainer.id, studentId);
 
   const link = await prisma.studentAnamnesis.findUnique({
     where: {

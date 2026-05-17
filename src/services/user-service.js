@@ -6,6 +6,7 @@ import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
 import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
+import { buildPlatformPlanForMe } from './platform-plan-service.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -15,7 +16,7 @@ async function computeHasActiveTrainer(userId) {
 	return Boolean(link);
 }
 
-async function toUserProfile(user, { hasActiveTrainer } = {}) {
+async function toUserProfile(user, { hasActiveTrainer, platformPlan } = {}) {
 	if (!user) return null;
 
 	const avatarUrl = await s3BucketHandler.resolveUrl(user.avatarUrl);
@@ -82,6 +83,11 @@ async function toUserProfile(user, { hasActiveTrainer } = {}) {
 		} : null;
 	}
 
+	// platformPlan is present only when the user has a trainer profile
+	if (platformPlan !== undefined) {
+		profile.platformPlan = platformPlan;
+	}
+
 	return profile;
 }
 
@@ -110,6 +116,16 @@ export async function getUserProfileById(userId, includeRelations = []) {
 
 	const select = buildUserSelect(includeRelations);
 
+	// Always fetch trainer.id so we can build platformPlan without a second
+	// roundtrip. When trainerOnboarding was also requested, buildUserSelect
+	// already set select.trainer to the milestone fields; we merge id: true
+	// into that existing select. Otherwise we add the relation from scratch.
+	if (select.trainer) {
+		select.trainer.select.id = true;
+	} else {
+		select.trainer = { select: { id: true } };
+	}
+
 	const [user, hasActiveTrainer] = await Promise.all([
 		prisma.user.findUnique({ where: { id: userId }, select }),
 		computeHasActiveTrainer(userId),
@@ -122,7 +138,24 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		throw err;
 	}
 
-	return toUserProfile(user, { hasActiveTrainer });
+	// Attach platformPlan only for users with a trainer profile.
+	// Non-trainer users (student-only) get no platformPlan field.
+	let platformPlan;
+	if (Array.isArray(user.roles) && user.roles.includes(Roles.TRAINER)) {
+		const trainerId = user.trainer?.id;
+		if (trainerId) {
+			platformPlan = await buildPlatformPlanForMe(prisma, trainerId);
+		}
+	}
+
+	// When trainerOnboarding was NOT requested, trainer was fetched only for
+	// its id (used above for platformPlan). Strip it so toUserProfile does not
+	// accidentally render a partial trainerOnboarding shape in the response.
+	if (!includeRelations.includes('trainerOnboarding')) {
+		user.trainer = undefined;
+	}
+
+	return toUserProfile(user, { hasActiveTrainer, platformPlan });
 }
 
 export async function setActiveProfileToTrainer(userId) {

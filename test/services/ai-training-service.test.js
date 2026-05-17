@@ -57,6 +57,18 @@ vi.mock('../../src/services/exercise-service.js', () => ({
   updateExercise: vi.fn(),
 }))
 
+// Mock platform-plan-service — gating is tested separately in platform-plan-service.test.js
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanUseAi: vi.fn().mockResolvedValue(undefined),
+  recordAiAction: vi.fn().mockResolvedValue(undefined),
+  assertStudentCap: vi.fn().mockResolvedValue(undefined),
+  assertCanUseBranding: vi.fn().mockResolvedValue(undefined),
+  assertCanCreateChallenge: vi.fn().mockResolvedValue(undefined),
+  assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
+  enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  getTrainerPlan: vi.fn().mockResolvedValue({ tier: 'DIAMOND', limits: {}, subscription: null }),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { importFromTemplate } from '../../src/services/training-protocol-service.js'
@@ -74,6 +86,7 @@ import {
   sanitizeToolInputIds,
 } from '../../src/services/ai-training-service.js'
 import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY } from '../../src/constants/ai.js'
+import { assertCanUseAi, recordAiAction } from '../../src/services/platform-plan-service.js'
 
 describe('ai-training-service', () => {
   beforeEach(() => {
@@ -82,6 +95,10 @@ describe('ai-training-service', () => {
     // Re-apply Anthropic constructor mock after mockReset clears implementations.
     // Must use a regular function (not arrow) because `new` requires a constructor.
     Anthropic.mockImplementation(function () { this.messages = { create: anthropicCreate } })
+
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertCanUseAi.mockResolvedValue(undefined)
+    recordAiAction.mockResolvedValue(undefined)
 
     // Default $transaction: execute callback with prisma as tx (for interactive transactions)
     prisma.$transaction.mockImplementation(async (fn) => {

@@ -52,6 +52,9 @@ export async function cleanDatabase() {
     'student_subscriptions',
     'subscription_plans',
     'trainer_briefing_snapshots',
+    'platform_subscription_payments',
+    'platform_subscriptions',
+    'ai_usage_events',
     'users',
     'user_waitlist',
   ];

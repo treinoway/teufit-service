@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainer: { findUnique: vi.fn() },
@@ -71,6 +76,7 @@ import {
   isQuestionVisible,
 } from '../../src/constants/anamnesis.js';
 import { validateParentLink, normalizeChoiceAnswersForVisibility } from '../../src/services/anamnesis-shared.js';
+import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -139,6 +145,8 @@ const makeStudentAnamnesisLink = (overrides = {}) => ({
 describe('anamnesis-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertStudentActiveOnPlan.mockResolvedValue(undefined);
   });
 
   // ── createAnamnesis ──────────────────────────────────────────────────────

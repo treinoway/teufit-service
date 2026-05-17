@@ -643,4 +643,117 @@ e2eDescribe('e2e: user profile flows', () => {
       expect(response.json()).toHaveProperty('hasActiveTrainer', true);
     });
   });
+
+  describe('platformPlan in GET /me', () => {
+    async function createAndAuthStudent(suffix) {
+      const email = `e2e+platform-student-${suffix}-${Date.now()}@example.com`;
+      const signupRes = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: 'StrongPassw0rd!' },
+      });
+      expect(signupRes.statusCode).toBe(201);
+      const { token: { accessToken } } = signupRes.json();
+      return { accessToken, email };
+    }
+
+    async function createAndAuthTrainer(suffix) {
+      const email = `e2e+platform-trainer-${suffix}-${Date.now()}@example.com`;
+      const signupRes = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password: 'StrongPassw0rd!' },
+      });
+      expect(signupRes.statusCode).toBe(201);
+
+      const { token: { accessToken: rawToken } } = signupRes.json();
+
+      const becomeRes = await app.inject({
+        method: 'PATCH',
+        url: '/become-trainer',
+        headers: { authorization: `Bearer ${rawToken}` },
+      });
+      expect(becomeRes.statusCode).toBe(200);
+
+      const { token: { accessToken } } = becomeRes.json();
+      return { accessToken, email };
+    }
+
+    it('GET /me returns platformPlan for trainer users on FREE tier', async () => {
+      const { accessToken } = await createAndAuthTrainer('free-plan');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+
+      expect(body).toHaveProperty('platformPlan');
+      expect(body.platformPlan.tier).toBe('FREE');
+      expect(body.platformPlan.status).toBe('ACTIVE');
+      expect(body.platformPlan.cancelAtPeriodEnd).toBe(false);
+      expect(body.platformPlan.limits).toMatchObject({
+        studentCap: 3,
+        aiActionsPerStudent: 0,
+        aiActionsTrainerCap: 0,
+        branding: false,
+        championships: false,
+      });
+      expect(body.platformPlan.usage).toMatchObject({
+        students: { active: expect.any(Number), blocked: expect.any(Number), cap: 3 },
+        aiActions: { total: 0, byStudent: [] },
+      });
+    });
+
+    it('GET /me does NOT include platformPlan for student-only users', async () => {
+      const { accessToken } = await createAndAuthStudent('no-plan');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+
+      expect(body).not.toHaveProperty('platformPlan');
+    });
+
+    it('GET /me platformPlan shape has all required fields', async () => {
+      const { accessToken } = await createAndAuthTrainer('shape-check');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { platformPlan } = response.json();
+
+      expect(platformPlan).toMatchObject({
+        tier: expect.any(String),
+        status: expect.any(String),
+        cancelAtPeriodEnd: expect.any(Boolean),
+        limits: {
+          branding: expect.any(Boolean),
+          championships: expect.any(Boolean),
+        },
+        usage: {
+          students: {
+            active: expect.any(Number),
+            blocked: expect.any(Number),
+          },
+          aiActions: {
+            total: expect.any(Number),
+            byStudent: expect.any(Array),
+          },
+        },
+      });
+    });
+  });
 });

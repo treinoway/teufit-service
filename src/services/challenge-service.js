@@ -7,6 +7,7 @@ import {
   ChallengeStatus,
 } from '../constants/challenge.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
+import { assertCanCreateChallenge } from './platform-plan-service.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -341,6 +342,8 @@ export async function previewParticipants({ prisma, trainerUserId, mode, filter,
  */
 export async function createChallenge({ prisma, trainerUserId, data }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
+
+  await assertCanCreateChallenge(prisma, trainer.id);
 
   validateDateRange(data.startDate, data.endDate, true);
 

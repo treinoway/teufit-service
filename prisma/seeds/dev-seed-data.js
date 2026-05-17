@@ -14,6 +14,34 @@ export const TRAINER = Object.freeze({
   notes: 'Conta de demonstração para desenvolvimento local.',
 });
 
+// DIAMOND trainer — use to test premium-only features (unlimited students, AI, branding, championships).
+export const TRAINER_DIAMOND = Object.freeze({
+  email: 'dev_diamond@treinoway.local',
+  password: 'trainer123',
+  firstName: 'Diana',
+  lastName: 'Diamond',
+  gender: 'female',
+  birthDate: '1982-07-20',
+  professionalDocument: 'CREF-DIAMOND-001',
+  gymName: 'Diamond Studio',
+  serviceMode: 'online',
+  notes: 'Conta Diamond para testes de features premium.',
+});
+
+// PLATINUM trainer — seeded with 50 students to test downgrade soft-block path.
+export const TRAINER_PLATINUM = Object.freeze({
+  email: 'dev_platinum@treinoway.local',
+  password: 'trainer123',
+  firstName: 'Pedro',
+  lastName: 'Platinum',
+  gender: 'male',
+  birthDate: '1979-11-05',
+  professionalDocument: 'CREF-PLATINUM-001',
+  gymName: 'Platinum Fitness',
+  serviceMode: 'in_person',
+  notes: 'Conta Platinum com 50 alunos para testes de soft-block e downgrade.',
+});
+
 // 10 students. Order matters — buckets in dev-seed.js index by position.
 export const STUDENTS = Object.freeze([
   { firstName: 'Ana',      lastName: 'Souza',     gender: 'female', birthDate: '1992-04-22' },

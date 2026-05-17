@@ -5,6 +5,11 @@ import {
   ChallengeStatus,
 } from '../../src/constants/challenge.js';
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanCreateChallenge: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
 
 const mockTx = {
@@ -44,6 +49,7 @@ import {
   removeParticipant,
   getStudentChallenge,
 } from '../../src/services/challenge-service.js';
+import { assertCanCreateChallenge } from '../../src/services/platform-plan-service.js';
 
 const TRAINER_ID = 'trainer-record-uuid';
 const TRAINER_USER_ID = 'trainer-user-uuid';
@@ -96,6 +102,8 @@ const makeCompletedChallenge = () => {
 describe('challenge-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertCanCreateChallenge.mockResolvedValue(undefined);
     mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
     // Return null config by default — resolveChallengePtsSnapshot will use system defaults
     mockPrisma.gamificationConfig.findUnique.mockResolvedValue(null);

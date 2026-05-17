@@ -12,6 +12,7 @@ vi.mock('../../src/db.js', () => {
       },
       trainer: {
         findFirst: vi.fn(),
+        findUnique: vi.fn(),
         create: vi.fn(),
       },
       trainerStudent: {
@@ -29,9 +30,14 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkProfileComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  buildPlatformPlanForMe: vi.fn(),
+}));
+
 import { prisma } from '../../src/db.js';
 import { getAddressByPostalCode } from '../../src/services/address-service.js';
 import { maybeMarkProfileComplete } from '../../src/services/trainer-onboarding-service.js';
+import { buildPlatformPlanForMe } from '../../src/services/platform-plan-service.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
 
 describe('userService', () => {
@@ -39,6 +45,8 @@ describe('userService', () => {
     vi.clearAllMocks();
     // Default: no active trainer link — individual tests override when needed
     prisma.trainerStudent.findFirst.mockResolvedValue(null);
+    // Default: no trainer profile (student-only user)
+    prisma.trainer.findUnique.mockResolvedValue(null);
   });
 
   it('throws USER_ID_REQUIRED when userId is missing', async () => {
@@ -796,6 +804,130 @@ describe('userService', () => {
 
       expect(result).toHaveProperty('address', null);
       expect(result).toHaveProperty('socials', null);
+    });
+  });
+
+  describe('platformPlan in getUserProfileById', () => {
+    const baseUser = {
+      id: 'u1',
+      email: 'trainer@example.com',
+      roles: ['trainer'],
+      status: 'active',
+      firstName: 'José',
+      lastName: 'Demo',
+      gender: 'male',
+      birthDate: null,
+      avatarUrl: null,
+    };
+
+    const mockPlan = {
+      tier: 'FREE',
+      status: 'ACTIVE',
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      limits: { studentCap: 3, aiActionsPerStudent: 0, aiActionsTrainerCap: 0, branding: false, championships: false },
+      usage: {
+        students: { active: 1, blocked: 0, cap: 3 },
+        aiActions: { total: 0, byStudent: [] },
+      },
+    };
+
+    it('includes platformPlan when user has TRAINER role and trainer record exists', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: { id: 'trainer-id-1' } });
+      buildPlatformPlanForMe.mockResolvedValue(mockPlan);
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result).toHaveProperty('platformPlan');
+      expect(result.platformPlan).toEqual(mockPlan);
+      expect(buildPlatformPlanForMe).toHaveBeenCalledOnce();
+      expect(buildPlatformPlanForMe).toHaveBeenCalledWith(
+        expect.anything(), // prisma singleton
+        'trainer-id-1'
+      );
+    });
+
+    it('omits platformPlan when user is student-only (no TRAINER role)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        roles: ['student'],
+        trainer: null,
+      });
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result).not.toHaveProperty('platformPlan');
+      expect(buildPlatformPlanForMe).not.toHaveBeenCalled();
+    });
+
+    it('omits platformPlan when user has TRAINER role but no trainer DB record', async () => {
+      // trainer row does not exist yet (relation is null in the DB)
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: null });
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result).not.toHaveProperty('platformPlan');
+      expect(buildPlatformPlanForMe).not.toHaveBeenCalled();
+    });
+
+    it('resolves trainer.id from the user row without a separate trainer query', async () => {
+      // The optimisation: trainer.id is fetched in the same user query, so
+      // prisma.trainer.findUnique must never be called.
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: { id: 'internal-trainer-id' } });
+      buildPlatformPlanForMe.mockResolvedValue(mockPlan);
+
+      await getUserProfileById('u1', []);
+
+      expect(prisma.trainer.findUnique).not.toHaveBeenCalled();
+      expect(buildPlatformPlanForMe).toHaveBeenCalledWith(expect.anything(), 'internal-trainer-id');
+    });
+
+    it('returns PLATINUM plan details correctly when trainer is on PLATINUM', async () => {
+      const platinumPlan = {
+        tier: 'PLATINUM',
+        status: 'ACTIVE',
+        currentPeriodEnd: '2026-06-16T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+        limits: { studentCap: 80, aiActionsPerStudent: 3, aiActionsTrainerCap: null, branding: true, championships: true },
+        usage: {
+          students: { active: 50, blocked: 0, cap: 80 },
+          aiActions: { total: 5, byStudent: [{ studentId: 's1', count: 2 }, { studentId: 's2', count: 3 }] },
+        },
+      };
+
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: { id: 'trainer-id-1' } });
+      buildPlatformPlanForMe.mockResolvedValue(platinumPlan);
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result.platformPlan.tier).toBe('PLATINUM');
+      expect(result.platformPlan.usage.students.active).toBe(50);
+      expect(result.platformPlan.usage.aiActions.total).toBe(5);
+      expect(result.platformPlan.usage.aiActions.byStudent).toHaveLength(2);
+    });
+
+    it('returns DIAMOND plan with null caps for unlimited limits', async () => {
+      const diamondPlan = {
+        tier: 'DIAMOND',
+        status: 'ACTIVE',
+        currentPeriodEnd: '2026-06-16T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+        limits: { studentCap: null, aiActionsPerStudent: null, aiActionsTrainerCap: 1000, branding: true, championships: true },
+        usage: {
+          students: { active: 200, blocked: 0, cap: null },
+          aiActions: { total: 0, byStudent: [] },
+        },
+      };
+
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: { id: 'trainer-id-1' } });
+      buildPlatformPlanForMe.mockResolvedValue(diamondPlan);
+
+      const result = await getUserProfileById('u1', []);
+
+      expect(result.platformPlan.tier).toBe('DIAMOND');
+      expect(result.platformPlan.limits.studentCap).toBeNull();
+      expect(result.platformPlan.limits.aiActionsPerStudent).toBeNull();
+      expect(result.platformPlan.limits.aiActionsTrainerCap).toBe(1000);
     });
   });
 

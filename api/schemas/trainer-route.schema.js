@@ -132,6 +132,13 @@ const studentItemSchema = {
     firstName: { type: 'string', nullable: true },
     lastName: { type: 'string', nullable: true },
     avatarUrl: { type: 'string', nullable: true },
+    // Current-month adherence percentage (0..100, 2 decimals). null when the
+    // student has no active protocol that prescribes weekly trainings.
+    adherence: { type: 'number', nullable: true },
+    // Denormalized hot-path fields (kept fresh by write-time hooks).
+    lastWorkoutAt: { type: 'string', format: 'date-time', nullable: true },
+    currentPrLoad: { type: 'number', nullable: true },
+    currentPrAt: { type: 'string', format: 'date-time', nullable: true },
   },
 };
 

@@ -50,6 +50,12 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanUseAi: vi.fn().mockResolvedValue(undefined),
+  recordAiAction: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('../../src/services/student-dashboard-service.js', () => ({
   buildAiPerformanceSnapshot: vi.fn(),
 }))
@@ -58,6 +64,13 @@ import { prisma } from '../../src/db.js'
 import { processAiChat, processAiChatStream } from '../../src/services/ai-training-service.js'
 import { buildAiPerformanceSnapshot } from '../../src/services/student-dashboard-service.js'
 import { AI_RETRY, AI_TOOLS } from '../../src/constants/ai.js'
+import { assertCanUseAi, recordAiAction } from '../../src/services/platform-plan-service.js'
+
+// Re-apply platform-plan-service mocks after each test (mockReset: true in vitest config).
+beforeEach(() => {
+  assertCanUseAi.mockResolvedValue(undefined)
+  recordAiAction.mockResolvedValue(undefined)
+})
 
 // ---------------------------------------------------------------------------
 // Shared response shapes

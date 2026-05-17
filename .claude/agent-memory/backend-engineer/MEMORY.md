@@ -211,6 +211,16 @@ Challenge status (`scheduled/active/completed/cancelled`) is computed on read fr
 ## Sub-agent invocation (2026-04-16, updated 2026-05-15)
 `test-writer`, `api-docs-sync`, `backend-code-reviewer` are project-level agents in `.claude/agents/`. They are NOT invokable via the `Skill` tool or `RemoteTrigger`. Write tests and update docs directly when these agents cannot be invoked by the Skill tool.
 
+## Vitest: do NOT spread asymmetric matchers (2026-05-16)
+`{ ...expect.objectContaining(...), key: value }` throws `PrettyFormatPluginError: Asymmetric matcher Object does not implement toAsymmetricMatcher()`. Always flatten all properties in `toMatchObject`:
+```js
+// WRONG: { ...expectPlanError(err), details: {...} }
+// CORRECT:
+await expect(fn()).rejects.toMatchObject({
+  error: err.code, messageCode: err.messageCode, httpStatus: err.status, details: {...},
+});
+```
+
 ## computeCycleEndDate — billing cycle date algorithm (2026-05-15)
 Shared helper: `src/helpers/subscription-helpers.js`. Two-path algorithm:
 1. If `startDay > lastDayOfTargetMonth` → return `Date.UTC(y, targetMonth, lastDayOfTargetMonth)` (overflow clamp — last day of target month).
@@ -346,6 +356,18 @@ When two inline object shapes are identical, extract to a named const to prevent
 - When adding `trainerBriefingSnapshot` to an existing `vi.mock` of `../../src/db.js`, add `updateMany: vi.fn().mockResolvedValue({ count: 0 })` to it.
 - Mark briefing dirty AFTER a `$transaction` commits, not inside it.
 - Cron enabled only when `NODE_ENV=production` OR `ENABLE_BRIEFING_CRON=true`. Do not enable in tests.
+
+## Asaas billing patterns (2026-05-16)
+- DB enum `PlatformBillingType`: only `PIX | CREDIT_CARD | BOLETO` (no UNDEFINED)
+- `billingType` on `PlatformSubscriptionPayment` is NOT nullable — always call `normalizeBillingType()` before insert
+- `dueDate` on `PlatformSubscriptionPayment` is NOT nullable — always call `parseDueDate()` before insert
+- Webhook secret: `asaas-access-token` header is a literal string match (no HMAC)
+- Tier encoded in Asaas `externalReference` as `tier:TIER:trainer:UUID` — parse via `parseTierFromExternalReference()`
+- Tier flip happens ONLY on `PAYMENT_CONFIRMED` webhook, NOT on checkout
+- Past-due grace: check-on-read in `getTrainerPlan()` — no cron needed. 7-day grace (`PAST_DUE_GRACE_DAYS`)
+- Pre-existing lint count: 16 errors (as of 2026-05-16)
+- Platform plan rate limits at `config.rateLimit.platformPlan`
+- Asaas config at `config.asaas` (apiKey, webhookSecret, env)
 
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`

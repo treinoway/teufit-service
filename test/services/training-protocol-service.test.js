@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainer: { findUnique: vi.fn(), updateMany: vi.fn() },
@@ -27,10 +32,13 @@ import {
   deleteProtocol,
   importFromTemplate,
 } from '../../src/services/training-protocol-service.js';
+import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 describe('training-protocol-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
+    assertStudentActiveOnPlan.mockResolvedValue(undefined);
     prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
     prisma.trainer.updateMany.mockResolvedValue({ count: 0 });
   });

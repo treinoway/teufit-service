@@ -1,6 +1,64 @@
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
+import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../../src/constants/platform-plan.js';
+
+const platformPlanShape = {
+  type: 'object',
+  nullable: true,
+  additionalProperties: false,
+  description: 'Platform subscription details. Present only when the user has an active trainer profile.',
+  properties: {
+    tier: { type: 'string', enum: Object.values(PLATFORM_PLAN_TIERS) },
+    status: { type: 'string', enum: Object.values(PLATFORM_SUBSCRIPTION_STATUSES) },
+    currentPeriodEnd: { type: 'string', format: 'date-time', nullable: true },
+    cancelAtPeriodEnd: { type: 'boolean' },
+    limits: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        studentCap: { type: ['integer', 'null'], description: 'null means unlimited' },
+        aiActionsPerStudent: { type: ['integer', 'null'], description: 'null means unlimited' },
+        aiActionsTrainerCap: { type: ['integer', 'null'], description: 'null means unlimited' },
+        branding: { type: 'boolean' },
+        championships: { type: 'boolean' },
+      },
+    },
+    usage: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        students: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            active: { type: 'integer', minimum: 0 },
+            blocked: { type: 'integer', minimum: 0 },
+            cap: { type: ['integer', 'null'], description: 'null means unlimited' },
+          },
+        },
+        aiActions: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            total: { type: 'integer', minimum: 0 },
+            byStudent: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  studentId: { type: 'string', format: 'uuid' },
+                  count: { type: 'integer', minimum: 0 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
 // Dynamically generate allowed relations list from ALLOWED_USER_RELATIONS (includes virtual aliases)
 const allowedRelations = [...ALLOWED_USER_RELATIONS];
@@ -138,6 +196,7 @@ export const getMeSchema = {
             },
           },
         },
+        platformPlan: platformPlanShape,
       },
       additionalProperties: false,
     },

@@ -1,71 +1,96 @@
-# Frontend Brief — Trainer Briefing (SEUS ALUNOS AGORA)
+# Frontend Brief — Platform Plan in /me + Dev Seeds
 
-**Backend branch**: staging · **Generated**: 2026-05-15
+**Backend branch**: staging · **Generated**: 2026-05-16
 
 ## Elevator pitch
-Trainers can now see a live snapshot of their student cohort's key activity metrics — active students, returning students, stagnant progress, inactive students, and adherence rate — directly inside the AI assistant view, replacing the current mock data.
+Trainers now receive their full platform subscription details on every `/me` call, so the app can immediately show tier, limits, and real-time usage without a separate API round-trip. A student-only user gets no such field — the distinction is automatic.
 
 ## User story
-As a trainer, I want a real-time at-a-glance summary of my students' training activity so that I can quickly understand the health of my cohort before interacting with the AI assistant.
+As a trainer, I want to see my current subscription tier, how many students I have, and how many iArnold actions I've used this month, so I can understand my usage at a glance and decide if I need to upgrade.
 
 ## User flows
-1. **Entry point**: Trainer navigates to `/trainer/ai-assistant`. The "SEUS ALUNOS AGORA" card is already visible in the current UI (lines 567–594 of `AiAssistant.jsx`).
+1. **Entry point**: App boot — `AuthContext` fetches `/me` and stores the result. `platformPlan` is available immediately to any component that reads the context.
 2. **Happy path**:
-   1. Page loads → frontend calls `GET /trainer/briefing`.
-   2. Response arrives → card populates with real numbers.
-   3. If `adherenceDeltaPp` is positive, show an upward trend indicator; if negative, show a downward one; if zero, neutral.
+   - Trainer opens the app → `/me` returns `platformPlan.tier = 'FREE'` (or PRO/PLATINUM/DIAMOND).
+   - `AuthContext` exposes `platformPlan` to all consumers.
+   - Dashboard header shows current tier badge.
+   - Settings → Plan page shows limits, usage bars, and subscription details.
 3. **Branches**:
-   - Fresh trainer with no students → all values are `0`; adherence shows `"0.00"`. No error state.
-   - Token expired → 401 → redirect to login (existing auth interceptor handles this).
-   - Trainer role missing → 403 → show generic permission error (existing error handling).
+   - Student-only user: `platformPlan` is absent from `/me`. No plan UI is shown.
+   - Trainer with PAST_DUE status: `platformPlan.status = 'PAST_DUE'`. Show payment-overdue banner.
+   - Trainer with `cancelAtPeriodEnd: true`: show "cancels on [date]" notice.
 
 ## UI states to cover
-- **Loading**: Show skeleton loaders for each of the 6 metric tiles while the fetch is in flight.
-- **Success**: Populate tiles with values from the response.
-- **Error**: If the fetch fails (non-401/403), show a subtle inline error message within the card without breaking the rest of the AI assistant page.
-- **Empty / fresh trainer**: All zeros are valid — do not show "no data" states. Zero is a legitimate value.
-- **Permissions**: 403 → do not render the card; show a permission-denied notice.
-- **Adherence delta sign**: `adherenceDeltaPp` is a string like `"4.00"` or `"-3.50"`. Parse as float to determine sign for the trend arrow/color.
+- **Loading**: skeleton for the plan card while `/me` is in-flight.
+- **Empty / student user**: no plan UI — do not render a blank plan card.
+- **FREE tier**: show upgrade CTA in prominent position. Disable iArnold button, branding page, and championships CTA.
+- **PAST_DUE**: yellow/orange warning banner with payment recovery CTA.
+- **CANCELED**: grey badge, "plan expired" message.
+- **Null caps**: `studentCap: null` and `aiActionsPerStudent: null` mean unlimited — render as "∞" or "Ilimitado".
 
 ## API contract
-### GET /trainer/briefing
-- **Auth**: Bearer token required (`TRAINER` role)
-- **Request**: no body, no query params
+### GET /me
+- **Auth**: Bearer token (any authenticated user)
+- **Request**: no body; optional `?include=address,socials,preferences,trainerOnboarding`
 - **Success** (200):
   ```json
   {
-    "activeStudents": 24,
-    "returningThisWeek": 2,
-    "stagnantProgress": 3,
-    "inactiveStudents": 2,
-    "overallAdherence": "87.00",
-    "adherenceDeltaPp": "4.00",
-    "computedAt": "2026-05-15T22:00:00.000Z"
+    "id": "uuid",
+    "email": "trainer@example.com",
+    "roles": ["trainer"],
+    "platformPlan": {
+      "tier": "FREE",
+      "status": "ACTIVE",
+      "currentPeriodEnd": null,
+      "cancelAtPeriodEnd": false,
+      "limits": {
+        "studentCap": 3,
+        "aiActionsPerStudent": 0,
+        "aiActionsTrainerCap": 0,
+        "branding": false,
+        "championships": false
+      },
+      "usage": {
+        "students": { "active": 2, "blocked": 0, "cap": 3 },
+        "aiActions": {
+          "total": 0,
+          "byStudent": []
+        }
+      }
+    }
   }
   ```
-- **Errors** (status · error · messageCode · when):
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · token missing or expired
-  - `403` · `FORBIDDEN` · `auth.forbidden` · authenticated user is not a trainer
-  - `404` · `NOT_FOUND` · `trainer.notFound` · trainer profile not found for this user
-  - `500` · `INTERNAL_SERVER_ERROR` · `internal.serverError` · unexpected server failure
+  - `platformPlan` is **absent** (not null) for student-only users.
+  - `studentCap`, `aiActionsPerStudent`, `aiActionsTrainerCap` are `null` when the limit is unlimited (DIAMOND tier).
+  - `currentPeriodEnd` is `null` for FREE (no billing period).
+  - `usage.students.blocked` counts students marked inactive due to a soft-block after downgrade.
+  - `usage.aiActions.byStudent[].count` is the number of iArnold actions used for that student this billing month.
 
 ## i18n keys required
 Stable messageCodes the frontend needs to translate for this feature:
-- `trainer.notFound` → suggested copy: "Trainer profile not found"
-- `auth.unauthorized` → already present in existing i18n
-- `auth.forbidden` → already present in existing i18n
+- `platformPlan.studentCapExceeded` → suggested copy: "Você atingiu o limite de alunos do seu plano."
+- `platformPlan.aiNotAvailable` → suggested copy: "iArnold não está disponível no plano Free."
+- `platformPlan.aiActionsExceeded` → suggested copy: "Você atingiu o limite de ações do iArnold para este mês."
+- `platformPlan.brandingNotAvailable` → suggested copy: "Personalização de marca não está disponível no seu plano."
+- `platformPlan.championshipsNotAvailable` → suggested copy: "Campeonatos não estão disponíveis no seu plano."
+- `platformPlan.studentBlockedOnPlan` → suggested copy: "Este aluno está bloqueado. Faça upgrade para reativá-lo."
 
 ## Acceptance criteria
-- [ ] Card renders real numbers from the API instead of hardcoded mock values.
-- [ ] Each of the 6 metrics is displayed in its designated tile: active students, returning this week, stagnant progress, inactive students, overall adherence (%), adherence delta (pp).
-- [ ] Loading state is visible while the fetch is in flight (skeleton or spinner per tile).
-- [ ] `adherenceDeltaPp` drives a visual trend indicator: green/up for positive, red/down for negative, neutral for zero.
-- [ ] A fresh trainer with no students sees all zeros, no error message.
-- [ ] If the API returns 403, the card is hidden or shows a permission notice — does not crash the page.
-- [ ] `computedAt` is optionally displayed as a "last updated" timestamp in a human-readable format.
+- [ ] `AuthContext` reads `platformPlan` from the `/me` response and exposes it.
+- [ ] `usePlatformPlan()` hook returns `null` when the user is not a trainer (field absent).
+- [ ] Plan badge on dashboard/settings shows the correct tier label (FREE, Pro, Platinum, Diamond).
+- [ ] Usage bars show `active / cap` (or `∞` when cap is null) for students and iArnold actions.
+- [ ] `usage.students.blocked > 0` renders a "X alunos bloqueados" warning.
+- [ ] iArnold button is disabled when `limits.aiActionsPerStudent === 0`.
+- [ ] Branding page is gated when `limits.branding === false`.
+- [ ] Championships CTA is hidden/disabled when `limits.championships === false`.
+- [ ] `status === 'PAST_DUE'` renders a payment overdue banner.
+- [ ] `cancelAtPeriodEnd === true` shows a cancellation notice with the `currentPeriodEnd` date.
+- [ ] Student-only users see no plan UI anywhere in the app.
 
 ## Open design questions
-- Should `computedAt` be shown to the user ("Updated 2h ago"), hidden entirely, or surfaced only in a tooltip?
-- Does `stagnantProgress` need a tooltip explaining what "stagnant" means (no new load PR in 14 days)?
-- Visual weight of the trend arrow for `adherenceDeltaPp`: inline text (`+4pp`), coloured badge, or animated icon?
-- Should the card have a manual refresh button, or is the read-on-load data enough?
+- Where does the plan badge live on the trainer dashboard — header, sidebar, or profile dropdown?
+- Should the usage bar for iArnold show per-student breakdown or trainer-total only?
+- What does the "upgrade" CTA look like when the user is already on DIAMOND?
+- How should the "X alunos bloqueados" warning link to the student list?
+- Should `PAST_DUE` block navigation to certain pages, or only show a banner?

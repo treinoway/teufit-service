@@ -4,6 +4,7 @@ import { buildError, validateGenderOrdination, validateTrainingLevel, validatePr
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
+import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 
 /**
  * Validate status
@@ -58,6 +59,8 @@ export async function createProtocol(userId, data) {
   if (!assignee || assignee.deletedAt) {
     throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
   }
+
+  await assertStudentActiveOnPlan(prisma, trainer.id, data.assigneeId);
 
   if (data.status) {
     validateStatus(data.status);
@@ -470,6 +473,8 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
   if (!assignee || assignee.deletedAt) {
     throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
   }
+
+  await assertStudentActiveOnPlan(prisma, trainer.id, assigneeId);
 
   const protocol = await prisma.$transaction(async (tx) => {
     const created = await tx.trainingProtocol.create({

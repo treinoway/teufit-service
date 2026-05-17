@@ -33,10 +33,23 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkFirstProtocolCreated: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock platform-plan-service — gating is tested separately
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  assertCanUseAi: vi.fn().mockResolvedValue(undefined),
+  recordAiAction: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { prisma } from '../../src/db.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { processAiChat } from '../../src/services/ai-training-service.js'
 import { AI_LIMITS } from '../../src/constants/ai.js'
+import { assertCanUseAi, recordAiAction } from '../../src/services/platform-plan-service.js'
+
+// Re-apply platform-plan-service mocks after each test (mockReset: true in vitest config).
+beforeEach(() => {
+  assertCanUseAi.mockResolvedValue(undefined)
+  recordAiAction.mockResolvedValue(undefined)
+})
 
 const WINDOW_SIZE = AI_LIMITS.MAX_HISTORY_ITEMS * 2 // 40
 
