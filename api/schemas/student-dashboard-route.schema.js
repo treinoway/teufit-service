@@ -334,6 +334,7 @@ export const getExerciseProgressionDetailSchema = {
         maximum: DASHBOARD_DEFAULTS.SESSIONS_PER_EXERCISE_MAX,
         default: DASHBOARD_DEFAULTS.SESSIONS_PER_EXERCISE_DEFAULT,
       },
+      includeAbandoned: { type: 'boolean', default: false },
     },
   },
   response: {

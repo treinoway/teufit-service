@@ -102,7 +102,7 @@ function computeMaxStreak(sortedUniqueDates) {
  * @param {boolean} includeDurationOnly - when false, excludes exercises where has_load=false
  * @param {string|null} filterExerciseId - when set, restricts to a single exercise
  */
-async function fetchProgressionRows(studentUserId, from, to, includeDurationOnly, filterExerciseId = null) {
+async function fetchProgressionRows(studentUserId, from, to, includeDurationOnly, filterExerciseId = null, includeAbandoned = false) {
   const rows = await prisma.$queryRaw`
     SELECT
       e.id AS exercise_id,
@@ -131,6 +131,7 @@ async function fetchProgressionRows(studentUserId, from, to, includeDurationOnly
       AND ws.started_at <= ${to}
       AND (${includeDurationOnly} = TRUE OR e.has_load = TRUE)
       AND (${filterExerciseId}::uuid IS NULL OR e.id = ${filterExerciseId}::uuid)
+      AND (${includeAbandoned} = TRUE OR ws.status <> 'abandoned')
     GROUP BY e.id, e.name, e.has_load, e.prescription_mode, e.training_id, t.name,
              ws.id, ws.started_at, ws.status
     ORDER BY e.id, ws.started_at DESC
@@ -499,7 +500,7 @@ export async function getExerciseProgression(trainerUserId, studentId, { dateFro
  * @param {string} exerciseId
  * @param {object} options - { dateFrom, dateTo, sessionLimit }
  */
-export async function getExerciseProgressionDetail(trainerUserId, studentId, exerciseId, { dateFrom, dateTo, sessionLimit } = {}) {
+export async function getExerciseProgressionDetail(trainerUserId, studentId, exerciseId, { dateFrom, dateTo, sessionLimit, includeAbandoned = false } = {}) {
   await resolveTrainerStudent(trainerUserId, studentId);
 
   const dateWindow = resolveWindow({ dateFrom, dateTo });
@@ -521,7 +522,7 @@ export async function getExerciseProgressionDetail(trainerUserId, studentId, exe
         training: { select: { name: true } },
       },
     }),
-    fetchProgressionRows(studentId, dateWindow.from, dateWindow.to, true, exerciseId),
+    fetchProgressionRows(studentId, dateWindow.from, dateWindow.to, true, exerciseId, includeAbandoned),
   ]);
 
   const exerciseMap = bucketProgressionRows(rawRows);

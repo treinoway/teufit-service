@@ -1000,6 +1000,40 @@ describe('student-dashboard-service', () => {
 
       expect(prisma.exerciseLog.findMany).not.toHaveBeenCalled();
     });
+
+    it('passes includeAbandoned=false by default to the SQL query', async () => {
+      prisma.exercise.findFirst.mockResolvedValue({
+        id: EXERCISE_ID,
+        name: 'Bench Press',
+        hasLoad: true,
+        prescriptionMode: 'reps',
+        trainingId: 'training-1',
+        training: { name: 'Peito' },
+      });
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await getExerciseProgressionDetail(TRAINER_ID, STUDENT_ID, EXERCISE_ID, {});
+
+      const queryArgs = prisma.$queryRaw.mock.calls[0];
+      expect(queryArgs).toContain(false);
+    });
+
+    it('passes includeAbandoned=true when requested', async () => {
+      prisma.exercise.findFirst.mockResolvedValue({
+        id: EXERCISE_ID,
+        name: 'Bench Press',
+        hasLoad: true,
+        prescriptionMode: 'reps',
+        trainingId: 'training-1',
+        training: { name: 'Peito' },
+      });
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await getExerciseProgressionDetail(TRAINER_ID, STUDENT_ID, EXERCISE_ID, { includeAbandoned: true });
+
+      const queryArgs = prisma.$queryRaw.mock.calls[0];
+      expect(queryArgs).toContain(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
