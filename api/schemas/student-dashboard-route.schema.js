@@ -68,6 +68,38 @@ export const getDashboardSummarySchema = {
             expirationDate: { type: 'string', nullable: true },
           },
         },
+        adherence: {
+          type: 'number',
+          nullable: true,
+          minimum: 0,
+          maximum: 100,
+          description: 'Aderência do mês corrente: completed/expected × 100, capped at 100. Always calendar month, ignores any period filter.',
+        },
+        adherenceCompleted: {
+          type: 'integer',
+          nullable: true,
+          description: 'Number of completed sessions in the current calendar month. null when the student has no active protocol or expected = 0.',
+        },
+        adherenceExpected: {
+          type: 'integer',
+          nullable: true,
+          description: 'Number of expected sessions in the current calendar month (up to now). null when the student has no active protocol or expected = 0.',
+        },
+        adherenceMonth: {
+          type: 'string',
+          description: 'Start date (YYYY-MM-01) of the month this adherence refers to.',
+        },
+        previousAdherence: {
+          type: 'number',
+          nullable: true,
+          minimum: 0,
+          maximum: 100,
+          description: 'Adherence of the previous calendar month, for delta comparison.',
+        },
+        previousAdherenceMonth: {
+          type: 'string',
+          description: 'Start date (YYYY-MM-01) of the month this adherence refers to.',
+        },
         maxStreakDays: { type: 'integer', nullable: true },
         sessionsPerWeek: { type: 'number', nullable: true },
         daysSinceLastSession: { type: 'integer', nullable: true },

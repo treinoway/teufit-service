@@ -14,46 +14,15 @@
 import { BriefingThresholds } from '../constants/briefing.js';
 import { WorkoutSessionStatus } from '../constants/training.js';
 import { NotFoundAppError } from '../errors/app-error.js';
+import {
+  DAY_MS,
+  WEEKDAY_TO_INT,
+  countWeekdayOccurrences,
+  computeExpectedSessions,
+} from '../helpers/adherence-helpers.js';
 
-export const DAY_MS = 86400000;
-
-// Map WeekDays enum string → JS Date.getUTCDay() integer.
-export const WEEKDAY_TO_INT = Object.freeze({
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-});
-
-/**
- * Count how many times any of `weekDayInts` falls in [start, endExclusive),
- * using UTC day boundaries. `start` is snapped down to its UTC midnight before
- * iterating so a mid-day `start` still includes that day.
- *
- * Example: start=2026-05-01 (Fri), end=2026-05-17 14:00, weekDayInts={1 (Mon)}
- *   → Mondays in window: May 4, 11 → 2.
- */
-export function countWeekdayOccurrences(start, endExclusive, weekDayInts) {
-  if (start >= endExclusive) return 0;
-  if (weekDayInts.size === 0) return 0;
-  const startMidnight = new Date(
-    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
-  );
-  const endMs = endExclusive.getTime();
-  let count = 0;
-  for (const dow of weekDayInts) {
-    const startDow = startMidnight.getUTCDay();
-    const offset = (dow - startDow + 7) % 7;
-    const firstMs = startMidnight.getTime() + offset * DAY_MS;
-    if (firstMs >= endMs) continue;
-    const span = endMs - firstMs;
-    count += Math.floor((span - 1) / (7 * DAY_MS)) + 1;
-  }
-  return count;
-}
+// Re-export so existing consumers (trainer-service) don't break.
+export { DAY_MS, WEEKDAY_TO_INT, countWeekdayOccurrences };
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -427,25 +396,7 @@ async function computeMonthlyAdherence(prisma, rosterIds, monthStart, monthEnd) 
     }),
   ]);
 
-  let expected = 0;
-  for (const proto of protocols) {
-    if (proto.trainings.length === 0) continue;
-
-    const effectiveStart = proto.startDate > monthStart ? proto.startDate : monthStart;
-    // expirationDate is inclusive — convert to exclusive bound by adding a day.
-    const expirationExclusive = proto.expirationDate
-      ? new Date(proto.expirationDate.getTime() + DAY_MS)
-      : null;
-    const effectiveEnd =
-      expirationExclusive && expirationExclusive < monthEnd ? expirationExclusive : monthEnd;
-
-    const weekDayInts = new Set(
-      proto.trainings
-        .map((t) => WEEKDAY_TO_INT[t.weekDay])
-        .filter((n) => n !== undefined),
-    );
-    expected += countWeekdayOccurrences(effectiveStart, effectiveEnd, weekDayInts);
-  }
+  const expected = computeExpectedSessions({ protocols, windowFrom: monthStart, windowTo: monthEnd });
 
   if (expected === 0) return 0;
 

@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
-import { WorkoutSessionStatus, DashboardMessageCode } from '../../src/constants/training.js';
+import { WorkoutSessionStatus, DashboardMessageCode, WeekDays } from '../../src/constants/training.js';
+import { countWeekdayOccurrences, WEEKDAY_TO_INT } from '../../src/helpers/adherence-helpers.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -85,12 +86,14 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
     return res.json().id;
   }
 
-  async function createTraining(trainerToken, protocolId, { name = 'Peito', category = 'strength' } = {}) {
+  async function createTraining(trainerToken, protocolId, { name = 'Peito', category = 'strength', weekDay = null } = {}) {
+    const payload = { name, category };
+    if (weekDay !== null) payload.weekDay = weekDay;
     const res = await app.inject({
       method: 'POST',
       url: `/trainer/protocols/${protocolId}/trainings`,
       headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { name, category },
+      payload,
     });
     expect(res.statusCode).toBe(201);
     return res.json().id;
@@ -153,6 +156,102 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
     await createExercise(trainerToken, trainingId);
 
     return { trainerId, trainerToken, studentId, studentToken, protocolId, trainingId };
+  }
+
+  /**
+   * Dedicated fixture for the adherence-parity regression test.
+   *
+   * This seed gives the student a real adherence number so the test asserts
+   * actual values instead of (null === null).
+   *
+   * Strategy:
+   *   - Protocol startDate = first day of the current UTC calendar month.
+   *   - Training weekDay = the weekday of the first day of the current month.
+   *     That day is always ≤ now (it's the 1st of the month), so expected >= 1
+   *     regardless of when in the month the test runs.
+   *   - One completed session + one abandoned session are seeded via the API,
+   *     so their startedAt falls at "now" (well within the current month).
+   *
+   * Returns:
+   *   - Everything from seedDashboardFixtures
+   *   - expectedAdherence  {number}  computed from the seeded protocol+training
+   *   - completedCount     {number}  sessions that count toward adherence (= 1)
+   *   - expectedCount      {number}  denominator computed identically to the service
+   *   - adherenceMonthString {string} "YYYY-MM-01" for the current month
+   */
+  async function seedAdherenceFixtures() {
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth();
+
+    // Month window boundaries — identical to what computeStudentMonthlyAdherence uses.
+    const monthStart = new Date(Date.UTC(currentYear, currentMonth, 1));
+    const nextMonthStart = new Date(Date.UTC(currentYear, currentMonth + 1, 1));
+    // Upper bound for expected-count is min(nextMonthStart, now) — same as the service.
+    const adherenceWindowTo = nextMonthStart < now ? nextMonthStart : now;
+
+    // Pick the weekday of the first day of the current month.
+    // It always falls on day 1, so countWeekdayOccurrences always returns >= 1.
+    const monthStartDow = monthStart.getUTCDay(); // 0=Sun … 6=Sat
+    // Map JS getUTCDay() integer back to the WeekDays constant string.
+    const dowToWeekDayString = Object.fromEntries(
+      Object.values(WeekDays).map((name) => [WEEKDAY_TO_INT[name], name]),
+    );
+    const weekDayName = dowToWeekDayString[monthStartDow]; // e.g. 'thursday'
+
+    // The protocol startDate is the first day of the current month, formatted
+    // as YYYY-MM-DD for the API (which calls parseDateOnlyAsUtc internally).
+    const monthStartDateString = `${String(currentYear)}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+    const adherenceMonthString = monthStartDateString; // already "YYYY-MM-01"
+
+    // Compute the denominator using the same helper as the service.
+    const weekDayInt = WEEKDAY_TO_INT[weekDayName];
+    const expectedCount = countWeekdayOccurrences(monthStart, adherenceWindowTo, new Set([weekDayInt]));
+
+    const { userId: trainerId, accessToken: trainerToken } = await createTrainerWithToken();
+    const { userId: studentId, accessToken: studentToken, email: studentEmail } = await createStudentWithToken();
+    await linkTrainerStudent(trainerToken, studentEmail);
+
+    const protocolId = await createProtocol(trainerToken, studentId, {
+      name: 'Adherence Test Protocol',
+      startDate: monthStartDateString,
+    });
+
+    const trainingId = await createTraining(trainerToken, protocolId, {
+      name: 'Treino A',
+      category: 'strength',
+      weekDay: weekDayName,
+    });
+
+    await createExercise(trainerToken, trainingId);
+
+    // Seed one completed session and one abandoned session.
+    // Both land at "now" (well within the current month window).
+    const completedSessionId = await startSession(studentToken, trainingId);
+    await finishSession(studentToken, completedSessionId);
+
+    const abandonedSessionId = await startSession(studentToken, trainingId);
+    await abandonSession(studentToken, abandonedSessionId);
+
+    // completedCount = 1 (only completed sessions count toward adherence)
+    const completedCount = 1;
+    const adherenceValue = expectedCount > 0
+      ? Math.round(Math.min(completedCount / expectedCount, 1) * 100 * 100) / 100
+      : null;
+
+    return {
+      trainerId,
+      trainerToken,
+      studentId,
+      studentToken,
+      protocolId,
+      trainingId,
+      weekDayName,
+      expectedCount,
+      completedCount,
+      adherenceValue,
+      adherenceMonthString,
+    };
   }
 
   // ─── Common: invalid UUID ────────────────────────────────────────────────────
@@ -335,6 +434,125 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
       expect(body.sessionCounts.abandoned).toBe(1);
       expect(body.completionRate).toBe(0.5);
       expect(body.totalSessions).toBe(2);
+    });
+
+    it('dashboard adherence matches listStudents adherence for the same student on the same day', async () => {
+      // Regression test for the bug where listStudents used calendar-month adherence
+      // but getDashboardSummary used the dateWindow — they disagreed for the same student.
+      // After the fix: both always use the current calendar month.
+      //
+      // This test uses seedAdherenceFixtures to ensure both endpoints operate on a
+      // real adherence number (not null === null). The fixture creates:
+      //   - A protocol starting on the 1st of the current month
+      //   - A training whose weekDay = the weekday of the 1st of the current month
+      //     (guaranteed to have occurred at least once → expected >= 1)
+      //   - 1 completed session + 1 abandoned session (both in current month)
+      //
+      // Month-boundary note: if today is the very first millisecond of the 1st we
+      // could still get expected = 1 and completed = 1 → adherence = 100. The only
+      // case where this assertion is skipped is when expectedCount === 0, which
+      // should never happen with this strategy but is guarded defensively.
+      const {
+        trainerToken,
+        studentId,
+        expectedCount,
+        completedCount,
+        adherenceValue,
+        adherenceMonthString,
+      } = await seedAdherenceFixtures();
+
+      const [listRes, summaryRes] = await Promise.all([
+        app.inject({
+          method: 'GET',
+          url: '/trainer/students',
+          headers: { authorization: `Bearer ${trainerToken}` },
+        }),
+        app.inject({
+          method: 'GET',
+          url: `/trainer/students/${studentId}/dashboard/summary`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+        }),
+      ]);
+
+      expect(listRes.statusCode).toBe(200);
+      expect(summaryRes.statusCode).toBe(200);
+
+      const studentInList = listRes.json().find((s) => s.id === studentId);
+      const dashboardBody = summaryRes.json();
+
+      expect(studentInList).toBeDefined();
+
+      // ── Parity invariant: both endpoints must agree ─────────────────────────
+      expect(dashboardBody.adherence).toBe(studentInList.adherence);
+      expect(dashboardBody.adherenceCompleted).toBe(studentInList.adherenceCompleted);
+      expect(dashboardBody.adherenceMonth).toBe(studentInList.adherenceMonth);
+
+      // ── Ground-truth check: values must match the seeded data ───────────────
+      // This catches regressions in either endpoint independently (not just parity).
+      if (expectedCount > 0) {
+        expect(dashboardBody.adherence).toBe(adherenceValue);
+        expect(dashboardBody.adherenceCompleted).toBe(completedCount);
+        expect(dashboardBody.adherenceExpected).toBe(expectedCount);
+        expect(studentInList.adherenceCompleted).toBe(completedCount);
+        expect(studentInList.adherenceExpected).toBe(expectedCount);
+      }
+
+      // ── adherenceMonth shape ────────────────────────────────────────────────
+      expect(dashboardBody.adherenceMonth).toBe(adherenceMonthString);
+      expect(studentInList.adherenceMonth).toBe(adherenceMonthString);
+      expect(dashboardBody.adherenceMonth).toMatch(/^\d{4}-\d{2}-01$/);
+    });
+
+    it('dashboard summary response includes all new adherence fields with correct types', async () => {
+      const { trainerToken, studentId } = await seedDashboardFixtures();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/dashboard/summary`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      // All new fields must be present
+      expect(body).toHaveProperty('adherenceCompleted');
+      expect(body).toHaveProperty('adherenceExpected');
+      expect(body).toHaveProperty('adherenceMonth');
+      expect(body).toHaveProperty('previousAdherence');
+      expect(body).toHaveProperty('previousAdherenceMonth');
+
+      // adherenceMonth must be a YYYY-MM-01 string
+      expect(body.adherenceMonth).toMatch(/^\d{4}-\d{2}-01$/);
+      expect(body.previousAdherenceMonth).toMatch(/^\d{4}-\d{2}-01$/);
+
+      // previousAdherenceMonth must be the calendar month before adherenceMonth
+      const currentMonth = new Date(body.adherenceMonth);
+      const previousMonth = new Date(body.previousAdherenceMonth);
+      const expectedPrev = new Date(
+        Date.UTC(currentMonth.getUTCFullYear(), currentMonth.getUTCMonth() - 1, 1),
+      );
+      expect(previousMonth.getTime()).toBe(expectedPrev.getTime());
+    });
+
+    it('listStudents response includes adherenceCompleted, adherenceExpected, adherenceMonth for each student', async () => {
+      const { trainerToken, studentId } = await seedDashboardFixtures();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const students = res.json();
+      const student = students.find((s) => s.id === studentId);
+
+      expect(student).toBeDefined();
+      expect(student).toHaveProperty('adherenceCompleted');
+      expect(student).toHaveProperty('adherenceExpected');
+      expect(student).toHaveProperty('adherenceMonth');
+      expect(student.adherenceMonth).toMatch(/^\d{4}-\d{2}-01$/);
     });
   });
 

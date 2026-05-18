@@ -464,7 +464,10 @@ describe('listStudents', () => {
 
     const result = await listStudents({ trainerId: 'trainer1' });
 
-    // No active protocols mocked → adherence is null (no expected sessions).
+    // No active protocols mocked → adherence fields are null; adherenceMonth is always set.
+    const now = new Date();
+    const expectedAdherenceMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+
     expect(result).toEqual([
       {
         id: 's1',
@@ -473,6 +476,9 @@ describe('listStudents', () => {
         lastName: 'A',
         avatarUrl: 'https://cdn.example.com/alice.jpg',
         adherence: null,
+        adherenceCompleted: null,
+        adherenceExpected: null,
+        adherenceMonth: expectedAdherenceMonth,
         lastWorkoutAt: lastWorkout,
         currentPrLoad: 120,
         currentPrAt: prAt,
@@ -484,6 +490,9 @@ describe('listStudents', () => {
         lastName: 'B',
         avatarUrl: null,
         adherence: null,
+        adherenceCompleted: null,
+        adherenceExpected: null,
+        adherenceMonth: expectedAdherenceMonth,
         lastWorkoutAt: null,
         currentPrLoad: null,
         currentPrAt: null,
@@ -524,6 +533,9 @@ describe('listStudents', () => {
     const result = await listStudents({ trainerId: 'trainer1' });
 
     expect(result[0].adherence).toBe(80);
+    expect(result[0].adherenceCompleted).toBe(12);
+    expect(result[0].adherenceExpected).toBe(15);
+    expect(result[0].adherenceMonth).toBe('2026-05-01');
     vi.useRealTimers();
   });
 });

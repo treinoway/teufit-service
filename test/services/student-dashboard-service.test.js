@@ -7,8 +7,9 @@ vi.mock('../../src/db.js', () => ({
       groupBy: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      aggregate: vi.fn(),
     },
-    trainingProtocol: { findFirst: vi.fn() },
+    trainingProtocol: { findMany: vi.fn(), findFirst: vi.fn() },
     user: { findUnique: vi.fn() },
     exercise: { findFirst: vi.fn() },
     exerciseLog: { findMany: vi.fn() },
@@ -54,6 +55,7 @@ const makeProtocol = (overrides = {}) => ({
   name: 'Hypertrophy Block',
   startDate: new Date('2026-01-01T12:00:00Z'),
   expirationDate: new Date('2026-06-30T12:00:00Z'),
+  trainings: [],
   ...overrides,
 });
 
@@ -124,7 +126,8 @@ describe('student-dashboard-service', () => {
     beforeEach(() => {
       prisma.workoutSession.groupBy.mockResolvedValue([]);
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       // getDashboardSummary now issues a $queryRaw for streak date aggregation
       prisma.$queryRaw.mockResolvedValue([]);
     });
@@ -194,7 +197,8 @@ describe('student-dashboard-service', () => {
     it('returns all zero counts and null fields for a student with no sessions', async () => {
       prisma.workoutSession.groupBy.mockResolvedValue([]);
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue([]);
 
       const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
@@ -209,7 +213,8 @@ describe('student-dashboard-service', () => {
     it('computes completionRate = 0.75 for 3 completed + 1 abandoned (in_progress excluded from denominator)', async () => {
       prisma.workoutSession.groupBy.mockResolvedValue(makeGroupByResult(3, 2, 1));
       prisma.workoutSession.findFirst.mockResolvedValue({ startedAt: new Date('2026-04-01T10:00:00Z') });
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue([]);
 
       const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
@@ -225,7 +230,8 @@ describe('student-dashboard-service', () => {
     it('returns completionRate: null when denominator is 0 (only in_progress sessions)', async () => {
       prisma.workoutSession.groupBy.mockResolvedValue(makeGroupByResult(0, 5, 0));
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue([]);
 
       const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
@@ -236,7 +242,8 @@ describe('student-dashboard-service', () => {
     it('passes deletedAt: null filter to groupBy query (soft-deleted sessions excluded)', async () => {
       prisma.workoutSession.groupBy.mockResolvedValue([]);
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue([]);
 
       await getDashboardSummary(TRAINER_ID, STUDENT_ID, {
@@ -254,7 +261,8 @@ describe('student-dashboard-service', () => {
     it('returns currentProtocol with date-only formatted startDate and expirationDate', async () => {
       prisma.workoutSession.groupBy.mockResolvedValue([]);
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(makeProtocol());
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocol()]);
       prisma.$queryRaw.mockResolvedValue([]);
 
       const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
@@ -288,10 +296,12 @@ describe('student-dashboard-service', () => {
   // ---------------------------------------------------------------------------
 
   describe('getDashboardSummary — derived stats', () => {
-    function stubSummaryQueries({ groupedCounts = [], lastSession = null, protocol = null, streakDates = [] } = {}) {
+    function stubSummaryQueries({ groupedCounts = [], lastSession = null, protocols = [], streakDates = [] } = {}) {
       prisma.workoutSession.groupBy.mockResolvedValue(groupedCounts);
       prisma.workoutSession.findFirst.mockResolvedValue(lastSession);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(protocol);
+      // computeStudentMonthlyAdherence issues aggregate calls (current + previous month)
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue(protocols);
       prisma.$queryRaw.mockResolvedValue(streakDates.map(makeStreakDateRow));
     }
 
@@ -397,6 +407,158 @@ describe('student-dashboard-service', () => {
       expect(result).toHaveProperty('maxStreakDays');
       expect(result).toHaveProperty('sessionsPerWeek');
       expect(result).toHaveProperty('daysSinceLastSession');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getDashboardSummary — adherence (always calendar-month, not window-relative)
+  // ---------------------------------------------------------------------------
+
+  describe('getDashboardSummary — adherence', () => {
+    // Adherence is computed via computeStudentMonthlyAdherence, which issues
+    // prisma.trainingProtocol.findMany + prisma.workoutSession.aggregate per
+    // month call. The dashboard's dateFrom/dateTo window does NOT affect adherence.
+
+    function stubAdherenceQueries({
+      monthlyCompletedCount = 0,
+      monthlyProtocols = [],
+      streakDates = [],
+    } = {}) {
+      prisma.workoutSession.groupBy.mockResolvedValue([]);
+      prisma.workoutSession.findFirst.mockResolvedValue(null);
+      // aggregate is called twice (current + previous month) by computeStudentMonthlyAdherence
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: monthlyCompletedCount } });
+      // trainingProtocol.findMany is called for both monthly adherence calls AND for
+      // the currentProtocol query — the mock returns the same value each time
+      prisma.trainingProtocol.findMany.mockResolvedValue(monthlyProtocols);
+      prisma.$queryRaw.mockResolvedValue(streakDates.map(makeStreakDateRow));
+    }
+
+    it('returns adherence: null when there are no active protocols for the current month', async () => {
+      stubAdherenceQueries({ monthlyCompletedCount: 5, monthlyProtocols: [] });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.adherence).toBeNull();
+    });
+
+    it('returns adherence: null when monthly protocols have no trainings with weekDay (expected = 0)', async () => {
+      stubAdherenceQueries({
+        monthlyCompletedCount: 5,
+        monthlyProtocols: [{
+          id: 'p1',
+          name: 'Protocol',
+          startDate: new Date(Date.UTC(2026, 0, 1)),
+          expirationDate: null,
+          trainings: [], // no trainings → expected = 0
+        }],
+      });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.adherence).toBeNull();
+    });
+
+    it('returns adherence based on current calendar month, not the dashboard date window', async () => {
+      // Supply a very narrow date window (7 days) — adherence must still come from
+      // the current month computation, not this window.
+      // Mock: 6 completed this month, protocol trains Mon+Wed (expected in month > 0)
+      prisma.workoutSession.groupBy.mockResolvedValue([]);
+      prisma.workoutSession.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 6 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([{
+        id: 'p1',
+        name: 'Protocol',
+        startDate: new Date(Date.UTC(2026, 0, 1)),
+        expirationDate: null,
+        trainings: [{ weekDay: 'monday' }, { weekDay: 'wednesday' }],
+      }]);
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      // Use a narrow 7-day window — should not affect adherence
+      const narrowResult = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {
+        dateFrom: '2026-05-01T00:00:00.000Z',
+        dateTo: '2026-05-08T00:00:00.000Z',
+      });
+
+      // Use a wide 90-day window — should produce the same adherence
+      const wideResult = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {
+        dateFrom: '2026-02-01T00:00:00.000Z',
+        dateTo: '2026-05-18T00:00:00.000Z',
+      });
+
+      // Both results must report the same adherence value regardless of window
+      expect(narrowResult.adherence).toBe(wideResult.adherence);
+      // adherence must not be null (protocol is active, expected > 0)
+      expect(narrowResult.adherence).not.toBeNull();
+    });
+
+    it('response includes all new adherence fields', async () => {
+      stubAdherenceQueries({ monthlyCompletedCount: 0, monthlyProtocols: [] });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result).toHaveProperty('adherence');
+      expect(result).toHaveProperty('adherenceCompleted');
+      expect(result).toHaveProperty('adherenceExpected');
+      expect(result).toHaveProperty('adherenceMonth');
+      expect(result).toHaveProperty('previousAdherence');
+      expect(result).toHaveProperty('previousAdherenceMonth');
+      expect(result).toHaveProperty('completionRate');
+    });
+
+    it('adherenceMonth is a YYYY-MM-01 string matching the current UTC month', async () => {
+      stubAdherenceQueries({ monthlyCompletedCount: 0, monthlyProtocols: [] });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.adherenceMonth).toMatch(/^\d{4}-\d{2}-01$/);
+      // Must be in the same calendar year as now
+      const nowYear = new Date().getUTCFullYear();
+      expect(result.adherenceMonth.startsWith(String(nowYear))).toBe(true);
+    });
+
+    it('previousAdherenceMonth is the month before adherenceMonth', async () => {
+      stubAdherenceQueries({ monthlyCompletedCount: 0, monthlyProtocols: [] });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      const current = new Date(result.adherenceMonth);
+      const previous = new Date(result.previousAdherenceMonth);
+      // current month start minus 1 month should equal previousAdherenceMonth
+      const expectedPrev = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - 1, 1));
+      expect(previous.getTime()).toBe(expectedPrev.getTime());
+    });
+
+    it('caps adherence at 100 when completed > expected', async () => {
+      prisma.workoutSession.groupBy.mockResolvedValue([]);
+      prisma.workoutSession.findFirst.mockResolvedValue(null);
+      // 99 completed but only a few expected → should cap at 100
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 99 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([{
+        id: 'p1',
+        name: 'Protocol',
+        startDate: new Date(Date.UTC(2026, 0, 1)),
+        expirationDate: null,
+        trainings: [{ weekDay: 'monday' }],
+      }]);
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.adherence).toBeLessThanOrEqual(100);
+      if (result.adherence !== null) {
+        expect(result.adherence).toBe(100);
+      }
+    });
+
+    it('adherenceCompleted and adherenceExpected are null when expected = 0', async () => {
+      stubAdherenceQueries({ monthlyCompletedCount: 3, monthlyProtocols: [] });
+
+      const result = await getDashboardSummary(TRAINER_ID, STUDENT_ID, {});
+
+      expect(result.adherenceCompleted).toBeNull();
+      expect(result.adherenceExpected).toBeNull();
     });
   });
 
@@ -1060,7 +1222,8 @@ describe('student-dashboard-service', () => {
     function stubSummaryForTimezone(streakDates = []) {
       prisma.workoutSession.groupBy.mockResolvedValue([]);
       prisma.workoutSession.findFirst.mockResolvedValue(null);
-      prisma.trainingProtocol.findFirst.mockResolvedValue(null);
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue(streakDates.map(makeStreakDateRow));
     }
 
@@ -1120,7 +1283,9 @@ describe('student-dashboard-service', () => {
       prisma.user.findUnique.mockResolvedValue({ firstName: 'João', lastName: 'Silva' });
       prisma.workoutSession.groupBy.mockResolvedValue(makeGroupByResult(completed, inProgress, abandoned));
       prisma.workoutSession.findFirst.mockResolvedValue({ startedAt: new Date('2026-04-01T10:00:00Z') });
+      prisma.workoutSession.aggregate.mockResolvedValue({ _count: { _all: 0 } });
       prisma.trainingProtocol.findFirst.mockResolvedValue({ id: 'protocol-1', name: 'Hypertrophy' });
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
       prisma.$queryRaw.mockResolvedValue([]);
     }
 

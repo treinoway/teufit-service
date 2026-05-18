@@ -369,6 +369,13 @@ When two inline object shapes are identical, extract to a named const to prevent
 - Platform plan rate limits at `config.rateLimit.platformPlan`
 - Asaas config at `config.asaas` (apiKey, webhookSecret, env)
 
+## Adherence helpers extraction (2026-05-18)
+- Shared helper: `src/helpers/adherence-helpers.js` — exports `WEEKDAY_TO_INT`, `DAY_MS`, `countWeekdayOccurrences`, `computeExpectedSessions`.
+- `briefing-service.js` now imports from the helper and re-exports `DAY_MS/WEEKDAY_TO_INT/countWeekdayOccurrences` for backward compat (currently unused by any active consumer).
+- `trainer-service.js` imports `computeExpectedSessions` directly from the helper; no longer imports the 3 lower-level symbols.
+- `getDashboardSummary` changed from `trainingProtocol.findFirst` → `trainingProtocol.findMany` (all active protocols in window). Unit tests must mock `trainingProtocol.findMany`, not `findFirst`.
+- Weekday date arithmetic pitfall: `countWeekdayOccurrences` snaps start to UTC midnight — a mid-day start STILL counts that day, and the end is EXCLUSIVE. Verify expected occurrences manually before writing assertions (enumerate the actual dates).
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.

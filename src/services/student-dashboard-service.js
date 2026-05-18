@@ -3,6 +3,7 @@ import { AppError } from '../errors/app-error.js';
 import { DASHBOARD_DEFAULTS, DashboardMessageCode } from '../constants/training.js';
 import { resolveTrainerStudent } from './workout-session-service.js';
 import { formatDateOnly, addDaysMs } from '../helpers/date-helpers.js';
+import { computeStudentMonthlyAdherence } from '../helpers/adherence-helpers.js';
 
 const LOAD_HISTORY_MAX_SESSIONS = 6;
 
@@ -219,6 +220,11 @@ function computeExerciseTrend(sessions) {
  * Get aggregated dashboard summary for a student.
  * Includes session counts by status, completionRate, lastSessionAt, and currentProtocol.
  *
+ * Adherence fields (adherence, adherenceCompleted, adherenceExpected, adherenceMonth,
+ * previousAdherence, previousAdherenceMonth) are ALWAYS the current and previous calendar
+ * months, regardless of the dateFrom/dateTo period picker. This intentionally decouples
+ * adherence from the dashboard's date window, matching the listStudents roster view.
+ *
  * @param {string} trainerUserId
  * @param {string} studentId
  * @param {object} options - { dateFrom, dateTo, timeZone }
@@ -234,41 +240,60 @@ export async function getDashboardSummary(trainerUserId, studentId, { dateFrom, 
     startedAt: { gte: dateWindow.from, lte: dateWindow.to },
   };
 
-  const [groupedCounts, lastSession, currentProtocol, activeDateRows] = await Promise.all([
-    prisma.workoutSession.groupBy({
-      by: ['status'],
-      where,
-      _count: { _all: true },
-    }),
-    prisma.workoutSession.findFirst({
-      where,
-      orderBy: { startedAt: 'desc' },
-      select: { startedAt: true },
-    }),
-    prisma.trainingProtocol.findFirst({
-      where: {
-        assigneeId: studentId,
-        status: 'active',
-        deletedAt: null,
-      },
-      orderBy: { startDate: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        startDate: true,
-        expirationDate: true,
-      },
-    }),
-    prisma.$queryRaw`
-      SELECT DISTINCT TO_CHAR(DATE(started_at AT TIME ZONE ${timeZone}), 'YYYY-MM-DD') AS session_date
-      FROM workout_sessions
-      WHERE user_id = ${studentId}::uuid
-        AND deleted_at IS NULL
-        AND started_at >= ${dateWindow.from}
-        AND started_at <= ${dateWindow.to}
-      ORDER BY session_date ASC
-    `,
-  ]);
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+  const currentMonth = now.getUTCMonth();
+
+  // Previous month with correct year rollover (e.g. Jan → previous = Dec of prior year).
+  const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+  const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+  const [groupedCounts, lastSession, activeProtocols, activeDateRows, currentAdherence, previousAdherence] =
+    await Promise.all([
+      prisma.workoutSession.groupBy({
+        by: ['status'],
+        where,
+        _count: { _all: true },
+      }),
+      prisma.workoutSession.findFirst({
+        where,
+        orderBy: { startedAt: 'desc' },
+        select: { startedAt: true },
+      }),
+      // Protocols for the currentProtocol display card only — weekdays not needed here.
+      prisma.trainingProtocol.findMany({
+        where: {
+          assigneeId: studentId,
+          status: 'active',
+          deletedAt: null,
+          startDate: { lt: dateWindow.to },
+          OR: [
+            { expirationDate: null },
+            { expirationDate: { gte: dateWindow.from } },
+          ],
+        },
+        orderBy: { startDate: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          expirationDate: true,
+        },
+      }),
+      prisma.$queryRaw`
+        SELECT DISTINCT TO_CHAR(DATE(started_at AT TIME ZONE ${timeZone}), 'YYYY-MM-DD') AS session_date
+        FROM workout_sessions
+        WHERE user_id = ${studentId}::uuid
+          AND deleted_at IS NULL
+          AND started_at >= ${dateWindow.from}
+          AND started_at <= ${dateWindow.to}
+        ORDER BY session_date ASC
+      `,
+      // Adherence is always the current calendar month — independent of dateWindow.
+      // Pass `now` so both calls share the same instant (avoids sub-second skew).
+      computeStudentMonthlyAdherence({ prisma, studentId, year: currentYear, month: currentMonth, now }),
+      computeStudentMonthlyAdherence({ prisma, studentId, year: prevYear, month: prevMonth, now }),
+    ]);
 
   const sessionCounts = {
     completed: 0,
@@ -301,18 +326,28 @@ export async function getDashboardSummary(trainerUserId, studentId, { dateFrom, 
       ? Math.floor((Date.now() - lastSessionAt.getTime()) / 86400000)
       : null;
 
+  // The most recent protocol is first (orderBy: startDate desc) — use it for
+  // the currentProtocol display card.
+  const latestProtocol = activeProtocols[0] ?? null;
+
   return {
     window: { from: dateWindow.from.toISOString(), to: dateWindow.to.toISOString() },
     sessionCounts,
     totalSessions,
     completionRate,
+    adherence: currentAdherence.adherence,
+    adherenceCompleted: currentAdherence.completed,
+    adherenceExpected: currentAdherence.expected,
+    adherenceMonth: formatDateOnly(currentAdherence.monthStart),
+    previousAdherence: previousAdherence.adherence,
+    previousAdherenceMonth: formatDateOnly(previousAdherence.monthStart),
     lastSessionAt: lastSessionAt?.toISOString() ?? null,
-    currentProtocol: currentProtocol
+    currentProtocol: latestProtocol
       ? {
-          id: currentProtocol.id,
-          name: currentProtocol.name,
-          startDate: formatDateOnly(currentProtocol.startDate),
-          expirationDate: formatDateOnly(currentProtocol.expirationDate),
+          id: latestProtocol.id,
+          name: latestProtocol.name,
+          startDate: formatDateOnly(latestProtocol.startDate),
+          expirationDate: formatDateOnly(latestProtocol.expirationDate),
         }
       : null,
     maxStreakDays,

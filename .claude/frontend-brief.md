@@ -1,96 +1,133 @@
-# Frontend Brief — Platform Plan in /me + Dev Seeds
+# Frontend Brief — Monthly Adherence With Concrete Numbers
 
-**Backend branch**: staging · **Generated**: 2026-05-16
+**Backend branch**: staging · **Generated**: 2026-05-18
 
 ## Elevator pitch
-Trainers now receive their full platform subscription details on every `/me` call, so the app can immediately show tier, limits, and real-time usage without a separate API round-trip. A student-only user gets no such field — the distinction is automatic.
+
+Personal trainers can now see exactly how many sessions a student completed vs how many were expected this month — and whether that number improved or dropped compared to last month — in both the student roster and the individual student dashboard.
 
 ## User story
-As a trainer, I want to see my current subscription tier, how many students I have, and how many iArnold actions I've used this month, so I can understand my usage at a glance and decide if I need to upgrade.
+
+As a trainer, I want to see "6 of 8 sessions this month" and know whether that's better or worse than last month, so I can quickly identify students who are falling behind without needing to interpret raw percentages.
 
 ## User flows
-1. **Entry point**: App boot — `AuthContext` fetches `/me` and stores the result. `platformPlan` is available immediately to any component that reads the context.
-2. **Happy path**:
-   - Trainer opens the app → `/me` returns `platformPlan.tier = 'FREE'` (or PRO/PLATINUM/DIAMOND).
-   - `AuthContext` exposes `platformPlan` to all consumers.
-   - Dashboard header shows current tier badge.
-   - Settings → Plan page shows limits, usage bars, and subscription details.
-3. **Branches**:
-   - Student-only user: `platformPlan` is absent from `/me`. No plan UI is shown.
-   - Trainer with PAST_DUE status: `platformPlan.status = 'PAST_DUE'`. Show payment-overdue banner.
-   - Trainer with `cancelAtPeriodEnd: true`: show "cancels on [date]" notice.
+
+1. **Entry point — roster list**: Trainer opens the student list (`/trainer/students`). Each student card now has enough data to render concrete session counts alongside the percentage.
+2. **Happy path — student card**:
+   1. Trainer sees each student card with adherence displayed as e.g. "6 de 8 treinos (75%)" for the current calendar month.
+   2. The month label (e.g. "Maio") is derived from `adherenceMonth`.
+   3. When `adherenceExpected` is null, the card shows only "–" or a neutral empty state (no active protocol).
+3. **Entry point — student dashboard**: Trainer taps a student and opens their detail dashboard.
+4. **Happy path — dashboard summary card**:
+   1. Current-month adherence bar/number shows `adherenceCompleted` / `adherenceExpected` × 100 (= `adherence`).
+   2. A delta badge compares `adherence` (current) vs `previousAdherence` (last month): "↑ +12%" or "↓ -8%" or "=" for no change, "–" when previous month has no data.
+   3. `adherenceMonth` and `previousAdherenceMonth` label which months are being compared (e.g. "Maio vs Abril").
+5. **Branches**:
+   - Student has no active protocol: `adherence`, `adherenceCompleted`, `adherenceExpected` are all `null` → show "Sem protocolo ativo".
+   - `previousAdherence` is null: render delta area as "Sem dados anteriores".
+   - `adherence` = 100: celebrate with full bar / "100% 🎯" treatment.
 
 ## UI states to cover
-- **Loading**: skeleton for the plan card while `/me` is in-flight.
-- **Empty / student user**: no plan UI — do not render a blank plan card.
-- **FREE tier**: show upgrade CTA in prominent position. Disable iArnold button, branding page, and championships CTA.
-- **PAST_DUE**: yellow/orange warning banner with payment recovery CTA.
-- **CANCELED**: grey badge, "plan expired" message.
-- **Null caps**: `studentCap: null` and `aiActionsPerStudent: null` mean unlimited — render as "∞" or "Ilimitado".
+
+- **Loading**: skeleton for both the roster card and the dashboard summary card.
+- **Empty / null protocol**: `adherence === null` → neutral state, no bar, no delta.
+- **Partial**: `adherenceCompleted < adherenceExpected` → bar fills proportionally to `adherence`.
+- **Full**: `adherence === 100` → full bar, celebratory treatment.
+- **No previous data**: `previousAdherence === null` → delta area hidden or "–".
+- **Positive delta**: `adherence > previousAdherence` → green up-arrow badge.
+- **Negative delta**: `adherence < previousAdherence` → red/orange down-arrow badge.
+- **Neutral delta**: equal values → neutral badge or no badge.
+- **Permissions**: roster and dashboard are trainer-only (403 for students).
 
 ## API contract
-### GET /me
-- **Auth**: Bearer token (any authenticated user)
-- **Request**: no body; optional `?include=address,socials,preferences,trainerOnboarding`
+
+### GET /trainer/students
+
+- **Auth**: Bearer token, TRAINER role required.
+- **Request**: no body.
+- **Success** (200):
+  ```json
+  [
+    {
+      "id": "uuid",
+      "firstName": "Ana",
+      "lastName": "Silva",
+      "adherence": 75.0,
+      "adherenceCompleted": 6,
+      "adherenceExpected": 8,
+      "adherenceMonth": "2026-05-01",
+      "lastWorkoutAt": "2026-05-16T10:30:00.000Z",
+      "currentPrLoad": 85.0,
+      "currentPrAt": "2026-05-10T09:00:00.000Z"
+    }
+  ]
+  ```
+- **Errors**:
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · no token
+  - `403` · `FORBIDDEN` · `auth.forbidden` · student calling a trainer route
+
+### GET /trainer/students/:studentId/dashboard/summary
+
+- **Auth**: Bearer token, TRAINER role required.
+- **Request**: optional query params `dateFrom`, `dateTo` (only affect session counts, streaks, completionRate — NOT adherence).
 - **Success** (200):
   ```json
   {
-    "id": "uuid",
-    "email": "trainer@example.com",
-    "roles": ["trainer"],
-    "platformPlan": {
-      "tier": "FREE",
-      "status": "ACTIVE",
-      "currentPeriodEnd": null,
-      "cancelAtPeriodEnd": false,
-      "limits": {
-        "studentCap": 3,
-        "aiActionsPerStudent": 0,
-        "aiActionsTrainerCap": 0,
-        "branding": false,
-        "championships": false
-      },
-      "usage": {
-        "students": { "active": 2, "blocked": 0, "cap": 3 },
-        "aiActions": {
-          "total": 0,
-          "byStudent": []
-        }
-      }
-    }
+    "window": { "from": "...", "to": "..." },
+    "sessionCounts": { "completed": 24, "in_progress": 1, "abandoned": 3 },
+    "totalSessions": 28,
+    "completionRate": 0.89,
+    "adherence": 75.0,
+    "adherenceCompleted": 6,
+    "adherenceExpected": 8,
+    "adherenceMonth": "2026-05-01",
+    "previousAdherence": 62.5,
+    "previousAdherenceMonth": "2026-04-01",
+    "lastSessionAt": "2026-05-17T09:00:00.000Z",
+    "currentProtocol": { "id": "uuid", "name": "Hypertrophy Block", "startDate": "2026-01-01", "expirationDate": "2026-06-30" },
+    "maxStreakDays": 5,
+    "sessionsPerWeek": 3.2,
+    "daysSinceLastSession": 1
   }
   ```
-  - `platformPlan` is **absent** (not null) for student-only users.
-  - `studentCap`, `aiActionsPerStudent`, `aiActionsTrainerCap` are `null` when the limit is unlimited (DIAMOND tier).
-  - `currentPeriodEnd` is `null` for FREE (no billing period).
-  - `usage.students.blocked` counts students marked inactive due to a soft-block after downgrade.
-  - `usage.aiActions.byStudent[].count` is the number of iArnold actions used for that student this billing month.
+  **Important**: `adherence`, `adherenceCompleted`, `adherenceExpected`, `adherenceMonth`, `previousAdherence`, and `previousAdherenceMonth` always reflect the calendar month — they do not change when the trainer changes `dateFrom`/`dateTo`. Only `sessionCounts`, `completionRate`, `totalSessions`, `sessionsPerWeek`, `maxStreakDays`, and `lastSessionAt` respond to the period filter.
+- **Errors**:
+  - `400` · `INVALID_DATE_RANGE` · `dashboard.invalidDateRange` · dateFrom > dateTo
+  - `400` · `WINDOW_TOO_LARGE` · `dashboard.windowTooLarge` · window > 365 days
+  - `404` · `STUDENT_NOT_FOUND` · `legacy.STUDENT_NOT_FOUND` · student not linked to trainer
 
 ## i18n keys required
-Stable messageCodes the frontend needs to translate for this feature:
-- `platformPlan.studentCapExceeded` → suggested copy: "Você atingiu o limite de alunos do seu plano."
-- `platformPlan.aiNotAvailable` → suggested copy: "iArnold não está disponível no plano Free."
-- `platformPlan.aiActionsExceeded` → suggested copy: "Você atingiu o limite de ações do iArnold para este mês."
-- `platformPlan.brandingNotAvailable` → suggested copy: "Personalização de marca não está disponível no seu plano."
-- `platformPlan.championshipsNotAvailable` → suggested copy: "Campeonatos não estão disponíveis no seu plano."
-- `platformPlan.studentBlockedOnPlan` → suggested copy: "Este aluno está bloqueado. Faça upgrade para reativá-lo."
+
+- `dashboard.invalidDateRange` → suggested copy: "O período inicial não pode ser posterior ao final."
+- `dashboard.windowTooLarge` → suggested copy: "O intervalo máximo permitido é de 365 dias."
+
+New display strings (not messageCode — just UI copy decisions):
+- Null adherence state: "Sem protocolo ativo"
+- Previous month no data: "Sem dados anteriores"
+- Delta positive: "↑ +{n}%"
+- Delta negative: "↓ -{n}%"
+- Month label format: use `adherenceMonth` ("2026-05-01") → derive "Maio 2026" / "May 2026" via `Intl.DateTimeFormat`.
 
 ## Acceptance criteria
-- [ ] `AuthContext` reads `platformPlan` from the `/me` response and exposes it.
-- [ ] `usePlatformPlan()` hook returns `null` when the user is not a trainer (field absent).
-- [ ] Plan badge on dashboard/settings shows the correct tier label (FREE, Pro, Platinum, Diamond).
-- [ ] Usage bars show `active / cap` (or `∞` when cap is null) for students and iArnold actions.
-- [ ] `usage.students.blocked > 0` renders a "X alunos bloqueados" warning.
-- [ ] iArnold button is disabled when `limits.aiActionsPerStudent === 0`.
-- [ ] Branding page is gated when `limits.branding === false`.
-- [ ] Championships CTA is hidden/disabled when `limits.championships === false`.
-- [ ] `status === 'PAST_DUE'` renders a payment overdue banner.
-- [ ] `cancelAtPeriodEnd === true` shows a cancellation notice with the `currentPeriodEnd` date.
-- [ ] Student-only users see no plan UI anywhere in the app.
+
+- [ ] Student roster card displays `adherenceCompleted` / `adherenceExpected` (e.g. "6 de 8 sessões") alongside the percentage.
+- [ ] Student roster card shows `adherenceMonth` formatted as a human-readable month name.
+- [ ] When `adherenceExpected` is null, roster card shows a neutral/empty state (no bar, no count).
+- [ ] Dashboard summary card shows current-month adherence as a progress bar or fraction using the same fields.
+- [ ] Dashboard summary card shows a month-over-month delta badge using `previousAdherence`.
+- [ ] Delta badge is hidden or neutral when `previousAdherence` is null.
+- [ ] Changing the period picker (dateFrom/dateTo) does NOT change the adherence section — only session counts and streak change.
+- [ ] The `adherenceMonth` and `previousAdherenceMonth` labels make clear which months are being compared.
+
+## Out of scope
+
+- `completionRate` display is unchanged.
+- No changes to other dashboard KPIs (streak, sessionsPerWeek, daysSinceLastSession).
+- Do not build a multi-month adherence trend chart (only current vs previous month delta).
 
 ## Open design questions
-- Where does the plan badge live on the trainer dashboard — header, sidebar, or profile dropdown?
-- Should the usage bar for iArnold show per-student breakdown or trainer-total only?
-- What does the "upgrade" CTA look like when the user is already on DIAMOND?
-- How should the "X alunos bloqueados" warning link to the student list?
-- Should `PAST_DUE` block navigation to certain pages, or only show a banner?
+
+- Where exactly on the student card should the "6 de 8 sessões" text appear — below the adherence bar, inline with it, or as a tooltip?
+- Should the delta badge on the dashboard show absolute percentage points (e.g. "+12pp") or relative change (e.g. "+19%")?
+- What is the visual treatment when `adherence === 100`? Full bar with a check icon, confetti, nothing special?
+- What month label format is preferred: "Maio" (short), "Maio 2026" (full), or "Mai/26" (compact for mobile)?
