@@ -118,6 +118,27 @@ describe('workouts-today-service', () => {
       expect(result.workouts[0].nextScheduledDate).toBeNull();
     });
 
+    it('emits one entry per matching training when multiple trainings share the same weekday', async () => {
+      // 2025-04-16 is a Wednesday
+      vi.setSystemTime(new Date('2025-04-16T12:00:00Z'));
+
+      const legs = makeTraining({ id: 'tr-legs', weekDay: 'wednesday', order: 0 }, 0);
+      const cardio = makeTraining({ id: 'tr-cardio', weekDay: 'wednesday', order: 1 }, 1);
+      const friday = makeTraining({ id: 'tr-fri', weekDay: 'friday', order: 2 }, 2);
+
+      prisma.trainingProtocol.findMany.mockResolvedValue([
+        makeProtocol([legs, cardio, friday]),
+      ]);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(result.workouts).toHaveLength(2);
+      expect(result.workouts.map((w) => w.targetTraining.id)).toEqual(['tr-legs', 'tr-cardio']);
+      expect(result.workouts.every((w) => w.isRestDay === false)).toBe(true);
+      // Both entries share the same protocol summary (1 protocol → 2 workouts)
+      expect(result.workouts[0].protocol.id).toBe(result.workouts[1].protocol.id);
+    });
+
     it('uses weekDay mode when only one of multiple trainings has a weekDay set', async () => {
       // 2025-04-14 is a Monday
       vi.setSystemTime(new Date('2025-04-14T12:00:00Z'));

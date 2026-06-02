@@ -92,21 +92,28 @@ async function tryAutoCompleteSession(session, language, logger) {
 // ─── Per-protocol resolution helpers ─────────────────────────────────────────
 
 /**
- * Resolves the weekDay-based target training and rest-day state for a single protocol.
+ * Resolves the weekDay-based target trainings for a single protocol.
+ * Returns one entry per training matching today's weekday (a protocol may have
+ * multiple trainings on the same day — e.g. legs + cardio on Tuesday). Falls
+ * back to a single rest-day entry if no training matches.
  *
  * @param {object} protocol - Protocol with `trainings` included
  * @param {string} todayWeekday - Lowercase weekday name for the user's timezone
  * @param {Date} today - Current date object
  * @param {string} timeZone - IANA timezone identifier
- * @returns {{ targetTraining: object|null, isRestDay: boolean, nextScheduledDate: string|null }}
+ * @returns {Array<{ targetTraining: object|null, isRestDay: boolean, nextScheduledDate: string|null }>}
  */
 function resolveWeekDayMode(protocol, todayWeekday, today, timeZone) {
-  const matchingTraining = protocol.trainings.find(
+  const matchingTrainings = protocol.trainings.filter(
     (training) => training.weekDay === todayWeekday,
   );
 
-  if (matchingTraining) {
-    return { targetTraining: matchingTraining, isRestDay: false, nextScheduledDate: null };
+  if (matchingTrainings.length > 0) {
+    return matchingTrainings.map((targetTraining) => ({
+      targetTraining,
+      isRestDay: false,
+      nextScheduledDate: null,
+    }));
   }
 
   let nextScheduledDate = null;
@@ -122,16 +129,17 @@ function resolveWeekDayMode(protocol, todayWeekday, today, timeZone) {
     }
   }
 
-  return { targetTraining: null, isRestDay: true, nextScheduledDate };
+  return [{ targetTraining: null, isRestDay: true, nextScheduledDate }];
 }
 
 /**
  * Resolves the order-based target training for a single protocol.
  * Queries the last completed session to determine which training is next.
+ * Always returns a single entry — order mode is "next training in cycle".
  *
  * @param {object} protocol - Protocol with `trainings` included
  * @param {string} userId
- * @returns {Promise<{ targetTraining: object, isRestDay: false, nextScheduledDate: null }>}
+ * @returns {Promise<Array<{ targetTraining: object, isRestDay: false, nextScheduledDate: null }>>}
  */
 async function resolveOrderMode(protocol, userId) {
   const lastCompletedSession = await prisma.workoutSession.findFirst({
@@ -155,18 +163,20 @@ async function resolveOrderMode(protocol, userId) {
     targetTraining = nextTraining ?? protocol.trainings[0];
   }
 
-  return { targetTraining, isRestDay: false, nextScheduledDate: null };
+  return [{ targetTraining, isRestDay: false, nextScheduledDate: null }];
 }
 
 /**
  * Resolves today's workout state for a single protocol.
+ * Returns one or more entries — weekDay mode may emit N entries when the
+ * protocol schedules multiple trainings on the same weekday.
  *
  * @param {object} protocol - Protocol with `trainings` included
  * @param {string} userId
  * @param {string} todayWeekday
  * @param {Date} today
  * @param {string} timeZone
- * @returns {Promise<{ targetTraining: object|null, isRestDay: boolean, nextScheduledDate: string|null }>}
+ * @returns {Promise<Array<{ targetTraining: object|null, isRestDay: boolean, nextScheduledDate: string|null }>>}
  */
 async function resolveProtocolWorkout(protocol, userId, todayWeekday, today, timeZone) {
   const isWeekDayBased = protocol.trainings.some((training) => training.weekDay !== null);
@@ -261,9 +271,9 @@ export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', lo
   const todayWeekday = getWeekdayInTimeZone(today, timeZone);
 
   // TODO: if N protocols grows large, replace Promise.all fan-out with a batched query
-  const workoutEntries = await Promise.all(
+  const perProtocolEntries = await Promise.all(
     protocolsWithTrainings.map(async (protocol) => {
-      const { targetTraining, isRestDay, nextScheduledDate } = await resolveProtocolWorkout(
+      const entries = await resolveProtocolWorkout(
         protocol,
         userId,
         todayWeekday,
@@ -271,19 +281,23 @@ export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', lo
         timeZone,
       );
 
-      return {
-        protocol: {
-          id: protocol.id,
-          name: protocol.name,
-          startDate: formatDateOnly(protocol.startDate),
-          expirationDate: formatDateOnly(protocol.expirationDate),
-        },
+      const protocolSummary = {
+        id: protocol.id,
+        name: protocol.name,
+        startDate: formatDateOnly(protocol.startDate),
+        expirationDate: formatDateOnly(protocol.expirationDate),
+      };
+
+      return entries.map(({ targetTraining, isRestDay, nextScheduledDate }) => ({
+        protocol: protocolSummary,
         targetTraining,
         isRestDay,
         nextScheduledDate,
-      };
+      }));
     }),
   );
+
+  const workoutEntries = perProtocolEntries.flat();
 
   return { workouts: workoutEntries, pendingTraining };
 }
