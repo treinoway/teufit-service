@@ -553,6 +553,7 @@ model ExerciseLog {
   setLogs        SetLog[]
 
   @@index([workoutSessionId, exerciseId])
+  @@index([exerciseId])
   @@map("exercise_logs")
 }
 

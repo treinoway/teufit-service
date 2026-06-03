@@ -1,133 +1,97 @@
-# Frontend Brief — Monthly Adherence With Concrete Numbers
+# Frontend Brief — Inline Previous Performance (previousLog)
 
-**Backend branch**: staging · **Generated**: 2026-05-18
+**Backend branch**: staging · **Generated**: 2026-05-26
 
 ## Elevator pitch
-
-Personal trainers can now see exactly how many sessions a student completed vs how many were expected this month — and whether that number improved or dropped compared to last month — in both the student roster and the individual student dashboard.
+When a student opens a workout session, each exercise now shows what they did last time — sets, reps, and load — right inside the session detail, with no extra requests needed.
 
 ## User story
-
-As a trainer, I want to see "6 of 8 sessions this month" and know whether that's better or worse than last month, so I can quickly identify students who are falling behind without needing to interpret raw percentages.
+As a student, I want to see my last logged performance for each exercise inline while I work out, so that I can track my progression and aim to beat previous numbers without navigating away from the active session.
 
 ## User flows
-
-1. **Entry point — roster list**: Trainer opens the student list (`/trainer/students`). Each student card now has enough data to render concrete session counts alongside the percentage.
-2. **Happy path — student card**:
-   1. Trainer sees each student card with adherence displayed as e.g. "6 de 8 treinos (75%)" for the current calendar month.
-   2. The month label (e.g. "Maio") is derived from `adherenceMonth`.
-   3. When `adherenceExpected` is null, the card shows only "–" or a neutral empty state (no active protocol).
-3. **Entry point — student dashboard**: Trainer taps a student and opens their detail dashboard.
-4. **Happy path — dashboard summary card**:
-   1. Current-month adherence bar/number shows `adherenceCompleted` / `adherenceExpected` × 100 (= `adherence`).
-   2. A delta badge compares `adherence` (current) vs `previousAdherence` (last month): "↑ +12%" or "↓ -8%" or "=" for no change, "–" when previous month has no data.
-   3. `adherenceMonth` and `previousAdherenceMonth` label which months are being compared (e.g. "Maio vs Abril").
-5. **Branches**:
-   - Student has no active protocol: `adherence`, `adherenceCompleted`, `adherenceExpected` are all `null` → show "Sem protocolo ativo".
-   - `previousAdherence` is null: render delta area as "Sem dados anteriores".
-   - `adherence` = 100: celebrate with full bar / "100% 🎯" treatment.
+1. **Entry point**: Student opens an active or past workout session via the session detail screen (accessed from the home screen, the active session banner, or the session history list).
+2. **Happy path**:
+   - Student opens a session.
+   - Each exercise card in the session now shows a "última vez" (last time) section beneath the prescription info.
+   - The section lists previous sets: e.g. "Série 1: 10 reps × 80 kg", "Série 2: 8 reps × 80 kg".
+   - For time-based exercises, it shows duration: "Série 1: 30 min".
+   - Student uses the data as a target while logging the current session.
+3. **Branches**:
+   - First-time exercise (no prior history): the "última vez" section is hidden or shows a "Primeira vez aqui!" empty state.
+   - Substituted exercise: if the student swapped to a substitute exercise in this session, the previousLog reflects the substitute's history (not the original exercise's). No special UI needed — the data is correct automatically.
 
 ## UI states to cover
-
-- **Loading**: skeleton for both the roster card and the dashboard summary card.
-- **Empty / null protocol**: `adherence === null` → neutral state, no bar, no delta.
-- **Partial**: `adherenceCompleted < adherenceExpected` → bar fills proportionally to `adherence`.
-- **Full**: `adherence === 100` → full bar, celebratory treatment.
-- **No previous data**: `previousAdherence === null` → delta area hidden or "–".
-- **Positive delta**: `adherence > previousAdherence` → green up-arrow badge.
-- **Negative delta**: `adherence < previousAdherence` → red/orange down-arrow badge.
-- **Neutral delta**: equal values → neutral badge or no badge.
-- **Permissions**: roster and dashboard are trainer-only (403 for students).
+- **Has history**: show `previousLog.setLogs` items in a compact list below the exercise prescription. Show `previousLog.finishedAt` as a relative date (e.g. "Há 7 dias").
+- **No history** (`previousLog === null`): hide the section entirely, or show a subtle "Primeira vez" label — do not show an empty list.
+- **Loading**: skeleton row in place of the previous performance section while the session GET is in-flight.
+- **Empty setLogs** (`previousLog` is non-null but `setLogs` is `[]`): treat the same as null — the student had a session but logged no completed sets. Hide the section.
 
 ## API contract
 
-### GET /trainer/students
+### GET /my/workout-sessions/:sessionId
+- **Auth**: student token required
+- **Success** (200): full session object with `exerciseLogs[].previousLog` embedded
 
-- **Auth**: Bearer token, TRAINER role required.
-- **Request**: no body.
-- **Success** (200):
-  ```json
-  [
-    {
-      "id": "uuid",
-      "firstName": "Ana",
-      "lastName": "Silva",
-      "adherence": 75.0,
-      "adherenceCompleted": 6,
-      "adherenceExpected": 8,
-      "adherenceMonth": "2026-05-01",
-      "lastWorkoutAt": "2026-05-16T10:30:00.000Z",
-      "currentPrLoad": 85.0,
-      "currentPrAt": "2026-05-10T09:00:00.000Z"
-    }
-  ]
-  ```
-- **Errors**:
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · no token
-  - `403` · `FORBIDDEN` · `auth.forbidden` · student calling a trainer route
-
-### GET /trainer/students/:studentId/dashboard/summary
-
-- **Auth**: Bearer token, TRAINER role required.
-- **Request**: optional query params `dateFrom`, `dateTo` (only affect session counts, streaks, completionRate — NOT adherence).
-- **Success** (200):
-  ```json
-  {
-    "window": { "from": "...", "to": "..." },
-    "sessionCounts": { "completed": 24, "in_progress": 1, "abandoned": 3 },
-    "totalSessions": 28,
-    "completionRate": 0.89,
-    "adherence": 75.0,
-    "adherenceCompleted": 6,
-    "adherenceExpected": 8,
-    "adherenceMonth": "2026-05-01",
-    "previousAdherence": 62.5,
-    "previousAdherenceMonth": "2026-04-01",
-    "lastSessionAt": "2026-05-17T09:00:00.000Z",
-    "currentProtocol": { "id": "uuid", "name": "Hypertrophy Block", "startDate": "2026-01-01", "expirationDate": "2026-06-30" },
-    "maxStreakDays": 5,
-    "sessionsPerWeek": 3.2,
-    "daysSinceLastSession": 1
+Each `exerciseLog` now includes:
+```json
+{
+  "previousLog": {
+    "workoutSessionId": "uuid",
+    "finishedAt": "2026-05-19T10:45:00.000Z",
+    "setLogs": [
+      { "setNumber": 1, "repetitions": 10, "load": 80.0, "duration": null },
+      { "setNumber": 2, "repetitions": 8,  "load": 80.0, "duration": null }
+    ]
   }
-  ```
-  **Important**: `adherence`, `adherenceCompleted`, `adherenceExpected`, `adherenceMonth`, `previousAdherence`, and `previousAdherenceMonth` always reflect the calendar month — they do not change when the trainer changes `dateFrom`/`dateTo`. Only `sessionCounts`, `completionRate`, `totalSessions`, `sessionsPerWeek`, `maxStreakDays`, and `lastSessionAt` respond to the period filter.
+}
+```
+
+Or when no history exists:
+```json
+{ "previousLog": null }
+```
+
+Field semantics:
+- `repetitions`: integer or null (null for time-based exercises)
+- `load`: number (kg) or null (null for bodyweight/duration exercises)
+- `duration`: integer (seconds) or null (null for rep-based exercises)
+- `setLogs` contains only completed sets; incomplete sets are excluded at the data layer.
+- `notes`, `rpe`, `restSeconds` are intentionally absent from `previousLog.setLogs`.
+
+No new endpoint is required. No extra requests from the frontend.
+
 - **Errors**:
-  - `400` · `INVALID_DATE_RANGE` · `dashboard.invalidDateRange` · dateFrom > dateTo
-  - `400` · `WINDOW_TOO_LARGE` · `dashboard.windowTooLarge` · window > 365 days
-  - `404` · `STUDENT_NOT_FOUND` · `legacy.STUDENT_NOT_FOUND` · student not linked to trainer
+  - `404` · `WORKOUT_SESSION_NOT_FOUND` · `resource.notFound` · session not found or soft-deleted
+  - `403` · `FORBIDDEN_NOT_YOUR_SESSION` · `resource.forbidden` · session belongs to another user
 
 ## i18n keys required
+No new `messageCode` values are introduced. This is a data enrichment — no new error paths.
 
-- `dashboard.invalidDateRange` → suggested copy: "O período inicial não pode ser posterior ao final."
-- `dashboard.windowTooLarge` → suggested copy: "O intervalo máximo permitido é de 365 dias."
-
-New display strings (not messageCode — just UI copy decisions):
-- Null adherence state: "Sem protocolo ativo"
-- Previous month no data: "Sem dados anteriores"
-- Delta positive: "↑ +{n}%"
-- Delta negative: "↓ -{n}%"
-- Month label format: use `adherenceMonth` ("2026-05-01") → derive "Maio 2026" / "May 2026" via `Intl.DateTimeFormat`.
+Suggested UI copy for the frontend i18n files:
+- `session.previousLog.label` → "Última vez" (pt-BR) / "Last time" (en-US)
+- `session.previousLog.date` → "Há {days} dias" / "{days} days ago"
+- `session.previousLog.firstTime` → "Primeira vez" / "First time"
+- `session.previousLog.setItem.reps` → "Série {n}: {reps} reps × {load} kg"
+- `session.previousLog.setItem.duration` → "Série {n}: {duration}"
 
 ## Acceptance criteria
-
-- [ ] Student roster card displays `adherenceCompleted` / `adherenceExpected` (e.g. "6 de 8 sessões") alongside the percentage.
-- [ ] Student roster card shows `adherenceMonth` formatted as a human-readable month name.
-- [ ] When `adherenceExpected` is null, roster card shows a neutral/empty state (no bar, no count).
-- [ ] Dashboard summary card shows current-month adherence as a progress bar or fraction using the same fields.
-- [ ] Dashboard summary card shows a month-over-month delta badge using `previousAdherence`.
-- [ ] Delta badge is hidden or neutral when `previousAdherence` is null.
-- [ ] Changing the period picker (dateFrom/dateTo) does NOT change the adherence section — only session counts and streak change.
-- [ ] The `adherenceMonth` and `previousAdherenceMonth` labels make clear which months are being compared.
+- [ ] Each exercise card in the session detail shows a "Última vez" section when `previousLog` is non-null and `setLogs.length > 0`.
+- [ ] The section is hidden (not rendered) when `previousLog` is null or `setLogs` is empty.
+- [ ] The date displayed (relative to today) is derived from `previousLog.finishedAt`.
+- [ ] Rep-based sets display repetitions and load; duration-based sets display duration.
+- [ ] The previous performance section is read-only — no interaction targets.
+- [ ] Loading skeleton is shown while the session GET is pending.
+- [ ] No additional API requests are made to populate the previous performance data.
+- [ ] Substituted exercises: previousLog reflects the substitute's history (data is already correct from the API — no special frontend logic needed).
 
 ## Out of scope
-
-- `completionRate` display is unchanged.
-- No changes to other dashboard KPIs (streak, sessionsPerWeek, daysSinceLastSession).
-- Do not build a multi-month adherence trend chart (only current vs previous month delta).
+- Aggregates (1RM, total volume, PR badges) — raw set data only.
+- Editable or interactive previous log entries.
+- Separate endpoint or lazy-load for previous performance.
+- Trainer-facing session detail view (no `previousLog` on the trainer GET endpoint).
 
 ## Open design questions
-
-- Where exactly on the student card should the "6 de 8 sessões" text appear — below the adherence bar, inline with it, or as a tooltip?
-- Should the delta badge on the dashboard show absolute percentage points (e.g. "+12pp") or relative change (e.g. "+19%")?
-- What is the visual treatment when `adherence === 100`? Full bar with a check icon, confetti, nothing special?
-- What month label format is preferred: "Maio" (short), "Maio 2026" (full), or "Mai/26" (compact for mobile)?
+- Should the "Última vez" section be collapsed by default on mobile (tap to expand) to preserve vertical space, or always visible below the prescription?
+- How should the date be displayed — relative ("Há 7 dias") or absolute ("19 mai")? Or both?
+- For exercises with many previous sets (e.g. 6 sets), should there be a "ver todos" truncation at 3?
+- Should load be displayed in kg always, or should the unit be derived from the student's profile preference?

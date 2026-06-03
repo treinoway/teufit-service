@@ -1,5 +1,13 @@
 import { prisma } from '../db.js';
-import { WorkoutSessionStatus, ExerciseLogStatus, SubstituteMessageCode } from '../constants/training.js';
+import {
+  WorkoutSessionStatus,
+  ExerciseLogStatus,
+  SubstituteMessageCode,
+  LastPerformanceErrorCode,
+  LastPerformanceMessageCode,
+  WorkoutSessionFinalizedErrorCode,
+  WorkoutSessionFinalizedMessageCode,
+} from '../constants/training.js';
 import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
 import { awardWorkoutCompletionPoints } from './gamification-service.js';
@@ -101,6 +109,26 @@ const exerciseSelectWithSubstitutes = {
 };
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * Throw SESSION_FINALIZED (409) when the session is in a terminal state.
+ * Used to block all mutating operations on COMPLETED or ABANDONED sessions.
+ * The check is intentionally skipped in deleteSession (soft-delete is allowed
+ * across all states) and for notes-only patches in updateSession.
+ *
+ * @param {{ id: string, status: string }} session
+ */
+function assertSessionMutable(session) {
+  if (session.status !== WorkoutSessionStatus.IN_PROGRESS) {
+    throw new AppError({
+      httpStatus: 409,
+      error: WorkoutSessionFinalizedErrorCode,
+      messageCode: WorkoutSessionFinalizedMessageCode,
+      message: 'Cannot modify a finalized workout session',
+      details: { sessionId: session.id, status: session.status },
+    });
+  }
+}
 
 /**
  * Load a training that belongs to the given user (as protocol assignee).
@@ -342,7 +370,119 @@ export async function listSessions(userId, filters = {}) {
 }
 
 /**
+ * Resolve the effective exerciseId for a given exerciseLog.
+ * When the log was substituted, the student is performing the substitute exercise,
+ * so previous performance should reflect that substitute's history.
+ *
+ * @param {{ exerciseId: string, substitutedByExerciseId: string | null }} exerciseLog
+ * @returns {string}
+ */
+function resolveEffectiveExerciseId(exerciseLog) {
+  return exerciseLog.substitutedByExerciseId ?? exerciseLog.exerciseId;
+}
+
+/**
+ * Batch-load the most recent prior completed ExerciseLog per effective exerciseId,
+ * then batch-load their completed setLogs. Returns a Map keyed by effectiveExerciseId.
+ *
+ * Uses DISTINCT ON (exercise_id) ordered by ws.finished_at DESC to get exactly one
+ * prior log per exercise in two round-trips, no N+1.
+ *
+ * Excludes:
+ * - sessions not owned by userId
+ * - sessions not in COMPLETED status
+ * - soft-deleted sessions
+ * - the current session itself (currentSessionId)
+ *
+ * @param {string[]} effectiveExerciseIds
+ * @param {string} userId
+ * @param {string} currentSessionId
+ * @returns {Promise<Map<string, { workoutSessionId: string, finishedAt: Date, setLogs: object[] }>>}
+ */
+async function loadPreviousLogsByExercise(effectiveExerciseIds, userId, currentSessionId) {
+  const previousLogRows = await prisma.$queryRaw`
+    SELECT DISTINCT ON (el.exercise_id)
+      el.id,
+      el.exercise_id,
+      el.workout_session_id,
+      ws.finished_at
+    FROM exercise_logs el
+    JOIN workout_sessions ws ON ws.id = el.workout_session_id
+    WHERE el.exercise_id = ANY(${effectiveExerciseIds}::uuid[])
+      AND ws.user_id = ${userId}::uuid
+      AND ws.status = ${WorkoutSessionStatus.COMPLETED}
+      AND ws.deleted_at IS NULL
+      AND ws.id != ${currentSessionId}::uuid
+    ORDER BY el.exercise_id, ws.finished_at DESC NULLS LAST
+  `;
+
+  if (previousLogRows.length === 0) {
+    return new Map();
+  }
+
+  const previousLogIds = previousLogRows.map((row) => row.id);
+
+  const setLogRows = await prisma.setLog.findMany({
+    where: { exerciseLogId: { in: previousLogIds }, completed: true },
+    select: { exerciseLogId: true, setNumber: true, repetitions: true, load: true, duration: true },
+    orderBy: [{ exerciseLogId: 'asc' }, { setNumber: 'asc' }],
+  });
+
+  const setLogsByExerciseLogId = new Map();
+  for (const setLog of setLogRows) {
+    const existing = setLogsByExerciseLogId.get(setLog.exerciseLogId) ?? [];
+    existing.push({ setNumber: setLog.setNumber, repetitions: setLog.repetitions, load: setLog.load, duration: setLog.duration });
+    setLogsByExerciseLogId.set(setLog.exerciseLogId, existing);
+  }
+
+  const resultByExerciseId = new Map();
+  for (const row of previousLogRows) {
+    // Guard: skip rows where finished_at is null — completed sessions should
+    // always have finishedAt set, but the column is nullable in the schema and
+    // we must not expose a malformed previousLog to the client.
+    if (row.finished_at == null) continue;
+
+    resultByExerciseId.set(row.exercise_id, {
+      workoutSessionId: row.workout_session_id,
+      finishedAt: row.finished_at,
+      setLogs: setLogsByExerciseLogId.get(row.id) ?? [],
+    });
+  }
+
+  return resultByExerciseId;
+}
+
+/**
+ * Attach previousLog to each exerciseLog in the session.
+ * Mutates exerciseLogs in-place for efficiency — session object is not shared.
+ *
+ * @param {object} session - Session with exerciseLogs array
+ * @returns {Promise<void>}
+ */
+async function attachPreviousLogs(session) {
+  const exerciseLogs = session.exerciseLogs;
+
+  if (!exerciseLogs || exerciseLogs.length === 0) {
+    return;
+  }
+
+  const effectiveExerciseIds = exerciseLogs.map(resolveEffectiveExerciseId);
+  const previousLogsByExercise = await loadPreviousLogsByExercise(
+    effectiveExerciseIds,
+    session.userId,
+    session.id,
+  );
+
+  for (const exerciseLog of exerciseLogs) {
+    const effectiveExerciseId = resolveEffectiveExerciseId(exerciseLog);
+    exerciseLog.previousLog = previousLogsByExercise.get(effectiveExerciseId) ?? null;
+  }
+}
+
+/**
  * Get a single workout session with full exercise and set log detail.
+ * Each exerciseLog includes a `previousLog` field showing the student's last
+ * completed performance for that exercise (null when no prior history exists).
  *
  * @param {string} userId
  * @param {string} sessionId
@@ -371,6 +511,8 @@ export async function getSession(userId, sessionId) {
     throw buildError('FORBIDDEN_NOT_YOUR_SESSION', 'This session does not belong to you', 403);
   }
 
+  await attachPreviousLogs(session);
+
   return session;
 }
 
@@ -385,6 +527,14 @@ export async function getSession(userId, sessionId) {
  */
 export async function updateSession(userId, sessionId, data) {
   const session = await resolveUserSession(sessionId, userId);
+
+  const isTerminalSession = session.status !== WorkoutSessionStatus.IN_PROGRESS;
+
+  if (isTerminalSession && data.status !== undefined) {
+    // Status changes are never allowed on a terminal session — even setting
+    // the same status again would re-trigger gamification/side-effects.
+    assertSessionMutable(session);
+  }
 
   const updateData = {};
 
@@ -474,7 +624,8 @@ export async function deleteSession(userId, sessionId) {
  * @returns {Promise<object>}
  */
 export async function updateExerciseLog(userId, sessionId, exerciseLogId, data) {
-  await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(exerciseLog.workoutSession);
 
   const updateData = {};
   if (data.status !== undefined) updateData.status = data.status;
@@ -500,6 +651,7 @@ export async function updateExerciseLog(userId, sessionId, exerciseLogId, data) 
  */
 export async function createSetLog(userId, sessionId, exerciseLogId, data) {
   const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(exerciseLog.workoutSession);
 
   const setLog = await prisma.setLog.create({
     data: {
@@ -538,6 +690,7 @@ export async function createSetLog(userId, sessionId, exerciseLogId, data) {
  */
 export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, data) {
   const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(exerciseLog.workoutSession);
   await resolveSetLog(setLogId, exerciseLogId);
 
   const updateData = {};
@@ -581,6 +734,7 @@ export async function updateSetLog(userId, sessionId, exerciseLogId, setLogId, d
  */
 export async function deleteSetLog(userId, sessionId, exerciseLogId, setLogId) {
   const exerciseLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(exerciseLog.workoutSession);
   await resolveSetLog(setLogId, exerciseLogId);
 
   const deleted = await prisma.setLog.delete({
@@ -658,6 +812,7 @@ export async function listStudentSessions(trainerId, studentId, filters = {}) {
  */
 export async function substituteExerciseLog(userId, sessionId, exerciseLogId, substituteExerciseId) {
   const principalLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(principalLog.workoutSession);
 
   // Idempotent: if already substituted with the same exercise, return existing log
   if (
@@ -746,6 +901,7 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
  */
 export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId) {
   const substituteLog = await resolveExerciseLog(exerciseLogId, sessionId, userId);
+  assertSessionMutable(substituteLog.workoutSession);
 
   // Confirm the candidate log is actually a substitute (a principal in the same session
   // must reference its exerciseId via substitutedByExerciseId).
@@ -802,6 +958,105 @@ export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId
       data: { order: { decrement: 1 } },
     });
   });
+}
+
+/**
+ * Return the last-performance snapshot for a TrainingExercise.
+ *
+ * Finds the most recent completed/abandoned WorkoutSession (not the current
+ * in-progress one) that contains an ExerciseLog for `exerciseId` owned by
+ * `userId`, then returns the session timestamp and all its set logs.
+ *
+ * Returns { performedAt: null, sets: [] } when no prior performance exists —
+ * this covers both "exercise never logged" and "first time doing this exercise"
+ * without forcing the client to handle 404.
+ *
+ * Access control:
+ *   1. Verifies the Exercise row exists and is not soft-deleted.
+ *   2. Verifies Exercise.training.trainingProtocol.assigneeId === userId.
+ *      Returns 403 (not 404) to distinguish "not yours" from "does not exist".
+ *
+ * Query plan (2 round-trips, no N+1):
+ *   Q1: Exercise PK lookup + join to Training + TrainingProtocol (ownership check).
+ *   Q2: ExerciseLog filtered by exerciseId, joined to WorkoutSession filtered by
+ *       userId + status != in_progress + deletedAt = null, ordered by
+ *       session.startedAt DESC, take 1 — includes SetLog children inline.
+ *       Uses the new @@index([exerciseId]) on exercise_logs.
+ *
+ * @param {string} userId
+ * @param {string} exerciseId - TrainingExercise.id
+ * @returns {Promise<{ performedAt: string | null, sets: object[] }>}
+ */
+export async function getExerciseLastPerformance(userId, exerciseId) {
+  const exercise = await prisma.exercise.findUnique({
+    where: { id: exerciseId },
+    select: {
+      id: true,
+      deletedAt: true,
+      training: {
+        select: {
+          trainingProtocol: { select: { assigneeId: true } },
+        },
+      },
+    },
+  });
+
+  if (!exercise || exercise.deletedAt) {
+    throw new AppError({
+      httpStatus: 404,
+      error: LastPerformanceErrorCode.EXERCISE_NOT_FOUND,
+      messageCode: LastPerformanceMessageCode.EXERCISE_NOT_FOUND,
+      message: 'Exercise not found',
+    });
+  }
+
+  const assigneeId = exercise.training?.trainingProtocol?.assigneeId;
+  if (assigneeId !== userId) {
+    throw new AppError({
+      httpStatus: 403,
+      error: LastPerformanceErrorCode.EXERCISE_NOT_YOURS,
+      messageCode: LastPerformanceMessageCode.EXERCISE_NOT_YOURS,
+      message: 'This exercise does not belong to your protocol',
+    });
+  }
+
+  const exerciseLog = await prisma.exerciseLog.findFirst({
+    where: {
+      exerciseId,
+      workoutSession: {
+        userId,
+        status: { not: WorkoutSessionStatus.IN_PROGRESS },
+        deletedAt: null,
+      },
+    },
+    orderBy: {
+      workoutSession: { startedAt: 'desc' },
+    },
+    select: {
+      workoutSession: { select: { startedAt: true } },
+      setLogs: {
+        orderBy: { setNumber: 'asc' },
+        select: {
+          setNumber: true,
+          repetitions: true,
+          load: true,
+          duration: true,
+          rpe: true,
+          restSeconds: true,
+          completed: true,
+        },
+      },
+    },
+  });
+
+  if (!exerciseLog) {
+    return { performedAt: null, sets: [] };
+  }
+
+  return {
+    performedAt: exerciseLog.workoutSession.startedAt,
+    sets: exerciseLog.setLogs,
+  };
 }
 
 /**

@@ -2,7 +2,13 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
-import { WorkoutSessionStatus, ExerciseLogStatus } from '../../src/constants/training.js';
+import { prisma } from '../../src/db.js';
+import {
+  WorkoutSessionStatus,
+  ExerciseLogStatus,
+  WorkoutSessionFinalizedErrorCode,
+  WorkoutSessionFinalizedMessageCode,
+} from '../../src/constants/training.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -65,6 +71,25 @@ e2eDescribe('e2e: workout-sessions', () => {
   }
 
   async function createProtocolAndTraining(trainerToken, studentId) {
+    // Platform plan guard (assertStudentActiveOnPlan) requires a TrainerStudent
+    // link before protocol creation. Resolve trainer.id via /me and upsert link.
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: { authorization: `Bearer ${trainerToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const trainerUserId = meRes.json().id;
+    const trainer = await prisma.trainer.findUnique({
+      where: { userId: trainerUserId },
+      select: { id: true },
+    });
+    await prisma.trainerStudent.upsert({
+      where: { trainerId_studentId: { trainerId: trainer.id, studentId } },
+      create: { trainerId: trainer.id, studentId, activeOnPlan: true },
+      update: { activeOnPlan: true },
+    });
+
     const protocolResponse = await app.inject({
       method: 'POST',
       url: '/trainer/protocols',
@@ -1286,6 +1311,775 @@ e2eDescribe('e2e: workout-sessions', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ─── GET /my/exercises/:exerciseId/last-performance ───────────────────────
+
+  describe('GET /my/exercises/:exerciseId/last-performance', () => {
+    async function setupExerciseWithCompletedSession() {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseId = await createExercise(trainerToken, trainingId);
+
+      // Start and complete a session so there is a prior performance record
+      const sessionResponse = await startSession(studentToken, trainingId);
+      const sessionId = sessionResponse.json().id;
+      const exerciseLogId = sessionResponse.json().exerciseLogs[0].id;
+
+      // Log one set
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, load: 80.0, rpe: 7, restSeconds: 90, completed: true },
+      });
+
+      // Complete the session so it appears in last-performance queries
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      return { studentToken, exerciseId, trainerToken, studentId, studentEmail, trainingId };
+    }
+
+    it('returns 401 when no auth token is provided', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/my/exercises/00000000-0000-0000-0000-000000000001/last-performance',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when exerciseId does not exist', async () => {
+      const { accessToken: studentToken } = await createStudentWithToken();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/my/exercises/00000000-0000-0000-0000-000000000000/last-performance',
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error).toBe('EXERCISE_NOT_FOUND');
+      expect(body.messageCode).toBe('exercise.notFound');
+    });
+
+    it('returns 403 when the exercise belongs to a different student', async () => {
+      const { exerciseId } = await setupExerciseWithCompletedSession();
+
+      // A second unrelated student tries to access the first student's exercise
+      const { accessToken: otherStudentToken } = await createStudentWithToken();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${otherStudentToken}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = response.json();
+      expect(body.error).toBe('EXERCISE_NOT_YOURS');
+      expect(body.messageCode).toBe('exercise.notYours');
+    });
+
+    it('returns 200 with performedAt=null and sets=[] when exercise has never been logged', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseId = await createExercise(trainerToken, trainingId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.performedAt).toBeNull();
+      expect(body.sets).toEqual([]);
+    });
+
+    it('returns 200 with performedAt and set logs after a completed session', async () => {
+      const { studentToken, exerciseId } = await setupExerciseWithCompletedSession();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.performedAt).not.toBeNull();
+      expect(body.sets).toHaveLength(1);
+      expect(body.sets[0]).toMatchObject({
+        setNumber: 1,
+        repetitions: 10,
+        load: 80.0,
+        rpe: 7,
+        restSeconds: 90,
+        completed: true,
+      });
+    });
+
+    it('does not return sets from an in-progress session', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseId = await createExercise(trainerToken, trainingId);
+
+      // Start a session but do NOT complete it
+      const sessionResponse = await startSession(studentToken, trainingId);
+      const sessionId = sessionResponse.json().id;
+      const exerciseLogId = sessionResponse.json().exerciseLogs[0].id;
+
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, load: 80.0, completed: true },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().performedAt).toBeNull();
+      expect(response.json().sets).toEqual([]);
+    });
+  });
+
+  // ─── SESSION_FINALIZED guard ──────────────────────────────────────────────
+
+  describe('SESSION_FINALIZED guard — terminal sessions block mutations', () => {
+    /**
+     * Sets up a full environment and returns a session in the given terminal status.
+     * The session has one exercise log (with a set log pre-created) and one
+     * substitute exercise to enable substitute/undo-substitute tests.
+     */
+    async function setupTerminalSession(terminalStatus) {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+      // Create principal exercise
+      const exResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', sets: 3, hasLoad: true },
+      });
+      expect(exResponse.statusCode).toBe(201);
+      const principalExerciseId = exResponse.json().id;
+
+      // Create substitute exercise (needed for substituteExerciseLog tests)
+      const subResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'DB Press', type: 'strength', sets: 3 },
+      });
+      expect(subResponse.statusCode).toBe(201);
+      const substituteExerciseId = subResponse.json().id;
+
+      // Start session
+      const sessionResponse = await startSession(studentToken, trainingId);
+      expect(sessionResponse.statusCode).toBe(201);
+      const sessionBody = sessionResponse.json();
+      const sessionId = sessionBody.id;
+      const exerciseLogId = sessionBody.exerciseLogs[0].id;
+
+      // Create a set log (needed for updateSetLog / deleteSetLog tests)
+      const setLogResponse = await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, load: 60.0 },
+      });
+      expect(setLogResponse.statusCode).toBe(201);
+      const setLogId = setLogResponse.json().id;
+
+      // Transition to terminal state
+      const updateResponse = await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: terminalStatus },
+      });
+      expect(updateResponse.statusCode).toBe(200);
+
+      return {
+        studentToken,
+        sessionId,
+        exerciseLogId,
+        setLogId,
+        substituteExerciseId,
+      };
+    }
+
+    function expectFinalizedError(body) {
+      expect(body).toMatchObject({
+        error: WorkoutSessionFinalizedErrorCode,
+        messageCode: WorkoutSessionFinalizedMessageCode,
+        message: expect.any(String),
+        details: expect.objectContaining({ status: expect.any(String) }),
+      });
+    }
+
+    // Run the same 409 cases for both terminal states
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'PATCH /my/workout-sessions/:id — status change on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId } = await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { status: WorkoutSessionStatus.COMPLETED },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'PATCH /my/workout-sessions/:id — notes-only patch on %s session → 200 (allowed)',
+      async (terminalStatus) => {
+        const { studentToken, sessionId } = await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { notes: 'Post-workout annotation' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().notes).toBe('Post-workout annotation');
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'PATCH .../exercise-logs/:exerciseLogId on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId, exerciseLogId } = await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { status: ExerciseLogStatus.COMPLETED },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'POST .../sets on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId, exerciseLogId } = await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { setNumber: 2, repetitions: 8 },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'PATCH .../sets/:setLogId on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId, exerciseLogId, setLogId } =
+          await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets/${setLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { load: 70.0 },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'DELETE .../sets/:setLogId on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId, exerciseLogId, setLogId } =
+          await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'DELETE',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets/${setLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'POST .../substitute on %s session → 409',
+      async (terminalStatus) => {
+        const { studentToken, sessionId, exerciseLogId, substituteExerciseId } =
+          await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/substitute`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { substituteExerciseId },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expectFinalizedError(response.json());
+      },
+    );
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'DELETE (undo-substitute) .../substitute on %s session → 409',
+      async (terminalStatus) => {
+        // For this test we need a session that was swapped BEFORE being finalized.
+        // We build it independently so the swap happens while IN_PROGRESS.
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+
+        const exResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', sets: 3 },
+        });
+        const principalExerciseId = exResponse.json().id;
+
+        const subResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalExerciseId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'DB Press', type: 'strength', sets: 3 },
+        });
+        const substituteExerciseId = subResponse.json().id;
+
+        const sessionBody = (await startSession(studentToken, trainingId)).json();
+        const sessionId = sessionBody.id;
+        const principalLogId = sessionBody.exerciseLogs[0].id;
+
+        // Swap while IN_PROGRESS
+        const swapResponse = await app.inject({
+          method: 'POST',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${principalLogId}/substitute`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { substituteExerciseId },
+        });
+        expect(swapResponse.statusCode).toBe(201);
+        const substituteLogId = swapResponse.json().id;
+
+        // Finalize the session
+        const finalizeResponse = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { status: terminalStatus },
+        });
+        expect(finalizeResponse.statusCode).toBe(200);
+
+        // Now attempt undo on a finalized session
+        const undoResponse = await app.inject({
+          method: 'DELETE',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${substituteLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+        });
+
+        expect(undoResponse.statusCode).toBe(409);
+        expectFinalizedError(undoResponse.json());
+      },
+    );
+
+    // ── deleteSession carve-out ──────────────────────────────────────────
+
+    it.each([WorkoutSessionStatus.COMPLETED, WorkoutSessionStatus.ABANDONED])(
+      'DELETE /my/workout-sessions/:id on %s session → 200 (soft-delete intentionally allowed)',
+      async (terminalStatus) => {
+        const { studentToken, sessionId } = await setupTerminalSession(terminalStatus);
+
+        const response = await app.inject({
+          method: 'DELETE',
+          url: `/my/workout-sessions/${sessionId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          id: sessionId,
+          deletedAt: expect.any(String),
+        });
+      },
+    );
+
+    // ── IN_PROGRESS regression guards ────────────────────────────────────
+
+    describe('IN_PROGRESS sessions — no guard triggers', () => {
+      async function setupInProgressSession() {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+        await createExercise(trainerToken, trainingId);
+
+        const sessionBody = (await startSession(studentToken, trainingId)).json();
+        const sessionId = sessionBody.id;
+        const exerciseLogId = sessionBody.exerciseLogs[0].id;
+
+        const setLogResponse = await app.inject({
+          method: 'POST',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { setNumber: 1, repetitions: 10, load: 60.0 },
+        });
+        const setLogId = setLogResponse.json().id;
+
+        return { studentToken, sessionId, exerciseLogId, setLogId };
+      }
+
+      it('PATCH session with status change → 200', async () => {
+        const { studentToken, sessionId } = await setupInProgressSession();
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { status: WorkoutSessionStatus.COMPLETED },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+
+      it('PATCH exercise log → 200', async () => {
+        const { studentToken, sessionId, exerciseLogId } = await setupInProgressSession();
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { status: ExerciseLogStatus.COMPLETED },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+
+      it('POST set log → 201', async () => {
+        const { studentToken, sessionId, exerciseLogId } = await setupInProgressSession();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { setNumber: 2, repetitions: 8 },
+        });
+
+        expect(response.statusCode).toBe(201);
+      });
+
+      it('PATCH set log → 200', async () => {
+        const { studentToken, sessionId, exerciseLogId, setLogId } = await setupInProgressSession();
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets/${setLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+          payload: { load: 70.0 },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+
+      it('DELETE set log → 200', async () => {
+        const { studentToken, sessionId, exerciseLogId, setLogId } = await setupInProgressSession();
+
+        const response = await app.inject({
+          method: 'DELETE',
+          url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets/${setLogId}`,
+          headers: { authorization: `Bearer ${studentToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+    });
+  });
+
+  // ─── GET /my/workout-sessions/:sessionId — previousLog field ──────────────
+
+  describe('GET /my/workout-sessions/:sessionId — previousLog field', () => {
+    /**
+     * Helper: log a set in a session's first exerciseLog and complete the session.
+     * Returns the exerciseLogId for the completed session.
+     */
+    async function logSetAndCompleteSession(studentToken, sessionId, exerciseLogId, setPayload) {
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: setPayload,
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+    }
+
+    it('returns previousLog: null for each exerciseLog when no prior completed session exists', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0].previousLog).toBeNull();
+    });
+
+    it('returns previousLog with setLogs after the student has completed the exercise before', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      // First session: complete with a set
+      const firstSessionResponse = (await startSession(studentToken, trainingId)).json();
+      const firstSessionId = firstSessionResponse.id;
+      const firstExerciseLogId = firstSessionResponse.exerciseLogs[0].id;
+      await logSetAndCompleteSession(studentToken, firstSessionId, firstExerciseLogId, {
+        setNumber: 1,
+        repetitions: 10,
+        load: 80.0,
+      });
+
+      // Second session: in_progress — previousLog should reflect the first session
+      const secondSessionResponse = (await startSession(studentToken, trainingId)).json();
+      const secondSessionId = secondSessionResponse.id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${secondSessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.exerciseLogs).toHaveLength(1);
+      const previousLog = body.exerciseLogs[0].previousLog;
+      expect(previousLog).not.toBeNull();
+      expect(previousLog.workoutSessionId).toBe(firstSessionId);
+      expect(previousLog.finishedAt).not.toBeNull();
+      expect(previousLog.setLogs).toHaveLength(1);
+      expect(previousLog.setLogs[0]).toMatchObject({
+        setNumber: 1,
+        repetitions: 10,
+        load: 80.0,
+        duration: null,
+      });
+    });
+
+    it('excludes notes, rpe, restSeconds from previousLog setLogs', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      // Complete a first session with rpe and restSeconds
+      const firstSession = (await startSession(studentToken, trainingId)).json();
+      await logSetAndCompleteSession(studentToken, firstSession.id, firstSession.exerciseLogs[0].id, {
+        setNumber: 1,
+        repetitions: 8,
+        load: 100.0,
+        rpe: 9,
+        restSeconds: 120,
+        notes: 'Hard set',
+      });
+
+      const secondSession = (await startSession(studentToken, trainingId)).json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${secondSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      const previousSetLog = response.json().exerciseLogs[0].previousLog.setLogs[0];
+      expect(previousSetLog).toHaveProperty('setNumber');
+      expect(previousSetLog).toHaveProperty('repetitions');
+      expect(previousSetLog).toHaveProperty('load');
+      expect(previousSetLog).toHaveProperty('duration');
+      expect(previousSetLog).not.toHaveProperty('notes');
+      expect(previousSetLog).not.toHaveProperty('rpe');
+      expect(previousSetLog).not.toHaveProperty('restSeconds');
+    });
+
+    it('excludes ABANDONED sessions from previousLog', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      // First session: abandoned (should be excluded)
+      const abandonedSession = (await startSession(studentToken, trainingId)).json();
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${abandonedSession.id}/exercise-logs/${abandonedSession.exerciseLogs[0].id}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, load: 70.0 },
+      });
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${abandonedSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.ABANDONED },
+      });
+
+      // Second session: in_progress
+      const currentSession = (await startSession(studentToken, trainingId)).json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${currentSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Abandoned session must not appear as previousLog
+      expect(response.json().exerciseLogs[0].previousLog).toBeNull();
+    });
+
+    it('does not include the current session itself in previousLog even when status is completed', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      // Complete a session and then GET it — it must not reference itself as previousLog
+      const session = (await startSession(studentToken, trainingId)).json();
+      const exerciseLogId = session.exerciseLogs[0].id;
+      await logSetAndCompleteSession(studentToken, session.id, exerciseLogId, {
+        setNumber: 1,
+        repetitions: 12,
+        load: 90.0,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${session.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // A completed session viewed directly must not reference its own ID as previousLog
+      const previousLog = response.json().exerciseLogs[0].previousLog;
+      if (previousLog !== null) {
+        expect(previousLog.workoutSessionId).not.toBe(session.id);
+      }
+    });
+
+    it('only includes completed setLogs in previousLog (excludes incomplete sets)', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const firstSession = (await startSession(studentToken, trainingId)).json();
+      const firstExerciseLogId = firstSession.exerciseLogs[0].id;
+
+      // Log one completed set and one incomplete set
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${firstSession.id}/exercise-logs/${firstExerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 10, load: 80.0, completed: true },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${firstSession.id}/exercise-logs/${firstExerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 2, repetitions: 6, load: 80.0, completed: false },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${firstSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      const currentSession = (await startSession(studentToken, trainingId)).json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${currentSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const setLogs = response.json().exerciseLogs[0].previousLog.setLogs;
+      // Only the completed set (setNumber=1) should appear
+      expect(setLogs).toHaveLength(1);
+      expect(setLogs[0].setNumber).toBe(1);
+    });
+
+    it('returns previousLog: null for a session with no exerciseLogs', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      // Start a session on a training with NO exercises
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().exerciseLogs).toHaveLength(0);
     });
   });
 });

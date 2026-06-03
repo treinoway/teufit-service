@@ -162,6 +162,22 @@ export async function workoutSessionRoutes(fastify) {
     },
   );
 
+  // GET /my/exercises/:exerciseId/last-performance — Last logged performance for an exercise
+  fastify.get(
+    '/my/exercises/:exerciseId/last-performance',
+    {
+      preHandler: [authenticate],
+      schema: schema.getExerciseLastPerformanceSchema,
+    },
+    async (request, reply) => {
+      const result = await service.getExerciseLastPerformance(
+        request.user.id,
+        request.params.exerciseId,
+      );
+      return reply.send(result);
+    },
+  );
+
   // DELETE /my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId — Undo substitute swap
   fastify.delete(
     '/my/workout-sessions/:sessionId/exercise-logs/:exerciseLogId',

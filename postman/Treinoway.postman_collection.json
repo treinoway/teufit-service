@@ -3447,6 +3447,39 @@
             "description": "Undo a substitute exercise swap within the 15-second window before any set is logged. Deletes the substitute ExerciseLog, resets the principal log back to PENDING, and closes the order gap. Returns 400 if any SetLog exists on the substitute, or if the log is not actually a substitute. Returns 204 No Content on success."
           },
           "response": []
+        },
+        {
+          "name": "Get Last Performance for Exercise",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/exercises/:exerciseId/last-performance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "exercises",
+                ":exerciseId",
+                "last-performance"
+              ],
+              "variable": [
+                {
+                  "key": "exerciseId",
+                  "value": "",
+                  "description": "TrainingExercise UUID (from ExerciseLog.exerciseId in the session response — NOT a template ID)"
+                }
+              ]
+            },
+            "description": "Returns the most recent completed-session sets for the given TrainingExercise. Returns 200 with performedAt=null and sets=[] when the exercise has never been logged — avoids 404 handling for the first-time case. Returns 403 if the exercise belongs to a different student's protocol."
+          },
+          "response": []
         }
       ]
     },

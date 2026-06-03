@@ -201,6 +201,7 @@ export default {
 
     // Workout session
     'workoutSession.alreadyInProgress': 'Você já possui uma sessão de treino em andamento.',
+    'workoutSession.finalized': 'Não é possível modificar uma sessão de treino finalizada.',
 
     // Anamnesis
     'anamnesis.notFound': 'Anamnese não encontrada.',
@@ -317,6 +318,10 @@ export default {
     'platformPlan.paymentOverdue': 'Há um pagamento em atraso. Regularize para manter o plano ativo.',
     'platformPlan.invalidTier': 'Plano inválido.',
     'platformPlan.alreadyOnTier': 'Você já está neste plano.',
+
+    // Exercise last performance
+    'exercise.notFound': 'Exercício não encontrado.',
+    'exercise.notYours': 'Este exercício não pertence ao seu protocolo.',
 
     // Video library
     'video.notFound': 'Vídeo não encontrado.',

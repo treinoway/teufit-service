@@ -33,6 +33,9 @@ const substituteExerciseMinimalSchema = {
   },
 };
 
+// Base exerciseLog shape — used in routes that do NOT compute previousLog
+// (POST start-session, PATCH update-session, POST substitute-exercise-log,
+//  PATCH update-exercise-log, trainer GET student session).
 const exerciseLogSchema = {
   type: 'object',
   properties: {
@@ -70,6 +73,36 @@ const exerciseLogSchema = {
   },
 };
 
+// Extended exerciseLog shape — used only for GET session detail (student side),
+// which calls attachPreviousLogs() and guarantees the field is present.
+// finishedAt is nullable because workout_sessions.finished_at is nullable in Prisma
+// (a session may be completed without an explicit finishedAt if it was abandoned early).
+const exerciseLogWithPreviousLogSchema = {
+  type: 'object',
+  properties: {
+    ...exerciseLogSchema.properties,
+    previousLog: {
+      type: ['object', 'null'],
+      properties: {
+        workoutSessionId: { type: 'string', format: 'uuid' },
+        finishedAt: { type: 'string', format: 'date-time', nullable: true },
+        setLogs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              setNumber: { type: 'integer' },
+              repetitions: { type: ['integer', 'null'] },
+              load: { type: ['number', 'null'] },
+              duration: { type: ['integer', 'null'] },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 const workoutSessionSchema = {
   type: 'object',
   properties: {
@@ -96,12 +129,25 @@ const workoutSessionTrainingSummarySchema = {
   },
 };
 
+// workoutSessionDetailSchema — no previousLog.
+// Used for POST start-session, PATCH update-session, and trainer GET student session.
 const workoutSessionDetailSchema = {
   type: 'object',
   properties: {
     ...workoutSessionSchema.properties,
     training: workoutSessionTrainingSummarySchema,
     exerciseLogs: { type: 'array', items: exerciseLogSchema },
+  },
+};
+
+// workoutSessionDetailWithPreviousLogSchema — includes previousLog on each exerciseLog.
+// Used only for GET /my/workout-sessions/:sessionId, which calls attachPreviousLogs().
+const workoutSessionDetailWithPreviousLogSchema = {
+  type: 'object',
+  properties: {
+    ...workoutSessionSchema.properties,
+    training: workoutSessionTrainingSummarySchema,
+    exerciseLogs: { type: 'array', items: exerciseLogWithPreviousLogSchema },
   },
 };
 
@@ -134,6 +180,23 @@ const conflictErrorSchema = {
       type: 'object',
       properties: {
         activeSessionId: { type: 'string', format: 'uuid' },
+      },
+    },
+  },
+};
+
+const sessionFinalizedErrorSchema = {
+  type: 'object',
+  required: ['error', 'messageCode', 'message'],
+  properties: {
+    error: { type: 'string' },
+    messageCode: { type: 'string' },
+    message: { type: 'string' },
+    details: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string', format: 'uuid' },
+        status: { type: 'string' },
       },
     },
   },
@@ -203,7 +266,8 @@ export const getSessionSchema = {
     properties: { sessionId: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: workoutSessionDetailSchema,
+    // Uses the extended schema because this route calls attachPreviousLogs()
+    200: workoutSessionDetailWithPreviousLogSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -235,6 +299,7 @@ export const updateSessionSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -306,6 +371,7 @@ export const updateExerciseLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -346,6 +412,7 @@ export const createSetLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -384,6 +451,7 @@ export const updateSetLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -412,6 +480,7 @@ export const deleteSetLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -472,6 +541,50 @@ export const getStudentSessionSchema = {
   },
 };
 
+// ─── Last performance ─────────────────────────────────────────────────────────
+
+const lastPerformanceSetSchema = {
+  type: 'object',
+  properties: {
+    setNumber: { type: 'integer', minimum: 1 },
+    repetitions: { type: 'integer', nullable: true },
+    load: { type: 'number', nullable: true },
+    duration: { type: 'integer', nullable: true },
+    rpe: { type: 'integer', minimum: 1, maximum: 10, nullable: true },
+    restSeconds: { type: 'integer', nullable: true },
+    completed: { type: 'boolean' },
+  },
+};
+
+export const getExerciseLastPerformanceSchema = {
+  tags: ['Workout Sessions'],
+  summary: 'Get the last logged performance for a training exercise',
+  description:
+    'Returns the most recent completed-session sets for the given exercise. ' +
+    'Returns 200 with performedAt=null and sets=[] when the exercise has never been logged — ' +
+    'avoids 404 handling for the common first-time case.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['exerciseId'],
+    properties: { exerciseId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        performedAt: { type: 'string', format: 'date-time', nullable: true },
+        sets: { type: 'array', items: lastPerformanceSetSchema },
+      },
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 // ─── Undo substitute exercise log ────────────────────────────────────────────
 
 export const undoSubstituteExerciseLogSchema = {
@@ -492,6 +605,7 @@ export const undoSubstituteExerciseLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -525,7 +639,7 @@ export const substituteExerciseLogSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
-    409: errorResponseSchema,
+    409: sessionFinalizedErrorSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },

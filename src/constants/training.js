@@ -161,3 +161,16 @@ export const DashboardMessageCode = Object.freeze({
   INVALID_DATE_RANGE: 'dashboard.invalidDateRange',
   WINDOW_TOO_LARGE: 'dashboard.windowTooLarge',
 });
+
+export const LastPerformanceErrorCode = Object.freeze({
+  EXERCISE_NOT_FOUND: 'EXERCISE_NOT_FOUND',
+  EXERCISE_NOT_YOURS: 'EXERCISE_NOT_YOURS',
+});
+
+export const LastPerformanceMessageCode = Object.freeze({
+  EXERCISE_NOT_FOUND: 'exercise.notFound',
+  EXERCISE_NOT_YOURS: 'exercise.notYours',
+});
+
+export const WorkoutSessionFinalizedErrorCode = 'SESSION_FINALIZED';
+export const WorkoutSessionFinalizedMessageCode = 'workoutSession.finalized';

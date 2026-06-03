@@ -197,6 +197,7 @@ export default {
 
     // Workout session
     'workoutSession.alreadyInProgress': 'You already have a workout session in progress.',
+    'workoutSession.finalized': 'Cannot modify a finalized workout session.',
 
     // Anamnesis
     'anamnesis.notFound': 'Anamnesis not found.',
@@ -281,6 +282,10 @@ export default {
     'exercise.supersetMaxMembers': 'A superset cannot have more than 6 exercises.',
     'exercise.alreadyInSuperset': 'One or more exercises already belong to a superset group.',
     'exercise.supersetGroupNotFound': 'Superset group not found or has no active members.',
+
+    // Exercise last performance
+    'exercise.notFound': 'Exercise not found.',
+    'exercise.notYours': 'This exercise does not belong to your protocol.',
 
     // Substitute exercises
     'exercise.substituteSameTraining': 'The substitute exercise must belong to the same training as the principal.',
