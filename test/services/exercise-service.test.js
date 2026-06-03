@@ -95,6 +95,7 @@ describe('exercise-service', () => {
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
         },
         training: { update: vi.fn().mockResolvedValue({}) },
       };
@@ -202,11 +203,12 @@ describe('exercise-service', () => {
       trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
     });
 
-    function makeCreateTxMock(createdExercise) {
+    function makeCreateTxMock(createdExercise, maxOrder = null) {
       return {
         exercise: {
           create: vi.fn().mockResolvedValue(createdExercise),
           findMany: vi.fn().mockResolvedValue([createdExercise]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: maxOrder } }),
         },
         training: { update: vi.fn().mockResolvedValue({}) },
       };
@@ -337,6 +339,49 @@ describe('exercise-service', () => {
       expect(txMock.training.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'tr1' }, data: { estimatedDurationSeconds: expect.any(Number) } }),
       );
+    });
+
+    it('appends a new exercise to the end of the training (max order + 1)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex3', order: 2, prescriptionMode: 'reps' };
+      const txMock = makeCreateTxMock(created, 1);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ order: 2 }),
+      });
+    });
+
+    it('uses order 0 for the first exercise in an empty training', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', order: 0, prescriptionMode: 'reps' };
+      const txMock = makeCreateTxMock(created, null);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ order: 0 }),
+      });
+    });
+
+    it('respects an explicit order when provided (no append)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', order: 5, prescriptionMode: 'reps' };
+      const txMock = makeCreateTxMock(created, 1);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength', order: 5 });
+
+      expect(txMock.exercise.aggregate).not.toHaveBeenCalled();
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ order: 5 }),
+      });
     });
   });
 
@@ -595,6 +640,7 @@ describe('exercise-service', () => {
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([created]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
         },
         training: { update: vi.fn().mockResolvedValue({}) },
       };
@@ -605,6 +651,29 @@ describe('exercise-service', () => {
       expect(txMock.training.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'tr1' }, data: { estimatedDurationSeconds: expect.any(Number) } }),
       );
+    });
+
+    it('appends from-template exercise to the end of the training (max order + 1)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
+
+      const created = { id: 'ex9', trainingId: 'tr1', order: 4, prescriptionMode: 'reps', substituteForExerciseId: null, deletedAt: null };
+      const txMock = {
+        exercise: {
+          create: vi.fn().mockResolvedValue(created),
+          findMany: vi.fn().mockResolvedValue([created]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: 3 } }),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createFromTemplate('u1', 'tr1', 'tmpl-1');
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ order: 4 }),
+      });
     });
   });
 

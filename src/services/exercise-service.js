@@ -51,6 +51,21 @@ async function loadActiveExercises(trainingId) {
   });
 }
 
+/**
+ * Resolve the order for a new exercise appended to the end of a training.
+ *
+ * Returns max(order) + 1 across active principal exercises (non-deleted,
+ * non-substitute), or 0 when the training has no exercises yet. This keeps newly
+ * created exercises at the bottom of the list instead of colliding at order 0.
+ */
+async function resolveAppendOrder(tx, trainingId) {
+  const result = await tx.exercise.aggregate({
+    where: { trainingId, deletedAt: null, substituteForExerciseId: null },
+    _max: { order: true },
+  });
+  return result._max.order === null ? 0 : result._max.order + 1;
+}
+
 
 function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
@@ -131,8 +146,11 @@ export async function createExercise(userId, trainingId, data) {
   }
 
   const exercise = await prisma.$transaction(async (tx) => {
+    const order = data.order !== undefined
+      ? data.order
+      : await resolveAppendOrder(tx, trainingId);
     const created = await tx.exercise.create({
-      data: buildExerciseData(data, trainingId),
+      data: buildExerciseData({ ...data, order }, trainingId),
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -278,9 +296,12 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
   };
 
   const exercise = await prisma.$transaction(async (tx) => {
+    const order = data.order !== undefined
+      ? data.order
+      : await resolveAppendOrder(tx, trainingId);
     const created = await tx.exercise.create({
       data: {
-        ...buildExerciseData(exerciseData, trainingId, template.id),
+        ...buildExerciseData({ ...exerciseData, order }, trainingId, template.id),
         exerciseTemplateId: template.id,
       },
     });
