@@ -54,7 +54,7 @@ const exerciseBodyProperties = {
   name: { type: 'string', minLength: 1 },
   type: { type: 'string', enum: exerciseTypeValues },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
-  videoUrl: { type: 'string' },
+  videoUrl: { type: 'string', nullable: true },
   order: { type: 'integer', minimum: 0 },
   supersetGroupId: { type: 'string', format: 'uuid' },
   supersetOrder: { type: 'integer', minimum: 0 },

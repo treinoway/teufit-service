@@ -93,6 +93,58 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
   };
 }
 
+/**
+ * Find an existing private library template for this trainer matching the
+ * exercise, or create one. Lets a freshly created exercise auto-populate the
+ * trainer's exercise library so it is reusable next time.
+ *
+ * Dedup key: trainerId + type + name (case-insensitive). A match is reused
+ * as-is (its stored values are NOT overwritten) to avoid surprising edits to
+ * a template shared by other trainings. New templates are always private
+ * (isPublic: false).
+ *
+ * Runs inside the caller's transaction so the template and exercise are atomic.
+ */
+async function findOrCreateLibraryTemplate(tx, trainerId, data) {
+  const existing = await tx.exerciseTemplate.findFirst({
+    where: {
+      trainerId,
+      deletedAt: null,
+      type: data.type,
+      name: { equals: data.name, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
+
+  const created = await tx.exerciseTemplate.create({
+    data: {
+      trainerId,
+      name: data.name,
+      type: data.type,
+      videoUrl: data.videoUrl || null,
+      isPublic: false,
+      sets: data.sets ?? null,
+      repetitions,
+      duration,
+      prescriptionMode: resolvedMode,
+      hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+      suggestedLoad: data.suggestedLoad ?? null,
+      restInterval: data.restInterval ?? null,
+      notes: data.notes ?? null,
+    },
+    select: { id: true },
+  });
+
+  return created.id;
+}
+
 function normalizeExercisePrescriptionMode(exercise) {
   if (!exercise) return exercise;
   return {
@@ -141,7 +193,7 @@ export async function createExercise(userId, trainingId, data) {
   // createExerciseSchema strips substituteForExerciseId via additionalProperties: false.
   if (data.supersetGroupId) {
     // Resolve order and shift downstream exercises atomically so group stays contiguous
-    const exercise = await createSupersetMemberAtomically(trainingId, data);
+    const exercise = await createSupersetMemberAtomically(trainingId, data, trainer.id);
     return normalizeExercisePrescriptionMode(exercise);
   }
 
@@ -149,8 +201,9 @@ export async function createExercise(userId, trainingId, data) {
     const order = data.order !== undefined
       ? data.order
       : await resolveAppendOrder(tx, trainingId);
+    const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainer.id, data);
     const created = await tx.exercise.create({
-      data: buildExerciseData({ ...data, order }, trainingId),
+      data: buildExerciseData({ ...data, order }, trainingId, exerciseTemplateId),
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -173,7 +226,7 @@ export async function createExercise(userId, trainingId, data) {
  *
  * All queries and mutations run inside a single $transaction.
  */
-async function createSupersetMemberAtomically(trainingId, data) {
+async function createSupersetMemberAtomically(trainingId, data, trainerId) {
   return prisma.$transaction(async (tx) => {
     const allActive = await tx.exercise.findMany({
       where: { trainingId, deletedAt: null },
@@ -243,8 +296,9 @@ async function createSupersetMemberAtomically(trainingId, data) {
       }
     }
 
+    const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainerId, data);
     const created = await tx.exercise.create({
-      data: buildExerciseData({ ...data, order: resolvedOrder }, trainingId),
+      data: buildExerciseData({ ...data, order: resolvedOrder }, trainingId, exerciseTemplateId),
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -834,9 +888,11 @@ export async function addSubstitute(userId, principalId, data) {
     });
     const nextSubstituteOrder = lastSubstitute ? lastSubstitute.substituteOrder + 1 : 0;
 
+    const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainer.id, data);
     const substituteData = buildExerciseData(
       { ...data, substituteForExerciseId: principalId, substituteOrder: nextSubstituteOrder },
       principal.trainingId,
+      exerciseTemplateId,
     );
 
     return tx.exercise.create({ data: substituteData });

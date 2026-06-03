@@ -97,6 +97,10 @@ describe('exercise-service', () => {
           findMany: vi.fn().mockResolvedValue([]),
           aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
         },
+        exerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+        },
         training: { update: vi.fn().mockResolvedValue({}) },
       };
       prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
@@ -209,6 +213,10 @@ describe('exercise-service', () => {
           create: vi.fn().mockResolvedValue(createdExercise),
           findMany: vi.fn().mockResolvedValue([createdExercise]),
           aggregate: vi.fn().mockResolvedValue({ _max: { order: maxOrder } }),
+        },
+        exerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
         },
         training: { update: vi.fn().mockResolvedValue({}) },
       };
@@ -381,6 +389,144 @@ describe('exercise-service', () => {
       expect(txMock.exercise.aggregate).not.toHaveBeenCalled();
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 5 }),
+      });
+    });
+  });
+
+  describe('createExercise — library template auto-creation', () => {
+    const makeTraining = () => ({
+      id: 'tr1',
+      deletedAt: null,
+      trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
+    });
+
+    function makeLibraryTxMock(createdExercise) {
+      return {
+        exercise: {
+          create: vi.fn().mockResolvedValue(createdExercise),
+          findMany: vi.fn().mockResolvedValue([createdExercise]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
+        },
+        exerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+    }
+
+    it('creates a private template when none exists and links it to the exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const txMock = makeLibraryTxMock({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          isPublic: false,
+          trainerId: 't1',
+          name: 'Squat',
+          type: 'strength',
+        }),
+        select: { id: true },
+      });
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ exerciseTemplateId: 'tpl1' }),
+      });
+    });
+
+    it('reuses an existing template (dedup by name + type) without creating a new one', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const txMock = makeLibraryTxMock({ id: 'ex1', prescriptionMode: 'reps' });
+      txMock.exerciseTemplate.findFirst.mockResolvedValue({ id: 'existing-tpl' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exerciseTemplate.create).not.toHaveBeenCalled();
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ exerciseTemplateId: 'existing-tpl' }),
+      });
+    });
+
+    it('dedups by case-insensitive name + type + trainerId', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const txMock = makeLibraryTxMock({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exerciseTemplate.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            trainerId: 't1',
+            type: 'strength',
+            name: { equals: 'Squat', mode: 'insensitive' },
+            deletedAt: null,
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('addSubstitute — library template auto-creation', () => {
+    const makePrincipal = (overrides = {}) => ({
+      id: 'principal-1',
+      trainingId: 'tr1',
+      deletedAt: null,
+      substituteForExerciseId: null,
+      supersetGroupId: null,
+      training: {
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+      },
+      ...overrides,
+    });
+
+    it('creates and links a library template for the new substitute', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipal());
+      const created = { id: 'sub-1', name: 'Alt', substituteOrder: 0, substituteForExerciseId: 'principal-1', prescriptionMode: 'reps' };
+
+      const txCreate = vi.fn().mockResolvedValue(created);
+      const tplFindFirst = vi.fn().mockResolvedValue(null);
+      const tplCreate = vi.fn().mockResolvedValue({ id: 'tpl1' });
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          exercise: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: txCreate,
+          },
+          exerciseTemplate: {
+            findFirst: tplFindFirst,
+            create: tplCreate,
+          },
+        };
+        return fn(tx);
+      });
+
+      await addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength' });
+
+      expect(tplFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            trainerId: 't1',
+            type: 'strength',
+            name: { equals: 'Alt', mode: 'insensitive' },
+            deletedAt: null,
+          }),
+        }),
+      );
+      expect(tplCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ isPublic: false, trainerId: 't1', name: 'Alt', type: 'strength' }),
+        select: { id: true },
+      });
+      expect(txCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ exerciseTemplateId: 'tpl1', substituteForExerciseId: 'principal-1' }),
       });
     });
   });
@@ -1175,6 +1321,10 @@ describe('exercise-service', () => {
             findFirst: vi.fn().mockResolvedValue(null),
             create: vi.fn().mockResolvedValue(created),
           },
+          exerciseTemplate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+          },
         };
         return fn(tx);
       });
@@ -1195,6 +1345,10 @@ describe('exercise-service', () => {
           exercise: {
             findFirst: vi.fn().mockResolvedValue(null), // no existing substitutes
             create: txCreate,
+          },
+          exerciseTemplate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
           },
         };
         return fn(tx);
@@ -1224,6 +1378,10 @@ describe('exercise-service', () => {
           exercise: {
             findFirst: vi.fn().mockResolvedValue({ substituteOrder: 0 }), // one existing
             create: txCreate,
+          },
+          exerciseTemplate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
           },
         };
         return fn(tx);
