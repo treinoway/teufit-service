@@ -74,7 +74,7 @@ const exerciseBodyProperties = {
   suggestedLoad: { type: 'number', minimum: 0 },
   restInterval: { type: 'integer', minimum: 0 },
   notes: { type: 'string' },
-  intensity: { type: 'string', enum: exerciseIntensityValues },
+  intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
 };
 
 export const createExerciseSchema = {

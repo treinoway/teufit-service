@@ -100,6 +100,7 @@ const exerciseSelectWithSubstitutes = {
     restInterval: true,
     videoUrl: true,
     notes: true,
+    intensity: true,
     substitutes: {
       where: { deletedAt: null },
       orderBy: { substituteOrder: 'asc' },
