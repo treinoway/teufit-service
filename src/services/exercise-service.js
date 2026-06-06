@@ -11,6 +11,8 @@ import {
   assertSupersetContiguity,
 } from '../helpers/training-validators.js';
 import {
+  ExerciseType,
+  ExerciseIntensityMessageCode,
   PrescriptionMode,
   SupersetConstraints,
   SupersetMessageCode,
@@ -20,6 +22,20 @@ import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { randomUUID } from 'crypto';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * Throw a 400 AppError if intensity is set but the effective exercise type is not cardio.
+ */
+function validateIntensityRequiresCardio(intensity, effectiveType) {
+  if (intensity !== undefined && intensity !== null && effectiveType !== ExerciseType.CARDIO) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+      message: 'Intensity can only be set for cardio exercises.',
+    });
+  }
+}
 
 /**
  * Verify training ownership (trainer context)
@@ -90,6 +106,7 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
     suggestedLoad: data.suggestedLoad ?? null,
     restInterval: data.restInterval ?? null,
     notes: data.notes ?? null,
+    intensity: data.intensity !== undefined ? data.intensity : null,
   };
 }
 
@@ -138,6 +155,7 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
       suggestedLoad: data.suggestedLoad ?? null,
       restInterval: data.restInterval ?? null,
       notes: data.notes ?? null,
+      intensity: data.intensity !== undefined ? data.intensity : null,
     },
     select: { id: true },
   });
@@ -188,6 +206,7 @@ export async function createExercise(userId, trainingId, data) {
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
+  validateIntensityRequiresCardio(data.intensity, data.type);
 
   // Substitutes are only added via POST /trainer/exercises/:id/substitutes — not via this endpoint.
   // createExerciseSchema strips substituteForExerciseId via additionalProperties: false.
@@ -332,9 +351,13 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
   }
 
+  const effectiveType = data.type || template.type;
+  const effectiveIntensity = data.intensity !== undefined ? data.intensity : template.intensity;
+  validateIntensityRequiresCardio(effectiveIntensity, effectiveType);
+
   const exerciseData = {
     name: data.name || template.name,
-    type: data.type || template.type,
+    type: effectiveType,
     videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
     order: data.order !== undefined ? data.order : 0,
     sets: data.sets !== undefined ? data.sets : template.sets,
@@ -347,6 +370,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     suggestedLoad: data.suggestedLoad !== undefined ? data.suggestedLoad : template.suggestedLoad,
     restInterval: data.restInterval !== undefined ? data.restInterval : template.restInterval,
     notes: data.notes !== undefined ? data.notes : template.notes,
+    intensity: effectiveIntensity !== undefined ? effectiveIntensity : null,
   };
 
   const exercise = await prisma.$transaction(async (tx) => {
@@ -516,6 +540,17 @@ export async function updateExercise(userId, exerciseId, data) {
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
+  // Validate intensity: effective type = updated type (if provided) or existing type
+  if (data.intensity !== undefined) {
+    const effectiveType = data.type !== undefined ? data.type : exercise.type;
+    validateIntensityRequiresCardio(data.intensity, effectiveType);
+  }
+  // Also reject if type is being changed away from cardio while intensity is/remains set
+  if (data.type !== undefined && data.type !== ExerciseType.CARDIO) {
+    const effectiveIntensity = data.intensity !== undefined ? data.intensity : exercise.intensity;
+    validateIntensityRequiresCardio(effectiveIntensity, data.type);
+  }
+
   // If order is being changed and the exercise belongs to a superset, verify contiguity
   if (data.order !== undefined && data.order !== exercise.order && exercise.supersetGroupId) {
     const allActive = await loadActiveExercises(exercise.trainingId);
@@ -541,6 +576,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
+  if (data.intensity !== undefined) updateData.intensity = data.intensity;
 
   if (data.prescriptionMode !== undefined) {
     const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);
@@ -870,6 +906,7 @@ export async function addSubstitute(userId, principalId, data) {
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
+  validateIntensityRequiresCardio(data.intensity, data.type);
 
   // The substitute schema blocks supersetGroupId, so the candidate always has null here.
   validateSubstituteConstraint(principal, {

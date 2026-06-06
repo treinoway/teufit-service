@@ -55,6 +55,14 @@ export const ExerciseType = Object.freeze({
   STRETCHING: 'stretching',
 });
 
+export const ExerciseIntensity = Object.freeze({
+  VERY_LIGHT: 'very_light',
+  LIGHT: 'light',
+  MODERATE: 'moderate',
+  VIGOROUS: 'vigorous',
+  NEAR_MAXIMAL: 'near_maximal',
+});
+
 export const ProtocolType = Object.freeze({
   STRENGTH: 'strength',
   CARDIO: 'cardio',
@@ -102,6 +110,7 @@ export const trainingStatusValues = Object.freeze(Object.values(TrainingStatus))
 export const genderOrdinationValues = Object.freeze(Object.values(GenderOrdination));
 export const trainingLevelValues = Object.freeze(Object.values(TrainingLevel));
 export const exerciseTypeValues = Object.freeze(Object.values(ExerciseType));
+export const exerciseIntensityValues = Object.freeze(Object.values(ExerciseIntensity));
 export const protocolTypeValues = Object.freeze(Object.values(ProtocolType));
 export const workoutSessionStatusValues = Object.freeze(Object.values(WorkoutSessionStatus));
 export const exerciseLogStatusValues = Object.freeze(Object.values(ExerciseLogStatus));
@@ -170,6 +179,10 @@ export const LastPerformanceErrorCode = Object.freeze({
 export const LastPerformanceMessageCode = Object.freeze({
   EXERCISE_NOT_FOUND: 'exercise.notFound',
   EXERCISE_NOT_YOURS: 'exercise.notYours',
+});
+
+export const ExerciseIntensityMessageCode = Object.freeze({
+  INTENSITY_REQUIRES_CARDIO: 'exercise.intensityRequiresCardio',
 });
 
 export const WorkoutSessionFinalizedErrorCode = 'SESSION_FINALIZED';

@@ -380,6 +380,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
           suggestedLoad: junctionRow.suggestedLoad ?? null,
           restInterval: junctionRow.restInterval ?? null,
           notes: junctionRow.notes ?? null,
+          intensity: junctionRow.intensity ?? null,
         },
       });
     }

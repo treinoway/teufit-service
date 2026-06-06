@@ -180,6 +180,7 @@ export const importedExerciseResponseSchema = {
     suggestedLoad: { type: 'number', nullable: true },
     restInterval: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
+    ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },

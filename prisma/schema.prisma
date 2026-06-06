@@ -380,6 +380,7 @@ model ExerciseTemplate {
   suggestedLoad    Float?  @map("suggested_load")
   restInterval     Int?    @map("rest_interval")
   notes            String? @db.Text
+  intensity        String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -414,6 +415,7 @@ model TrainingTemplateExerciseTemplate {
   suggestedLoad    Float?  @map("suggested_load")
   restInterval     Int?    @map("rest_interval")
   notes            String? @db.Text
+  intensity        String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -451,6 +453,7 @@ model Exercise {
   suggestedLoad    Float?  @map("suggested_load")
   restInterval     Int?    @map("rest_interval")
   notes            String? @db.Text
+  intensity        String? @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

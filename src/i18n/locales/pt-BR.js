@@ -64,6 +64,13 @@ export default {
       mobility: 'Mobilidade',
       stretching: 'Alongamento',
     },
+    exerciseIntensity: {
+      very_light: 'Muito leve',
+      light: 'Leve',
+      moderate: 'Moderada',
+      vigorous: 'Vigorosa',
+      near_maximal: 'Quase máxima',
+    },
     workoutSessionStatus: {
       in_progress: 'Em andamento',
       completed: 'Concluído',
@@ -286,6 +293,9 @@ export default {
     'exercise.supersetMaxMembers': 'Um bi-set não pode ter mais de 6 exercícios.',
     'exercise.alreadyInSuperset': 'Um ou mais exercícios já pertencem a um bi-set.',
     'exercise.supersetGroupNotFound': 'Bi-set não encontrado ou sem membros ativos.',
+
+    // Exercise intensity
+    'exercise.intensityRequiresCardio': 'A intensidade só pode ser definida para exercícios do tipo cardio.',
 
     // Substitute exercises
     'exercise.substituteSameTraining': 'O exercício substituto deve pertencer ao mesmo treino que o exercício principal.',

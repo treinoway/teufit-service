@@ -29,7 +29,7 @@ import {
   reorderSubstitutes,
   reorderSupersetMembers,
 } from '../../src/services/exercise-service.js';
-import { SupersetMessageCode, SubstituteMessageCode } from '../../src/constants/training.js';
+import { ExerciseIntensityMessageCode, SupersetMessageCode, SubstituteMessageCode } from '../../src/constants/training.js';
 
 const makeExercise = (overrides = {}) => ({
   id: 'ex1',
@@ -473,6 +473,65 @@ describe('exercise-service', () => {
     });
   });
 
+  describe('createExercise — intensity', () => {
+    const makeTraining = () => ({
+      id: 'tr1',
+      deletedAt: null,
+      trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
+    });
+
+    function makeIntensityTxMock(createdExercise) {
+      return {
+        exercise: {
+          create: vi.fn().mockResolvedValue(createdExercise),
+          findMany: vi.fn().mockResolvedValue([createdExercise]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
+        },
+        exerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+    }
+
+    it('persists intensity when set on a cardio exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      const created = { id: 'ex1', type: 'cardio', intensity: 'moderate', prescriptionMode: 'duration' };
+      const txMock = makeIntensityTxMock(created);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await createExercise('u1', 'tr1', {
+        name: 'Running',
+        type: 'cardio',
+        prescriptionMode: 'duration',
+        duration: 30,
+        intensity: 'moderate',
+      });
+
+      expect(result).toEqual(created);
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: 'cardio', intensity: 'moderate' }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR with exercise.intensityRequiresCardio when intensity set on strength exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+
+      await expect(
+        createExercise('u1', 'tr1', { name: 'Squat', type: 'strength', intensity: 'moderate' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('addSubstitute — library template auto-creation', () => {
     const makePrincipal = (overrides = {}) => ({
       id: 'principal-1',
@@ -750,6 +809,68 @@ describe('exercise-service', () => {
     });
   });
 
+  describe('updateExercise — intensity', () => {
+    it('persists intensity when set on a cardio exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'cardio', intensity: null }));
+      const updated = { id: 'ex1', type: 'cardio', intensity: 'vigorous', prescriptionMode: 'reps' };
+      prisma.exercise.update.mockResolvedValue(updated);
+
+      const result = await updateExercise('u1', 'ex1', { intensity: 'vigorous' });
+
+      expect(result).toEqual(updated);
+      expect(prisma.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ intensity: 'vigorous' }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR when setting intensity on a non-cardio exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'strength', intensity: null }));
+
+      await expect(
+        updateExercise('u1', 'ex1', { intensity: 'moderate' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.exercise.update).not.toHaveBeenCalled();
+    });
+
+    it('throws VALIDATION_ERROR when changing type to strength while intensity is set on the exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'cardio', intensity: 'light' }));
+
+      await expect(
+        updateExercise('u1', 'ex1', { type: 'strength' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.exercise.update).not.toHaveBeenCalled();
+    });
+
+    it('accepts clearing intensity to null on a cardio exercise', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'cardio', intensity: 'light' }));
+      const updated = { id: 'ex1', type: 'cardio', intensity: null, prescriptionMode: 'reps' };
+      prisma.exercise.update.mockResolvedValue(updated);
+
+      const result = await updateExercise('u1', 'ex1', { intensity: null });
+
+      expect(result).toEqual(updated);
+      expect(prisma.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ intensity: null }),
+      });
+    });
+  });
+
   describe('createFromTemplate — recompute duration', () => {
     const makeTraining = () => ({
       id: 'tr1',
@@ -820,6 +941,93 @@ describe('exercise-service', () => {
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 4 }),
       });
+    });
+  });
+
+  describe('createFromTemplate — intensity', () => {
+    const makeTraining = () => ({
+      id: 'tr1',
+      deletedAt: null,
+      trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
+    });
+
+    const makeCardioTemplate = (overrides = {}) => ({
+      id: 'tmpl-cardio',
+      trainerId: 't1',
+      name: 'Running',
+      type: 'cardio',
+      isPublic: false,
+      deletedAt: null,
+      sets: null,
+      repetitions: null,
+      duration: 30,
+      prescriptionMode: 'duration',
+      hasLoad: false,
+      suggestedLoad: null,
+      restInterval: null,
+      notes: null,
+      videoUrl: null,
+      intensity: 'moderate',
+      ...overrides,
+    });
+
+    function makeTxMock(created) {
+      return {
+        exercise: {
+          create: vi.fn().mockResolvedValue(created),
+          findMany: vi.fn().mockResolvedValue([created]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+    }
+
+    it('inherits intensity from cardio template when caller does not override', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
+      const created = { id: 'ex1', type: 'cardio', intensity: 'moderate', prescriptionMode: 'duration' };
+      const txMock = makeTxMock(created);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await createFromTemplate('u1', 'tr1', 'tmpl-cardio');
+
+      expect(result).toEqual(created);
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ intensity: 'moderate' }),
+      });
+    });
+
+    it('clears intensity when caller overrides intensity to null', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
+      const created = { id: 'ex1', type: 'cardio', intensity: null, prescriptionMode: 'duration' };
+      const txMock = makeTxMock(created);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await createFromTemplate('u1', 'tr1', 'tmpl-cardio', { intensity: null });
+
+      expect(result).toEqual(created);
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ intensity: null }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR when caller overrides type to strength on a cardio template with intensity', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate()); // intensity: 'moderate'
+
+      await expect(
+        createFromTemplate('u1', 'tr1', 'tmpl-cardio', { type: 'strength' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 
@@ -1392,6 +1600,28 @@ describe('exercise-service', () => {
       expect(txCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ substituteOrder: 1 }),
       });
+    });
+
+    it('throws VALIDATION_ERROR when adding a substitute with intensity on a non-cardio type', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue({
+        id: 'principal-1',
+        trainingId: 'tr1',
+        deletedAt: null,
+        substituteForExerciseId: null,
+        supersetGroupId: null,
+        training: { deletedAt: null, trainingProtocol: { trainerId: 't1', deletedAt: null } },
+      });
+
+      await expect(
+        addSubstitute('u1', 'principal-1', { name: 'Alt Squat', type: 'strength', intensity: 'moderate' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

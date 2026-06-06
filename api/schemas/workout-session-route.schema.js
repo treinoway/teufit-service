@@ -63,6 +63,7 @@ const exerciseLogSchema = {
         restInterval: { type: 'integer', nullable: true },
         videoUrl: { type: 'string', nullable: true },
         notes: { type: 'string', nullable: true },
+        ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
         // swap options available to the student for this exercise
         substitutes: { type: 'array', items: substituteExerciseMinimalSchema },
       },

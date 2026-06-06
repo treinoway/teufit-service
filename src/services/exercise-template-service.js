@@ -7,7 +7,19 @@ import {
   applyPrescriptionModeExclusivity,
   resolvePrescriptionMode,
 } from '../helpers/training-validators.js';
-import { PrescriptionMode } from '../constants/training.js';
+import { ExerciseType, ExerciseIntensityMessageCode, PrescriptionMode } from '../constants/training.js';
+import { AppError } from '../errors/app-error.js';
+
+function validateIntensityRequiresCardio(intensity, effectiveType) {
+  if (intensity !== undefined && intensity !== null && effectiveType !== ExerciseType.CARDIO) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+      message: 'Intensity can only be set for cardio exercises.',
+    });
+  }
+}
 
 function buildTemplateData(data, trainerId) {
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
@@ -27,6 +39,7 @@ function buildTemplateData(data, trainerId) {
     suggestedLoad: data.suggestedLoad ?? null,
     restInterval: data.restInterval ?? null,
     notes: data.notes ?? null,
+    intensity: data.intensity !== undefined ? data.intensity : null,
   };
 }
 
@@ -58,6 +71,7 @@ export async function createExerciseTemplate(userId, data) {
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
+  validateIntensityRequiresCardio(data.intensity, data.type);
 
   const template = await prisma.exerciseTemplate.create({
     data: buildTemplateData(data, trainer.id),
@@ -202,6 +216,15 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
+  if (data.intensity !== undefined) {
+    const effectiveType = data.type !== undefined ? data.type : template.type;
+    validateIntensityRequiresCardio(data.intensity, effectiveType);
+  }
+  if (data.type !== undefined && data.type !== ExerciseType.CARDIO) {
+    const effectiveIntensity = data.intensity !== undefined ? data.intensity : template.intensity;
+    validateIntensityRequiresCardio(effectiveIntensity, data.type);
+  }
+
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
@@ -212,6 +235,7 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
+  if (data.intensity !== undefined) updateData.intensity = data.intensity;
 
   if (data.prescriptionMode !== undefined) {
     const { repetitions, duration } = applyPrescriptionModeExclusivity(data.prescriptionMode, data);

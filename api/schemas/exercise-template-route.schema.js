@@ -1,4 +1,4 @@
-import { exerciseTypeValues, prescriptionModeValues } from '../../src/constants/training.js';
+import { exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -26,6 +26,7 @@ const exerciseTemplateResponseSchema = {
     suggestedLoad: { type: 'number', nullable: true },
     restInterval: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
+    ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -59,6 +60,7 @@ export const createExerciseTemplateSchema = {
       suggestedLoad: { type: 'number', minimum: 0 },
       restInterval: { type: 'integer', minimum: 0 },
       notes: { type: 'string' },
+      intensity: { type: 'string', enum: exerciseIntensityValues },
     },
     additionalProperties: false,
   },
@@ -153,6 +155,7 @@ export const updateExerciseTemplateSchema = {
       suggestedLoad: { type: ['number', 'null'], minimum: 0 },
       restInterval: { type: ['integer', 'null'], minimum: 0 },
       notes: { type: 'string' },
+      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
     },
     additionalProperties: false,
   },

@@ -50,6 +50,7 @@ function buildJunctionCreateData(e, index, template) {
     suggestedLoad: e.suggestedLoad !== undefined ? e.suggestedLoad : template.suggestedLoad,
     restInterval: e.restInterval !== undefined ? e.restInterval : template.restInterval,
     notes: e.notes !== undefined ? e.notes : template.notes,
+    intensity: e.intensity !== undefined ? e.intensity : template.intensity,
   };
 }
 

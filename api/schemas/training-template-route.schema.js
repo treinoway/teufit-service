@@ -56,6 +56,7 @@ const trainingTemplateExerciseTemplateSchema = {
     suggestedLoad: { type: 'number', nullable: true },
     restInterval: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
+    intensity: { type: 'string', nullable: true },
     exerciseTemplate: exerciseTemplateRefSchema,
   },
 };

@@ -1,97 +1,100 @@
-# Frontend Brief — Inline Previous Performance (previousLog)
+# Frontend Brief — Exercise Intensity Field
 
-**Backend branch**: staging · **Generated**: 2026-05-26
+**Backend branch**: staging · **Generated**: 2026-06-05
 
 ## Elevator pitch
-When a student opens a workout session, each exercise now shows what they did last time — sets, reps, and load — right inside the session detail, with no extra requests needed.
+Trainers can now assign an ACSM cardio intensity level to any cardio exercise or exercise template, giving students clearer effort targets during cardio workouts.
 
 ## User story
-As a student, I want to see my last logged performance for each exercise inline while I work out, so that I can track my progression and aim to beat previous numbers without navigating away from the active session.
+As a trainer, I want to label cardio exercises with an intensity level so that my students know exactly how hard they should be working during cardio sessions.
 
 ## User flows
-1. **Entry point**: Student opens an active or past workout session via the session detail screen (accessed from the home screen, the active session banner, or the session history list).
+1. **Entry point**: Exercise editor panel — reached from a training day's exercise list, or from the Exercise Templates library.
 2. **Happy path**:
-   - Student opens a session.
-   - Each exercise card in the session now shows a "última vez" (last time) section beneath the prescription info.
-   - The section lists previous sets: e.g. "Série 1: 10 reps × 80 kg", "Série 2: 8 reps × 80 kg".
-   - For time-based exercises, it shows duration: "Série 1: 30 min".
-   - Student uses the data as a target while logging the current session.
+   1. Trainer opens an exercise whose type is "cardio".
+   2. An "Intensity" select/dropdown appears (hidden or disabled for non-cardio types).
+   3. Trainer picks one of the five intensity levels.
+   4. Trainer saves. The exercise card shows the intensity label (e.g., "Moderada" / "Moderate").
 3. **Branches**:
-   - First-time exercise (no prior history): the "última vez" section is hidden or shows a "Primeira vez aqui!" empty state.
-   - Substituted exercise: if the student swapped to a substitute exercise in this session, the previousLog reflects the substitute's history (not the original exercise's). No special UI needed — the data is correct automatically.
+   - If trainer clears the intensity (sets to none/null), the field is saved as null and the label disappears from the card.
+   - If the type is not cardio, the intensity field must not be shown (or must be disabled and its value discarded). The backend will reject it with a 400.
 
 ## UI states to cover
-- **Has history**: show `previousLog.setLogs` items in a compact list below the exercise prescription. Show `previousLog.finishedAt` as a relative date (e.g. "Há 7 dias").
-- **No history** (`previousLog === null`): hide the section entirely, or show a subtle "Primeira vez" label — do not show an empty list.
-- **Loading**: skeleton row in place of the previous performance section while the session GET is in-flight.
-- **Empty setLogs** (`previousLog` is non-null but `setLogs` is `[]`): treat the same as null — the student had a session but logged no completed sets. Hide the section.
+- **Field visibility**: Show intensity select only when `type === 'cardio'`. Hide/disable otherwise.
+- **Loading**: Standard save spinner on the exercise form.
+- **Empty**: Intensity not set → no intensity badge on the exercise card.
+- **Success**: Intensity badge rendered using `intensityLabel` (the translated string returned by the API).
+- **Error (400)**: `exercise.intensityRequiresCardio` → show inline error "Intensity can only be set for cardio exercises."
+- **Null label**: `intensityLabel` will be `null` when `intensity` is `null` — do not render the badge.
 
 ## API contract
-
-### GET /my/workout-sessions/:sessionId
-- **Auth**: student token required
-- **Success** (200): full session object with `exerciseLogs[].previousLog` embedded
-
-Each `exerciseLog` now includes:
-```json
-{
-  "previousLog": {
-    "workoutSessionId": "uuid",
-    "finishedAt": "2026-05-19T10:45:00.000Z",
-    "setLogs": [
-      { "setNumber": 1, "repetitions": 10, "load": 80.0, "duration": null },
-      { "setNumber": 2, "repetitions": 8,  "load": 80.0, "duration": null }
-    ]
+### POST /trainer/trainings/:trainingId/exercises
+- **Auth**: Bearer — TRAINER role
+- **Request** (intensity is optional):
+  ```json
+  {
+    "name": "Esteira",
+    "type": "cardio",
+    "intensity": "moderate"
   }
-}
-```
+  ```
+- **Success** (201):
+  ```json
+  {
+    "id": "uuid",
+    "type": "cardio",
+    "typeLabel": "Cardio",
+    "intensity": "moderate",
+    "intensityLabel": "Moderada"
+  }
+  ```
+- **Errors** (status · error · messageCode · when):
+  - `400` · `VALIDATION_ERROR` · `exercise.intensityRequiresCardio` · intensity set on a non-cardio type
 
-Or when no history exists:
-```json
-{ "previousLog": null }
-```
+### PATCH /trainer/exercises/:id
+- **Auth**: Bearer — TRAINER role
+- **Request** (null clears the field):
+  ```json
+  { "intensity": null }
+  ```
+- **Success** (200): same shape as POST 201 response
+- **Errors** (status · error · messageCode · when):
+  - `400` · `VALIDATION_ERROR` · `exercise.intensityRequiresCardio` · type changed away from cardio while intensity is set, or intensity set while type is non-cardio
 
-Field semantics:
-- `repetitions`: integer or null (null for time-based exercises)
-- `load`: number (kg) or null (null for bodyweight/duration exercises)
-- `duration`: integer (seconds) or null (null for rep-based exercises)
-- `setLogs` contains only completed sets; incomplete sets are excluded at the data layer.
-- `notes`, `rpe`, `restSeconds` are intentionally absent from `previousLog.setLogs`.
+### POST /trainer/exercise-templates
+### PATCH /trainer/exercise-templates/:id
+Same intensity field and validation rules as exercises above. Response includes `intensity` + `intensityLabel`.
 
-No new endpoint is required. No extra requests from the frontend.
-
-- **Errors**:
-  - `404` · `WORKOUT_SESSION_NOT_FOUND` · `resource.notFound` · session not found or soft-deleted
-  - `403` · `FORBIDDEN_NOT_YOUR_SESSION` · `resource.forbidden` · session belongs to another user
+### POST /trainer/exercises/from-template
+Intensity is inherited from the template when not explicitly overridden in the request body.
 
 ## i18n keys required
-No new `messageCode` values are introduced. This is a data enrichment — no new error paths.
+Stable messageCodes the frontend needs to translate for this feature:
+- `exercise.intensityRequiresCardio` → suggested copy: "A intensidade só pode ser definida para exercícios do tipo cardio."
 
-Suggested UI copy for the frontend i18n files:
-- `session.previousLog.label` → "Última vez" (pt-BR) / "Last time" (en-US)
-- `session.previousLog.date` → "Há {days} dias" / "{days} days ago"
-- `session.previousLog.firstTime` → "Primeira vez" / "First time"
-- `session.previousLog.setItem.reps` → "Série {n}: {reps} reps × {load} kg"
-- `session.previousLog.setItem.duration` → "Série {n}: {duration}"
+Categorical labels returned directly by the API (`intensityLabel`) — no client-side translation needed:
+- `very_light` → "Muito leve" / "Very light"
+- `light` → "Leve" / "Light"
+- `moderate` → "Moderada" / "Moderate"
+- `vigorous` → "Vigorosa" / "Vigorous"
+- `near_maximal` → "Quase máxima" / "Near-maximal"
 
 ## Acceptance criteria
-- [ ] Each exercise card in the session detail shows a "Última vez" section when `previousLog` is non-null and `setLogs.length > 0`.
-- [ ] The section is hidden (not rendered) when `previousLog` is null or `setLogs` is empty.
-- [ ] The date displayed (relative to today) is derived from `previousLog.finishedAt`.
-- [ ] Rep-based sets display repetitions and load; duration-based sets display duration.
-- [ ] The previous performance section is read-only — no interaction targets.
-- [ ] Loading skeleton is shown while the session GET is pending.
-- [ ] No additional API requests are made to populate the previous performance data.
-- [ ] Substituted exercises: previousLog reflects the substitute's history (data is already correct from the API — no special frontend logic needed).
+- [ ] Intensity select appears only when exercise type is "cardio"; hidden or disabled otherwise.
+- [ ] All five intensity options are shown, using the `intensityLabel` value (not the raw key) for display.
+- [ ] Saving a cardio exercise with an intensity level returns 201/200 with `intensityLabel` populated.
+- [ ] Setting intensity to null/none clears the badge and sends `intensity: null` to the API.
+- [ ] Attempting to set intensity on a strength/mobility/stretching exercise is blocked before the API call (or gracefully handles the 400 response).
+- [ ] Exercise card/detail view renders an intensity badge when `intensityLabel` is not null.
+- [ ] Intensity is visible in the student view as a read-only label on cardio exercises.
 
 ## Out of scope
-- Aggregates (1RM, total volume, PR badges) — raw set data only.
-- Editable or interactive previous log entries.
-- Separate endpoint or lazy-load for previous performance.
-- Trainer-facing session detail view (no `previousLog` on the trainer GET endpoint).
+- Filtering or searching exercises by intensity.
+- Intensity on non-cardio exercise types (backend rejects this).
+- AI-driven intensity suggestions.
 
 ## Open design questions
-- Should the "Última vez" section be collapsed by default on mobile (tap to expand) to preserve vertical space, or always visible below the prescription?
-- How should the date be displayed — relative ("Há 7 dias") or absolute ("19 mai")? Or both?
-- For exercises with many previous sets (e.g. 6 sets), should there be a "ver todos" truncation at 3?
-- Should load be displayed in kg always, or should the unit be derived from the student's profile preference?
+- Where exactly in the exercise card should the intensity badge appear — near the type label, or in the prescription details section?
+- What visual style for the badge? Color-coded by intensity level (green to red gradient) or neutral?
+- Should the intensity dropdown label read "Intensidade ACSM" or simply "Intensidade"?
+- Student view: read-only text or a visual indicator (e.g., effort bar)?

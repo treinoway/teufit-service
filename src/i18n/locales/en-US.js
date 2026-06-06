@@ -60,6 +60,13 @@ export default {
       mobility: 'Mobility',
       stretching: 'Stretching',
     },
+    exerciseIntensity: {
+      very_light: 'Very light',
+      light: 'Light',
+      moderate: 'Moderate',
+      vigorous: 'Vigorous',
+      near_maximal: 'Near-maximal',
+    },
     workoutSessionStatus: {
       in_progress: 'In Progress',
       completed: 'Completed',
@@ -286,6 +293,9 @@ export default {
     // Exercise last performance
     'exercise.notFound': 'Exercise not found.',
     'exercise.notYours': 'This exercise does not belong to your protocol.',
+
+    // Exercise intensity
+    'exercise.intensityRequiresCardio': 'Intensity can only be set for cardio exercises.',
 
     // Substitute exercises
     'exercise.substituteSameTraining': 'The substitute exercise must belong to the same training as the principal.',

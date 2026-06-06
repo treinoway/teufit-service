@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { prisma } from '../../src/db.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -68,7 +69,30 @@ e2eDescribe('e2e: exercises', () => {
     return { userId, accessToken };
   }
 
+  // Platform plan guard (assertStudentActiveOnPlan) requires an active
+  // TrainerStudent link before protocol creation. Resolve trainer.id via /me
+  // and upsert the link.
+  async function activatePlanLink(trainerToken, assigneeId) {
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: { authorization: `Bearer ${trainerToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const trainer = await prisma.trainer.findUnique({
+      where: { userId: meRes.json().id },
+      select: { id: true },
+    });
+    await prisma.trainerStudent.upsert({
+      where: { trainerId_studentId: { trainerId: trainer.id, studentId: assigneeId } },
+      create: { trainerId: trainer.id, studentId: assigneeId, activeOnPlan: true },
+      update: { activeOnPlan: true },
+    });
+  }
+
   async function createProtocolAndTraining(trainerToken, assigneeId) {
+    await activatePlanLink(trainerToken, assigneeId);
+
     const protocolResponse = await app.inject({
       method: 'POST',
       url: '/trainer/protocols',
@@ -266,6 +290,51 @@ e2eDescribe('e2e: exercises', () => {
         const body = response.json();
         expect(body).toHaveProperty('restInterval', null);
       });
+
+      it('returns 201 with intensity and intensityLabel (pt-BR) for cardio exercise', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Running',
+            type: 'cardio',
+            prescriptionMode: 'duration',
+            duration: 30,
+            intensity: 'moderate',
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('intensity', 'moderate');
+        expect(body).toHaveProperty('intensityLabel', 'Moderada');
+      });
+
+      it('returns 400 when intensity set on a non-cardio exercise', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Squat',
+            type: 'strength',
+            intensity: 'moderate',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = response.json();
+        expect(body).toHaveProperty('messageCode', 'exercise.intensityRequiresCardio');
+      });
     });
 
     describe('POST /trainer/exercises/from-template', () => {
@@ -337,6 +406,70 @@ e2eDescribe('e2e: exercises', () => {
         expect(response.statusCode).toBe(201);
         const body = response.json();
         expect(body).toHaveProperty('restInterval', 60);
+      });
+
+      it('inherits intensity from cardio template when not overridden', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const templateResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Treadmill Run',
+            type: 'cardio',
+            prescriptionMode: 'duration',
+            duration: 30,
+            intensity: 'moderate',
+          },
+        });
+        expect(templateResponse.statusCode).toBe(201);
+        const { id: templateId } = templateResponse.json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercises/from-template',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { trainingId, templateId },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('intensity', 'moderate');
+        expect(body).toHaveProperty('intensityLabel', 'Moderada');
+      });
+
+      it('returns intensityLabel in en-US when app-language header is en-US', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const templateResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: {
+            name: 'Cycling',
+            type: 'cardio',
+            prescriptionMode: 'duration',
+            duration: 45,
+            intensity: 'moderate',
+          },
+        });
+        expect(templateResponse.statusCode).toBe(201);
+        const { id: templateId } = templateResponse.json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercises/from-template',
+          headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'en-US' },
+          payload: { trainingId, templateId },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('intensityLabel', 'Moderate');
       });
     });
 
@@ -572,6 +705,85 @@ e2eDescribe('e2e: exercises', () => {
 
         expect(updateResponse.statusCode).toBe(200);
         expect(updateResponse.json()).toHaveProperty('repetitions', { min: null, max: 15 });
+      });
+
+      it('sets intensity on a cardio exercise and returns intensityLabel', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Cycling', type: 'cardio', prescriptionMode: 'duration', duration: 30 },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { intensity: 'vigorous' },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('intensity', 'vigorous');
+        expect(body).toHaveProperty('intensityLabel', 'Vigorosa');
+      });
+
+      it('clears intensity by sending null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Running', type: 'cardio', prescriptionMode: 'duration', duration: 20, intensity: 'moderate' },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { intensity: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        const body = updateResponse.json();
+        expect(body).toHaveProperty('intensity', null);
+        expect(body).toHaveProperty('intensityLabel', null);
+      });
+
+      it('returns 400 when changing exercise type to strength while intensity is set', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Jump Rope', type: 'cardio', prescriptionMode: 'duration', duration: 10, intensity: 'light' },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: exerciseId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { type: 'strength' },
+        });
+
+        expect(updateResponse.statusCode).toBe(400);
+        expect(updateResponse.json()).toHaveProperty('messageCode', 'exercise.intensityRequiresCardio');
       });
     });
 
@@ -876,6 +1088,7 @@ e2eDescribe('e2e: exercises', () => {
       const { id: trainingTemplateId } = trainingTemplateResponse.json();
 
       // Create a protocol
+      await activatePlanLink(trainerToken, assigneeId);
       const protocolResponse = await app.inject({
         method: 'POST',
         url: '/trainer/protocols',
@@ -937,6 +1150,7 @@ e2eDescribe('e2e: exercises', () => {
       expect(trainingTemplateResponse.statusCode).toBe(201);
       const { id: trainingTemplateId } = trainingTemplateResponse.json();
 
+      await activatePlanLink(trainerToken, assigneeId);
       const protocolResponse = await app.inject({
         method: 'POST',
         url: '/trainer/protocols',
