@@ -1,4 +1,4 @@
-import { trainingStatusValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues } from '../../src/constants/training.js';
+import { trainingStatusValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues, exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues, trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
@@ -379,6 +379,128 @@ export const getMyProtocolByIdSchema = {
         trainings: { type: 'array', items: trainingItemSchema },
       },
     },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── Bulk create: protocol + trainings + exercises in one request ─────────────
+
+const exerciseInputSchema = {
+  type: 'object',
+  required: ['name', 'type', 'order'],
+  additionalProperties: false,
+  properties: {
+    exerciseTemplateId: { type: 'string', format: 'uuid' },
+    name: { type: 'string', minLength: 1 },
+    type: { type: 'string', enum: exerciseTypeValues },
+    videoUrl: { type: 'string' },
+    order: { type: 'integer', minimum: 0 },
+    sets: { type: 'integer', minimum: 1, nullable: true },
+    repetitions: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            min: { type: 'integer', minimum: 1, nullable: true },
+            max: { type: 'integer', minimum: 1, nullable: true },
+          },
+          additionalProperties: false,
+        },
+        { type: 'integer', minimum: 1 },
+        { type: 'null' },
+      ],
+    },
+    duration: { type: 'integer', minimum: 1, nullable: true },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
+    hasLoad: { type: 'boolean' },
+    suggestedLoad: { type: 'number', nullable: true },
+    restInterval: { type: 'integer', minimum: 0, nullable: true },
+    notes: { type: 'string', nullable: true },
+    intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+  },
+};
+
+const trainingInputSchema = {
+  type: 'object',
+  required: ['name', 'category', 'order'],
+  additionalProperties: false,
+  properties: {
+    trainingTemplateId: { type: 'string', format: 'uuid' },
+    name: { type: 'string', minLength: 1 },
+    description: { type: 'string', nullable: true },
+    category: { type: 'string', enum: trainingCategoryValues },
+    bodySegment: { type: ['string', 'null'], enum: [...bodySegmentValues, null] },
+    weekDay: { type: ['string', 'null'], enum: [...weekDayValues, null] },
+    order: { type: 'integer', minimum: 0 },
+    exercises: {
+      type: 'array',
+      items: exerciseInputSchema,
+      default: [],
+    },
+  },
+};
+
+const protocolWithTrainingsResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    assigneeId: { type: 'string', format: 'uuid' },
+    trainerId: { type: 'string', format: 'uuid' },
+    protocolTemplateId: { type: 'string', format: 'uuid', nullable: true },
+    name: { type: 'string' },
+    description: { type: 'string', nullable: true },
+    ...i18nField('status', 'trainingStatus'),
+    startDate: { type: 'string', format: 'date' },
+    expirationDate: { type: 'string', format: 'date', nullable: true },
+    ...i18nField('genderOrdination', 'genderOrdination', { nullable: true }),
+    ...i18nField('trainingLevel', 'trainingLevel', { nullable: true }),
+    ...i18nField('type', 'protocolType', { nullable: true }),
+    createdAt: { type: 'string', format: 'date-time' },
+    assignee: assigneeSchema,
+    trainings: { type: 'array', items: trainingItemSchema },
+  },
+};
+
+export const createProtocolWithTrainingsSchema = {
+  tags: ['Training Protocols - Trainer'],
+  summary: 'Create protocol with all trainings and exercises in one request',
+  description:
+    'Atomically creates a training protocol together with all its trainings and exercises. ' +
+    'Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. ' +
+    'Returns the created protocol with its trainings list (exercises are not included in the response).',
+  security: [{ bearerAuth: [] }],
+  body: {
+    type: 'object',
+    required: ['assigneeId', 'name', 'startDate'],
+    additionalProperties: false,
+    properties: {
+      assigneeId: { type: 'string', format: 'uuid', description: 'User ID of the protocol assignee' },
+      protocolTemplateId: { type: 'string', format: 'uuid' },
+      name: { type: 'string', minLength: 1 },
+      description: { type: 'string' },
+      status: { type: 'string', enum: trainingStatusValues },
+      startDate: { type: 'string', format: 'date' },
+      expirationDate: { type: 'string', format: 'date' },
+      genderOrdination: { type: 'string', enum: genderOrdinationValues },
+      trainingLevel: { type: 'string', enum: trainingLevelValues },
+      type: { type: 'string', enum: protocolTypeValues },
+      trainings: {
+        type: 'array',
+        items: trainingInputSchema,
+        default: [],
+      },
+    },
+  },
+  response: {
+    201: {
+      description: 'Protocol created atomically with all trainings and exercises',
+      ...protocolWithTrainingsResponseSchema,
+    },
+    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

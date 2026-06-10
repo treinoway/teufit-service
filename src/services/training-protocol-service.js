@@ -1,10 +1,12 @@
 import { prisma } from '../db.js';
-import { TrainingStatus, trainingStatusValues } from '../constants/training.js';
-import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode } from '../helpers/training-validators.js';
+import { TrainingStatus, trainingStatusValues, BulkProtocolErrorCode, BulkProtocolMessageCode } from '../constants/training.js';
+import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode, applyPrescriptionModeExclusivity } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
+import { estimateWorkoutDuration } from '../helpers/workout-duration.js';
+import { AppError } from '../errors/app-error.js';
 
 /**
  * Validate status
@@ -476,81 +478,283 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
 
   await assertStudentActiveOnPlan(prisma, trainer.id, assigneeId);
 
-  const protocol = await prisma.$transaction(async (tx) => {
-    const created = await tx.trainingProtocol.create({
-      data: {
-        trainerId: trainer.id,
-        assigneeId,
-        protocolTemplateId: template.id,
-        name: data.name || template.name,
-        description: data.description || template.description,
-        status: 'active',
-        startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
-        expirationDate: parseDateOnlyAsUtc(data.expirationDate),
-        genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
-        trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
-        type: data.type !== undefined ? data.type : template.type,
-      },
-    });
+  const trainingsData = template.trainings.map((templateTraining) => {
+    const { trainingTemplate } = templateTraining;
+    const exerciseCreateData = trainingTemplate.trainingTemplateExerciseTemplates.map(
+      buildNestedExerciseCreateData,
+    );
+    const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
-    for (const templateTraining of template.trainings) {
-      const { trainingTemplate } = templateTraining;
-
-      const createdTraining = await tx.training.create({
-        data: {
-          trainingProtocolId: created.id,
-          trainingTemplateId: trainingTemplate.id,
-          name: trainingTemplate.name,
-          description: trainingTemplate.description,
-          category: trainingTemplate.category,
-          bodySegment: trainingTemplate.bodySegment,
-          weekDay: templateTraining.weekDay || null,
-          order: templateTraining.order,
-        },
-      });
-
-      for (const junctionRow of trainingTemplate.trainingTemplateExerciseTemplates) {
-        await tx.exercise.create({
-          data: {
-            trainingId: createdTraining.id,
-            exerciseTemplateId: junctionRow.exerciseTemplateId,
-            name: junctionRow.name,
-            type: junctionRow.type,
-            videoUrl: junctionRow.videoUrl || null,
-            order: junctionRow.order,
-            sets: junctionRow.sets ?? null,
-            repetitions: junctionRow.repetitions ?? null,
-            duration: junctionRow.duration ?? null,
-            prescriptionMode: resolvePrescriptionMode(junctionRow.prescriptionMode, junctionRow),
-            hasLoad: junctionRow.hasLoad ?? false,
-            suggestedLoad: junctionRow.suggestedLoad ?? null,
-            restInterval: junctionRow.restInterval ?? null,
-            notes: junctionRow.notes ?? null,
-          },
-        });
-      }
-    }
-
-    return tx.trainingProtocol.findUnique({
-      where: { id: created.id },
-      include: {
-        assignee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-          },
-        },
-        trainings: {
-          where: { deletedAt: null },
-          orderBy: { order: 'asc' },
-        },
-      },
-    });
+    return {
+      trainingTemplateId: trainingTemplate.id,
+      name: trainingTemplate.name,
+      description: trainingTemplate.description,
+      category: trainingTemplate.category,
+      bodySegment: trainingTemplate.bodySegment,
+      weekDay: templateTraining.weekDay || null,
+      order: templateTraining.order,
+      estimatedDurationSeconds,
+      exercises: { create: exerciseCreateData },
+    };
   });
+
+  const created = await prisma.trainingProtocol.create({
+    data: {
+      trainerId: trainer.id,
+      assigneeId,
+      protocolTemplateId: template.id,
+      name: data.name || template.name,
+      description: data.description || template.description,
+      status: 'active',
+      startDate: data.startDate ? parseDateOnlyAsUtc(data.startDate) : new Date(),
+      expirationDate: parseDateOnlyAsUtc(data.expirationDate),
+      genderOrdination: data.genderOrdination ?? template.genderOrdination ?? null,
+      trainingLevel: data.trainingLevel ?? template.trainingLevel ?? null,
+      type: data.type !== undefined ? data.type : template.type,
+      trainings: { create: trainingsData },
+    },
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+        },
+      },
+      trainings: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+      },
+    },
+  });
+  const protocol = created;
 
   await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
 
   return normalizeProtocolDateFields(protocol);
+}
+
+// ─── Shared exercise helper ───────────────────────────────────────────────────
+
+/**
+ * Build a single exercise's nested-create data for a protocol/training write.
+ * Applies prescriptionMode exclusivity so repetitions and duration are mutually exclusive.
+ *
+ * Used by both importFromTemplate and createProtocolWithTrainings so that any
+ * new exercise field only needs to be added here.
+ */
+function buildNestedExerciseCreateData(exercise) {
+  const resolvedMode = resolvePrescriptionMode(exercise.prescriptionMode, exercise);
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exercise);
+
+  return {
+    exerciseTemplateId: exercise.exerciseTemplateId ?? null,
+    name: exercise.name,
+    type: exercise.type,
+    videoUrl: exercise.videoUrl ?? null,
+    order: exercise.order,
+    sets: exercise.sets ?? null,
+    repetitions,
+    duration,
+    prescriptionMode: resolvedMode,
+    hasLoad: exercise.hasLoad ?? false,
+    suggestedLoad: exercise.suggestedLoad ?? null,
+    restInterval: exercise.restInterval ?? null,
+    notes: exercise.notes ?? null,
+    intensity: exercise.intensity ?? null,
+  };
+}
+
+/**
+ * Verify that all referenced trainingTemplateIds and exerciseTemplateIds are owned
+ * by (or publicly accessible to) the trainer. Performs at most 2 batched queries.
+ *
+ * Throws TRAINING_TEMPLATE_NOT_OWNED or EXERCISE_TEMPLATE_NOT_OWNED if any FK
+ * references a template that does not belong to the trainer and is not public.
+ */
+async function verifyTemplateOwnership(prismaClient, trainerId, trainingTemplateIds, exerciseTemplateIds) {
+  if (trainingTemplateIds.size > 0) {
+    const ownedTrainingTemplates = await prismaClient.trainingTemplate.findMany({
+      where: {
+        id: { in: [...trainingTemplateIds] },
+        OR: [{ trainerId }, { isPublic: true }],
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (ownedTrainingTemplates.length !== trainingTemplateIds.size) {
+      throw new AppError({
+        httpStatus: 403,
+        error: BulkProtocolErrorCode.TRAINING_TEMPLATE_NOT_OWNED,
+        messageCode: BulkProtocolMessageCode.TRAINING_TEMPLATE_NOT_OWNED,
+        message: 'One or more training templates do not belong to your profile.',
+      });
+    }
+  }
+
+  if (exerciseTemplateIds.size > 0) {
+    const ownedExerciseTemplates = await prismaClient.exerciseTemplate.findMany({
+      where: {
+        id: { in: [...exerciseTemplateIds] },
+        OR: [{ trainerId }, { isPublic: true }],
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (ownedExerciseTemplates.length !== exerciseTemplateIds.size) {
+      throw new AppError({
+        httpStatus: 403,
+        error: BulkProtocolErrorCode.EXERCISE_TEMPLATE_NOT_OWNED,
+        messageCode: BulkProtocolMessageCode.EXERCISE_TEMPLATE_NOT_OWNED,
+        message: 'One or more exercise templates do not belong to your profile.',
+      });
+    }
+  }
+}
+
+/**
+ * Collect unique non-null trainingTemplateIds and exerciseTemplateIds from the
+ * incoming trainings array so they can be verified in a single batched query each.
+ */
+function collectTemplateIds(trainings) {
+  const trainingTemplateIds = new Set();
+  const exerciseTemplateIds = new Set();
+
+  for (const training of trainings) {
+    if (training.trainingTemplateId) {
+      trainingTemplateIds.add(training.trainingTemplateId);
+    }
+    for (const exercise of training.exercises ?? []) {
+      if (exercise.exerciseTemplateId) {
+        exerciseTemplateIds.add(exercise.exerciseTemplateId);
+      }
+    }
+  }
+
+  return { trainingTemplateIds, exerciseTemplateIds };
+}
+
+/**
+ * Map an array of incoming training payloads to Prisma nested create shape.
+ * Computes estimatedDurationSeconds in-memory — no extra DB queries.
+ */
+function buildTrainingsData(trainings) {
+  return trainings.map((training) => {
+    const exercises = training.exercises ?? [];
+    const exerciseCreateData = exercises.map(buildNestedExerciseCreateData);
+    const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
+
+    return {
+      trainingTemplateId: training.trainingTemplateId ?? null,
+      name: training.name,
+      description: training.description ?? null,
+      category: training.category,
+      bodySegment: training.bodySegment ?? null,
+      weekDay: training.weekDay ?? null,
+      order: training.order,
+      estimatedDurationSeconds,
+      exercises: { create: exerciseCreateData },
+    };
+  });
+}
+
+// ─── Public service function ──────────────────────────────────────────────────
+
+/**
+ * Create a training protocol together with all its trainings and exercises
+ * in a single atomic nested write. Replaces the T×E sequential waterfall of
+ * individual create calls from the frontend.
+ *
+ * Query budget:
+ *   1. trainer.findUnique (resolve trainer.id)
+ *   2. user.findUnique (verify assignee exists and is not deleted)
+ *   3. assertStudentActiveOnPlan (1 query internal)
+ *   4. trainingTemplate.findMany (ownership check — only when IDs are present)
+ *   5. exerciseTemplate.findMany (ownership check — only when IDs are present)
+ *   6. trainingProtocol.create with deep nested trainings + exercises (1 atomic write)
+ *   Total: 3–6 queries regardless of training/exercise count.
+ *
+ * @param {string} userId - User ID of the authenticated trainer
+ * @param {object} data - Protocol + trainings payload
+ * @returns {Promise<object>} Created protocol with assignee and trainings
+ */
+export async function createProtocolWithTrainings(userId, data) {
+  // 1. Resolve trainer profile
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  // 2. Verify assignee exists and is not soft-deleted
+  const assignee = await prisma.user.findUnique({
+    where: { id: data.assigneeId },
+    select: { id: true, deletedAt: true },
+  });
+
+  if (!assignee || assignee.deletedAt) {
+    throw buildError('ASSIGNEE_NOT_FOUND', 'Assignee user not found', 404);
+  }
+
+  // 3. Guard: student must be active under trainer's plan
+  await assertStudentActiveOnPlan(prisma, trainer.id, data.assigneeId);
+
+  // 4. Validate protocol-level categorical fields
+  if (data.status) {
+    validateStatus(data.status);
+  }
+  validateGenderOrdination(data.genderOrdination);
+  validateTrainingLevel(data.trainingLevel);
+  validateProtocolType(data.type);
+
+  // 5. Verify template ownership in 2 batched queries (skipped when no IDs are provided)
+  const trainings = data.trainings ?? [];
+  const { trainingTemplateIds, exerciseTemplateIds } = collectTemplateIds(trainings);
+  await verifyTemplateOwnership(prisma, trainer.id, trainingTemplateIds, exerciseTemplateIds);
+
+  // 6. Build in-memory nested create payload
+  const trainingsData = buildTrainingsData(trainings);
+
+  // 7. Single atomic write: protocol + all trainings + all exercises
+  const created = await prisma.trainingProtocol.create({
+    data: {
+      trainerId: trainer.id,
+      assigneeId: data.assigneeId,
+      protocolTemplateId: data.protocolTemplateId ?? null,
+      name: data.name,
+      description: data.description ?? null,
+      status: data.status ?? 'active',
+      startDate: parseDateOnlyAsUtc(data.startDate),
+      expirationDate: parseDateOnlyAsUtc(data.expirationDate),
+      genderOrdination: data.genderOrdination ?? null,
+      trainingLevel: data.trainingLevel ?? null,
+      type: data.type ?? null,
+      trainings: { create: trainingsData },
+    },
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+        },
+      },
+      trainings: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+      },
+    },
+  });
+
+  // 8. Fire-and-forget onboarding milestone
+  await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
+
+  return normalizeProtocolDateFields(created);
 }

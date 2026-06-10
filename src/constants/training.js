@@ -187,3 +187,14 @@ export const ExerciseIntensityMessageCode = Object.freeze({
 
 export const WorkoutSessionFinalizedErrorCode = 'SESSION_FINALIZED';
 export const WorkoutSessionFinalizedMessageCode = 'workoutSession.finalized';
+
+// Bulk protocol creation error codes
+export const BulkProtocolErrorCode = Object.freeze({
+  TRAINING_TEMPLATE_NOT_OWNED: 'TRAINING_TEMPLATE_NOT_OWNED',
+  EXERCISE_TEMPLATE_NOT_OWNED: 'EXERCISE_TEMPLATE_NOT_OWNED',
+});
+
+export const BulkProtocolMessageCode = Object.freeze({
+  TRAINING_TEMPLATE_NOT_OWNED: 'protocol.trainingTemplateNotOwned',
+  EXERCISE_TEMPLATE_NOT_OWNED: 'protocol.exerciseTemplateNotOwned',
+});

@@ -329,6 +329,10 @@ export default {
     'platformPlan.invalidTier': 'Invalid plan.',
     'platformPlan.alreadyOnTier': 'You are already on this plan.',
 
+    // Bulk protocol creation
+    'protocol.trainingTemplateNotOwned': 'One or more training templates do not belong to your profile.',
+    'protocol.exerciseTemplateNotOwned': 'One or more exercise templates do not belong to your profile.',
+
     // Video library
     'video.notFound': 'Video not found.',
     'video.invalidUrl': 'Invalid URL. Please use a valid http(s) address.',

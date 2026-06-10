@@ -151,6 +151,30 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('suggestedLoad', 60);
       });
 
+      it('creates strength exercise template with explicit intensity null', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: {
+            name: 'dasdas',
+            type: 'strength',
+            hasLoad: true,
+            prescriptionMode: 'reps',
+            intensity: null,
+            sets: 3,
+            repetitions: { min: 2, max: 7 },
+          },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('id');
+        expect(body).toHaveProperty('intensity', null);
+      });
+
       it('returns 400 for invalid exercise type', async () => {
         const { accessToken } = await createTrainerWithToken();
 

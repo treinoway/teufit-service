@@ -647,20 +647,19 @@ describe('training-protocol-service', () => {
         trainings: [],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
-      const created = { id: 'p1', assigneeId: 'assignee-1' };
-      const fullProtocol = {
+      const createdProtocol = {
         id: 'p1',
         assigneeId: 'assignee-1',
         trainings: [],
         assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
       };
-      prisma.trainingProtocol.create.mockResolvedValue(created);
-      prisma.trainingProtocol.findUnique.mockResolvedValue(fullProtocol);
+      prisma.trainingProtocol.create.mockResolvedValue(createdProtocol);
 
       const result = await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
 
       expect(result.assignee).toMatchObject({ id: 'assignee-1', firstName: 'Jane' });
       expect(result.trainings).toHaveLength(0);
+      // The new implementation uses a single nested create — training.create is never called
       expect(prisma.training.create).not.toHaveBeenCalled();
     });
 
@@ -688,29 +687,31 @@ describe('training-protocol-service', () => {
         ],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
-      const createdProtocol = { id: 'p1' };
-      const createdTraining = { id: 'tr-1' };
-      const fullProtocol = {
+      const createdProtocol = {
         id: 'p1',
         assigneeId: 'assignee-1',
         trainings: [{ id: 'tr-1', name: 'Bench Press', weekDay: 'monday' }],
         assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
       };
       prisma.trainingProtocol.create.mockResolvedValue(createdProtocol);
-      prisma.training.create.mockResolvedValue(createdTraining);
-      prisma.trainingProtocol.findUnique.mockResolvedValue(fullProtocol);
 
       const result = await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
 
-      expect(prisma.training.create).toHaveBeenCalledWith(
+      // The new implementation passes trainings as a nested create inside trainingProtocol.create
+      expect(prisma.trainingProtocol.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            trainingProtocolId: 'p1',
-            trainingTemplateId: 'tt-1',
-            name: 'Bench Press',
-            category: 'strength',
-            weekDay: 'monday',
-            order: 0,
+            trainings: {
+              create: expect.arrayContaining([
+                expect.objectContaining({
+                  trainingTemplateId: 'tt-1',
+                  name: 'Bench Press',
+                  category: 'strength',
+                  weekDay: 'monday',
+                  order: 0,
+                }),
+              ]),
+            },
           }),
         }),
       );
@@ -773,53 +774,47 @@ describe('training-protocol-service', () => {
         ],
       });
       prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
-      const createdProtocol = { id: 'p1' };
-      const createdTraining = { id: 'tr-1' };
-      const fullProtocol = {
+      const createdProtocol = {
         id: 'p1',
         assigneeId: 'assignee-1',
         trainings: [{ id: 'tr-1', name: 'Bench Press', weekDay: 'monday' }],
         assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
       };
       prisma.trainingProtocol.create.mockResolvedValue(createdProtocol);
-      prisma.training.create.mockResolvedValue(createdTraining);
-      prisma.trainingProtocol.findUnique.mockResolvedValue(fullProtocol);
 
       await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
 
-      expect(prisma.exercise.create).toHaveBeenCalledTimes(2);
-      expect(prisma.exercise.create).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          data: expect.objectContaining({
-            trainingId: 'tr-1',
-            exerciseTemplateId: 'et-1',
-            name: 'Supino',
-            type: 'strength',
-            order: 0,
-            sets: 3,
-            repetitions: 10,
-            hasLoad: true,
-            suggestedLoad: 60,
-            restInterval: 90,
-          }),
-        }),
-      );
-      expect(prisma.exercise.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          data: expect.objectContaining({
-            trainingId: 'tr-1',
-            exerciseTemplateId: 'et-2',
-            name: 'Crucifixo',
-            type: 'strength',
-            order: 1,
-            videoUrl: 'https://example.com/video',
-            hasLoad: false,
-            suggestedLoad: null,
-          }),
-        }),
-      );
+      // The new implementation passes exercises as nested creates inside data.trainings.create
+      // — exercise.create is never called independently
+      expect(prisma.exercise.create).not.toHaveBeenCalled();
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const exercisesCreate = createCall.data.trainings.create[0].exercises.create;
+
+      expect(exercisesCreate).toHaveLength(2);
+      expect(exercisesCreate[0]).toMatchObject({
+        exerciseTemplateId: 'et-1',
+        name: 'Supino',
+        type: 'strength',
+        videoUrl: null,
+        order: 0,
+        sets: 3,
+        repetitions: 10,
+        hasLoad: true,
+        suggestedLoad: 60,
+        restInterval: 90,
+        prescriptionMode: 'reps',
+      });
+      expect(exercisesCreate[1]).toMatchObject({
+        exerciseTemplateId: 'et-2',
+        name: 'Crucifixo',
+        type: 'strength',
+        videoUrl: 'https://example.com/video',
+        order: 1,
+        hasLoad: false,
+        suggestedLoad: null,
+        prescriptionMode: 'reps',
+      });
     });
 
     it('inherits genderOrdination and trainingLevel from template when not overridden', async () => {
@@ -927,6 +922,209 @@ describe('training-protocol-service', () => {
           data: expect.objectContaining({ type: 'strength' }),
         }),
       );
+    });
+
+    it('copies intensity from junction row into exercise create data', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: null,
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Cardio Day',
+              description: null,
+              category: 'cardio',
+              bodySegment: null,
+              trainingTemplateExerciseTemplates: [
+                {
+                  exerciseTemplateId: 'et-1',
+                  order: 0,
+                  name: 'Corrida',
+                  type: 'cardio',
+                  videoUrl: null,
+                  sets: 3,
+                  repetitions: null,
+                  duration: 600,
+                  prescriptionMode: 'duration',
+                  hasLoad: false,
+                  suggestedLoad: null,
+                  restInterval: null,
+                  notes: null,
+                  intensity: 'vigorous',
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      prisma.trainingProtocol.create.mockResolvedValue({
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const exercisesCreate = createCall.data.trainings.create[0].exercises.create;
+      expect(exercisesCreate[0].intensity).toBe('vigorous');
+    });
+
+    it('sets intensity to null when junction row has no intensity', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: null,
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Força',
+              description: null,
+              category: 'strength',
+              bodySegment: null,
+              trainingTemplateExerciseTemplates: [
+                {
+                  exerciseTemplateId: 'et-1',
+                  order: 0,
+                  name: 'Squat',
+                  type: 'strength',
+                  videoUrl: null,
+                  sets: 4,
+                  repetitions: 10,
+                  duration: null,
+                  prescriptionMode: 'reps',
+                  hasLoad: true,
+                  suggestedLoad: 80,
+                  restInterval: 90,
+                  notes: null,
+                  intensity: null,
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      prisma.trainingProtocol.create.mockResolvedValue({
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const exercisesCreate = createCall.data.trainings.create[0].exercises.create;
+      expect(exercisesCreate[0].intensity).toBeNull();
+    });
+
+    it('computes estimatedDurationSeconds > 0 for training with exercises', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: 'monday',
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Força',
+              description: null,
+              category: 'strength',
+              bodySegment: 'upper',
+              trainingTemplateExerciseTemplates: [
+                {
+                  exerciseTemplateId: 'et-1',
+                  order: 0,
+                  name: 'Bench Press',
+                  type: 'strength',
+                  videoUrl: null,
+                  sets: 4,
+                  repetitions: 10,
+                  duration: null,
+                  prescriptionMode: 'reps',
+                  hasLoad: true,
+                  suggestedLoad: 60,
+                  restInterval: 90,
+                  notes: null,
+                  intensity: null,
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      prisma.trainingProtocol.create.mockResolvedValue({
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const trainingData = createCall.data.trainings.create[0];
+      expect(trainingData.estimatedDurationSeconds).toBeGreaterThan(0);
+    });
+
+    it('sets estimatedDurationSeconds to 0 for training with no exercises', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: null,
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Descanso',
+              description: null,
+              category: 'rest',
+              bodySegment: null,
+              trainingTemplateExerciseTemplates: [],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      prisma.trainingProtocol.create.mockResolvedValue({
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const trainingData = createCall.data.trainings.create[0];
+      expect(trainingData.estimatedDurationSeconds).toBe(0);
     });
   });
 });

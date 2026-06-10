@@ -33,6 +33,21 @@ export async function trainingProtocolRoutes(fastify) {
     },
   );
 
+  // Rate limit: 10 req/min
+  // Create protocol with all trainings and exercises in one atomic request
+  fastify.post(
+    '/trainer/protocols/with-trainings',
+    {
+      config: { rateLimit: config.rateLimit.trainingProtocol.createWithTrainings },
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createProtocolWithTrainingsSchema,
+    },
+    async (request, reply) => {
+      const protocol = await service.createProtocolWithTrainings(request.user.id, request.body);
+      return reply.status(201).send(protocol);
+    },
+  );
+
   // Rate limit: 60 req/min
   // Get protocols created by trainer
   fastify.get(

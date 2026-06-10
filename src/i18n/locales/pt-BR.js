@@ -333,6 +333,10 @@ export default {
     'exercise.notFound': 'Exercício não encontrado.',
     'exercise.notYours': 'Este exercício não pertence ao seu protocolo.',
 
+    // Bulk protocol creation
+    'protocol.trainingTemplateNotOwned': 'Um ou mais modelos de treino não pertencem ao seu perfil.',
+    'protocol.exerciseTemplateNotOwned': 'Um ou mais modelos de exercício não pertencem ao seu perfil.',
+
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
     'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',

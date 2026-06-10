@@ -376,6 +376,18 @@ When two inline object shapes are identical, extract to a named const to prevent
 - `getDashboardSummary` changed from `trainingProtocol.findFirst` → `trainingProtocol.findMany` (all active protocols in window). Unit tests must mock `trainingProtocol.findMany`, not `findFirst`.
 - Weekday date arithmetic pitfall: `countWeekdayOccurrences` snaps start to UTC midnight — a mid-day start STILL counts that day, and the end is EXCLUSIVE. Verify expected occurrences manually before writing assertions (enumerate the actual dates).
 
+## AJV v8: nullable enums on input schemas need type array (2026-06-10)
+`nullable: true` is ignored by AJV v8 (Fastify 5) on **request body/query** schemas.
+For any optional enum that can be null, use: `{ type: ['string', 'null'], enum: [...values, null] }`.
+Response schemas: `nullable: true` still works (fast-json-stringify handles it).
+Affected fields: `intensity`, `bodySegment`, `weekDay` in `training-protocol-route.schema.js`.
+
+## importFromTemplate must stay in sync with createProtocolWithTrainings (2026-06-10)
+Both flows build nested exercise create-data. The single canonical helper is `buildNestedExerciseCreateData`
+in `training-protocol-service.js`. Both paths use it — adding a new exercise field only requires touching this one function.
+Both paths also compute `estimatedDurationSeconds` per training via `estimateWorkoutDuration({ exercises: createData })`.
+If a refactor removes `buildNestedExerciseCreateData`, re-add it; do NOT return to the inline object pattern.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.

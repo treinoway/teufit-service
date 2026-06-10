@@ -102,6 +102,10 @@ export default {
         max: 10,
         timeWindow: '1 minute',
       },
+      createWithTrainings: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
     },
     trainingProtocolTemplate: {
       create: {

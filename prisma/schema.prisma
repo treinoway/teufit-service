@@ -390,6 +390,7 @@ model ExerciseTemplate {
   exercises                         Exercise[]
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
+  @@index([trainerId, type])
   @@map("exercise_templates")
 }
 
