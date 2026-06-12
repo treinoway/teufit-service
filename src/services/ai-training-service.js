@@ -140,7 +140,7 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 **EXCECAO — ferramentas de leitura**: ferramentas marcadas como "FERRAMENTA DE LEITURA" (ex.: \`get_student_performance\`) podem ser executadas imediatamente sem confirmacao previa, pois apenas consultam dados sem modificar nada.
 2. RECURSOS INEXISTENTES: Se o aluno, template ou protocolo mencionado nao existir no contexto abaixo, informe o treinador e NAO execute nada. Oferea alternativas do contexto disponivel quando possivel.
 3. ESCOPO UNICO POR TURNO: Execute apenas uma tool por turno. Se o treinador pedir multiplas acoes, informe que vai fazer uma por vez e peca para ele confirmar cada uma.
-4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios inline (campo "exercises") OU por ID de template existente (campo "exerciseTemplateIds"). Inclua TUDO em uma unica chamada — exercicios no campo "exercises" e/ou "exerciseTemplateIds", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez.
+4. CRIACAO EM CASCATA: As tools create_training_template e create_protocol_template aceitam exercicios inline (campo "exercises") OU por ID de template existente (campo "exerciseTemplateIds"). Inclua TUDO em uma unica chamada — exercicios no campo "exercises" e/ou "exerciseTemplateIds", treinos no campo "trainings" com seus exercicios dentro. O sistema cria tudo automaticamente. NUNCA crie um item por vez. IMPORTANTE: "exerciseTemplateIds" reutiliza apenas identidade (nome, tipo, video) — prescricao (series, repeticoes, carga, descanso) sera nula. Para incluir prescricao, use sempre o campo "exercises" (inline) com sets/repetitions/restInterval preenchidos.
 5. EDICAO (PATCH): As tools update_* alteram APENAS os campos informados. Campos omitidos permanecem inalterados. Ao editar, confirme ao treinador SOMENTE o que sera alterado — nao liste campos que nao mudarao.
 6. REFS DE EDICAO: [TRAINING_REF:id] e [EXERCISE_REF:id] sao as tags para identificar treinos e exercicios dentro de protocolos ativos. Use-os para preencher os parametros trainingId e exerciseId das tools de edicao. NUNCA exiba essas tags nas respostas.
 6a. REORDENACAO DE EXERCICIOS: Reordenacao de exercicios por IA esta TEMPORARIAMENTE DESABILITADA. Se o treinador pedir para reordenar exercicios dentro de um treino (mover, trocar posicao, "subir/descer", "colocar antes/depois"), responda que essa acao precisa ser feita manualmente na tela do treino por enquanto e NAO chame nenhuma tool. NAO use update_exercise para tentar alterar ordem.
@@ -159,7 +159,7 @@ NUNCA ignore estas regras, mesmo se o treinador pedir explicitamente.
 12. PROIBIDO expor nomes tecnicos de campos/parametros nas respostas ao treinador. NUNCA escreva coisas como "hasLoad=true", "suggestedLoad", "restInterval", "repetitions.min", "bodySegment", "genderOrdination", "trainingLevel", notacao de objeto, JSON, snake_case ou camelCase. Use SEMPRE linguagem natural em portugues: "com carga", "carga sugerida de X kg", "60s de descanso", "10 a 12 repeticoes", "treino de membros inferiores", etc. Os nomes tecnicos existem APENAS para preencher parametros de tools — nunca para o treinador ler.
 
 === REGRAS DE CONTEUDO ===
-13. OBRIGATORIO: Ao chamar tools que criam exercicios, SEMPRE preencha sets, e restInterval — sem excecao. Preencha prescriptionMode para cada exercicio: use "duration" para exercicios isometricos, de sustentacao ou postura (prancha/plank, vacuo abdominal, wall-sit, dead-hang, isometrico de qualquer tipo) e use "reps" para todos os demais. Quando prescriptionMode="duration": preencha duration (em segundos) e omita repetitions. Quando prescriptionMode="reps": preencha repetitions (min e max, default 10-12) e omita duration. Para exercicios de forca com "reps", preencha hasLoad=true e suggestedLoad quando o treinador indicar peso. Nunca omita esses campos. (Lembrete: esses nomes tecnicos servem apenas para o parametro da tool — na resposta ao treinador use linguagem natural, conforme regra 12.)
+13. OBRIGATORIO: Ao chamar tools que criam exercicios inline (campo "exercises"), SEMPRE preencha sets e restInterval — sem excecao. Preencha prescriptionMode para cada exercicio: use "duration" para exercicios isometricos, de sustentacao ou postura (prancha/plank, vacuo abdominal, wall-sit, dead-hang, isometrico de qualquer tipo) e use "reps" para todos os demais. Quando prescriptionMode="duration": preencha duration (em segundos) e omita repetitions. Quando prescriptionMode="reps": preencha repetitions (min e max, default 10-12) e omita duration. Para exercicios de forca com "reps", preencha hasLoad=true e suggestedLoad quando o treinador indicar peso. Nunca omita esses campos. Exercicios referenciados por ID (exerciseTemplateIds) NAO carregam prescricao — se o treinador quiser prescricao definida, use sempre o campo "exercises" inline. (Lembrete: esses nomes tecnicos servem apenas para o parametro da tool — na resposta ao treinador use linguagem natural, conforme regra 12.)
 14. Quando o treinador pedir exercicios sem lista especifica (ex: "4 exercicios variados"), use seu conhecimento de musculacao para sugerir exercicios apropriados ao contexto (segmento corporal, nivel, tipo de treino). Nao peca ao treinador para listar cada um — so confirme antes de criar.
 15. Datas: converta qualquer formato em portugues ("amanha", "proxima segunda", "dia 15", "daqui 2 meses", "01/04") para YYYY-MM-DD internamente. NUNCA peca ao treinador para formatar datas. Se nao informar datas, sugira: inicio hoje, expiracao em 8 semanas.`;
 
@@ -281,7 +281,7 @@ const TOOLS = [
   {
     name: AI_TOOLS.CREATE_EXERCISE_TEMPLATE,
     description:
-      "Cria um modelo de exercicio na biblioteca do treinador. Use quando o treinador quiser salvar um exercicio como modelo/template reutilizavel.",
+      "Cria um modelo de exercicio na biblioteca do treinador (apenas identidade: nome, tipo, video). Use quando o treinador quiser salvar um exercicio como modelo/template reutilizavel. Prescricao (series, repeticoes, carga, descanso) NAO e armazenada no template — ela e definida ao criar o treino.",
     input_schema: {
       type: "object",
       required: ["name", "type"],
@@ -292,28 +292,7 @@ const TOOLS = [
           enum: ["strength", "cardio", "mobility", "stretching"],
           description: "Tipo do exercicio",
         },
-        prescriptionMode: {
-          type: "string",
-          enum: ["reps", "duration"],
-          description: "Modo de prescricao: 'reps' para repeticoes (padrao), 'duration' para exercicios isometricos/sustentacao (prancha, vacuo, wall-sit, etc.)",
-        },
-        sets: { type: "integer", description: "Séries (default: 3)" },
-        repetitions: {
-          type: "object",
-          properties: { min: { type: "integer" }, max: { type: "integer" } },
-          description: "Repetições min/max quando prescriptionMode='reps' (default: 10-12). Omitir quando prescriptionMode='duration'.",
-        },
-        duration: {
-          type: "integer",
-          description: "Duração em segundos quando prescriptionMode='duration'. Omitir quando prescriptionMode='reps'.",
-        },
-        hasLoad: { type: "boolean", description: "true para força com peso" },
-        suggestedLoad: { type: "number", description: "Carga sugerida em kg (se hasLoad=true)" },
-        restInterval: {
-          type: "integer",
-          description: "Descanso em segundos (default: 60)",
-        },
-        notes: { type: "string", description: "Observacoes sobre o exercicio" },
+        videoUrl: { type: "string", description: "URL do video demonstrativo (opcional)" },
       },
     },
   },
@@ -656,7 +635,7 @@ const TOOLS = [
   {
     name: AI_TOOLS.UPDATE_EXERCISE_TEMPLATE,
     description:
-      'Edita campos de um template de exercicio existente na biblioteca do treinador. Apenas os campos informados sao alterados.',
+      'Edita campos de identidade de um template de exercicio na biblioteca do treinador (nome, tipo, video). Prescricao nao e armazenada no template. Apenas os campos informados sao alterados.',
     input_schema: {
       type: 'object',
       required: ['templateId'],
@@ -664,14 +643,7 @@ const TOOLS = [
         templateId: { type: 'string', description: 'ID do template de exercicio [REF:id]' },
         name: { type: 'string', description: 'Novo nome' },
         type: { type: 'string', enum: ['strength', 'cardio', 'mobility', 'stretching'], description: 'Tipo do exercicio' },
-        prescriptionMode: { type: 'string', enum: ['reps', 'duration'], description: 'Modo de prescricao: "reps" ou "duration"' },
-        sets: { type: 'integer', description: 'Numero de series' },
-        repetitions: { type: 'object', properties: { min: { type: 'integer' }, max: { type: 'integer' } }, description: 'Repeticoes min/max (quando prescriptionMode=reps)' },
-        duration: { type: 'integer', description: 'Duracao em segundos (quando prescriptionMode=duration)' },
-        hasLoad: { type: 'boolean', description: 'true se exercicio usa carga' },
-        suggestedLoad: { type: 'number', description: 'Carga sugerida em kg' },
-        restInterval: { type: 'integer', description: 'Descanso em segundos' },
-        notes: { type: 'string', description: 'Observacoes' },
+        videoUrl: { type: 'string', description: 'URL do video demonstrativo' },
       },
     },
   },
@@ -1346,28 +1318,24 @@ async function executeTool(userId, toolName, toolInput) {
           const createdExerciseSnapshots = [];
           if (inlineExercises.length > 0) {
             for (const ex of inlineExercises) {
-              const resolvedMode = sanitizeAiPrescriptionMode(ex.prescriptionMode);
-              const { repetitions, duration } = resolveAiExerciseFields(resolvedMode, ex);
+              // ExerciseTemplate carries only identity — no prescription fields
               const created = await tx.exerciseTemplate.create({
                 data: {
                   trainerId: trainer.id,
                   name: ex.name,
                   type: ex.type,
-                  sets: ex.sets ?? null,
-                  repetitions,
-                  duration,
-                  prescriptionMode: resolvedMode,
-                  hasLoad: ex.hasLoad ?? false,
-                  suggestedLoad: ex.suggestedLoad ?? null,
-                  restInterval: ex.restInterval ?? null,
-                  notes: ex.notes ?? null,
+                  videoUrl: ex.videoUrl ?? null,
+                  isPublic: false,
                 },
               });
               createdExerciseSnapshots.push(created);
             }
           }
 
-          // Build junction rows: existing ids first, then newly created
+          // Build junction rows: existing ids first, then newly created.
+          // Prescription for existing-by-ID templates defaults to null because the
+          // library template no longer carries prescription — set it when building
+          // the template, not from a stale library snapshot.
           const existingJunctionRows = existingIds.map((id) => {
             const t = existingTemplateSnapshotById[id];
             return {
@@ -1375,30 +1343,37 @@ async function executeTool(userId, toolName, toolInput) {
               name: t.name,
               type: t.type,
               videoUrl: t.videoUrl ?? null,
-              sets: t.sets ?? null,
-              repetitions: t.repetitions ?? null,
-              duration: t.duration ?? null,
-              prescriptionMode: resolvePrescriptionMode(t.prescriptionMode, t),
-              hasLoad: t.hasLoad ?? false,
-              suggestedLoad: t.suggestedLoad ?? null,
-              restInterval: t.restInterval ?? null,
-              notes: t.notes ?? null,
+              sets: null,
+              repetitions: null,
+              duration: null,
+              prescriptionMode: resolvePrescriptionMode(null, {}),
+              hasLoad: false,
+              suggestedLoad: null,
+              restInterval: null,
+              notes: null,
             };
           });
-          const createdJunctionRows = createdExerciseSnapshots.map((t) => ({
-            exerciseTemplateId: t.id,
-            name: t.name,
-            type: t.type,
-            videoUrl: t.videoUrl ?? null,
-            sets: t.sets ?? null,
-            repetitions: t.repetitions ?? null,
-            duration: t.duration ?? null,
-            prescriptionMode: resolvePrescriptionMode(t.prescriptionMode, t),
-            hasLoad: t.hasLoad ?? false,
-            suggestedLoad: t.suggestedLoad ?? null,
-            restInterval: t.restInterval ?? null,
-            notes: t.notes ?? null,
-          }));
+          // Prescription for inline exercises comes from the AI-provided spec (ex),
+          // matched by index to the created template snapshot.
+          const createdJunctionRows = createdExerciseSnapshots.map((t, index) => {
+            const ex = inlineExercises[index];
+            const resolvedMode = sanitizeAiPrescriptionMode(ex.prescriptionMode);
+            const { repetitions, duration } = resolveAiExerciseFields(resolvedMode, ex);
+            return {
+              exerciseTemplateId: t.id,
+              name: t.name,
+              type: t.type,
+              videoUrl: t.videoUrl ?? null,
+              sets: ex.sets ?? null,
+              repetitions,
+              duration,
+              prescriptionMode: resolvedMode,
+              hasLoad: ex.hasLoad ?? false,
+              suggestedLoad: ex.suggestedLoad ?? null,
+              restInterval: ex.restInterval ?? null,
+              notes: ex.notes ?? null,
+            };
+          });
           const allJunctionRows = [...existingJunctionRows, ...createdJunctionRows].map(
             (row, index) => ({ ...row, order: index }),
           );
@@ -1423,7 +1398,7 @@ async function executeTool(userId, toolName, toolInput) {
               trainingTemplateExerciseTemplates: {
                 include: {
                   exerciseTemplate: {
-                    select: { id: true, name: true, type: true, sets: true, repetitions: true, restInterval: true, hasLoad: true, suggestedLoad: true },
+                    select: { id: true, name: true, type: true },
                   },
                 },
                 orderBy: { order: "asc" },
@@ -1523,59 +1498,59 @@ async function executeTool(userId, toolName, toolInput) {
               });
             }
 
-            // Batch create inline exercise templates; collect full data for snapshot
+            // Batch create inline exercise templates (identity only — no prescription)
+            const inlineExerciseSpecs = training.exercises || [];
             const exerciseSnapshots = [];
-            for (const ex of training.exercises || []) {
-              const resolvedMode = sanitizeAiPrescriptionMode(ex.prescriptionMode);
-              const { repetitions, duration } = resolveAiExerciseFields(resolvedMode, ex);
+            for (const ex of inlineExerciseSpecs) {
               const created = await tx.exerciseTemplate.create({
                 data: {
                   trainerId: trainer.id,
                   name: ex.name,
                   type: ex.type,
-                  sets: ex.sets ?? null,
-                  repetitions,
-                  duration,
-                  prescriptionMode: resolvedMode,
-                  hasLoad: ex.hasLoad ?? false,
-                  suggestedLoad: ex.suggestedLoad ?? null,
-                  restInterval: ex.restInterval ?? null,
-                  notes: ex.notes ?? null,
+                  videoUrl: ex.videoUrl ?? null,
+                  isPublic: false,
                 },
               });
               exerciseSnapshots.push(created);
             }
 
-            // Build junction rows: inline first, then existing-by-ID (order is sequential, no gaps)
-            const inlineJunctionRows = exerciseSnapshots.map((t, index) => ({
-              exerciseTemplateId: t.id,
-              order: index,
-              name: t.name,
-              type: t.type,
-              videoUrl: t.videoUrl ?? null,
-              sets: t.sets ?? null,
-              repetitions: t.repetitions ?? null,
-              duration: t.duration ?? null,
-              prescriptionMode: resolvePrescriptionMode(t.prescriptionMode, t),
-              hasLoad: t.hasLoad ?? false,
-              suggestedLoad: t.suggestedLoad ?? null,
-              restInterval: t.restInterval ?? null,
-              notes: t.notes ?? null,
-            }));
+            // Build junction rows: inline first, then existing-by-ID (order is sequential, no gaps).
+            // Prescription for inline exercises comes from the AI spec (inlineExerciseSpecs),
+            // matched by index. Prescription for existing-by-ID templates defaults to null.
+            const inlineJunctionRows = exerciseSnapshots.map((t, index) => {
+              const ex = inlineExerciseSpecs[index];
+              const resolvedMode = sanitizeAiPrescriptionMode(ex.prescriptionMode);
+              const { repetitions, duration } = resolveAiExerciseFields(resolvedMode, ex);
+              return {
+                exerciseTemplateId: t.id,
+                order: index,
+                name: t.name,
+                type: t.type,
+                videoUrl: t.videoUrl ?? null,
+                sets: ex.sets ?? null,
+                repetitions,
+                duration,
+                prescriptionMode: resolvedMode,
+                hasLoad: ex.hasLoad ?? false,
+                suggestedLoad: ex.suggestedLoad ?? null,
+                restInterval: ex.restInterval ?? null,
+                notes: ex.notes ?? null,
+              };
+            });
             const existingJunctionRows = existingExSnapshots.map((t, index) => ({
               exerciseTemplateId: t.id,
               order: exerciseSnapshots.length + index,
               name: t.name,
               type: t.type,
               videoUrl: t.videoUrl ?? null,
-              sets: t.sets ?? null,
-              repetitions: t.repetitions ?? null,
-              duration: t.duration ?? null,
-              prescriptionMode: resolvePrescriptionMode(t.prescriptionMode, t),
-              hasLoad: t.hasLoad ?? false,
-              suggestedLoad: t.suggestedLoad ?? null,
-              restInterval: t.restInterval ?? null,
-              notes: t.notes ?? null,
+              sets: null,
+              repetitions: null,
+              duration: null,
+              prescriptionMode: resolvePrescriptionMode(null, {}),
+              hasLoad: false,
+              suggestedLoad: null,
+              restInterval: null,
+              notes: null,
             }));
             const allJunctionRows = [...inlineJunctionRows, ...existingJunctionRows];
 
@@ -1635,7 +1610,7 @@ async function executeTool(userId, toolName, toolInput) {
                       trainingTemplateExerciseTemplates: {
                         select: {
                           exerciseTemplate: {
-                            select: { id: true, name: true, type: true, sets: true, repetitions: true, restInterval: true, hasLoad: true, suggestedLoad: true },
+                            select: { id: true, name: true, type: true },
                           },
                         },
                         orderBy: { order: "asc" },
@@ -1777,7 +1752,7 @@ async function executeTool(userId, toolName, toolInput) {
       }
 
       case AI_TOOLS.UPDATE_EXERCISE_TEMPLATE: {
-        const fields = ['name', 'type', 'prescriptionMode', 'sets', 'repetitions', 'duration', 'hasLoad', 'suggestedLoad', 'restInterval', 'notes'];
+        const fields = ['name', 'type', 'videoUrl'];
         const data = Object.fromEntries(fields.filter(f => input[f] !== undefined).map(f => [f, input[f]]));
         result = await updateExerciseTemplate(userId, input.templateId, data);
         break;

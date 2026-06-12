@@ -47,6 +47,9 @@ e2eDescribe('e2e: training templates', () => {
   }
 
   async function createExerciseTemplate(accessToken, overrides = {}) {
+    // Library templates now carry only identity (name, type, videoUrl, isPublic).
+    // Prescription fields are stripped before sending.
+    const { sets, repetitions, hasLoad, suggestedLoad, restInterval, notes, prescriptionMode, intensity, duration, ...identityOverrides } = overrides;
     const response = await app.inject({
       method: 'POST',
       url: '/trainer/exercise-templates',
@@ -54,13 +57,7 @@ e2eDescribe('e2e: training templates', () => {
       payload: {
         name: 'Barbell Squat',
         type: 'strength',
-        sets: 4,
-        repetitions: { min: 8, max: 12 },
-        hasLoad: true,
-        suggestedLoad: 60,
-        restInterval: 90,
-        notes: 'Keep back straight',
-        ...overrides,
+        ...identityOverrides,
       },
     });
     expect(response.statusCode).toBe(201);
@@ -128,17 +125,11 @@ e2eDescribe('e2e: training templates', () => {
       expect(body.trainingTemplateExerciseTemplates).toHaveLength(0);
     });
 
-    it('snapshots exercise template fields into junction rows at create time', async () => {
+    it('junction row gets identity from library template and null prescription defaults', async () => {
       const { accessToken } = await createTrainerWithToken();
       const exerciseTemplate = await createExerciseTemplate(accessToken, {
         name: 'Bench Press',
         type: 'strength',
-        sets: 5,
-        repetitions: { min: 5, max: 5 },
-        hasLoad: true,
-        suggestedLoad: 80,
-        restInterval: 120,
-        notes: 'Controlled descent',
       });
 
       const response = await app.inject({
@@ -157,15 +148,54 @@ e2eDescribe('e2e: training templates', () => {
       expect(body.trainingTemplateExerciseTemplates).toHaveLength(1);
 
       const junction = body.trainingTemplateExerciseTemplates[0];
+      // Identity comes from the library template
       expect(junction).toHaveProperty('name', 'Bench Press');
       expect(junction).toHaveProperty('type', 'strength');
+      expect(junction).toHaveProperty('exerciseTemplateId', exerciseTemplate.id);
+      // Prescription defaults to null / REPS when not specified
+      expect(junction).toHaveProperty('sets', null);
+      expect(junction).toHaveProperty('repetitions', null);
+      expect(junction).toHaveProperty('hasLoad', false);
+      expect(junction).toHaveProperty('suggestedLoad', null);
+      expect(junction).toHaveProperty('restInterval', null);
+      expect(junction).toHaveProperty('notes', null);
+      expect(junction).toHaveProperty('prescriptionMode', 'reps');
+    });
+
+    it('caller-supplied prescription overrides null defaults in junction rows', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Bench Press',
+        type: 'strength',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          name: 'Chest Day',
+          category: 'strength',
+          exerciseTemplates: [{
+            exerciseTemplateId: exerciseTemplate.id,
+            sets: 5,
+            repetitions: { min: 5, max: 5 },
+            hasLoad: true,
+            suggestedLoad: 80,
+            restInterval: 120,
+            notes: 'Controlled descent',
+          }],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const junction = response.json().trainingTemplateExerciseTemplates[0];
       expect(junction).toHaveProperty('sets', 5);
       expect(junction).toHaveProperty('repetitions', { min: 5, max: 5 });
       expect(junction).toHaveProperty('hasLoad', true);
       expect(junction).toHaveProperty('suggestedLoad', 80);
       expect(junction).toHaveProperty('restInterval', 120);
       expect(junction).toHaveProperty('notes', 'Controlled descent');
-      expect(junction).toHaveProperty('exerciseTemplateId', exerciseTemplate.id);
     });
 
     it('allows same exerciseTemplateId linked twice (unique constraint removed)', async () => {
@@ -200,6 +230,64 @@ e2eDescribe('e2e: training templates', () => {
       expect(body.trainingTemplateExerciseTemplates[1].order).toBe(1);
     });
 
+    it('accepts a PUBLIC exercise template owned by another trainer', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      // Trainer A creates a public exercise template
+      const publicExercise = await createExerciseTemplate(trainerA, {
+        name: 'Community Deadlift',
+        type: 'strength',
+        isPublic: true,
+      });
+
+      // Trainer B creates a training template referencing Trainer A's public exercise
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: {
+          name: 'Borrowed Template',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId: publicExercise.id }],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('id');
+      expect(body.trainingTemplateExerciseTemplates).toHaveLength(1);
+      const junction = body.trainingTemplateExerciseTemplates[0];
+      expect(junction).toHaveProperty('exerciseTemplateId', publicExercise.id);
+      // Identity snapshotted from the public template
+      expect(junction).toHaveProperty('name', 'Community Deadlift');
+      expect(junction).toHaveProperty('type', 'strength');
+    });
+
+    it('rejects a PRIVATE exercise template owned by another trainer with 404', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      // Trainer A creates a private exercise template (isPublic defaults to false)
+      const privateExercise = await createExerciseTemplate(trainerA, {
+        name: 'Private Squat',
+        type: 'strength',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/training-templates',
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: {
+          name: 'Forbidden Template',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId: privateExercise.id }],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
     it('returns 401 without authentication', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -214,22 +302,21 @@ e2eDescribe('e2e: training templates', () => {
   // ==================== PATCH /trainer/training-templates/:templateId/exercises/:exerciseId ====================
 
   describe('PATCH /trainer/training-templates/:templateId/exercises/:exerciseId', () => {
-    it('updates junction row snapshot fields without touching the ExerciseTemplate', async () => {
+    it('updates junction row prescription fields without touching the ExerciseTemplate', async () => {
       const { accessToken } = await createTrainerWithToken();
       const exerciseTemplate = await createExerciseTemplate(accessToken, {
         name: 'Romanian Deadlift',
         type: 'strength',
-        sets: 3,
-        hasLoad: true,
-        suggestedLoad: 70,
       });
 
+      // Create template with no prescription — junction starts with null prescription
       const template = await createTrainingTemplate(accessToken, {
         exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
       });
 
       const junction = template.trainingTemplateExerciseTemplates[0];
-      expect(junction.sets).toBe(3);
+      // Junction prescription defaults to null
+      expect(junction.sets).toBeNull();
 
       const patchResponse = await app.inject({
         method: 'PATCH',
@@ -249,9 +336,6 @@ e2eDescribe('e2e: training templates', () => {
       const exerciseTemplate = await createExerciseTemplate(accessToken, {
         name: 'Overhead Press',
         type: 'strength',
-        sets: 4,
-        hasLoad: true,
-        suggestedLoad: 50,
       });
 
       const template = await createTrainingTemplate(accessToken, {
@@ -264,10 +348,10 @@ e2eDescribe('e2e: training templates', () => {
         method: 'PATCH',
         url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { sets: 10, suggestedLoad: 999, notes: 'Changed in junction only' },
+        payload: { sets: 10, notes: 'Changed in junction only' },
       });
 
-      // Fetch the original ExerciseTemplate and verify it is unchanged
+      // Fetch the original ExerciseTemplate and verify it is unchanged (identity only)
       const exerciseTemplatesResponse = await app.inject({
         method: 'GET',
         url: '/trainer/exercise-templates',
@@ -278,18 +362,16 @@ e2eDescribe('e2e: training templates', () => {
       const templates = exerciseTemplatesResponse.json();
       const original = templates.find((t) => t.id === exerciseTemplate.id);
       expect(original).toBeDefined();
-      expect(original.sets).toBe(4);
-      expect(original.suggestedLoad).toBe(50);
+      // Library template has no prescription fields
+      expect(original).not.toHaveProperty('sets');
+      expect(original).not.toHaveProperty('suggestedLoad');
     });
 
-    it('updates multiple snapshot fields in a single PATCH', async () => {
+    it('updates multiple junction prescription fields in a single PATCH', async () => {
       const { accessToken } = await createTrainerWithToken();
       const exerciseTemplate = await createExerciseTemplate(accessToken, {
         name: 'Pull Up',
         type: 'strength',
-        sets: 3,
-        hasLoad: false,
-        restInterval: 60,
       });
 
       const template = await createTrainingTemplate(accessToken, {
@@ -345,6 +427,32 @@ e2eDescribe('e2e: training templates', () => {
       });
 
       expect(patchResponse.statusCode).toBe(403);
+    });
+
+    it('persists intensity when patching a cardio junction row', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const exerciseTemplate = await createExerciseTemplate(accessToken, {
+        name: 'Running',
+        type: 'cardio',
+      });
+
+      const template = await createTrainingTemplate(accessToken, {
+        exerciseTemplates: [{ exerciseTemplateId: exerciseTemplate.id }],
+      });
+
+      const junction = template.trainingTemplateExerciseTemplates[0];
+
+      const patchResponse = await app.inject({
+        method: 'PATCH',
+        url: `/trainer/training-templates/${template.id}/exercises/${junction.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { intensity: 'vigorous' },
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+      const updated = patchResponse.json();
+      expect(updated).toHaveProperty('id', junction.id);
+      expect(updated).toHaveProperty('intensity', 'vigorous');
     });
 
     it('returns 401 without authentication', async () => {
@@ -518,14 +626,12 @@ e2eDescribe('e2e: training templates', () => {
   // ==================== POST /trainer/training-templates/:templateId/exercises/from-template ====================
 
   describe('POST /trainer/training-templates/:templateId/exercises/from-template', () => {
-    it('creates a junction row linking an existing ExerciseTemplate', async () => {
+    it('creates a junction row linking an existing ExerciseTemplate with null prescription defaults', async () => {
       const { accessToken } = await createTrainerWithToken();
+      // ExerciseTemplate is identity-only — no prescription stored on it
       const exerciseTemplate = await createExerciseTemplate(accessToken, {
         name: 'Library Pull-Up',
         type: 'strength',
-        sets: 3,
-        hasLoad: false,
-        restInterval: 60,
       });
       const template = await createTrainingTemplate(accessToken, {});
 
@@ -541,9 +647,10 @@ e2eDescribe('e2e: training templates', () => {
       expect(body).toHaveProperty('trainingTemplateId', template.id);
       expect(body).toHaveProperty('exerciseTemplateId', exerciseTemplate.id);
       expect(body).toHaveProperty('name', 'Library Pull-Up');
-      expect(body).toHaveProperty('sets', 3);
+      // Prescription defaults to null on the junction when caller provides none
+      expect(body).toHaveProperty('sets', null);
       expect(body).toHaveProperty('hasLoad', false);
-      expect(body).toHaveProperty('restInterval', 60);
+      expect(body).toHaveProperty('restInterval', null);
       expect(body).toHaveProperty('order', 0);
       expect(body.exerciseTemplate).toBeDefined();
       expect(body.exerciseTemplate.id).toBe(exerciseTemplate.id);
@@ -623,10 +730,11 @@ e2eDescribe('e2e: training templates', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('returns 404 when the exerciseTemplate belongs to another trainer', async () => {
+    it('returns 404 when the exerciseTemplate is private and belongs to another trainer', async () => {
       const { accessToken: trainerA } = await createTrainerWithToken();
       const { accessToken: trainerB } = await createTrainerWithToken();
 
+      // isPublic defaults to false — private template
       const foreignExercise = await createExerciseTemplate(trainerA, { name: 'Private', type: 'strength' });
       const template = await createTrainingTemplate(trainerB, {});
 
@@ -638,6 +746,44 @@ e2eDescribe('e2e: training templates', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('succeeds when the exerciseTemplate is public and belongs to another trainer', async () => {
+      const { accessToken: trainerA } = await createTrainerWithToken();
+      const { accessToken: trainerB } = await createTrainerWithToken();
+
+      // Trainer A creates a public exercise template
+      const publicExercise = await createExerciseTemplate(trainerA, {
+        name: 'Public Lunge',
+        type: 'strength',
+        isPublic: true,
+      });
+
+      // Trainer B creates their own training template and links A's public exercise
+      const template = await createTrainingTemplate(trainerB, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises/from-template`,
+        headers: { authorization: `Bearer ${trainerB}` },
+        payload: {
+          exerciseTemplateId: publicExercise.id,
+          sets: 3,
+          prescriptionMode: 'reps',
+          repetitions: { min: 12, max: 15 },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('trainingTemplateId', template.id);
+      expect(body).toHaveProperty('exerciseTemplateId', publicExercise.id);
+      // Identity snapshotted from the public template
+      expect(body).toHaveProperty('name', 'Public Lunge');
+      expect(body).toHaveProperty('type', 'strength');
+      // Prescription from caller input
+      expect(body).toHaveProperty('sets', 3);
+      expect(body).toHaveProperty('repetitions', { min: 12, max: 15 });
     });
 
     it('returns 404 when the training template does not exist', async () => {

@@ -1,7 +1,9 @@
-import { exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
+import { exerciseTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
+// Library exercise templates carry only the exercise identity. Prescription
+// ("how it's done") lives on the TrainingTemplateExerciseTemplate junction and the Exercise.
 const exerciseTemplateResponseSchema = {
   type: 'object',
   properties: {
@@ -11,22 +13,6 @@ const exerciseTemplateResponseSchema = {
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
-    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
-    sets: { type: 'integer', nullable: true },
-    repetitions: {
-      type: 'object',
-      nullable: true,
-      properties: {
-        min: { type: 'integer', nullable: true, minimum: 1 },
-        max: { type: 'integer', nullable: true, minimum: 1 },
-      },
-    },
-    duration: { type: 'integer', nullable: true },
-    hasLoad: { type: 'boolean' },
-    suggestedLoad: { type: 'number', nullable: true },
-    restInterval: { type: 'integer', nullable: true },
-    notes: { type: 'string', nullable: true },
-    ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -42,25 +28,8 @@ export const createExerciseTemplateSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
-      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string' },
       isPublic: { type: 'boolean' },
-      sets: { type: 'integer', minimum: 1 },
-      repetitions: {
-        type: 'object',
-        required: ['min', 'max'],
-        properties: {
-          min: { type: 'integer', minimum: 1 },
-          max: { type: 'integer', minimum: 1 },
-        },
-        additionalProperties: false,
-      },
-      duration: { type: 'integer', minimum: 1 },
-      hasLoad: { type: 'boolean' },
-      suggestedLoad: { type: 'number', minimum: 0 },
-      restInterval: { type: 'integer', minimum: 0 },
-      notes: { type: 'string' },
-      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
     },
     additionalProperties: false,
   },
@@ -138,24 +107,8 @@ export const updateExerciseTemplateSchema = {
     properties: {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
-      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string' },
       isPublic: { type: 'boolean' },
-      sets: { type: ['integer', 'null'], minimum: 1 },
-      repetitions: {
-        type: ['object', 'null'],
-        properties: {
-          min: { type: ['integer', 'null'], minimum: 1 },
-          max: { type: ['integer', 'null'], minimum: 1 },
-        },
-        additionalProperties: false,
-      },
-      duration: { type: ['integer', 'null'], minimum: 1 },
-      hasLoad: { type: 'boolean' },
-      suggestedLoad: { type: ['number', 'null'], minimum: 0 },
-      restInterval: { type: ['integer', 'null'], minimum: 0 },
-      notes: { type: 'string' },
-      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
     },
     additionalProperties: false,
   },

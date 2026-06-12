@@ -1,7 +1,9 @@
-import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescriptionModeValues } from '../../src/constants/training.js';
+import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
+// The linked library template carries only the exercise identity. Prescription lives on
+// the junction (trainingTemplateExerciseTemplateSchema), not here.
 const exerciseTemplateRefSchema = {
   type: 'object',
   properties: {
@@ -11,19 +13,6 @@ const exerciseTemplateRefSchema = {
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
     isPublic: { type: 'boolean' },
-    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
-    sets: { type: 'integer', nullable: true },
-    repetitions: {
-      type: 'object',
-      nullable: true,
-      properties: {
-        min: { type: 'integer', minimum: 1 },
-        max: { type: 'integer', minimum: 1 },
-      },
-    },
-    duration: { type: 'integer', nullable: true },
-    hasLoad: { type: 'boolean' },
-    suggestedLoad: { type: 'number', nullable: true },
   },
 };
 
@@ -163,10 +152,11 @@ export const createTrainingTemplateSchema = {
             suggestedLoad: { type: 'number', nullable: true },
             restInterval: { type: 'integer', nullable: true },
             notes: { type: 'string', nullable: true },
+            intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
           },
           additionalProperties: false,
         },
-        description: 'Optional list of { exerciseTemplateId, order?, supersetGroupId?, supersetOrder?, ...snapshotOverrides }; alternative to exerciseTemplateIds',
+        description: 'Optional list of { exerciseTemplateId, order?, supersetGroupId?, supersetOrder?, ...prescription }; alternative to exerciseTemplateIds',
       },
     },
     additionalProperties: false,
@@ -357,6 +347,7 @@ export const createTrainingTemplateExerciseSchema = {
       suggestedLoad: { type: 'number', nullable: true, minimum: 0 },
       restInterval: { type: 'integer', nullable: true, minimum: 0 },
       notes: { type: 'string', nullable: true },
+      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
       order: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -392,6 +383,24 @@ export const createTrainingTemplateExerciseFromTemplateSchema = {
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
       supersetOrder: { type: 'integer', minimum: 0 },
+      // Prescription set by the trainer at link time — the library template carries none.
+      prescriptionMode: { type: 'string', enum: prescriptionModeValues },
+      sets: { type: 'integer', nullable: true, minimum: 1 },
+      repetitions: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          min: { type: 'integer', minimum: 1 },
+          max: { type: 'integer', minimum: 1 },
+        },
+        additionalProperties: false,
+      },
+      duration: { type: 'integer', nullable: true, minimum: 1 },
+      hasLoad: { type: 'boolean' },
+      suggestedLoad: { type: 'number', nullable: true, minimum: 0 },
+      restInterval: { type: 'integer', nullable: true, minimum: 0 },
+      notes: { type: 'string', nullable: true },
+      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
     },
     additionalProperties: false,
   },
@@ -465,6 +474,7 @@ export const updateTrainingTemplateExerciseSchema = {
       suggestedLoad: { type: 'number', nullable: true },
       restInterval: { type: 'integer', nullable: true },
       notes: { type: 'string', nullable: true },
+      intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
       order: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,

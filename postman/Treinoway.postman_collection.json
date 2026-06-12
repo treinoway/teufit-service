@@ -2071,7 +2071,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\"\n}",
+              "raw": "{\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\",\n  \"intensity\": \"moderate\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2113,7 +2113,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"exerciseTemplateId\": \"\"\n}",
+              "raw": "{\n  \"exerciseTemplateId\": \"\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Keep core tight\",\n  \"intensity\": \"moderate\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2140,7 +2140,7 @@
                 }
               ]
             },
-            "description": "Attach an existing ExerciseTemplate from the trainer's library to the training template by creating a junction row. The ExerciseTemplate must belong to the caller. Requires TRAINER role and template ownership."
+            "description": "Attach an existing ExerciseTemplate from the trainer's library to the training template by creating a junction row. Prescription fields (prescriptionMode, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes, intensity) are set here at link time — the library template no longer carries them. Requires TRAINER role and template ownership."
           },
           "response": []
         },
@@ -2270,35 +2270,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/trainer/exercise-templates",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "trainer",
-                "exercise-templates"
-              ]
-            },
-            "description": "Create a reusable exercise template. Requires TRAINER role. Type: strength, cardio, mobility, stretching. Duration in seconds."
-          },
-          "response": []
-        },
-        {
-          "name": "Create Exercise Template (duration)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Prancha Isom\\u00e9trica\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"duration\",\n  \"sets\": 3,\n  \"duration\": 30,\n  \"restInterval\": 60\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates",
@@ -2310,7 +2287,7 @@
                 "exercise-templates"
               ]
             },
-            "description": "Create a reusable exercise template using duration-based prescription. Sets duration in seconds; repetitions must be omitted. Requires TRAINER role."
+            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
           },
           "response": []
         },
@@ -2392,7 +2369,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 70,\n  \"restInterval\": 120\n}"
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"isPublic\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -2412,7 +2389,7 @@
                 }
               ]
             },
-            "description": "Update exercise template. Only accessible by owner. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value."
+            "description": "Update exercise template identity fields (name, type, videoUrl, isPublic). All fields are optional. Only accessible by owner."
           },
           "response": []
         },

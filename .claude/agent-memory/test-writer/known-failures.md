@@ -19,4 +19,6 @@ As of 2026-05-02 (staging branch), the following E2E test failures are pre-exist
 
 **Why:** These are tracked separately. Do not treat them as regressions when writing or running tests for unrelated features.
 
-Total pre-existing: 17 failures across 6 files.
+- `test/e2e/training-template.e2e.test.js` — 4 failures in `POST /trainer/trainings/from-template` section. All use `createProtocol(accessToken, assigneeId)` which calls `/trainer/protocols`. That endpoint calls `assertStudentActiveOnPlan()` (added in commit `94710ca`), but the `createAssigneeWithToken` helper never sets up a TrainerStudent link. Tests were written in commit `d5af540` before the plan guard existed. Fix requires adding a `createTrainerStudentLink` setup step in those tests.
+
+Total pre-existing: 21 failures across 7 files.

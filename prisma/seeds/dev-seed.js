@@ -190,12 +190,14 @@ async function main() {
       firstProtocolCreatedAt: NOW,
     },
   });
-  // Ensure FREE plan subscription exists for the main trainer (self-sufficient after db:reset).
+  // Main trainer is DIAMOND so all premium features (incl. iArnold/AI) work after db:reset.
   await prisma.platformSubscription.create({
     data: {
       trainerId: trainer.id,
-      tier: PLATFORM_PLAN_TIERS.FREE,
+      tier: PLATFORM_PLAN_TIERS.DIAMOND,
       status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+      currentPeriodStart: NOW,
+      currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY_MS),
     },
   });
 
@@ -334,19 +336,14 @@ async function main() {
   // 4. ExerciseTemplates (15, public, owned by trainer).
   const templateByName = new Map();
   for (const tpl of EXERCISE_TEMPLATES) {
+    // Library templates are identity-only — prescription lives on the junction/Exercise.
     const created = await prisma.exerciseTemplate.create({
       data: {
         trainerId: trainer.id,
         name: tpl.name,
         type: tpl.type,
+        videoUrl: tpl.videoUrl ?? null,
         isPublic: true,
-        sets: tpl.sets,
-        repetitions: tpl.repetitions ?? null,
-        duration: tpl.duration ?? null,
-        prescriptionMode: tpl.prescriptionMode,
-        hasLoad: tpl.hasLoad,
-        suggestedLoad: tpl.suggestedLoad ?? null,
-        restInterval: tpl.restInterval ?? null,
       },
     });
     templateByName.set(tpl.name, { ...tpl, id: created.id });
@@ -743,7 +740,7 @@ async function main() {
   // ─── Summary ───────────────────────────────────────────────────────────────
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log('Dev seed complete:');
-  console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password} [FREE]`);
+  console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password} [DIAMOND]`);
   console.log(`  ✓ DIAMOND trainer — ${TRAINER_DIAMOND.email} / ${TRAINER_DIAMOND.password}`);
   console.log(`  ✓ PLATINUM trainer — ${TRAINER_PLATINUM.email} / ${TRAINER_PLATINUM.password} (50 students, 5 AI events)`);
   console.log(`  ✓ ${counts('Students', students.length)} — aluno1@treinoway.local … aluno${students.length}@treinoway.local / aluno123`);

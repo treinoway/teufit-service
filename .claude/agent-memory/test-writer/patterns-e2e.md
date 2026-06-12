@@ -51,3 +51,9 @@ Use unique email suffixes with `Date.now()` to avoid conflicts across parallel t
 ```js
 const email = `e2e+<feature>-<role>-${Date.now()}@example.com`;
 ```
+
+## Fastify `additionalProperties: false` does NOT cause 400
+
+Fastify 5 uses AJV with `removeAdditional: true` by default (confirmed in `node_modules/fastify/build/build-validation.js`). Extra fields in the request body are silently stripped — the server returns 2xx, not 400. Do NOT write tests asserting `statusCode 400` because a prescription/unknown field was sent. Instead, assert:
+- The response is 201/200
+- The response body does NOT contain those extra fields

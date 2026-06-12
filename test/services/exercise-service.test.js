@@ -878,6 +878,7 @@ describe('exercise-service', () => {
       trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
     });
 
+    // Library templates carry only identity — no prescription fields
     const makeTemplate = (overrides = {}) => ({
       id: 'tmpl-1',
       trainerId: 't1',
@@ -885,14 +886,6 @@ describe('exercise-service', () => {
       type: 'strength',
       isPublic: false,
       deletedAt: null,
-      sets: 3,
-      repetitions: { min: 8, max: 12 },
-      duration: null,
-      prescriptionMode: 'reps',
-      hasLoad: false,
-      suggestedLoad: null,
-      restInterval: 60,
-      notes: null,
       videoUrl: null,
       ...overrides,
     });
@@ -951,6 +944,7 @@ describe('exercise-service', () => {
       trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
     });
 
+    // Library templates carry only identity — no prescription or intensity
     const makeCardioTemplate = (overrides = {}) => ({
       id: 'tmpl-cardio',
       trainerId: 't1',
@@ -958,16 +952,7 @@ describe('exercise-service', () => {
       type: 'cardio',
       isPublic: false,
       deletedAt: null,
-      sets: null,
-      repetitions: null,
-      duration: 30,
-      prescriptionMode: 'duration',
-      hasLoad: false,
-      suggestedLoad: null,
-      restInterval: null,
-      notes: null,
       videoUrl: null,
-      intensity: 'moderate',
       ...overrides,
     });
 
@@ -982,11 +967,11 @@ describe('exercise-service', () => {
       };
     }
 
-    it('inherits intensity from cardio template when caller does not override', async () => {
+    it('defaults intensity to null when caller does not provide it (library template has no intensity)', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.training.findUnique.mockResolvedValue(makeTraining());
       prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
-      const created = { id: 'ex1', type: 'cardio', intensity: 'moderate', prescriptionMode: 'duration' };
+      const created = { id: 'ex1', type: 'cardio', intensity: null, prescriptionMode: 'reps' };
       const txMock = makeTxMock(created);
       prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
@@ -994,33 +979,59 @@ describe('exercise-service', () => {
 
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ intensity: 'moderate' }),
-      });
-    });
-
-    it('clears intensity when caller overrides intensity to null', async () => {
-      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      prisma.training.findUnique.mockResolvedValue(makeTraining());
-      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
-      const created = { id: 'ex1', type: 'cardio', intensity: null, prescriptionMode: 'duration' };
-      const txMock = makeTxMock(created);
-      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
-
-      const result = await createFromTemplate('u1', 'tr1', 'tmpl-cardio', { intensity: null });
-
-      expect(result).toEqual(created);
-      expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ intensity: null }),
       });
     });
 
-    it('throws VALIDATION_ERROR when caller overrides type to strength on a cardio template with intensity', async () => {
+    it('sets intensity when caller explicitly provides it for a cardio type', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.training.findUnique.mockResolvedValue(makeTraining());
-      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate()); // intensity: 'moderate'
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
+      const created = { id: 'ex1', type: 'cardio', intensity: 'vigorous', prescriptionMode: 'reps' };
+      const txMock = makeTxMock(created);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await createFromTemplate('u1', 'tr1', 'tmpl-cardio', { intensity: 'vigorous' });
+
+      expect(result).toEqual(created);
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ intensity: 'vigorous' }),
+      });
+    });
+
+    it('throws VALIDATION_ERROR when caller sets intensity on a strength template type', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      // Strength template — library has no intensity, caller provides it
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-strength',
+        trainerId: 't1',
+        name: 'Squat',
+        type: 'strength',
+        isPublic: false,
+        deletedAt: null,
+        videoUrl: null,
+      });
 
       await expect(
-        createFromTemplate('u1', 'tr1', 'tmpl-cardio', { type: 'strength' }),
+        createFromTemplate('u1', 'tr1', 'tmpl-strength', { intensity: 'moderate' }),
+      ).rejects.toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,
+        statusCode: 400,
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws VALIDATION_ERROR when caller overrides type to strength while setting intensity', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeCardioTemplate());
+
+      // Caller overrides type to strength AND sets intensity — should fail
+      await expect(
+        createFromTemplate('u1', 'tr1', 'tmpl-cardio', { type: 'strength', intensity: 'moderate' }),
       ).rejects.toMatchObject({
         error: 'VALIDATION_ERROR',
         messageCode: ExerciseIntensityMessageCode.INTENSITY_REQUIRES_CARDIO,

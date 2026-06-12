@@ -298,45 +298,54 @@ describe('ai-training-service — update tools & enriched context', () => {
   // ---------------------------------------------------------------------------
 
   describe(`executeTool — ${AI_TOOLS.UPDATE_EXERCISE_TEMPLATE}`, () => {
-    it('calls updateExerciseTemplate with only the provided fields', async () => {
+    it('calls updateExerciseTemplate with only the provided identity fields (name/type/videoUrl); prescription fields in input are NOT forwarded', async () => {
       const updated = { id: 'et-1', name: 'Supino Reto' }
       updateExerciseTemplate.mockResolvedValue(updated)
 
       const result = await executeTool('user-1', AI_TOOLS.UPDATE_EXERCISE_TEMPLATE, {
         templateId: 'et-1',
         name: 'Supino Reto',
+        // sets is a prescription field — must not be forwarded
         sets: 4,
       })
 
+      // Only name was in the allowlist ['name', 'type', 'videoUrl'] — sets must be stripped
       expect(updateExerciseTemplate).toHaveBeenCalledWith('user-1', 'et-1', {
         name: 'Supino Reto',
-        sets: 4,
       })
       expect(result).toMatchObject({ success: true, data: updated })
     })
 
-    it('passes boolean hasLoad=false correctly (falsy but defined)', async () => {
+    it('forwards videoUrl when provided, and does NOT forward prescription fields even when they are defined', async () => {
       updateExerciseTemplate.mockResolvedValue({ id: 'et-1' })
 
       await executeTool('user-1', AI_TOOLS.UPDATE_EXERCISE_TEMPLATE, {
         templateId: 'et-1',
+        videoUrl: 'https://example.com/video.mp4',
+        // prescription fields that must be ignored
         hasLoad: false,
+        sets: 3,
+        restInterval: 60,
       })
 
       const [, , data] = updateExerciseTemplate.mock.calls[0]
-      expect(data).toHaveProperty('hasLoad', false)
+      expect(data).toEqual({ videoUrl: 'https://example.com/video.mp4' })
+      expect(data).not.toHaveProperty('hasLoad')
+      expect(data).not.toHaveProperty('sets')
+      expect(data).not.toHaveProperty('restInterval')
     })
 
-    it('passes all supported fields when all are provided', async () => {
+    it('passes all three supported identity fields (name, type, videoUrl) and strips everything else', async () => {
       updateExerciseTemplate.mockResolvedValue({ id: 'et-1' })
 
       await executeTool('user-1', AI_TOOLS.UPDATE_EXERCISE_TEMPLATE, {
         templateId: 'et-1',
         name: 'Rosca Direta',
         type: 'strength',
+        videoUrl: 'https://example.com/rosca.mp4',
+        // prescription fields that must be ignored
         sets: 3,
         repetitions: { min: 10, max: 12 },
-        duration: null,
         hasLoad: true,
         suggestedLoad: 20,
         restInterval: 60,
@@ -344,16 +353,10 @@ describe('ai-training-service — update tools & enriched context', () => {
       })
 
       const [, , data] = updateExerciseTemplate.mock.calls[0]
-      // duration is null (explicitly provided) — should still be present
-      expect(data).toMatchObject({
+      expect(data).toEqual({
         name: 'Rosca Direta',
         type: 'strength',
-        sets: 3,
-        repetitions: { min: 10, max: 12 },
-        hasLoad: true,
-        suggestedLoad: 20,
-        restInterval: 60,
-        notes: 'Cotovelos fixos',
+        videoUrl: 'https://example.com/rosca.mp4',
       })
     })
   })

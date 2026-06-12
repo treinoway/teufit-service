@@ -7,31 +7,23 @@ import {
   validateRepetitions,
   validatePrescriptionMode,
   applyPrescriptionModeExclusivity,
-  resolvePrescriptionMode,
 } from '../helpers/training-validators.js';
 import { PrescriptionMode } from '../constants/training.js';
 
 /**
- * Build junction row create/update data by merging caller overrides with template snapshot.
- * The input `e` may carry optional override fields (e.g. `{ sets: 5 }`).
- * Fields not provided by the caller fall back to the fetched template values.
+ * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
+ * library ExerciseTemplate; prescription ("how it's done") comes only from the caller input
+ * `e` and defaults to null — the library template no longer carries prescription, so a
+ * workout's direction is supplied when the exercise is added to the training template.
  *
- * @param {object} e - Input item (exerciseTemplateId, order?, and any snapshot overrides)
+ * @param {object} e - Input item (exerciseTemplateId, order?, identity + prescription fields)
  * @param {number} index - Fallback order when e.order is not set
- * @param {object} template - Full ExerciseTemplate row fetched from DB
+ * @param {object} template - Library ExerciseTemplate row (name/type/videoUrl source)
  * @returns {object} Junction row create data
  */
 function buildJunctionCreateData(e, index, template) {
-  const resolvedMode = e.prescriptionMode !== undefined
-    ? e.prescriptionMode
-    : resolvePrescriptionMode(template.prescriptionMode, template);
-
-  const baseRepetitions = e.repetitions !== undefined ? e.repetitions : template.repetitions;
-  const baseDuration = e.duration !== undefined ? e.duration : template.duration;
-  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, {
-    repetitions: baseRepetitions,
-    duration: baseDuration,
-  });
+  const resolvedMode = e.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, e);
 
   return {
     exerciseTemplateId: e.exerciseTemplateId,
@@ -42,15 +34,15 @@ function buildJunctionCreateData(e, index, template) {
     name: e.name !== undefined ? e.name : template.name,
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
-    sets: e.sets !== undefined ? e.sets : template.sets,
+    sets: e.sets ?? null,
     repetitions,
     duration,
     prescriptionMode: resolvedMode,
-    hasLoad: e.hasLoad !== undefined ? e.hasLoad : template.hasLoad,
-    suggestedLoad: e.suggestedLoad !== undefined ? e.suggestedLoad : template.suggestedLoad,
-    restInterval: e.restInterval !== undefined ? e.restInterval : template.restInterval,
-    notes: e.notes !== undefined ? e.notes : template.notes,
-    intensity: e.intensity !== undefined ? e.intensity : template.intensity,
+    hasLoad: e.hasLoad !== undefined ? e.hasLoad : false,
+    suggestedLoad: e.suggestedLoad ?? null,
+    restInterval: e.restInterval ?? null,
+    notes: e.notes ?? null,
+    intensity: e.intensity ?? null,
   };
 }
 
@@ -98,8 +90,9 @@ export async function createTrainingTemplate(userId, data) {
   let existingTemplatesById = {};
   if (exerciseTemplatesInput.length > 0) {
     const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
+    // Allow own templates and public ones from other trainers (the library lists both).
     const existing = await prisma.exerciseTemplate.findMany({
-      where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
+      where: { id: { in: ids }, deletedAt: null, OR: [{ trainerId: trainer.id }, { isPublic: true }] },
     });
     const foundIds = new Set(existing.map((e) => e.id));
     const missing = ids.filter((id) => !foundIds.has(id));
@@ -460,6 +453,7 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
   if (data.restInterval !== undefined) updateData.restInterval = data.restInterval;
   if (data.notes !== undefined) updateData.notes = data.notes;
+  if (data.intensity !== undefined) updateData.intensity = data.intensity;
   if (data.order !== undefined) updateData.order = data.order;
   if (data.supersetGroupId !== undefined) updateData.supersetGroupId = data.supersetGroupId;
   if (data.supersetOrder !== undefined) updateData.supersetOrder = data.supersetOrder;
@@ -547,6 +541,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
   const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
 
   const junction = await prisma.$transaction(async (tx) => {
+    // Library template holds identity only — prescription stays on the junction.
     const exerciseTemplate = await tx.exerciseTemplate.create({
       data: {
         trainerId: trainer.id,
@@ -554,14 +549,6 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         type: data.type,
         videoUrl: data.videoUrl ?? null,
         isPublic: data.isPublic !== undefined ? data.isPublic : false,
-        sets: data.sets ?? null,
-        repetitions,
-        duration,
-        prescriptionMode: resolvedMode,
-        hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
-        suggestedLoad: data.suggestedLoad ?? null,
-        restInterval: data.restInterval ?? null,
-        notes: data.notes ?? null,
       },
     });
 
@@ -575,14 +562,15 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         name: exerciseTemplate.name,
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
-        sets: exerciseTemplate.sets,
-        repetitions: exerciseTemplate.repetitions,
-        duration: exerciseTemplate.duration,
-        prescriptionMode: exerciseTemplate.prescriptionMode,
-        hasLoad: exerciseTemplate.hasLoad,
-        suggestedLoad: exerciseTemplate.suggestedLoad,
-        restInterval: exerciseTemplate.restInterval,
-        notes: exerciseTemplate.notes,
+        sets: data.sets ?? null,
+        repetitions,
+        duration,
+        prescriptionMode: resolvedMode,
+        hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+        suggestedLoad: data.suggestedLoad ?? null,
+        restInterval: data.restInterval ?? null,
+        notes: data.notes ?? null,
+        intensity: data.intensity ?? null,
       },
       include: { exerciseTemplate: true },
     });
@@ -611,14 +599,19 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
     throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
   }
 
-  // Only the owner can link — public templates belong to another trainer's library.
-  if (exerciseTemplate.trainerId !== trainer.id) {
+  // Own templates and public ones from other trainers can be linked (the library lists both).
+  if (exerciseTemplate.trainerId !== trainer.id && !exerciseTemplate.isPublic) {
     throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
   }
 
+  validatePrescriptionMode(data.prescriptionMode, data);
+  validateRepetitions(data.repetitions);
+
   const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
-  const resolvedMode = resolvePrescriptionMode(exerciseTemplate.prescriptionMode, exerciseTemplate);
-  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exerciseTemplate);
+  // Identity comes from the library template; prescription is set by the trainer at link
+  // time (the workout's direction) — the library template no longer carries prescription.
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
 
   const junction = await prisma.trainingTemplateExerciseTemplate.create({
     data: {
@@ -630,14 +623,15 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
       name: exerciseTemplate.name,
       type: exerciseTemplate.type,
       videoUrl: exerciseTemplate.videoUrl,
-      sets: exerciseTemplate.sets,
+      sets: data.sets ?? null,
       repetitions,
       duration,
       prescriptionMode: resolvedMode,
-      hasLoad: exerciseTemplate.hasLoad,
-      suggestedLoad: exerciseTemplate.suggestedLoad,
-      restInterval: exerciseTemplate.restInterval,
-      notes: exerciseTemplate.notes,
+      hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+      suggestedLoad: data.suggestedLoad ?? null,
+      restInterval: data.restInterval ?? null,
+      notes: data.notes ?? null,
+      intensity: data.intensity ?? null,
     },
     include: { exerciseTemplate: true },
   });

@@ -945,27 +945,14 @@ describe('ai-training-service', () => {
     }
 
     describe(`${AI_TOOLS.CREATE_TRAINING_TEMPLATE}`, () => {
-      it('persists all five exercise fields in exerciseTemplate.create', async () => {
+      it('writes only identity fields to exerciseTemplate.create (no prescription); prescription lands on the junction row', async () => {
         prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1', name: 'Supino reto', type: 'strength', videoUrl: null })
         prisma.trainingTemplate.create.mockResolvedValue({
           id: 'tt-1',
           name: 'Treino A',
           category: 'strength',
-          trainingTemplateExerciseTemplates: [
-            {
-              exerciseTemplate: {
-                id: 'ex-created-1',
-                name: 'Supino reto',
-                type: 'strength',
-                sets: 4,
-                repetitions: { min: 8, max: 12 },
-                restInterval: 90,
-                hasLoad: true,
-                suggestedLoad: 60,
-              },
-            },
-          ],
+          trainingTemplateExerciseTemplates: [],
         })
 
         await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
@@ -974,23 +961,40 @@ describe('ai-training-service', () => {
           exercises: [EXERCISE_INPUT],
         })
 
+        // exerciseTemplate.create must carry identity only — no prescription fields
         expect(prisma.exerciseTemplate.create).toHaveBeenCalledTimes(1)
         expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({
-              sets: 4,
-              repetitions: { min: 8, max: 12 },
-              restInterval: 90,
-              hasLoad: true,
-              suggestedLoad: 60,
+              name: 'Supino reto',
+              type: 'strength',
+              isPublic: false,
             }),
           }),
         )
+        const exerciseCreateData = prisma.exerciseTemplate.create.mock.calls[0][0].data
+        expect(exerciseCreateData).not.toHaveProperty('sets')
+        expect(exerciseCreateData).not.toHaveProperty('repetitions')
+        expect(exerciseCreateData).not.toHaveProperty('restInterval')
+        expect(exerciseCreateData).not.toHaveProperty('hasLoad')
+        expect(exerciseCreateData).not.toHaveProperty('suggestedLoad')
+
+        // Junction row (created via trainingTemplate.create) carries the prescription from the inline spec
+        const trainingCreateCall = prisma.trainingTemplate.create.mock.calls[0][0]
+        const junctionRows = trainingCreateCall.data.trainingTemplateExerciseTemplates.create
+        expect(junctionRows).toHaveLength(1)
+        expect(junctionRows[0]).toMatchObject({
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          restInterval: 90,
+          hasLoad: true,
+          suggestedLoad: 60,
+        })
       })
 
-      it('includes hasLoad and suggestedLoad in the exerciseTemplate select on the follow-up read', async () => {
+      it('the exerciseTemplate select in the follow-up read contains only { id, name, type } — no prescription fields', async () => {
         prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1', name: 'Supino reto', type: 'strength', videoUrl: null })
         prisma.trainingTemplate.create.mockResolvedValue({
           id: 'tt-1',
           name: 'Treino A',
@@ -1008,10 +1012,13 @@ describe('ai-training-service', () => {
         const exerciseSelect =
           createCall.include.trainingTemplateExerciseTemplates.include.exerciseTemplate.select
 
-        expect(exerciseSelect).toMatchObject({
-          hasLoad: true,
-          suggestedLoad: true,
-        })
+        // Identity-only select — prescription fields must NOT be present
+        expect(exerciseSelect).toEqual({ id: true, name: true, type: true })
+        expect(exerciseSelect).not.toHaveProperty('hasLoad')
+        expect(exerciseSelect).not.toHaveProperty('suggestedLoad')
+        expect(exerciseSelect).not.toHaveProperty('sets')
+        expect(exerciseSelect).not.toHaveProperty('repetitions')
+        expect(exerciseSelect).not.toHaveProperty('restInterval')
       })
 
       it('summarizeToolResult surfaces hasLoad and suggestedLoad in the tool_result message rawContent', async () => {
@@ -1138,9 +1145,9 @@ describe('ai-training-service', () => {
     })
 
     describe(`${AI_TOOLS.CREATE_PROTOCOL_TEMPLATE}`, () => {
-      it('persists all five exercise fields in exerciseTemplate.create for inline exercises', async () => {
+      it('writes only identity fields to exerciseTemplate.create for inline exercises; prescription lands on the junction row', async () => {
         prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2', name: 'Supino reto', type: 'strength', videoUrl: null })
         prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
         prisma.trainingProtocolTemplate.create.mockResolvedValue({
           id: 'pt-1',
@@ -1160,23 +1167,40 @@ describe('ai-training-service', () => {
           ],
         })
 
+        // exerciseTemplate.create must carry identity only — no prescription
         expect(prisma.exerciseTemplate.create).toHaveBeenCalledTimes(1)
         expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({
-              sets: 4,
-              repetitions: { min: 8, max: 12 },
-              restInterval: 90,
-              hasLoad: true,
-              suggestedLoad: 60,
+              name: 'Supino reto',
+              type: 'strength',
+              isPublic: false,
             }),
           }),
         )
+        const exerciseCreateData = prisma.exerciseTemplate.create.mock.calls[0][0].data
+        expect(exerciseCreateData).not.toHaveProperty('sets')
+        expect(exerciseCreateData).not.toHaveProperty('repetitions')
+        expect(exerciseCreateData).not.toHaveProperty('restInterval')
+        expect(exerciseCreateData).not.toHaveProperty('hasLoad')
+        expect(exerciseCreateData).not.toHaveProperty('suggestedLoad')
+
+        // Junction rows (created via trainingTemplate.create) carry the prescription from the inline spec
+        const trainingCreateCall = prisma.trainingTemplate.create.mock.calls[0][0]
+        const junctionRows = trainingCreateCall.data.trainingTemplateExerciseTemplates.create
+        expect(junctionRows).toHaveLength(1)
+        expect(junctionRows[0]).toMatchObject({
+          sets: 4,
+          repetitions: { min: 8, max: 12 },
+          restInterval: 90,
+          hasLoad: true,
+          suggestedLoad: 60,
+        })
       })
 
-      it('includes hasLoad and suggestedLoad in the exerciseTemplate select on the protocol follow-up read', async () => {
+      it('the exerciseTemplate select in the protocol follow-up read contains only { id, name, type } — no prescription fields', async () => {
         prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
-        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2' })
+        prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-2', name: 'Supino reto', type: 'strength', videoUrl: null })
         prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt-2' })
         prisma.trainingProtocolTemplate.create.mockResolvedValue({
           id: 'pt-1',
@@ -1201,10 +1225,13 @@ describe('ai-training-service', () => {
           protocolCreateCall.include.trainings.include.trainingTemplate.select
             .trainingTemplateExerciseTemplates.select.exerciseTemplate.select
 
-        expect(exerciseSelect).toMatchObject({
-          hasLoad: true,
-          suggestedLoad: true,
-        })
+        // Identity-only select — prescription fields must NOT be present
+        expect(exerciseSelect).toEqual({ id: true, name: true, type: true })
+        expect(exerciseSelect).not.toHaveProperty('hasLoad')
+        expect(exerciseSelect).not.toHaveProperty('suggestedLoad')
+        expect(exerciseSelect).not.toHaveProperty('sets')
+        expect(exerciseSelect).not.toHaveProperty('repetitions')
+        expect(exerciseSelect).not.toHaveProperty('restInterval')
       })
 
       it('summarizeToolResult surfaces hasLoad and suggestedLoad in the tool_result message rawContent', async () => {
@@ -1827,22 +1854,14 @@ describe('ai-training-service', () => {
   // ---------------------------------------------------------------------------
 
   describe('prescriptionMode propagation in CREATE_TRAINING_TEMPLATE', () => {
-    it('persists prescriptionMode="duration" and applies exclusivity when LLM emits a duration exercise', async () => {
+    it('persists prescriptionMode="duration" and applies exclusivity on the junction row when LLM emits a duration exercise', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+      // exerciseTemplate.create receives identity only (no prescription)
       prisma.exerciseTemplate.create.mockResolvedValue({
         id: 'ex-duration-1',
-        trainerId: 'trainer-1',
         name: 'Prancha Isométrica',
         type: 'strength',
         videoUrl: null,
-        sets: 3,
-        repetitions: null,
-        duration: 30,
-        prescriptionMode: 'duration',
-        hasLoad: false,
-        suggestedLoad: null,
-        restInterval: 60,
-        notes: null,
       })
       prisma.trainingTemplate.create.mockResolvedValue({
         id: 'tt-duration-1',
@@ -1866,33 +1885,24 @@ describe('ai-training-service', () => {
         ],
       })
 
-      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            prescriptionMode: 'duration',
-            duration: 30,
-            repetitions: null,
-          }),
-        }),
-      )
+      // Prescription (prescriptionMode, duration, repetitions) lands on the junction row,
+      // not on exerciseTemplate.create
+      const trainingCreateCall = prisma.trainingTemplate.create.mock.calls[0][0]
+      const junctionRows = trainingCreateCall.data.trainingTemplateExerciseTemplates.create
+      expect(junctionRows[0]).toMatchObject({
+        prescriptionMode: 'duration',
+        duration: 30,
+        repetitions: null,
+      })
     })
 
-    it('persists prescriptionMode="reps" and nulls duration when LLM emits a reps exercise', async () => {
+    it('persists prescriptionMode="reps" and nulls duration on the junction row when LLM emits a reps exercise', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
       prisma.exerciseTemplate.create.mockResolvedValue({
         id: 'ex-reps-1',
-        trainerId: 'trainer-1',
         name: 'Supino',
         type: 'strength',
         videoUrl: null,
-        sets: 4,
-        repetitions: { min: 8, max: 12 },
-        duration: null,
-        prescriptionMode: 'reps',
-        hasLoad: true,
-        suggestedLoad: 60,
-        restInterval: 90,
-        notes: null,
       })
       prisma.trainingTemplate.create.mockResolvedValue({
         id: 'tt-reps-1',
@@ -1918,33 +1928,23 @@ describe('ai-training-service', () => {
         ],
       })
 
-      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            prescriptionMode: 'reps',
-            repetitions: { min: 8, max: 12 },
-            duration: null,
-          }),
-        }),
-      )
+      // prescriptionMode, repetitions, and duration (nulled) are on the junction row
+      const trainingCreateCall = prisma.trainingTemplate.create.mock.calls[0][0]
+      const junctionRows = trainingCreateCall.data.trainingTemplateExerciseTemplates.create
+      expect(junctionRows[0]).toMatchObject({
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+        duration: null,
+      })
     })
 
-    it('defaults to prescriptionMode="reps" when LLM omits the field, and nulls duration', async () => {
+    it('defaults to prescriptionMode="reps" on the junction row when LLM omits the field, and nulls duration', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
       prisma.exerciseTemplate.create.mockResolvedValue({
         id: 'ex-default-1',
-        trainerId: 'trainer-1',
         name: 'Agachamento',
         type: 'strength',
         videoUrl: null,
-        sets: 4,
-        repetitions: { min: 10, max: 12 },
-        duration: null,
-        prescriptionMode: 'reps',
-        hasLoad: false,
-        suggestedLoad: null,
-        restInterval: 60,
-        notes: null,
       })
       prisma.trainingTemplate.create.mockResolvedValue({
         id: 'tt-default-1',
@@ -1968,14 +1968,13 @@ describe('ai-training-service', () => {
         ],
       })
 
-      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            prescriptionMode: 'reps',
-            duration: null,
-          }),
-        }),
-      )
+      // Missing prescriptionMode must default to 'reps', and duration must be null — on the junction row
+      const trainingCreateCall = prisma.trainingTemplate.create.mock.calls[0][0]
+      const junctionRows = trainingCreateCall.data.trainingTemplateExerciseTemplates.create
+      expect(junctionRows[0]).toMatchObject({
+        prescriptionMode: 'reps',
+        duration: null,
+      })
     })
   })
 

@@ -137,9 +137,8 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
     return existing.id;
   }
 
-  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
-  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
-
+  // Library templates carry only the exercise identity — no prescription. The exercise's
+  // own prescription stays on the Exercise row; the library is just for reuse-by-name.
   const created = await tx.exerciseTemplate.create({
     data: {
       trainerId,
@@ -147,15 +146,6 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
       type: data.type,
       videoUrl: data.videoUrl || null,
       isPublic: false,
-      sets: data.sets ?? null,
-      repetitions,
-      duration,
-      prescriptionMode: resolvedMode,
-      hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
-      suggestedLoad: data.suggestedLoad ?? null,
-      restInterval: data.restInterval ?? null,
-      notes: data.notes ?? null,
-      intensity: data.intensity !== undefined ? data.intensity : null,
     },
     select: { id: true },
   });
@@ -352,25 +342,27 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
   }
 
   const effectiveType = data.type || template.type;
-  const effectiveIntensity = data.intensity !== undefined ? data.intensity : template.intensity;
+  // Identity (name/type/video) comes from the library template; prescription comes from the
+  // caller — the library template no longer carries prescription, so an import has no preset.
+  const effectiveIntensity = data.intensity ?? null;
   validateIntensityRequiresCardio(effectiveIntensity, effectiveType);
+
+  const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
 
   const exerciseData = {
     name: data.name || template.name,
     type: effectiveType,
     videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
     order: data.order !== undefined ? data.order : 0,
-    sets: data.sets !== undefined ? data.sets : template.sets,
-    repetitions: data.repetitions !== undefined ? data.repetitions : template.repetitions,
-    duration: data.duration !== undefined ? data.duration : template.duration,
-    prescriptionMode: data.prescriptionMode !== undefined
-      ? data.prescriptionMode
-      : resolvePrescriptionMode(template.prescriptionMode, template),
-    hasLoad: data.hasLoad !== undefined ? data.hasLoad : template.hasLoad,
-    suggestedLoad: data.suggestedLoad !== undefined ? data.suggestedLoad : template.suggestedLoad,
-    restInterval: data.restInterval !== undefined ? data.restInterval : template.restInterval,
-    notes: data.notes !== undefined ? data.notes : template.notes,
-    intensity: effectiveIntensity !== undefined ? effectiveIntensity : null,
+    sets: data.sets ?? null,
+    repetitions: data.repetitions ?? null,
+    duration: data.duration ?? null,
+    prescriptionMode: resolvedMode,
+    hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+    suggestedLoad: data.suggestedLoad ?? null,
+    restInterval: data.restInterval ?? null,
+    notes: data.notes ?? null,
+    intensity: effectiveIntensity,
   };
 
   const exercise = await prisma.$transaction(async (tx) => {

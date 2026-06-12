@@ -372,16 +372,6 @@ model ExerciseTemplate {
   videoUrl  String? @map("video_url") @db.Text
   isPublic  Boolean @default(false) @map("is_public")
 
-  sets             Int?
-  repetitions      Json?
-  duration         Int?
-  prescriptionMode String? @map("prescription_mode") @db.Text
-  hasLoad          Boolean @default(false) @map("has_load")
-  suggestedLoad    Float?  @map("suggested_load")
-  restInterval     Int?    @map("rest_interval")
-  notes            String? @db.Text
-  intensity        String? @db.Text
-
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)

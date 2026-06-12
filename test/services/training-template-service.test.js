@@ -14,6 +14,7 @@ vi.mock('../../src/db.js', () => ({
       findFirst: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }));
@@ -21,6 +22,7 @@ vi.mock('../../src/db.js', () => ({
 import { prisma } from '../../src/db.js';
 import {
   createTrainingTemplate,
+  createTrainingTemplateExercise,
   createTrainingTemplateExerciseFromTemplate,
   getTrainingTemplateById,
   updateTrainingTemplate,
@@ -98,24 +100,100 @@ describe('training-template-service', () => {
       expect(prisma.trainingTemplate.create).not.toHaveBeenCalled();
     });
 
-    it('creates template with exerciseTemplates and links them with snapshot fields', async () => {
+    it('throws EXERCISE_TEMPLATE_NOT_FOUND when exercise template is private and owned by another trainer', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const et1 = { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, sets: 4, repetitions: null, duration: null, hasLoad: true, suggestedLoad: 60, restInterval: null, notes: null };
-      const et2 = { id: 'et2', name: 'Lunge', type: 'strength', videoUrl: null, sets: 3, repetitions: null, duration: null, hasLoad: false, suggestedLoad: null, restInterval: 60, notes: null };
-      prisma.exerciseTemplate.findMany.mockResolvedValue([et1, et2]);
+      // findMany returns empty — simulates a private template from another trainer
+      // (the OR clause excludes it: trainerId !== t1 AND isPublic = false)
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+
+      await expect(
+        createTrainingTemplate('u1', {
+          name: 'Leg Day',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId: 'et-private-other' }],
+        }),
+      ).rejects.toMatchObject({ code: 'EXERCISE_TEMPLATE_NOT_FOUND', statusCode: 404 });
+
+      // Verify the findMany where clause uses the OR own/public pattern
+      expect(prisma.exerciseTemplate.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['et-private-other'] },
+          deletedAt: null,
+          OR: [{ trainerId: 't1' }, { isPublic: true }],
+        },
+      });
+      expect(prisma.trainingTemplate.create).not.toHaveBeenCalled();
+    });
+
+    it('succeeds when exercise template is public and owned by another trainer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      // Public template owned by a different trainer — returned by the OR clause
+      const publicTemplate = {
+        id: 'et-public-other',
+        name: 'Public Squat',
+        type: 'strength',
+        videoUrl: null,
+        trainerId: 'other-trainer',
+        isPublic: true,
+      };
+      prisma.exerciseTemplate.findMany.mockResolvedValue([publicTemplate]);
       const created = {
         id: 'tt1',
         trainerId: 't1',
         name: 'Leg Day',
         category: 'strength',
         trainingTemplateExerciseTemplates: [
-          { id: 'jte1', exerciseTemplateId: 'et1', order: 0, name: 'Squat', exerciseTemplate: et1 },
-          { id: 'jte2', exerciseTemplateId: 'et2', order: 1, name: 'Lunge', exerciseTemplate: et2 },
+          {
+            exerciseTemplateId: 'et-public-other',
+            order: 0,
+            name: 'Public Squat',
+            type: 'strength',
+          },
         ],
       };
       prisma.trainingTemplate.create.mockResolvedValue(created);
 
       const result = await createTrainingTemplate('u1', {
+        name: 'Leg Day',
+        category: 'strength',
+        exerciseTemplates: [{ exerciseTemplateId: 'et-public-other' }],
+      });
+
+      expect(result).toEqual(created);
+
+      // The findMany must use the OR own/public clause — not trainerId-only
+      expect(prisma.exerciseTemplate.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['et-public-other'] },
+          deletedAt: null,
+          OR: [{ trainerId: 't1' }, { isPublic: true }],
+        },
+      });
+
+      // Junction row identity must be snapshotted from the public template
+      const createCall = prisma.trainingTemplate.create.mock.calls[0][0];
+      const junctionRow = createCall.data.trainingTemplateExerciseTemplates.create[0];
+      expect(junctionRow.exerciseTemplateId).toBe('et-public-other');
+      expect(junctionRow.name).toBe('Public Squat');
+      expect(junctionRow.type).toBe('strength');
+    });
+
+    it('creates junction rows with null prescription defaults when template has identity only', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      // Templates now carry only identity — no prescription fields
+      const et1 = { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null };
+      const et2 = { id: 'et2', name: 'Lunge', type: 'strength', videoUrl: null };
+      prisma.exerciseTemplate.findMany.mockResolvedValue([et1, et2]);
+      const created = {
+        id: 'tt1',
+        trainerId: 't1',
+        name: 'Leg Day',
+        category: 'strength',
+        trainingTemplateExerciseTemplates: [],
+      };
+      prisma.trainingTemplate.create.mockResolvedValue(created);
+
+      await createTrainingTemplate('u1', {
         name: 'Leg Day',
         category: 'strength',
         exerciseTemplates: [
@@ -124,7 +202,6 @@ describe('training-template-service', () => {
         ],
       });
 
-      expect(result).toEqual(created);
       expect(prisma.trainingTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           trainerId: 't1',
@@ -138,14 +215,15 @@ describe('training-template-service', () => {
                 name: 'Squat',
                 type: 'strength',
                 videoUrl: null,
-                sets: 4,
+                sets: null,
                 repetitions: null,
                 duration: null,
                 prescriptionMode: 'reps',
-                hasLoad: true,
-                suggestedLoad: 60,
+                hasLoad: false,
+                suggestedLoad: null,
                 restInterval: null,
                 notes: null,
+                intensity: null,
               },
               {
                 exerciseTemplateId: 'et2',
@@ -155,14 +233,15 @@ describe('training-template-service', () => {
                 name: 'Lunge',
                 type: 'strength',
                 videoUrl: null,
-                sets: 3,
+                sets: null,
                 repetitions: null,
                 duration: null,
                 prescriptionMode: 'reps',
                 hasLoad: false,
                 suggestedLoad: null,
-                restInterval: 60,
+                restInterval: null,
                 notes: null,
+                intensity: null,
               },
             ],
           },
@@ -171,37 +250,58 @@ describe('training-template-service', () => {
       });
     });
 
-    it('input override takes precedence over template snapshot when creating with exerciseTemplates', async () => {
+    it('caller-supplied prescription fields override null defaults in junction rows', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
-      const template = {
-        id: 'et1',
-        name: 'Squat',
-        type: 'strength',
-        videoUrl: null,
-        sets: 4,
-        repetitions: null,
-        duration: null,
-        hasLoad: true,
-        suggestedLoad: 60,
-        restInterval: null,
-        notes: null,
-      };
+      const template = { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null };
       prisma.exerciseTemplate.findMany.mockResolvedValue([template]);
       prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt1', trainingTemplateExerciseTemplates: [] });
 
       await createTrainingTemplate('u1', {
         name: 'Leg Day',
         category: 'strength',
-        exerciseTemplates: [{ exerciseTemplateId: 'et1', sets: 5, notes: 'Focus on depth' }],
+        exerciseTemplates: [
+          {
+            exerciseTemplateId: 'et1',
+            sets: 5,
+            notes: 'Focus on depth',
+            hasLoad: true,
+            suggestedLoad: 80,
+          },
+        ],
       });
 
       const createCall = prisma.trainingTemplate.create.mock.calls[0][0];
       const junctionRow = createCall.data.trainingTemplateExerciseTemplates.create[0];
       expect(junctionRow.sets).toBe(5);
       expect(junctionRow.notes).toBe('Focus on depth');
-      // Non-overridden fields still come from the template
+      expect(junctionRow.hasLoad).toBe(true);
+      expect(junctionRow.suggestedLoad).toBe(80);
+      // Identity from the library template
       expect(junctionRow.name).toBe('Squat');
-      expect(junctionRow.suggestedLoad).toBe(60);
+      expect(junctionRow.type).toBe('strength');
+    });
+
+    it('junction rows inherit name/type/videoUrl from library template identity', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      const template = {
+        id: 'et1',
+        name: 'Bench Press',
+        type: 'strength',
+        videoUrl: 'https://example.com/bench.mp4',
+      };
+      prisma.exerciseTemplate.findMany.mockResolvedValue([template]);
+      prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt1', trainingTemplateExerciseTemplates: [] });
+
+      await createTrainingTemplate('u1', {
+        name: 'Push Day',
+        category: 'strength',
+        exerciseTemplates: [{ exerciseTemplateId: 'et1' }],
+      });
+
+      const junctionRow = prisma.trainingTemplate.create.mock.calls[0][0].data.trainingTemplateExerciseTemplates.create[0];
+      expect(junctionRow.name).toBe('Bench Press');
+      expect(junctionRow.type).toBe('strength');
+      expect(junctionRow.videoUrl).toBe('https://example.com/bench.mp4');
     });
   });
 
@@ -213,7 +313,7 @@ describe('training-template-service', () => {
         trainerId: 't1',
         name: 'Leg Day',
         trainingTemplateExerciseTemplates: [
-          { order: 0, exerciseTemplate: { id: 'et1', name: 'Squat' } },
+          { order: 0, exerciseTemplate: { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, isPublic: false } },
         ],
       });
 
@@ -222,10 +322,20 @@ describe('training-template-service', () => {
       expect(result.trainingTemplateExerciseTemplates).toHaveLength(1);
       expect(result.trainingTemplateExerciseTemplates[0].exerciseTemplate.name).toBe('Squat');
     });
+
+    it('throws TEMPLATE_NOT_FOUND when template does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(null);
+
+      await expect(getTrainingTemplateById('u1', 'tt-missing')).rejects.toMatchObject({
+        code: 'TEMPLATE_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
   });
 
   describe('updateTrainingTemplate', () => {
-    it('replaces exerciseTemplates and snapshots fields from ExerciseTemplate', async () => {
+    it('replaces junction rows with null prescription defaults when library template has identity only', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
       const et2 = {
@@ -233,13 +343,6 @@ describe('training-template-service', () => {
         name: 'Deadlift',
         type: 'strength',
         videoUrl: null,
-        sets: 5,
-        repetitions: null,
-        duration: null,
-        hasLoad: true,
-        suggestedLoad: 100,
-        restInterval: 90,
-        notes: null,
       };
       prisma.exerciseTemplate.findMany.mockResolvedValue([et2]);
       prisma.trainingTemplate.update.mockResolvedValue({
@@ -265,20 +368,38 @@ describe('training-template-service', () => {
                 name: 'Deadlift',
                 type: 'strength',
                 videoUrl: null,
-                sets: 5,
+                sets: null,
                 repetitions: null,
                 duration: null,
                 prescriptionMode: 'reps',
-                hasLoad: true,
-                suggestedLoad: 100,
-                restInterval: 90,
+                hasLoad: false,
+                suggestedLoad: null,
+                restInterval: null,
                 notes: null,
+                intensity: null,
               },
             ],
           },
         }),
         include: expect.any(Object),
       });
+    });
+
+    it('caller-supplied prescription overrides null defaults on update junction rows', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      const et1 = { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null };
+      prisma.exerciseTemplate.findMany.mockResolvedValue([et1]);
+      prisma.trainingTemplate.update.mockResolvedValue({ id: 'tt1', trainingTemplateExerciseTemplates: [] });
+
+      await updateTrainingTemplate('u1', 'tt1', {
+        exerciseTemplates: [{ exerciseTemplateId: 'et1', sets: 4, restInterval: 90 }],
+      });
+
+      const updateCall = prisma.trainingTemplate.update.mock.calls[0][0];
+      const junctionRow = updateCall.data.trainingTemplateExerciseTemplates.create[0];
+      expect(junctionRow.sets).toBe(4);
+      expect(junctionRow.restInterval).toBe(90);
     });
   });
 
@@ -294,7 +415,7 @@ describe('training-template-service', () => {
         order: 0,
         name: 'Squat',
         sets: 5,
-        exerciseTemplate: { id: 'et1', name: 'Squat' },
+        exerciseTemplate: { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, isPublic: false },
       };
       prisma.trainingTemplateExerciseTemplate.update.mockResolvedValue(updatedRow);
 
@@ -365,10 +486,47 @@ describe('training-template-service', () => {
 
       expect(prisma.trainingTemplate.findUnique).not.toHaveBeenCalled();
     });
+
+    it('includes intensity in updateData when intensity is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue({ id: 'jt1', trainingTemplateId: 'tt1' });
+      prisma.trainingTemplateExerciseTemplate.update.mockResolvedValue({ id: 'jt1' });
+
+      await updateTrainingTemplateExercise('u1', 'tt1', 'jt1', { intensity: 'moderate' });
+
+      const updateCall = prisma.trainingTemplateExerciseTemplate.update.mock.calls[0][0];
+      expect(updateCall.data).toEqual({ intensity: 'moderate' });
+    });
+
+    it('sets intensity to null in updateData when intensity is explicitly null', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue({ id: 'jt1', trainingTemplateId: 'tt1' });
+      prisma.trainingTemplateExerciseTemplate.update.mockResolvedValue({ id: 'jt1' });
+
+      await updateTrainingTemplateExercise('u1', 'tt1', 'jt1', { intensity: null });
+
+      const updateCall = prisma.trainingTemplateExerciseTemplate.update.mock.calls[0][0];
+      expect(updateCall.data).toEqual({ intensity: null });
+    });
+
+    it('omits intensity from updateData when intensity is not provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue({ id: 'jt1', trainingTemplateId: 'tt1' });
+      prisma.trainingTemplateExerciseTemplate.update.mockResolvedValue({ id: 'jt1' });
+
+      await updateTrainingTemplateExercise('u1', 'tt1', 'jt1', { sets: 4 });
+
+      const updateCall = prisma.trainingTemplateExerciseTemplate.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('intensity');
+      expect(updateCall.data).toEqual({ sets: 4 });
+    });
   });
 
   describe('createTrainingTemplateExerciseFromTemplate', () => {
-    // Shared setup helpers used by all four cases below.
+    // Shared setup helpers
     function mockOwnership(trainerId = 't1') {
       prisma.trainer.findUnique.mockResolvedValue({ id: trainerId });
       prisma.trainingTemplate.findUnique.mockResolvedValue({
@@ -379,11 +537,14 @@ describe('training-template-service', () => {
     }
 
     function mockExerciseTemplate(fields) {
-      prisma.exerciseTemplate.findUnique.mockResolvedValue({ trainerId: 't1', ...fields });
+      // Library templates carry only identity — no prescription fields
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({
+        trainerId: 't1',
+        ...fields,
+      });
     }
 
     function mockNextOrder(order = 0) {
-      // nextExerciseOrder uses trainingTemplateExerciseTemplate.findFirst
       prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue(
         order === 0 ? null : { order: order - 1 },
       );
@@ -393,21 +554,15 @@ describe('training-template-service', () => {
       prisma.trainingTemplateExerciseTemplate.create.mockResolvedValue(returnValue);
     }
 
-    it('junction row gets prescriptionMode=duration, duration populated, repetitions null when source template mode is duration', async () => {
+    it('junction row gets identity from library template and null prescription defaults when no prescription in data', async () => {
       mockOwnership();
+      // Identity-only template (no prescription fields)
       const exerciseTemplate = {
         id: 'et1',
         name: 'Plank',
         type: 'endurance',
         videoUrl: null,
-        sets: 3,
-        repetitions: null,
-        duration: 60,
-        prescriptionMode: 'duration',
-        hasLoad: false,
-        suggestedLoad: null,
-        restInterval: 30,
-        notes: null,
+        deletedAt: null,
       };
       mockExerciseTemplate(exerciseTemplate);
       mockNextOrder(0);
@@ -419,104 +574,256 @@ describe('training-template-service', () => {
       });
 
       const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
+      // Identity comes from library template
+      expect(createCall.data.name).toBe('Plank');
+      expect(createCall.data.type).toBe('endurance');
+      expect(createCall.data.videoUrl).toBeNull();
+      // Prescription defaults to null/REPS (library has no prescription)
+      expect(createCall.data.prescriptionMode).toBe('reps');
+      expect(createCall.data.sets).toBeNull();
+      expect(createCall.data.repetitions).toBeNull();
+      expect(createCall.data.duration).toBeNull();
+      expect(createCall.data.hasLoad).toBe(false);
+      expect(createCall.data.suggestedLoad).toBeNull();
+      expect(createCall.data.restInterval).toBeNull();
+      expect(createCall.data.notes).toBeNull();
+      expect(createCall.data.intensity).toBeNull();
+    });
+
+    it('caller-supplied prescription overrides defaults when linking from template', async () => {
+      mockOwnership();
+      const exerciseTemplate = {
+        id: 'et1',
+        name: 'Squat',
+        type: 'strength',
+        videoUrl: null,
+        deletedAt: null,
+      };
+      mockExerciseTemplate(exerciseTemplate);
+      mockNextOrder(0);
+      stubCreate();
+
+      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
+        exerciseTemplateId: 'et1',
+        order: 0,
+        sets: 4,
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+        hasLoad: true,
+        suggestedLoad: 80,
+        restInterval: 60,
+        notes: 'Full depth',
+      });
+
+      const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
+      // Identity from template
+      expect(createCall.data.name).toBe('Squat');
+      expect(createCall.data.type).toBe('strength');
+      // Prescription from caller
+      expect(createCall.data.sets).toBe(4);
+      expect(createCall.data.prescriptionMode).toBe('reps');
+      expect(createCall.data.repetitions).toEqual({ min: 8, max: 12 });
+      expect(createCall.data.duration).toBeNull(); // reps mode nulls duration
+      expect(createCall.data.hasLoad).toBe(true);
+      expect(createCall.data.suggestedLoad).toBe(80);
+      expect(createCall.data.restInterval).toBe(60);
+      expect(createCall.data.notes).toBe('Full depth');
+    });
+
+    it('duration mode is applied when caller sets prescriptionMode=duration', async () => {
+      mockOwnership();
+      const exerciseTemplate = {
+        id: 'et1',
+        name: 'Plank',
+        type: 'endurance',
+        videoUrl: null,
+        deletedAt: null,
+      };
+      mockExerciseTemplate(exerciseTemplate);
+      mockNextOrder(0);
+      stubCreate();
+
+      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
+        exerciseTemplateId: 'et1',
+        prescriptionMode: 'duration',
+        duration: 60,
+      });
+
+      const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
       expect(createCall.data.prescriptionMode).toBe('duration');
       expect(createCall.data.duration).toBe(60);
       expect(createCall.data.repetitions).toBeNull();
     });
 
-    it('junction row gets prescriptionMode=reps, repetitions populated, duration null when source template mode is reps', async () => {
+    it('throws EXERCISE_TEMPLATE_NOT_FOUND when template does not exist', async () => {
       mockOwnership();
-      const exerciseTemplate = {
-        id: 'et2',
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(null);
+
+      await expect(
+        createTrainingTemplateExerciseFromTemplate('u1', 'tt1', { exerciseTemplateId: 'et-missing' }),
+      ).rejects.toMatchObject({ code: 'EXERCISE_TEMPLATE_NOT_FOUND', statusCode: 404 });
+
+      expect(prisma.trainingTemplateExerciseTemplate.create).not.toHaveBeenCalled();
+    });
+
+    it('throws EXERCISE_TEMPLATE_NOT_FOUND when template is private and belongs to a different trainer', async () => {
+      mockOwnership('t1');
+      // Explicit isPublic: false — the guard now checks both ownership AND visibility
+      mockExerciseTemplate({
+        id: 'et1',
         name: 'Squat',
         type: 'strength',
         videoUrl: null,
-        sets: 4,
-        repetitions: 12,
-        duration: null,
-        prescriptionMode: 'reps',
-        hasLoad: true,
-        suggestedLoad: 80,
-        restInterval: 60,
-        notes: null,
-      };
-      mockExerciseTemplate(exerciseTemplate);
-      mockNextOrder(0);
-      stubCreate();
-
-      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
-        exerciseTemplateId: 'et2',
-        order: 0,
+        trainerId: 'other-trainer',
+        isPublic: false,
+        deletedAt: null,
       });
 
-      const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
-      expect(createCall.data.prescriptionMode).toBe('reps');
-      expect(createCall.data.repetitions).toBe(12);
-      expect(createCall.data.duration).toBeNull();
+      await expect(
+        createTrainingTemplateExerciseFromTemplate('u1', 'tt1', { exerciseTemplateId: 'et1' }),
+      ).rejects.toMatchObject({ code: 'EXERCISE_TEMPLATE_NOT_FOUND', statusCode: 404 });
+
+      expect(prisma.trainingTemplateExerciseTemplate.create).not.toHaveBeenCalled();
     });
 
-    it('legacy dirty source with both fields populated and null mode infers reps, nulls duration', async () => {
-      // resolvePrescriptionMode: mode is null, duration !== null but repetitions !== null → REPS
-      mockOwnership();
-      const exerciseTemplate = {
-        id: 'et3',
-        name: 'Row',
-        type: 'strength',
-        videoUrl: null,
-        sets: 3,
-        repetitions: 10,
-        duration: 45,
-        prescriptionMode: null,
-        hasLoad: true,
-        suggestedLoad: 40,
-        restInterval: 45,
-        notes: null,
-      };
-      mockExerciseTemplate(exerciseTemplate);
-      mockNextOrder(0);
-      stubCreate();
-
-      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
-        exerciseTemplateId: 'et3',
-        order: 0,
-      });
-
-      const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
-      expect(createCall.data.prescriptionMode).toBe('reps');
-      expect(createCall.data.repetitions).toBe(10);
-      expect(createCall.data.duration).toBeNull();
-    });
-
-    it('legacy dirty source with only duration populated and null mode infers duration, nulls repetitions', async () => {
-      // resolvePrescriptionMode: mode is null, duration !== null AND repetitions === null → DURATION
-      mockOwnership();
-      const exerciseTemplate = {
-        id: 'et4',
-        name: 'Hold',
+    it('succeeds when exercise template is public and owned by another trainer', async () => {
+      mockOwnership('t1');
+      // Public template from a different trainer — ownership guard allows it
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({
+        id: 'et-public',
+        name: 'Community Plank',
         type: 'endurance',
-        videoUrl: null,
-        sets: 4,
-        repetitions: null,
-        duration: 90,
-        prescriptionMode: null,
+        videoUrl: 'https://example.com/plank.mp4',
+        trainerId: 'other-trainer',
+        isPublic: true,
+        deletedAt: null,
+      });
+      mockNextOrder(0);
+      const junctionResult = {
+        id: 'jte-public',
+        trainingTemplateId: 'tt1',
+        exerciseTemplateId: 'et-public',
+        name: 'Community Plank',
+        type: 'endurance',
+        videoUrl: 'https://example.com/plank.mp4',
+        sets: 3,
+        prescriptionMode: 'reps',
+        repetitions: { min: 10, max: 15 },
+        duration: null,
         hasLoad: false,
         suggestedLoad: null,
-        restInterval: null,
+        restInterval: 30,
         notes: null,
-      };
-      mockExerciseTemplate(exerciseTemplate);
-      mockNextOrder(0);
-      stubCreate();
-
-      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
-        exerciseTemplateId: 'et4',
         order: 0,
+        intensity: null,
+      };
+      stubCreate(junctionResult);
+
+      const result = await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', {
+        exerciseTemplateId: 'et-public',
+        sets: 3,
+        prescriptionMode: 'reps',
+        repetitions: { min: 10, max: 15 },
+        restInterval: 30,
       });
 
+      expect(result).toEqual(junctionResult);
+
       const createCall = prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0];
-      expect(createCall.data.prescriptionMode).toBe('duration');
-      expect(createCall.data.duration).toBe(90);
-      expect(createCall.data.repetitions).toBeNull();
+      // Identity snapshotted from the public template (not the caller)
+      expect(createCall.data.name).toBe('Community Plank');
+      expect(createCall.data.type).toBe('endurance');
+      expect(createCall.data.videoUrl).toBe('https://example.com/plank.mp4');
+      expect(createCall.data.exerciseTemplateId).toBe('et-public');
+      // Prescription from caller input
+      expect(createCall.data.sets).toBe(3);
+      expect(createCall.data.prescriptionMode).toBe('reps');
+      expect(createCall.data.repetitions).toEqual({ min: 10, max: 15 });
+      expect(createCall.data.restInterval).toBe(30);
+    });
+  });
+
+  describe('createTrainingTemplateExercise (ad-hoc)', () => {
+    function mockOwnership(trainerId = 't1') {
+      prisma.trainer.findUnique.mockResolvedValue({ id: trainerId });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({
+        id: 'tt1',
+        trainerId,
+        deletedAt: null,
+      });
+    }
+
+    it('creates an identity-only exerciseTemplate row and links it via junction with prescription from data', async () => {
+      mockOwnership();
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue(null); // nextExerciseOrder → 0
+      const createdTemplate = { id: 'et-new', name: 'Ad-hoc Squat', type: 'strength', videoUrl: null, isPublic: false };
+      const createdJunction = {
+        id: 'jte-new',
+        trainingTemplateId: 'tt1',
+        exerciseTemplateId: 'et-new',
+        name: 'Ad-hoc Squat',
+        type: 'strength',
+        sets: 3,
+        repetitions: { min: 8, max: 12 },
+        prescriptionMode: 'reps',
+        exerciseTemplate: createdTemplate,
+      };
+
+      prisma.$transaction = vi.fn().mockImplementation(async (fn) => {
+        const tx = {
+          exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
+          trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue(createdJunction) },
+        };
+        return fn(tx);
+      });
+
+      const result = await createTrainingTemplateExercise('u1', 'tt1', {
+        name: 'Ad-hoc Squat',
+        type: 'strength',
+        sets: 3,
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+      });
+
+      expect(result).toEqual(createdJunction);
+
+      const txFn = prisma.$transaction.mock.calls[0][0];
+      // Retrieve the tx mock to check calls
+      const txMock = {
+        exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
+        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue(createdJunction) },
+      };
+      await txFn(txMock);
+
+      // exerciseTemplate row must contain ONLY identity fields
+      const templateCreateData = txMock.exerciseTemplate.create.mock.calls[0][0].data;
+      expect(templateCreateData).toMatchObject({
+        trainerId: 't1',
+        name: 'Ad-hoc Squat',
+        type: 'strength',
+        videoUrl: null,
+        isPublic: false,
+      });
+      expect(templateCreateData).not.toHaveProperty('sets');
+      expect(templateCreateData).not.toHaveProperty('repetitions');
+      expect(templateCreateData).not.toHaveProperty('notes');
+      expect(templateCreateData).not.toHaveProperty('prescriptionMode');
+
+      // Junction row must contain prescription from the request data
+      const junctionCreateData = txMock.trainingTemplateExerciseTemplate.create.mock.calls[0][0].data;
+      expect(junctionCreateData).toMatchObject({
+        sets: 3,
+        prescriptionMode: 'reps',
+        repetitions: { min: 8, max: 12 },
+      });
+    });
+
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        createTrainingTemplateExercise('u1', 'tt1', { name: 'Squat', type: 'strength' }),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
     });
   });
 });
