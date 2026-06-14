@@ -54,6 +54,7 @@ model User {
   videosCreated              Video[]
   studentSubscriptions       StudentSubscription[]
   aiUsageEventsAsStudent     AiUsageEvent[]        @relation("aiUsageStudent")
+  aiInteractionLogsAsStudent AiInteractionLog[]    @relation("aiInteractionLogStudent")
 
   @@map("users")
 }
@@ -125,6 +126,7 @@ model Trainer {
   briefingSnapshot          TrainerBriefingSnapshot?
   platformSubscription      PlatformSubscription?
   aiUsageEvents             AiUsageEvent[]
+  aiInteractionLogs         AiInteractionLog[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -1294,4 +1296,33 @@ model AiUsageEvent {
   @@index([trainerId, billingMonth])
   @@index([trainerId, studentId, billingMonth])
   @@map("ai_usage_events")
+}
+
+// High-fidelity interaction log for closed-beta diagnostics.
+// PRIVACY NOTE: userMessage and responseText may contain student personal data.
+// This table is for beta-only capture and MUST have a retention policy enforced
+// (e.g. purge rows older than 90 days) before any production rollout.
+// Do NOT log API keys, tokens, or secrets in any field.
+model AiInteractionLog {
+  id             String  @id @default(uuid()) @db.Uuid
+  trainerId      String  @map("trainer_id") @db.Uuid
+  studentId      String? @map("student_id") @db.Uuid
+  conversationId String? @map("conversation_id") @db.Text
+  action         String  @db.Text
+  userMessage    String? @map("user_message") @db.Text
+  toolsUsed      Json?   @map("tools_used")
+  responseText   String? @map("response_text") @db.Text
+  model          String? @db.Text
+  inputTokens    Int?    @map("input_tokens")
+  outputTokens   Int?    @map("output_tokens")
+  latencyMs      Int?    @map("latency_ms")
+  status         String  @db.Text
+  errorCode      String? @map("error_code") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User?   @relation("aiInteractionLogStudent", fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([trainerId, createdAt])
+  @@map("ai_interaction_logs")
 }

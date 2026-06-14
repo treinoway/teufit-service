@@ -62,3 +62,13 @@ export const AI_MODELS = Object.freeze({
   ANTHROPIC: 'claude-sonnet-4-6',
   GEMINI: 'gemini-2.5-flash',
 })
+
+export const AI_INTERACTION_LOG = Object.freeze({
+  // Gate: set AI_INTERACTION_LOG_ENABLED=false in env to disable (default ON for beta)
+  ENV_FLAG: 'AI_INTERACTION_LOG_ENABLED',
+  STATUS_SUCCESS: 'success',
+  STATUS_ERROR: 'error',
+  // Truncate free-text fields to avoid unbounded row sizes.
+  // userMessage/responseText may contain student PII — keep bounded.
+  MAX_TEXT_LENGTH: 8000,
+})

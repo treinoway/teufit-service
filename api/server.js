@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import * as Sentry from '@sentry/node';
 import Fastify from 'fastify';
 import config from '../config/index.js';
 import fastifyCookie from '@fastify/cookie';
@@ -50,6 +51,18 @@ import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
+import { healthRoutes } from './routes/health-route.js';
+
+// Sentry is env-gated — when SENTRY_DSN is absent every call below is a no-op.
+// Must be initialised before buildServer() so the scope is active for all requests.
+if (config.sentry.dsn) {
+  Sentry.init({
+    dsn: config.sentry.dsn,
+    environment: config.sentry.environment,
+    // Distributed tracing disabled for beta to avoid overhead.
+    tracesSampleRate: 0,
+  });
+}
 
 /**
  * Translate the `message` field of a normalized error payload in place.
@@ -89,6 +102,12 @@ export async function buildServer(options = {}) {
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);
 
+  // Echo the request id so web/mobile error reports (Sentry/Crashlytics) correlate with
+  // backend logs. Set early so it's present even on error/4xx responses.
+  fastify.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id);
+  });
+
   fastify.setErrorHandler((error, request, reply) => {
     const language = request.language;
     const normalizedError = normalizeError(error, language);
@@ -104,6 +123,17 @@ export async function buildServer(options = {}) {
         },
         'Unhandled server error',
       );
+
+      // Report unexpected server errors to Sentry (no-op when DSN is unset).
+      // 4xx client/validation/AppError business errors are intentionally excluded to
+      // avoid noise — we only want to be alerted about genuine runtime failures.
+      if (config.sentry.dsn) {
+        const route = request.routeOptions?.url ?? request.url;
+        Sentry.captureException(error, {
+          tags: { requestId: request.id, route },
+          user: { id: request.user?.id },
+        });
+      }
     }
 
     const payload = buildErrorPayload(normalizedError, { language });
@@ -111,9 +141,12 @@ export async function buildServer(options = {}) {
   });
 
   // 2. Error-normalizing preSerialization hook — handles statusCode >= 400 paths
-  //    that bypass setErrorHandler (e.g. Fastify's built-in 404 handler, raw strings)
+  //    that bypass setErrorHandler (e.g. Fastify's built-in 404 handler, raw strings).
+  //    /health is excluded: its 503 is a data response (not an error), and normalizing
+  //    it would overwrite the health payload fields with error contract fields.
   fastify.addHook('preSerialization', (request, reply, payload, done) => {
-    if (reply.statusCode < 400) {
+    const route = request.routeOptions?.url ?? request.url;
+    if (reply.statusCode < 400 || route === '/health') {
       done(null, payload);
       return;
     }
@@ -144,6 +177,24 @@ export async function buildServer(options = {}) {
   //    data responses on routes that use i18nField() / i18nArrayField() in their schemas.
   //    Early-returns for statusCode >= 400 (errors are handled above).
   fastify.addHook('preSerialization', applyLabelsPreSerializationHook);
+
+  // 4. Structured per-request access log (one line per completed request).
+  //    Skipped for /health to avoid monitor-polling noise.
+  //    Does NOT log bodies, headers, tokens, or passwords.
+  fastify.addHook('onResponse', (request, reply, done) => {
+    const route = request.routeOptions?.url ?? request.url;
+    if (route !== '/health') {
+      request.log.info({
+        requestId: request.id,
+        method: request.method,
+        url: route,
+        statusCode: reply.statusCode,
+        durationMs: reply.elapsedTime,
+        userId: request.user?.id ?? null,
+      });
+    }
+    done();
+  });
 
   // Register CORS support
   const isDevelopment = process.env.NODE_ENV === 'development';
@@ -256,7 +307,10 @@ export async function buildServer(options = {}) {
   // Register Asaas webhook route (public — no user auth, validated by webhook secret)
   await fastify.register(asaasWebhookRoutes);
 
-  // Health check endpoint (public)
+  // Health check endpoint (public — registered before the authenticate onRequest hook below).
+  await fastify.register(healthRoutes);
+
+  // Root liveness probe (public)
   fastify.get('/', async () => {
     return { message: "i'm alive" };
   });

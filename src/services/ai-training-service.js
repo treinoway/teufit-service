@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { AppError } from "../errors/app-error.js";
-import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY } from "../constants/ai.js";
+import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY, AI_MODELS, LLM_PROVIDERS, AI_INTERACTION_LOG } from "../constants/ai.js";
+import { writeInteractionLog } from "./ai-interaction-log-service.js";
 import * as studentDashboardService from "./student-dashboard-service.js";
 import { assertCanUseAi, recordAiAction } from "./platform-plan-service.js";
 import {
@@ -26,6 +27,18 @@ import { updateExercise } from "./exercise-service.js";
 import { getLlmProvider } from "../llm/index.js";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
+
+/**
+ * Resolve the active LLM model identifier, mirroring the provider's own logic.
+ * Used for interaction logging without coupling to provider internals.
+ */
+function resolveActiveModelId() {
+  const providerName = process.env.LLM_PROVIDER || LLM_PROVIDERS.ANTHROPIC;
+  if (providerName === LLM_PROVIDERS.GEMINI) {
+    return process.env.GEMINI_MODEL || AI_MODELS.GEMINI;
+  }
+  return process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC;
+}
 
 // --- Context builder ---
 
@@ -2169,6 +2182,8 @@ function resolveToolStudentId(toolInput) {
 // --- Main agentic loop ---
 
 export async function processAiChat(userId, { message, conversationId }) {
+  const turnStart = Date.now();
+
   const {
     conversationId: resolvedConversationId,
     conversationHistory,
@@ -2224,6 +2239,22 @@ export async function processAiChat(userId, { message, conversationId }) {
       if (isNewConversation) {
         await setConversationTitle(resolvedConversationId, message);
       }
+
+      // Log the blocked turn — no tool executed, text only
+      writeInteractionLog(prisma, {
+        trainerId: context.trainerId,
+        studentId: null,
+        conversationId: resolvedConversationId,
+        action: 'chat',
+        userMessage: message,
+        toolCall: null,
+        responseText: blockedText,
+        model: resolveActiveModelId(),
+        usage: null,
+        latencyMs: Date.now() - turnStart,
+        status: AI_INTERACTION_LOG.STATUS_SUCCESS,
+        errorCode: null,
+      }).catch(() => {}); // already swallowed inside writeInteractionLog, but defensive
 
       return {
         conversationId: resolvedConversationId,
@@ -2325,6 +2356,22 @@ export async function processAiChat(userId, { message, conversationId }) {
       await setConversationTitle(resolvedConversationId, message);
     }
 
+    // Log the completed tool turn (success or tool-level error)
+    writeInteractionLog(prisma, {
+      trainerId: context.trainerId,
+      studentId: resolveToolStudentId(toolCall.input),
+      conversationId: resolvedConversationId,
+      action: toolCall.name,
+      userMessage: message,
+      toolCall,
+      responseText: finalText,
+      model: resolveActiveModelId(),
+      usage: null, // provider usage not forwarded through normalized facade
+      latencyMs: Date.now() - turnStart,
+      status: toolResult.success ? AI_INTERACTION_LOG.STATUS_SUCCESS : AI_INTERACTION_LOG.STATUS_ERROR,
+      errorCode: toolResult.success ? null : (toolResult.error ?? null),
+    }).catch(() => {});
+
     return {
       conversationId: resolvedConversationId,
       message: finalText,
@@ -2342,6 +2389,22 @@ export async function processAiChat(userId, { message, conversationId }) {
     await setConversationTitle(resolvedConversationId, message);
   }
 
+  // Log the text-only turn (no tool executed)
+  writeInteractionLog(prisma, {
+    trainerId: context.trainerId,
+    studentId: null,
+    conversationId: resolvedConversationId,
+    action: 'chat',
+    userMessage: message,
+    toolCall: null,
+    responseText,
+    model: resolveActiveModelId(),
+    usage: null,
+    latencyMs: Date.now() - turnStart,
+    status: AI_INTERACTION_LOG.STATUS_SUCCESS,
+    errorCode: null,
+  }).catch(() => {});
+
   return {
     conversationId: resolvedConversationId,
     message: responseText,
@@ -2355,6 +2418,8 @@ export async function* processAiChatStream(
   userId,
   { message, conversationId },
 ) {
+  const turnStart = Date.now();
+
   const {
     conversationId: resolvedConversationId,
     conversationHistory,
@@ -2461,6 +2526,22 @@ export async function* processAiChatStream(
       if (isNewConversation) {
         await setConversationTitle(resolvedConversationId, message);
       }
+
+      // Log the blocked turn — no tool executed, text only
+      writeInteractionLog(prisma, {
+        trainerId: context.trainerId,
+        studentId: null,
+        conversationId: resolvedConversationId,
+        action: 'chat',
+        userMessage: message,
+        toolCall: null,
+        responseText: blockedText,
+        model: resolveActiveModelId(),
+        usage: null,
+        latencyMs: Date.now() - turnStart,
+        status: AI_INTERACTION_LOG.STATUS_SUCCESS,
+        errorCode: null,
+      }).catch(() => {});
 
       yield {
         event: "done",
@@ -2622,6 +2703,22 @@ export async function* processAiChatStream(
       await setConversationTitle(resolvedConversationId, message);
     }
 
+    // Log the completed tool turn (success or tool-level error)
+    writeInteractionLog(prisma, {
+      trainerId: context.trainerId,
+      studentId: resolveToolStudentId(toolCall.input),
+      conversationId: resolvedConversationId,
+      action: toolCall.name,
+      userMessage: message,
+      toolCall,
+      responseText: finalText,
+      model: resolveActiveModelId(),
+      usage: null, // provider usage not forwarded through normalized facade
+      latencyMs: Date.now() - turnStart,
+      status: toolResult.success ? AI_INTERACTION_LOG.STATUS_SUCCESS : AI_INTERACTION_LOG.STATUS_ERROR,
+      errorCode: toolResult.success ? null : (toolResult.error ?? null),
+    }).catch(() => {});
+
     yield {
       event: "done",
       data: {
@@ -2641,6 +2738,22 @@ export async function* processAiChatStream(
   if (isNewConversation) {
     await setConversationTitle(resolvedConversationId, message);
   }
+
+  // Log the text-only turn (no tool executed)
+  writeInteractionLog(prisma, {
+    trainerId: context.trainerId,
+    studentId: null,
+    conversationId: resolvedConversationId,
+    action: 'chat',
+    userMessage: message,
+    toolCall: null,
+    responseText,
+    model: resolveActiveModelId(),
+    usage: null,
+    latencyMs: Date.now() - turnStart,
+    status: AI_INTERACTION_LOG.STATUS_SUCCESS,
+    errorCode: null,
+  }).catch(() => {});
 
   yield {
     event: "done",

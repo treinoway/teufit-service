@@ -3,6 +3,11 @@ export default {
     accessTokenTtlSeconds: 60 * 15, // 15 minutes
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
   },
+  sentry: {
+    // Optional — all Sentry calls are no-ops when DSN is absent.
+    dsn: process.env.SENTRY_DSN || null,
+    environment: process.env.SENTRY_ENVIRONMENT || 'beta',
+  },
   asaas: {
     apiKey: process.env.ASAAS_API_KEY,
     webhookSecret: process.env.ASAAS_WEBHOOK_SECRET,

@@ -388,6 +388,27 @@ in `training-protocol-service.js`. Both paths use it — adding a new exercise f
 Both paths also compute `estimatedDurationSeconds` per training via `estimateWorkoutDuration({ exercises: createData })`.
 If a refactor removes `buildNestedExerciseCreateData`, re-add it; do NOT return to the inline object pattern.
 
+## preSerialization hook: 503 data responses get corrupted (2026-06-14)
+The error-normalizing preSerialization hook (step 2 in server.js) processes ALL responses with
+statusCode >= 400. A route returning a 503 data payload (not an error) will have its payload
+fields overwritten (`messageCode`, `error`, `message` injected). Guard the hook at the top:
+```js
+const route = request.routeOptions?.url ?? request.url;
+if (reply.statusCode < 400 || route === '/health') { done(null, payload); return; }
+```
+For new routes that return semantic 4xx/5xx data (not errors), add a similar exclusion.
+
+## Sentry + onResponse hook (2026-06-14)
+- `@sentry/node@10.x` installed. `Sentry.init` at module scope after all imports, gated by `config.sentry.dsn`.
+- `captureException` in `setErrorHandler` ONLY when `isServerError` (5xx) AND `config.sentry.dsn` is set.
+- `onResponse` structured log: `{ requestId, method, url, statusCode, durationMs, userId }`. Skip `/health`.
+- Config keys: `config.sentry.dsn`, `config.sentry.environment`. Env vars: `SENTRY_DSN`, `SENTRY_ENVIRONMENT`.
+
+## /health route registration (2026-06-14)
+`healthRoutes` must be registered BEFORE the `async (fastify) => { fastify.addHook('onRequest', authenticate) }`
+plugin scope in server.js — otherwise authenticate runs on /health and blocks unauthenticated monitors.
+Current position: after `asaasWebhookRoutes`, before the protected routes block.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.
