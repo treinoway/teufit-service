@@ -74,6 +74,23 @@ const exerciseLogSchema = {
   },
 };
 
+// Best set (highest tonnage = load * repetitions) of a session for an exercise.
+// Considers only completed sets with non-null load AND repetitions. Null when no
+// set qualifies (no history, or every set was incomplete / missing load/reps).
+const bestSetSchema = {
+  type: ['object', 'null'],
+  properties: {
+    setNumber: { type: 'integer', minimum: 1 },
+    repetitions: { type: 'integer' },
+    load: { type: 'number' },
+    duration: { type: 'integer', nullable: true },
+    rpe: { type: 'integer', minimum: 1, maximum: 10, nullable: true },
+    restSeconds: { type: 'integer', nullable: true },
+    completed: { type: 'boolean' },
+    tonnage: { type: 'number' },
+  },
+};
+
 // Extended exerciseLog shape — used only for GET session detail (student side),
 // which calls attachPreviousLogs() and guarantees the field is present.
 // finishedAt is nullable because workout_sessions.finished_at is nullable in Prisma
@@ -99,6 +116,7 @@ const exerciseLogWithPreviousLogSchema = {
             },
           },
         },
+        bestSet: bestSetSchema,
       },
     },
   },
@@ -576,6 +594,7 @@ export const getExerciseLastPerformanceSchema = {
       properties: {
         performedAt: { type: 'string', format: 'date-time', nullable: true },
         sets: { type: 'array', items: lastPerformanceSetSchema },
+        bestSet: bestSetSchema,
       },
     },
     401: errorResponseSchema,

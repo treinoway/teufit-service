@@ -1464,6 +1464,95 @@ e2eDescribe('e2e: workout-sessions', () => {
       expect(response.json().performedAt).toBeNull();
       expect(response.json().sets).toEqual([]);
     });
+
+    it('returns bestSet: null when exercise has never been logged', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseId = await createExercise(trainerToken, trainingId);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().bestSet).toBeNull();
+    });
+
+    it('returns bestSet with correct tonnage after a completed session', async () => {
+      // set: 80 × 10 = 800 tonnage
+      const { studentToken, exerciseId } = await setupExerciseWithCompletedSession();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.bestSet).not.toBeNull();
+      expect(body.bestSet).toMatchObject({
+        setNumber: 1,
+        repetitions: 10,
+        load: 80.0,
+        completed: true,
+        tonnage: 800,
+      });
+    });
+
+    it('returns bestSet as the set with highest tonnage when multiple sets were logged', async () => {
+      // Two sets: set 1 = 100 × 5 = 500, set 2 = 80 × 8 = 640 → set 2 is bestSet
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } =
+        await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseId = await createExercise(trainerToken, trainingId);
+
+      const sessionResponse = await startSession(studentToken, trainingId);
+      const sessionId = sessionResponse.json().id;
+      const exerciseLogId = sessionResponse.json().exerciseLogs[0].id;
+
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 5, load: 100.0, completed: true },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${sessionId}/exercise-logs/${exerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 2, repetitions: 8, load: 80.0, completed: true },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/exercises/${exerciseId}/last-performance`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.bestSet).toMatchObject({
+        setNumber: 2,
+        load: 80.0,
+        repetitions: 8,
+        tonnage: 640,
+      });
+    });
   });
 
   // ─── SESSION_FINALIZED guard ──────────────────────────────────────────────
@@ -2080,6 +2169,119 @@ e2eDescribe('e2e: workout-sessions', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().exerciseLogs).toHaveLength(0);
+    });
+
+    it('previousLog.bestSet is null when no prior completed session exists', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().exerciseLogs[0].previousLog).toBeNull();
+    });
+
+    it('previousLog.bestSet reflects the highest-tonnage set from the prior session', async () => {
+      // First session: set 1 = 100 × 3 = 300, set 2 = 70 × 6 = 420 → bestSet is set 2
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      await createExercise(trainerToken, trainingId);
+
+      const firstSession = (await startSession(studentToken, trainingId)).json();
+      const firstExerciseLogId = firstSession.exerciseLogs[0].id;
+
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${firstSession.id}/exercise-logs/${firstExerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, repetitions: 3, load: 100.0, completed: true },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${firstSession.id}/exercise-logs/${firstExerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 2, repetitions: 6, load: 70.0, completed: true },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${firstSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      // Second session: in_progress — previousLog should show bestSet from first
+      const secondSession = (await startSession(studentToken, trainingId)).json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${secondSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const previousLog = response.json().exerciseLogs[0].previousLog;
+      expect(previousLog).not.toBeNull();
+      expect(previousLog.bestSet).toMatchObject({
+        setNumber: 2,
+        load: 70.0,
+        repetitions: 6,
+        tonnage: 420,
+      });
+    });
+
+    it('previousLog.bestSet is null when prior session had no qualifying sets (cardio-only)', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      // Cardio exercise: load will be null
+      const exerciseResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Treadmill Run', type: 'cardio', sets: 1, hasLoad: false },
+      });
+      expect(exerciseResponse.statusCode).toBe(201);
+
+      const firstSession = (await startSession(studentToken, trainingId)).json();
+      const firstExerciseLogId = firstSession.exerciseLogs[0].id;
+
+      // Log a cardio set: no load, no reps — should not qualify for bestSet
+      await app.inject({
+        method: 'POST',
+        url: `/my/workout-sessions/${firstSession.id}/exercise-logs/${firstExerciseLogId}/sets`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { setNumber: 1, duration: 1800, completed: true },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/my/workout-sessions/${firstSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: { status: WorkoutSessionStatus.COMPLETED },
+      });
+
+      const secondSession = (await startSession(studentToken, trainingId)).json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${secondSession.id}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const previousLog = response.json().exerciseLogs[0].previousLog;
+      expect(previousLog).not.toBeNull();
+      expect(previousLog.bestSet).toBeNull();
     });
   });
 });

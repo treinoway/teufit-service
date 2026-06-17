@@ -425,14 +425,22 @@ async function loadPreviousLogsByExercise(effectiveExerciseIds, userId, currentS
 
   const setLogRows = await prisma.setLog.findMany({
     where: { exerciseLogId: { in: previousLogIds }, completed: true },
-    select: { exerciseLogId: true, setNumber: true, repetitions: true, load: true, duration: true },
+    select: { exerciseLogId: true, setNumber: true, repetitions: true, load: true, duration: true, rpe: true, restSeconds: true, completed: true },
     orderBy: [{ exerciseLogId: 'asc' }, { setNumber: 'asc' }],
   });
 
   const setLogsByExerciseLogId = new Map();
   for (const setLog of setLogRows) {
     const existing = setLogsByExerciseLogId.get(setLog.exerciseLogId) ?? [];
-    existing.push({ setNumber: setLog.setNumber, repetitions: setLog.repetitions, load: setLog.load, duration: setLog.duration });
+    existing.push({
+      setNumber: setLog.setNumber,
+      repetitions: setLog.repetitions,
+      load: setLog.load,
+      duration: setLog.duration,
+      rpe: setLog.rpe,
+      restSeconds: setLog.restSeconds,
+      completed: setLog.completed,
+    });
     setLogsByExerciseLogId.set(setLog.exerciseLogId, existing);
   }
 
@@ -443,14 +451,56 @@ async function loadPreviousLogsByExercise(effectiveExerciseIds, userId, currentS
     // we must not expose a malformed previousLog to the client.
     if (row.finished_at == null) continue;
 
+    const setLogs = setLogsByExerciseLogId.get(row.id) ?? [];
     resultByExerciseId.set(row.exercise_id, {
       workoutSessionId: row.workout_session_id,
       finishedAt: row.finished_at,
-      setLogs: setLogsByExerciseLogId.get(row.id) ?? [],
+      setLogs,
+      bestSet: computeBestSet(setLogs),
     });
   }
 
   return resultByExerciseId;
+}
+
+/**
+ * Compute the "best set" (highest tonnage = load * repetitions) from a list of
+ * set logs. Considers ONLY completed sets that have non-null load AND repetitions.
+ * Tie-break: higher load wins; on equal load, the lower setNumber wins (earliest).
+ * Returns null when no set qualifies. Pure in-memory reduction — no DB access.
+ *
+ * @param {Array<{setNumber:number, repetitions:number|null, load:number|null, duration?:number|null, rpe?:number|null, restSeconds?:number|null, completed?:boolean}>} sets
+ * @returns {{setNumber:number, load:number, repetitions:number, duration:number|null, rpe:number|null, restSeconds:number|null, completed:boolean, tonnage:number}|null}
+ */
+function computeBestSet(sets) {
+  if (!Array.isArray(sets)) return null;
+
+  let best = null;
+  for (const set of sets) {
+    if (set.completed !== true) continue;
+    if (set.load == null || set.repetitions == null) continue;
+
+    const tonnage = set.load * set.repetitions;
+    if (
+      best === null ||
+      tonnage > best.tonnage ||
+      (tonnage === best.tonnage && set.load > best.load) ||
+      (tonnage === best.tonnage && set.load === best.load && set.setNumber < best.setNumber)
+    ) {
+      best = {
+        setNumber: set.setNumber,
+        load: set.load,
+        repetitions: set.repetitions,
+        duration: set.duration ?? null,
+        rpe: set.rpe ?? null,
+        restSeconds: set.restSeconds ?? null,
+        completed: true,
+        tonnage,
+      };
+    }
+  }
+
+  return best;
 }
 
 /**
@@ -986,7 +1036,7 @@ export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId
  *
  * @param {string} userId
  * @param {string} exerciseId - TrainingExercise.id
- * @returns {Promise<{ performedAt: string | null, sets: object[] }>}
+ * @returns {Promise<{ performedAt: string | null, sets: object[], bestSet: object | null }>}
  */
 export async function getExerciseLastPerformance(userId, exerciseId) {
   const exercise = await prisma.exercise.findUnique({
@@ -1051,12 +1101,13 @@ export async function getExerciseLastPerformance(userId, exerciseId) {
   });
 
   if (!exerciseLog) {
-    return { performedAt: null, sets: [] };
+    return { performedAt: null, sets: [], bestSet: null };
   }
 
   return {
     performedAt: exerciseLog.workoutSession.startedAt,
     sets: exerciseLog.setLogs,
+    bestSet: computeBestSet(exerciseLog.setLogs),
   };
 }
 

@@ -1345,13 +1345,13 @@ describe('workout-session-service', () => {
       });
     });
 
-    it('returns { performedAt: null, sets: [] } when no prior exercise log exists', async () => {
+    it('returns { performedAt: null, sets: [], bestSet: null } when no prior exercise log exists', async () => {
       prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
       prisma.exerciseLog.findFirst.mockResolvedValue(null);
 
       const result = await getExerciseLastPerformance('user-1', 'ex-1');
 
-      expect(result).toEqual({ performedAt: null, sets: [] });
+      expect(result).toEqual({ performedAt: null, sets: [], bestSet: null });
     });
 
     it('returns performedAt and all set logs from the most recent completed session', async () => {
@@ -1432,6 +1432,136 @@ describe('workout-session-service', () => {
           orderBy: { workoutSession: { startedAt: 'desc' } },
         }),
       );
+    });
+
+    // ── bestSet computation via getExerciseLastPerformance ─────────────────
+
+    it('bestSet — picks set with highest tonnage (load × repetitions)', async () => {
+      // set 1: 100 × 5 = 500 tonnage; set 2: 80 × 8 = 640 tonnage → set 2 wins
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: 5,  load: 100.0, duration: null, rpe: 7,  restSeconds: 90, completed: true },
+          { setNumber: 2, repetitions: 8,  load: 80.0,  duration: null, rpe: 8,  restSeconds: 90, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toMatchObject({
+        setNumber: 2,
+        load: 80.0,
+        repetitions: 8,
+        completed: true,
+        tonnage: 640,
+      });
+    });
+
+    it('bestSet — tie-break by load: equal tonnage, higher load wins', async () => {
+      // 100 × 4 = 400; 80 × 5 = 400 → same tonnage, load 100 wins
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: 4, load: 100.0, duration: null, rpe: null, restSeconds: null, completed: true },
+          { setNumber: 2, repetitions: 5, load: 80.0,  duration: null, rpe: null, restSeconds: null, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toMatchObject({ setNumber: 1, load: 100.0, repetitions: 4, tonnage: 400 });
+    });
+
+    it('bestSet — tie-break by setNumber: equal tonnage AND equal load, lower setNumber wins', async () => {
+      // Both: 100 × 4 = 400 → setNumber 1 beats setNumber 2
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: 4, load: 100.0, duration: null, rpe: null, restSeconds: null, completed: true },
+          { setNumber: 2, repetitions: 4, load: 100.0, duration: null, rpe: null, restSeconds: null, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toMatchObject({ setNumber: 1, load: 100.0, repetitions: 4, tonnage: 400 });
+    });
+
+    it('bestSet — non-completed sets are excluded even if they have higher tonnage', async () => {
+      // set 1 (completed=false): 200 × 10 = 2000 — must be ignored
+      // set 2 (completed=true):  80  × 8  = 640  — should be bestSet
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: 10, load: 200.0, duration: null, rpe: null, restSeconds: null, completed: false },
+          { setNumber: 2, repetitions: 8,  load: 80.0,  duration: null, rpe: null, restSeconds: null, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toMatchObject({ setNumber: 2, load: 80.0, repetitions: 8, tonnage: 640 });
+    });
+
+    it('bestSet — null load/reps excluded; returns null when no qualifying set exists', async () => {
+      // All sets have null load or null reps — none qualifies
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: null, load: null,  duration: 1800, rpe: null, restSeconds: null, completed: true },
+          { setNumber: 2, repetitions: 10,   load: null,  duration: null, rpe: null, restSeconds: null, completed: true },
+          { setNumber: 3, repetitions: null, load: 80.0,  duration: null, rpe: null, restSeconds: null, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toBeNull();
+    });
+
+    it('bestSet.tonnage equals load × repetitions of the chosen set', async () => {
+      const expectedLoad = 120.0;
+      const expectedReps = 6;
+      const expectedTonnage = expectedLoad * expectedReps; // 720
+
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: expectedReps, load: expectedLoad, duration: null, rpe: 9, restSeconds: 120, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).not.toBeNull();
+      expect(result.bestSet.tonnage).toBe(expectedTonnage);
+      expect(result.bestSet.load).toBe(expectedLoad);
+      expect(result.bestSet.repetitions).toBe(expectedReps);
+    });
+
+    it('bestSet includes rpe, restSeconds, and duration from the winning set', async () => {
+      const log = makeLastExerciseLog({
+        setLogs: [
+          { setNumber: 1, repetitions: 10, load: 80.0, duration: 45, rpe: 8, restSeconds: 120, completed: true },
+        ],
+      });
+      prisma.exercise.findUnique.mockResolvedValue(makeExerciseRow());
+      prisma.exerciseLog.findFirst.mockResolvedValue(log);
+
+      const result = await getExerciseLastPerformance('user-1', 'ex-1');
+
+      expect(result.bestSet).toMatchObject({
+        duration: 45,
+        rpe: 8,
+        restSeconds: 120,
+        completed: true,
+      });
     });
   });
 
@@ -1681,6 +1811,62 @@ describe('workout-session-service', () => {
       const session = await getSession('user-1', 'session-1');
 
       expect(session.exerciseLogs[0].previousLog.setLogs).toEqual([]);
+    });
+
+    it('previousLog includes bestSet with correct tonnage when prior session has qualifying sets', async () => {
+      // set: 80 × 10 = 800 tonnage
+      const exerciseLogs = [makeExerciseLogInSession()];
+      prisma.workoutSession.findUnique.mockResolvedValue(makeSessionWithExerciseLogs(exerciseLogs));
+      prisma.$queryRaw.mockResolvedValue([makePreviousLogRow()]);
+      prisma.setLog.findMany.mockResolvedValue([
+        { exerciseLogId: 'prev-elog-1', setNumber: 1, repetitions: 10, load: 80.0, duration: null, rpe: 7, restSeconds: 90, completed: true },
+      ]);
+
+      const session = await getSession('user-1', 'session-1');
+
+      const previousLog = session.exerciseLogs[0].previousLog;
+      expect(previousLog).not.toBeNull();
+      expect(previousLog.bestSet).toMatchObject({
+        setNumber: 1,
+        load: 80.0,
+        repetitions: 10,
+        completed: true,
+        tonnage: 800,
+      });
+    });
+
+    it('previousLog.bestSet is null when prior session had no completed sets with load and reps', async () => {
+      const exerciseLogs = [makeExerciseLogInSession()];
+      prisma.workoutSession.findUnique.mockResolvedValue(makeSessionWithExerciseLogs(exerciseLogs));
+      prisma.$queryRaw.mockResolvedValue([makePreviousLogRow()]);
+      // Cardio-only set: no load, no reps — bestSet must be null
+      prisma.setLog.findMany.mockResolvedValue([
+        { exerciseLogId: 'prev-elog-1', setNumber: 1, repetitions: null, load: null, duration: 1800, rpe: null, restSeconds: 60, completed: true },
+      ]);
+
+      const session = await getSession('user-1', 'session-1');
+
+      expect(session.exerciseLogs[0].previousLog.bestSet).toBeNull();
+    });
+
+    it('previousLog.bestSet picks highest-tonnage set when multiple sets exist', async () => {
+      // set 1: 100 × 3 = 300; set 2: 70 × 6 = 420 → set 2 wins
+      const exerciseLogs = [makeExerciseLogInSession()];
+      prisma.workoutSession.findUnique.mockResolvedValue(makeSessionWithExerciseLogs(exerciseLogs));
+      prisma.$queryRaw.mockResolvedValue([makePreviousLogRow()]);
+      prisma.setLog.findMany.mockResolvedValue([
+        { exerciseLogId: 'prev-elog-1', setNumber: 1, repetitions: 3, load: 100.0, duration: null, rpe: 9, restSeconds: 120, completed: true },
+        { exerciseLogId: 'prev-elog-1', setNumber: 2, repetitions: 6, load: 70.0,  duration: null, rpe: 7, restSeconds: 90,  completed: true },
+      ]);
+
+      const session = await getSession('user-1', 'session-1');
+
+      expect(session.exerciseLogs[0].previousLog.bestSet).toMatchObject({
+        setNumber: 2,
+        load: 70.0,
+        repetitions: 6,
+        tonnage: 420,
+      });
     });
   });
 });

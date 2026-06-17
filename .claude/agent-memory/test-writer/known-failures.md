@@ -22,3 +22,5 @@ As of 2026-05-02 (staging branch), the following E2E test failures are pre-exist
 - `test/e2e/training-template.e2e.test.js` — 4 failures in `POST /trainer/trainings/from-template` section. All use `createProtocol(accessToken, assigneeId)` which calls `/trainer/protocols`. That endpoint calls `assertStudentActiveOnPlan()` (added in commit `94710ca`), but the `createAssigneeWithToken` helper never sets up a TrainerStudent link. Tests were written in commit `d5af540` before the plan guard existed. Fix requires adding a `createTrainerStudentLink` setup step in those tests.
 
 Total pre-existing: 21 failures across 7 files.
+
+**E2E first-run flakiness:** `workout-session.e2e.test.js` can report 56 failures on the very first cold run (all showing signup → 500 errors). Re-running immediately produces 92/92 passes. Root cause is likely a cold DB or cleanDatabase timing issue on startup. Do NOT treat the first run as ground truth — re-run before diagnosing.
