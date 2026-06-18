@@ -8,6 +8,8 @@ vi.mock('../../src/db.js', () => ({
       findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -15,6 +17,8 @@ vi.mock('../../src/db.js', () => ({
 import { prisma } from '../../src/db.js';
 import {
   createExerciseTemplate,
+  getExerciseTemplatesByTrainer,
+  batchDeleteExerciseTemplates,
   getExerciseTemplateById,
   updateExerciseTemplate,
   deleteExerciseTemplate,
@@ -166,6 +170,133 @@ describe('exercise-template-service', () => {
 
       const createData = prisma.exerciseTemplate.create.mock.calls[0][0].data;
       expect(Object.keys(createData).sort()).toEqual(['isPublic', 'name', 'trainerId', 'type', 'videoUrl'].sort());
+    });
+  });
+
+  describe('getExerciseTemplatesByTrainer', () => {
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(getExerciseTemplatesByTrainer('u1')).rejects.toMatchObject({
+        code: 'TRAINER_PROFILE_MISSING',
+        statusCode: 404,
+      });
+    });
+
+    it('returns paginated envelope with defaults page=1 and limit=20', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      const template = { id: 'et1', name: 'Squat', type: 'strength' };
+      prisma.exerciseTemplate.findMany.mockResolvedValue([template]);
+      prisma.exerciseTemplate.count.mockResolvedValue(1);
+
+      const result = await getExerciseTemplatesByTrainer('u1');
+
+      expect(result).toEqual({ data: [template], total: 1, page: 1, limit: 20 });
+    });
+
+    it('passes name ILIKE filter when filters.q is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+      prisma.exerciseTemplate.count.mockResolvedValue(0);
+
+      await getExerciseTemplatesByTrainer('u1', { q: 'squat' });
+
+      const findManyCall = prisma.exerciseTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({
+        name: { contains: 'squat', mode: 'insensitive' },
+      });
+      const countCall = prisma.exerciseTemplate.count.mock.calls[0][0];
+      expect(countCall.where).toMatchObject({
+        name: { contains: 'squat', mode: 'insensitive' },
+      });
+    });
+
+    it('includes type filter in where clause when a valid type is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+      prisma.exerciseTemplate.count.mockResolvedValue(0);
+
+      await getExerciseTemplatesByTrainer('u1', { type: 'strength' });
+
+      const findManyCall = prisma.exerciseTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({ type: 'strength' });
+    });
+
+    it('silently ignores an invalid type filter value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+      prisma.exerciseTemplate.count.mockResolvedValue(0);
+
+      await getExerciseTemplatesByTrainer('u1', { type: 'invalid' });
+
+      const findManyCall = prisma.exerciseTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).not.toHaveProperty('type');
+    });
+
+    it('calculates skip from custom page and limit', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+      prisma.exerciseTemplate.count.mockResolvedValue(0);
+
+      await getExerciseTemplatesByTrainer('u1', { page: 3, limit: 10 });
+
+      const findManyCall = prisma.exerciseTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.skip).toBe(20); // (3-1)*10
+      expect(findManyCall.take).toBe(10);
+    });
+
+    it('clamps limit to maximum of 100', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+      prisma.exerciseTemplate.count.mockResolvedValue(0);
+
+      const result = await getExerciseTemplatesByTrainer('u1', { limit: 500 });
+
+      const findManyCall = prisma.exerciseTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.take).toBe(100);
+      expect(result.limit).toBe(100);
+    });
+  });
+
+  describe('batchDeleteExerciseTemplates', () => {
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        batchDeleteExerciseTemplates('u1', ['et1', 'et2']),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
+
+      expect(prisma.exerciseTemplate.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('calls updateMany with correct where clause and sets deletedAt', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.updateMany.mockResolvedValue({ count: 2 });
+
+      await batchDeleteExerciseTemplates('u1', ['et1', 'et2']);
+
+      expect(prisma.exerciseTemplate.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['et1', 'et2'] }, trainerId: 't1', deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('returns deletedCount matching the count from updateMany', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.updateMany.mockResolvedValue({ count: 3 });
+
+      const result = await batchDeleteExerciseTemplates('u1', ['et1', 'et2', 'et3']);
+
+      expect(result).toEqual({ deletedCount: 3 });
+    });
+
+    it('returns deletedCount 0 when no owned IDs match', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await batchDeleteExerciseTemplates('u1', ['et-other', 'et-already-deleted']);
+
+      expect(result).toEqual({ deletedCount: 0 });
     });
   });
 

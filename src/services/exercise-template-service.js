@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import { buildError, validateExerciseType } from '../helpers/training-validators.js';
+import { exerciseTypeValues } from '../constants/training.js';
 
 // Library exercise templates carry only the exercise identity (name, type, video).
 // Prescription ("how it's done": sets/reps/load/rest/intensity) lives where a workout
@@ -39,12 +40,13 @@ export async function createExerciseTemplate(userId, data) {
 }
 
 /**
- * Get exercise templates for a trainer (own + public)
+ * Get exercise templates for a trainer (own + public) with pagination and search
  *
  * @param {string} userId - User ID of the trainer
- * @returns {Promise<object[]>} List of templates
+ * @param {object} filters - { page, limit, q, type }
+ * @returns {Promise<{ data: object[], total: number, page: number, limit: number }>}
  */
-export async function getExerciseTemplatesByTrainer(userId) {
+export async function getExerciseTemplatesByTrainer(userId, filters = {}) {
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -54,24 +56,58 @@ export async function getExerciseTemplatesByTrainer(userId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  const templates = await prisma.exerciseTemplate.findMany({
-    where: {
-      deletedAt: null,
-      OR: [{ trainerId: trainer.id }, { isPublic: true }],
-    },
-    include: {
-      trainer: {
-        include: {
-          user: {
-            select: { id: true, firstName: true, lastName: true },
-          },
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
+  const page = Math.max(1, parseInt(filters.page ?? 1, 10));
+  const limit = Math.min(100, Math.max(1, parseInt(filters.limit ?? 20, 10)));
+  const skip = (page - 1) * limit;
+
+  const where = {
+    deletedAt: null,
+    OR: [{ trainerId: trainer.id }, { isPublic: true }],
+    ...(filters.q && { name: { contains: filters.q, mode: 'insensitive' } }),
+    ...(filters.type && exerciseTypeValues.includes(filters.type) && { type: filters.type }),
+  };
+
+  const [data, total] = await Promise.all([
+    prisma.exerciseTemplate.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.exerciseTemplate.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
+}
+
+/**
+ * Batch soft-delete exercise templates owned by the trainer.
+ * Non-owned or already-deleted IDs are silently skipped.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string[]} ids - Array of template IDs to delete
+ * @returns {Promise<{ deletedCount: number }>}
+ */
+export async function batchDeleteExerciseTemplates(userId, ids) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
   });
 
-  return templates;
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  const { count } = await prisma.exerciseTemplate.updateMany({
+    where: {
+      id: { in: ids },
+      trainerId: trainer.id,
+      deletedAt: null,
+    },
+    data: { deletedAt: new Date() },
+  });
+
+  return { deletedCount: count };
 }
 
 /**

@@ -1,29 +1,131 @@
-# Frontend Brief — Exercise templates são identity-only
+# Frontend Brief — Library Pagination, Search/Filter & Batch Delete
 
-**Backend branch**: staging · **Generated**: 2026-06-10
+**Backend branch**: staging · **Generated**: 2026-06-17
 
-## O que mudou (backend)
-O `ExerciseTemplate` da **biblioteca** agora guarda só **identidade do exercício**: `name`, `type`, `videoUrl`, `isPublic`. Todos os campos de prescrição (`sets`, `repetitions`, `duration`, `prescriptionMode`, `hasLoad`, `suggestedLoad`, `restInterval`, `notes`, `intensity`) foram **removidos** do modelo da biblioteca.
+## Elevator pitch
+Trainers can now search, filter, and paginate their exercise, training, and protocol template libraries — and bulk-remove items in a single action — instead of scrolling through unbounded flat lists.
 
-A prescrição ("como o exercício é feito") só existe **dentro de um template de treino** (no junction `TrainingTemplateExerciseTemplate`) e no `Exercise` real. Motivo de produto: importar um exercício da biblioteca **não** deve trazer preset — séries/reps variam por treino.
+## User story
+As a trainer, I want to search my template library by name, filter by type/category, navigate paginated results, and bulk-delete items I no longer need, so that I can manage large libraries quickly without losing context.
 
-## Impacto no frontend (treinoway-web)
+## User flows
 
-### 1. Formulário de Exercise Template (biblioteca)
-- **Remover** todos os inputs de prescrição do form de criar/editar exercise template: sets, repetições, duração, modo de prescrição, carga (hasLoad/suggestedLoad), descanso, notes, intensidade.
-- Manter só: **nome**, **tipo**, **vídeo (videoUrl)**, e o toggle **público (isPublic)**.
-- Endpoints (rotas inalteradas): `POST/PATCH /trainer/exercise-templates`. Bodies agora aceitam **apenas** `{ name, type, videoUrl, isPublic }`. Campos extras de prescrição são ignorados (stripped) pelo servidor — não envie.
-- Resposta desses endpoints não traz mais campos de prescrição.
+1. **Entry point**: Library screens accessed from the Trainer dashboard — "Exercise Templates", "Training Templates", and "Protocol Templates" list pages.
 
-### 2. Montagem de template de treino — adicionar exercício da biblioteca
-- Ao adicionar um exercício existente da biblioteca a um training template (`POST /trainer/training-templates/:templateId/exercises/from-template`), o endpoint **agora aceita** prescrição no body: `prescriptionMode`, `sets`, `repetitions {min,max}`, `duration`, `hasLoad`, `suggestedLoad`, `restInterval`, `notes`, `intensity` (+ `order`, `supersetGroupId`, `supersetOrder`).
-- UX: ao puxar um exercício da biblioteca, os campos de prescrição vêm **vazios** (não mais pré-preenchidos do template). O treinador preenche a prescrição para aquele treino. Mostrar os inputs de prescrição nesse passo.
-- O exercício ad-hoc (`POST /trainer/training-templates/:templateId/exercises`) continua aceitando prescrição; agora também aceita `intensity`.
+2. **Happy path — search and filter**:
+   1. Trainer opens a library list page (e.g. Exercise Templates).
+   2. A search input is visible at the top of the list.
+   3. Trainer types a name query; the list updates (debounced) to show matching items.
+   4. Trainer optionally selects a filter from a dropdown (e.g. "Type: Strength").
+   5. Pagination controls appear at the bottom showing current page / total pages.
+   6. Trainer navigates between pages.
 
-### 3. Telas que exibiam prescrição "vinda da biblioteca"
-- Se alguma tela mostrava sets/reps/etc. a partir do objeto `exerciseTemplate` (biblioteca) — ex.: card de biblioteca, preview de import — remover. Esses dados não existem mais lá.
-- Dentro do training template, a prescrição vem do **junction** (`trainingTemplateExerciseTemplates[]`), que mantém todos os campos. O objeto aninhado `exerciseTemplate` agora é identity-only.
+3. **Happy path — batch delete**:
+   1. Trainer taps a "Select" toggle to enter selection mode.
+   2. Checkboxes appear on each list item.
+   3. Trainer selects one or more items (up to 200).
+   4. A "Delete selected (N)" action appears (floating bar or top toolbar).
+   5. Confirmation dialog asks "Delete N items?".
+   6. On confirm, a `POST .../batch-delete` request is sent with the selected IDs.
+   7. Success: the list refreshes from page 1, a toast shows "N items deleted".
 
-## Não mudou
-- `Exercise` real (dentro de um treino) e o junction do training template continuam com prescrição completa.
-- Fluxo de aplicar protocolo/treino ao aluno (`importFromTemplate`) — inalterado; a prescrição vem do junction.
+4. **Branches**:
+   - Empty search result: show empty state "No templates found for this search".
+   - All selected items are public (non-owned): `deletedCount: 0` returned — show a warning "Nothing was deleted — you can only delete your own templates".
+   - Mix of owned and non-owned selected: `deletedCount` will be less than items selected — show "N items deleted (some non-owned items were skipped)".
+
+## UI states to cover
+- **Loading**: skeleton rows while the paginated list is fetching.
+- **Empty** (no templates at all): "Create your first template" CTA.
+- **Empty search/filter result**: "No results for '[query]'" with a "Clear filters" link.
+- **Selection mode**: checkboxes visible on each item, floating "Delete selected (N)" bar. "Select" button disabled when count is 0.
+- **Batch delete in progress**: spinner on the delete bar, list dimmed, button disabled.
+- **Pagination**: previous/next buttons + "Page N of M" indicator. Disable prev on page 1, disable next on last page.
+- **deletedCount: 0 response**: warning toast "Nothing was deleted".
+
+## API contract
+
+### GET /trainer/exercise-templates
+- **Auth**: Bearer, TRAINER role
+- **Request** (querystring):
+  ```json
+  { "page": 1, "limit": 20, "q": "bench press", "type": "strength" }
+  ```
+- **Success** (200):
+  ```json
+  { "data": [...], "total": 42, "page": 1, "limit": 20 }
+  ```
+- **Errors**:
+  - `401` — auth failed
+
+### POST /trainer/exercise-templates/batch-delete
+- **Auth**: Bearer, TRAINER role
+- **Request**:
+  ```json
+  { "ids": ["uuid1", "uuid2"] }
+  ```
+- **Success** (200):
+  ```json
+  { "deletedCount": 3 }
+  ```
+- **Errors**:
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · `ids` empty or invalid UUIDs
+  - `401` — auth failed
+
+### GET /trainer/training-templates
+- **Auth**: Bearer, TRAINER role
+- **Request** (querystring):
+  ```json
+  { "page": 1, "limit": 20, "q": "string", "category": "strength", "bodySegment": "upper" }
+  ```
+- **Success** (200):
+  ```json
+  { "data": [...], "total": 18, "page": 1, "limit": 20 }
+  ```
+
+### POST /trainer/training-templates/batch-delete
+- **Auth**: Bearer, TRAINER role
+- **Request** / **Success**: same shape as exercise-templates batch-delete.
+
+### GET /trainer/protocol-templates
+- **Auth**: Bearer, TRAINER role
+- **Request** (querystring):
+  ```json
+  { "page": 1, "limit": 20, "q": "string", "type": "strength", "trainingLevel": "beginner" }
+  ```
+- **Success** (200):
+  ```json
+  { "data": [...], "total": 5, "page": 1, "limit": 20 }
+  ```
+
+### POST /trainer/protocol-templates/batch-delete
+- **Auth**: Bearer, TRAINER role
+- **Request** / **Success**: same shape as exercise-templates batch-delete.
+
+## i18n keys required
+No new `messageCode` values were introduced. Frontend should map:
+- `validation.failed` → suggested copy: "Some fields are invalid."
+
+## Acceptance criteria
+- [ ] Search input is visible on all 3 library list pages; results update within 300 ms debounce after the user stops typing.
+- [ ] Filter dropdowns show the correct enum options per entity (type, category, bodySegment, trainingLevel).
+- [ ] Pagination controls appear and navigate correctly.
+- [ ] "Select" toggle activates checkboxes on list items; a counter reflects the selection count.
+- [ ] "Delete selected" is disabled when no items are selected.
+- [ ] Confirmation dialog is shown before executing batch delete.
+- [ ] After batch delete, list refetches from page 1 and a toast shows "N item(s) deleted".
+- [ ] When `deletedCount: 0`, a warning toast "Nothing was deleted — you can only delete your own templates" is shown.
+- [ ] Empty search/filter result shows a "No results" state with a clear-filters affordance.
+
+## Out of scope
+- Sorting options (order is fixed as `createdAt desc` in this cycle).
+- Multi-select drag or range-select interactions.
+- Undo / restore after batch delete.
+- Public template filter toggle.
+
+## Open design questions
+- Should filter dropdowns be a separate filter panel (slide-in tray) or always-visible selects above the list?
+- Should the search bar be inside a collapsible header or always visible?
+- Should the user be able to change the page size (e.g. 10 / 20 / 50)?
+- Should selection mode include a "Select all on this page" checkbox?
+- Is the batch delete confirmation modal dismissible by tapping outside, or must the user explicitly cancel?

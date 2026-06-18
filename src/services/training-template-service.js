@@ -8,7 +8,7 @@ import {
   validatePrescriptionMode,
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
-import { PrescriptionMode } from '../constants/training.js';
+import { PrescriptionMode, trainingCategoryValues, bodySegmentValues } from '../constants/training.js';
 
 /**
  * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
@@ -134,12 +134,13 @@ export async function createTrainingTemplate(userId, data) {
 }
 
 /**
- * Get training templates created by a trainer (includes public templates)
+ * Get training templates created by a trainer (includes public templates) with pagination and search
  *
  * @param {string} userId - User ID of the trainer
- * @returns {Promise<object[]>} List of templates
+ * @param {object} filters - { page, limit, q, category, bodySegment }
+ * @returns {Promise<{ data: object[], total: number, page: number, limit: number }>}
  */
-export async function getTrainingTemplatesByTrainer(userId) {
+export async function getTrainingTemplatesByTrainer(userId, filters = {}) {
   // 1. Verify trainer profile exists
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
@@ -150,35 +151,79 @@ export async function getTrainingTemplatesByTrainer(userId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
+  const page = Math.max(1, parseInt(filters.page ?? 1, 10));
+  const limit = Math.min(100, Math.max(1, parseInt(filters.limit ?? 20, 10)));
+  const skip = (page - 1) * limit;
+
+  const where = {
+    deletedAt: null,
+    OR: [
+      { trainerId: trainer.id },
+      { isPublic: true },
+    ],
+    ...(filters.q && { name: { contains: filters.q, mode: 'insensitive' } }),
+    ...(filters.category && trainingCategoryValues.includes(filters.category) && { category: filters.category }),
+    ...(filters.bodySegment && bodySegmentValues.includes(filters.bodySegment) && { bodySegment: filters.bodySegment }),
+  };
+
   // 2. Fetch templates (own templates + public templates from others)
-  const templates = await prisma.trainingTemplate.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        { trainerId: trainer.id }, // Own templates
-        { isPublic: true }, // Public templates
-      ],
-    },
-    include: {
-      trainer: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
+  const [data, total] = await Promise.all([
+    prisma.trainingTemplate.findMany({
+      where,
+      include: {
+        trainer: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
             },
           },
         },
+        ...exerciseTemplatesInclude,
       },
-      ...exerciseTemplatesInclude,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.trainingTemplate.count({ where }),
+  ]);
+
+  return { data, total, page, limit };
+}
+
+/**
+ * Batch soft-delete training templates owned by the trainer.
+ * Non-owned or already-deleted IDs are silently skipped.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string[]} ids - Array of template IDs to delete
+ * @returns {Promise<{ deletedCount: number }>}
+ */
+export async function batchDeleteTrainingTemplates(userId, ids) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
   });
 
-  return templates;
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  const { count } = await prisma.trainingTemplate.updateMany({
+    where: {
+      id: { in: ids },
+      trainerId: trainer.id,
+      deletedAt: null,
+    },
+    data: { deletedAt: new Date() },
+  });
+
+  return { deletedCount: count };
 }
 
 /**

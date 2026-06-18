@@ -8,6 +8,8 @@ vi.mock('../../src/db.js', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
+      updateMany: vi.fn(),
     },
     exerciseTemplate: { findMany: vi.fn(), findUnique: vi.fn() },
     trainingTemplateExerciseTemplate: {
@@ -24,6 +26,8 @@ import {
   createTrainingTemplate,
   createTrainingTemplateExercise,
   createTrainingTemplateExerciseFromTemplate,
+  getTrainingTemplatesByTrainer,
+  batchDeleteTrainingTemplates,
   getTrainingTemplateById,
   updateTrainingTemplate,
   updateTrainingTemplateExercise,
@@ -302,6 +306,155 @@ describe('training-template-service', () => {
       expect(junctionRow.name).toBe('Bench Press');
       expect(junctionRow.type).toBe('strength');
       expect(junctionRow.videoUrl).toBe('https://example.com/bench.mp4');
+    });
+  });
+
+  describe('getTrainingTemplatesByTrainer', () => {
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(getTrainingTemplatesByTrainer('u1')).rejects.toMatchObject({
+        code: 'TRAINER_PROFILE_MISSING',
+        statusCode: 404,
+      });
+    });
+
+    it('returns paginated envelope with defaults page=1 and limit=20', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      const template = { id: 'tt1', name: 'Leg Day', category: 'strength' };
+      prisma.trainingTemplate.findMany.mockResolvedValue([template]);
+      prisma.trainingTemplate.count.mockResolvedValue(1);
+
+      const result = await getTrainingTemplatesByTrainer('u1');
+
+      expect(result).toEqual({ data: [template], total: 1, page: 1, limit: 20 });
+    });
+
+    it('passes name ILIKE filter when filters.q is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { q: 'leg' });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({
+        name: { contains: 'leg', mode: 'insensitive' },
+      });
+      const countCall = prisma.trainingTemplate.count.mock.calls[0][0];
+      expect(countCall.where).toMatchObject({
+        name: { contains: 'leg', mode: 'insensitive' },
+      });
+    });
+
+    it('includes category filter in where clause when a valid category is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { category: 'strength' });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({ category: 'strength' });
+    });
+
+    it('silently ignores an invalid category filter value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { category: 'invalid' });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).not.toHaveProperty('category');
+    });
+
+    it('includes bodySegment filter in where clause when a valid bodySegment is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { bodySegment: 'upper' });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({ bodySegment: 'upper' });
+    });
+
+    it('silently ignores an invalid bodySegment filter value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { bodySegment: 'invalid' });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).not.toHaveProperty('bodySegment');
+    });
+
+    it('calculates skip from custom page and limit', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      await getTrainingTemplatesByTrainer('u1', { page: 3, limit: 10 });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.skip).toBe(20); // (3-1)*10
+      expect(findManyCall.take).toBe(10);
+    });
+
+    it('clamps limit to maximum of 100', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingTemplate.count.mockResolvedValue(0);
+
+      const result = await getTrainingTemplatesByTrainer('u1', { limit: 999 });
+
+      const findManyCall = prisma.trainingTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.take).toBe(100);
+      expect(result.limit).toBe(100);
+    });
+  });
+
+  describe('batchDeleteTrainingTemplates', () => {
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        batchDeleteTrainingTemplates('u1', ['tt1', 'tt2']),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
+
+      expect(prisma.trainingTemplate.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('calls updateMany with correct where clause and sets deletedAt', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.updateMany.mockResolvedValue({ count: 2 });
+
+      await batchDeleteTrainingTemplates('u1', ['tt1', 'tt2']);
+
+      expect(prisma.trainingTemplate.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['tt1', 'tt2'] }, trainerId: 't1', deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('returns deletedCount matching the count from updateMany', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.updateMany.mockResolvedValue({ count: 2 });
+
+      const result = await batchDeleteTrainingTemplates('u1', ['tt1', 'tt2']);
+
+      expect(result).toEqual({ deletedCount: 2 });
+    });
+
+    it('returns deletedCount 0 when no owned IDs match', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await batchDeleteTrainingTemplates('u1', ['tt-other', 'tt-already-deleted']);
+
+      expect(result).toEqual({ deletedCount: 0 });
     });
   });
 

@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { buildError, validateWeekDay, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
+import { protocolTypeValues, trainingLevelValues } from '../constants/training.js';
 
 /**
  * Shared Prisma include for a protocol template's trainings relation. Hydrates
@@ -127,12 +128,13 @@ export async function createProtocolTemplate(userId, data) {
 }
 
 /**
- * Get all protocol templates created by a trainer
+ * Get all protocol templates created by a trainer with pagination and search
  *
  * @param {string} userId - User ID of the trainer
- * @returns {Promise<object[]>} List of templates
+ * @param {object} filters - { page, limit, q, type, trainingLevel }
+ * @returns {Promise<{ data: object[], total: number, page: number, limit: number }>}
  */
-export async function getProtocolTemplatesByTrainer(userId) {
+export async function getProtocolTemplatesByTrainer(userId, filters = {}) {
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
   });
@@ -141,25 +143,70 @@ export async function getProtocolTemplatesByTrainer(userId) {
     throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
   }
 
-  const templates = await prisma.trainingProtocolTemplate.findMany({
-    where: {
-      trainerId: trainer.id,
-      deletedAt: null,
-    },
-    include: {
-      _count: {
-        select: { trainings: true },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
+  const page = Math.max(1, parseInt(filters.page ?? 1, 10));
+  const limit = Math.min(100, Math.max(1, parseInt(filters.limit ?? 20, 10)));
+  const skip = (page - 1) * limit;
 
-  return templates.map(({ _count, ...tpl }) => ({
+  const where = {
+    trainerId: trainer.id,
+    deletedAt: null,
+    ...(filters.q && { name: { contains: filters.q, mode: 'insensitive' } }),
+    ...(filters.type && protocolTypeValues.includes(filters.type) && { type: filters.type }),
+    ...(filters.trainingLevel && trainingLevelValues.includes(filters.trainingLevel) && { trainingLevel: filters.trainingLevel }),
+  };
+
+  const [templates, total] = await Promise.all([
+    prisma.trainingProtocolTemplate.findMany({
+      where,
+      include: {
+        _count: {
+          select: { trainings: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      skip,
+      take: limit,
+    }),
+    prisma.trainingProtocolTemplate.count({ where }),
+  ]);
+
+  const data = templates.map(({ _count, ...tpl }) => ({
     ...tpl,
     trainingsCount: _count.trainings,
   }));
+
+  return { data, total, page, limit };
+}
+
+/**
+ * Batch soft-delete protocol templates owned by the trainer.
+ * Non-owned or already-deleted IDs are silently skipped.
+ *
+ * @param {string} userId - User ID of the trainer
+ * @param {string[]} ids - Array of template IDs to delete
+ * @returns {Promise<{ deletedCount: number }>}
+ */
+export async function batchDeleteProtocolTemplates(userId, ids) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  const { count } = await prisma.trainingProtocolTemplate.updateMany({
+    where: {
+      id: { in: ids },
+      trainerId: trainer.id,
+      deletedAt: null,
+    },
+    data: { deletedAt: new Date() },
+  });
+
+  return { deletedCount: count };
 }
 
 /**

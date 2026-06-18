@@ -288,6 +288,7 @@ model TrainingProtocolTemplate {
   protocols TrainingProtocol[]
   trainings ProtocolTemplateTraining[]
 
+  @@index([trainerId, deletedAt])
   @@map("training_protocol_templates")
 }
 
@@ -338,6 +339,8 @@ model TrainingTemplate {
   protocolTemplateTrainings         ProtocolTemplateTraining[]
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
+  @@index([trainerId, deletedAt])
+  @@index([isPublic, deletedAt])
   @@map("training_templates")
 }
 
@@ -383,6 +386,8 @@ model ExerciseTemplate {
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
 
   @@index([trainerId, type])
+  @@index([trainerId, deletedAt])
+  @@index([isPublic, deletedAt])
   @@map("exercise_templates")
 }
 

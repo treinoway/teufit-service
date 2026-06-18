@@ -8,6 +8,8 @@ vi.mock('../../src/db.js', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
     },
     trainingTemplate: { findMany: vi.fn() },
     protocolTemplateTraining: {
@@ -27,6 +29,7 @@ import { maybeMarkFirstProtocolCreated } from '../../src/services/trainer-onboar
 import {
   createProtocolTemplate,
   getProtocolTemplatesByTrainer,
+  batchDeleteProtocolTemplates,
   getProtocolTemplateById,
   updateProtocolTemplate,
   deleteProtocolTemplate,
@@ -255,26 +258,178 @@ describe('training-protocol-template-service', () => {
       });
     });
 
-    it('returns templates with trainingsCount', async () => {
+    it('returns paginated result with trainingsCount', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findMany.mockResolvedValue([
         { ...baseTemplate, _count: { trainings: 3 } },
       ]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(1);
 
       const result = await getProtocolTemplatesByTrainer('u1');
 
-      expect(result).toHaveLength(1);
-      expect(result[0].trainingsCount).toBe(3);
-      expect(result[0]._count).toBeUndefined();
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].trainingsCount).toBe(3);
+      expect(result.data[0]._count).toBeUndefined();
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
     });
 
-    it('returns empty array when trainer has no templates', async () => {
+    it('returns empty data array when trainer has no templates', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
       prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
 
       const result = await getProtocolTemplatesByTrainer('u1');
 
-      expect(result).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('passes name ILIKE filter when filters.q is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { q: 'push' });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({
+        name: { contains: 'push', mode: 'insensitive' },
+      });
+      const countCall = prisma.trainingProtocolTemplate.count.mock.calls[0][0];
+      expect(countCall.where).toMatchObject({
+        name: { contains: 'push', mode: 'insensitive' },
+      });
+    });
+
+    it('includes type filter in where clause when a valid protocol type is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { type: 'strength' });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({ type: 'strength' });
+    });
+
+    it('silently ignores an invalid type filter value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { type: 'yoga' });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).not.toHaveProperty('type');
+    });
+
+    it('includes trainingLevel filter in where clause when a valid trainingLevel is provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { trainingLevel: 'beginner' });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).toMatchObject({ trainingLevel: 'beginner' });
+    });
+
+    it('silently ignores an invalid trainingLevel filter value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { trainingLevel: 'expert' });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.where).not.toHaveProperty('trainingLevel');
+    });
+
+    it('calculates skip from custom page and limit', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      await getProtocolTemplatesByTrainer('u1', { page: 2, limit: 5 });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.skip).toBe(5); // (2-1)*5
+      expect(findManyCall.take).toBe(5);
+    });
+
+    it('clamps limit to maximum of 100', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(0);
+
+      const result = await getProtocolTemplatesByTrainer('u1', { limit: 200 });
+
+      const findManyCall = prisma.trainingProtocolTemplate.findMany.mock.calls[0][0];
+      expect(findManyCall.take).toBe(100);
+      expect(result.limit).toBe(100);
+    });
+
+    it('strips _count from data items and exposes trainingsCount instead', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.findMany.mockResolvedValue([
+        { ...baseTemplate, _count: { trainings: 5 } },
+      ]);
+      prisma.trainingProtocolTemplate.count.mockResolvedValue(1);
+
+      const result = await getProtocolTemplatesByTrainer('u1');
+
+      expect(result.data[0]).not.toHaveProperty('_count');
+      expect(result.data[0].trainingsCount).toBe(5);
+    });
+  });
+
+  // ==================== batchDeleteProtocolTemplates ====================
+
+  describe('batchDeleteProtocolTemplates', () => {
+    it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        batchDeleteProtocolTemplates('u1', ['tmpl-1', 'tmpl-2']),
+      ).rejects.toMatchObject({ code: 'TRAINER_PROFILE_MISSING', statusCode: 404 });
+
+      expect(prisma.trainingProtocolTemplate.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('calls updateMany with correct where clause and sets deletedAt', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.updateMany.mockResolvedValue({ count: 2 });
+
+      await batchDeleteProtocolTemplates('u1', ['tmpl-1', 'tmpl-2']);
+
+      expect(prisma.trainingProtocolTemplate.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['tmpl-1', 'tmpl-2'] },
+          trainerId: 'trainer-1',
+          deletedAt: null,
+        },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('returns deletedCount matching the count from updateMany', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.updateMany.mockResolvedValue({ count: 2 });
+
+      const result = await batchDeleteProtocolTemplates('u1', ['tmpl-1', 'tmpl-2']);
+
+      expect(result).toEqual({ deletedCount: 2 });
+    });
+
+    it('returns deletedCount 0 when no owned IDs match', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+      prisma.trainingProtocolTemplate.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await batchDeleteProtocolTemplates('u1', ['tmpl-other', 'tmpl-gone']);
+
+      expect(result).toEqual({ deletedCount: 0 });
     });
   });
 

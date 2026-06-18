@@ -3,6 +3,7 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-protocol-template-service.js';
 import * as schema from '../schemas/training-protocol-template-route.schema.js';
 import config from '../../config/index.js';
+import { AppError } from '../../src/errors/app-error.js';
 
 export async function trainingProtocolTemplateRoutes(fastify) {
   // Rate limit: 20 req/min
@@ -35,7 +36,7 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   );
 
   // Rate limit: 60 req/min
-  // Get all templates
+  // Get all templates with pagination and search
   fastify.get(
     '/trainer/protocol-templates',
     {
@@ -45,14 +46,34 @@ export async function trainingProtocolTemplateRoutes(fastify) {
     },
     async (request, reply) => {
       try {
-        const templates = await service.getProtocolTemplatesByTrainer(request.user.id);
-        return reply.send(templates);
+        const result = await service.getProtocolTemplatesByTrainer(request.user.id, request.query);
+        return reply.send(result);
       } catch (error) {
         if (error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to fetch templates' });
+      }
+    },
+  );
+
+  // Batch delete protocol templates
+  fastify.post(
+    '/trainer/protocol-templates/batch-delete',
+    {
+      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.list },
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.batchDeleteProtocolTemplatesSchema,
+    },
+    async (request, reply) => {
+      try {
+        const result = await service.batchDeleteProtocolTemplates(request.user.id, request.body.ids);
+        return reply.send(result);
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to batch delete protocol templates' });
       }
     },
   );

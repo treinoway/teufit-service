@@ -156,33 +156,84 @@ export const createProtocolTemplateSchema = {
   },
 };
 
+const protocolTemplateListItemSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    trainerId: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    description: { type: 'string', nullable: true },
+    defaultDurationWeeks: { type: 'integer', nullable: true },
+    ...i18nField('genderOrdination', 'genderOrdination', { nullable: true }),
+    ...i18nField('trainingLevel', 'trainingLevel', { nullable: true }),
+    ...i18nField('type', 'protocolType', { nullable: true }),
+    trainingsCount: { type: 'integer' },
+    createdAt: { type: 'string', format: 'date-time' },
+  },
+};
+
 export const getProtocolTemplatesSchema = {
   tags: ['Training Protocol Templates'],
   summary: 'Get all protocol templates',
   description: 'Get all protocol templates created by the authenticated trainer',
   security: [{ bearerAuth: [] }],
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      page: { type: 'integer', minimum: 1, default: 1 },
+      limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+      q: { type: 'string' },
+      type: { type: 'string', enum: protocolTypeEnum },
+      trainingLevel: { type: 'string', enum: trainingLevelEnum },
+    },
+  },
   response: {
     200: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          trainerId: { type: 'string', format: 'uuid' },
-          name: { type: 'string' },
-          description: { type: 'string', nullable: true },
-          defaultDurationWeeks: { type: 'integer', nullable: true },
-          ...i18nField('genderOrdination', 'genderOrdination', { nullable: true }),
-          ...i18nField('trainingLevel', 'trainingLevel', { nullable: true }),
-          ...i18nField('type', 'protocolType', { nullable: true }),
-          trainingsCount: { type: 'integer' },
-          createdAt: { type: 'string', format: 'date-time' },
-        },
+      type: 'object',
+      properties: {
+        data: { type: 'array', items: protocolTemplateListItemSchema },
+        total: { type: 'integer' },
+        page: { type: 'integer' },
+        limit: { type: 'integer' },
       },
+      required: ['data', 'total', 'page', 'limit'],
     },
     401: errorResponseSchema,
     404: errorResponseSchema,
     429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const batchDeleteProtocolTemplatesSchema = {
+  tags: ['Training Protocol Templates'],
+  summary: 'Batch delete protocol templates',
+  description: 'Soft-delete multiple protocol templates owned by the trainer. Non-owned IDs are silently skipped.',
+  security: [{ bearerAuth: [] }],
+  body: {
+    type: 'object',
+    required: ['ids'],
+    additionalProperties: false,
+    properties: {
+      ids: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        minItems: 1,
+        maxItems: 200,
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        deletedCount: { type: 'integer' },
+      },
+      required: ['deletedCount'],
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
     500: errorResponseSchema,
   },
 };

@@ -30,7 +30,7 @@ export async function exerciseTemplateRoutes(fastify) {
     },
   );
 
-  // Get exercise templates (own + public)
+  // Get exercise templates (own + public) with pagination and search
   fastify.get(
     '/trainer/exercise-templates',
     {
@@ -39,14 +39,34 @@ export async function exerciseTemplateRoutes(fastify) {
     },
     async (request, reply) => {
       try {
-        const templates = await service.getExerciseTemplatesByTrainer(request.user.id);
-        return reply.send(templates);
+        const result = await service.getExerciseTemplatesByTrainer(request.user.id, request.query);
+        return reply.send(result);
       } catch (error) {
+        if (error instanceof AppError) throw error;
         if (error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to fetch exercise templates' });
+      }
+    },
+  );
+
+  // Batch delete exercise templates
+  fastify.post(
+    '/trainer/exercise-templates/batch-delete',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.batchDeleteExerciseTemplatesSchema,
+    },
+    async (request, reply) => {
+      try {
+        const result = await service.batchDeleteExerciseTemplates(request.user.id, request.body.ids);
+        return reply.send(result);
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        fastify.log.error(error);
+        return reply.status(500).send({ error: 'Failed to batch delete exercise templates' });
       }
     },
   );

@@ -175,7 +175,7 @@ e2eDescribe('e2e: training protocol templates', () => {
   // ==================== GET /trainer/protocol-templates ====================
 
   describe('GET /trainer/protocol-templates', () => {
-    it('returns templates with trainingsCount', async () => {
+    it('returns paginated envelope with data, total, page, limit', async () => {
       const { accessToken } = await createTrainerWithToken();
       const trainingTemplate = await createTrainingTemplate(accessToken);
 
@@ -192,8 +192,12 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body).toHaveLength(1);
-      expect(body[0]).toHaveProperty('trainingsCount', 1);
+      expect(body).toHaveProperty('data');
+      expect(body).toHaveProperty('total', 1);
+      expect(body).toHaveProperty('page', 1);
+      expect(body).toHaveProperty('limit', 20);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toHaveProperty('trainingsCount', 1);
     });
 
     it('returns 0 for trainingsCount when no trainings added', async () => {
@@ -208,7 +212,62 @@ e2eDescribe('e2e: training protocol templates', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body[0].trainingsCount).toBe(0);
+      expect(body.data[0].trainingsCount).toBe(0);
+    });
+
+    it('q filter returns only matching templates by name', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      await createProtocolTemplate(accessToken, { name: 'Full Body Push Pull' });
+      await createProtocolTemplate(accessToken, { name: 'Cardio Circuit' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates?q=push',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.total).toBe(1);
+      expect(body.data[0].name).toBe('Full Body Push Pull');
+    });
+
+    it('page=2 returns the second page when there are more items than the limit', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      for (let i = 1; i <= 25; i++) {
+        await createProtocolTemplate(accessToken, { name: `Protocol ${i}` });
+      }
+
+      const page2Response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates?page=2&limit=20',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(page2Response.statusCode).toBe(200);
+      const body = page2Response.json();
+      expect(body.page).toBe(2);
+      expect(body.total).toBe(25);
+      expect(body.data).toHaveLength(5);
+    });
+
+    it('type filter returns only templates with the matching protocol type', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      await createProtocolTemplate(accessToken, { name: 'Strength Block', type: 'strength' });
+      await createProtocolTemplate(accessToken, { name: 'Cardio Block', type: 'cardio' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates?type=cardio',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.total).toBe(1);
+      expect(body.data[0].name).toBe('Cardio Block');
+      expect(body.data[0].type).toBe('cardio');
     });
   });
 
@@ -235,7 +294,7 @@ e2eDescribe('e2e: training protocol templates', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const [item] = response.json();
+      const [item] = response.json().data;
       expect(item).toHaveProperty('trainingLevel', 'intermediate');
       expect(item).toHaveProperty('trainingLevelLabel', 'Intermediário');
       expect(item).toHaveProperty('type', 'strength');
@@ -263,7 +322,7 @@ e2eDescribe('e2e: training protocol templates', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const [item] = response.json();
+      const [item] = response.json().data;
       expect(item).toHaveProperty('trainingLevelLabel', 'Intermediate');
       expect(item).toHaveProperty('typeLabel', 'Strength');
     });
@@ -287,7 +346,7 @@ e2eDescribe('e2e: training protocol templates', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const [item] = response.json();
+      const [item] = response.json().data;
       expect(item.genderOrdination).toBeNull();
       expect(item.genderOrdinationLabel).toBeNull();
     });
@@ -639,6 +698,92 @@ e2eDescribe('e2e: training protocol templates', () => {
       const body = response.json();
       expect(body.trainings[0].trainingTemplate.bodySegment).toBeNull();
       expect(body.trainings[0].trainingTemplate.bodySegmentLabel).toBeNull();
+    });
+  });
+
+  // ==================== POST /trainer/protocol-templates/batch-delete ====================
+
+  describe('POST /trainer/protocol-templates/batch-delete', () => {
+    it('soft-deletes owned templates and returns deletedCount', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const pt1Response = await createProtocolTemplate(accessToken, { name: 'Template Alpha' });
+      const pt2Response = await createProtocolTemplate(accessToken, { name: 'Template Beta' });
+      const { id: id1 } = pt1Response.json();
+      const { id: id2 } = pt2Response.json();
+
+      const deleteResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocol-templates/batch-delete',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { ids: [id1, id2] },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json()).toEqual({ deletedCount: 2 });
+
+      const listResponse = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocol-templates',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(listResponse.json().total).toBe(0);
+    });
+
+    it('returns deletedCount 0 when IDs belong to another trainer', async () => {
+      const { accessToken: trainerOneToken } = await createTrainerWithToken();
+      const { accessToken: trainerTwoToken } = await createTrainerWithToken();
+      const ptResponse = await createProtocolTemplate(trainerOneToken, { name: 'Owned By Trainer One' });
+      const { id } = ptResponse.json();
+
+      const deleteResponse = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocol-templates/batch-delete',
+        headers: { authorization: `Bearer ${trainerTwoToken}` },
+        payload: { ids: [id] },
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json()).toEqual({ deletedCount: 0 });
+    });
+
+    it('returns 400 VALIDATION_ERROR when ids is empty', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocol-templates/batch-delete',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { ids: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
+    });
+
+    it('returns 400 VALIDATION_ERROR when ids contains a non-UUID string', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocol-templates/batch-delete',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { ids: ['not-a-uuid'] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
+    });
+
+    it('returns 401 when not authenticated', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/trainer/protocol-templates/batch-delete',
+        payload: { ids: ['00000000-0000-0000-0000-000000000001'] },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 });

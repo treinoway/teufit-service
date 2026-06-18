@@ -175,14 +175,62 @@ export const getTrainingTemplatesSchema = {
   tags: ['Training Templates'],
   summary: 'Get training templates',
   security: [{ bearerAuth: [] }],
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      page: { type: 'integer', minimum: 1, default: 1 },
+      limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+      q: { type: 'string' },
+      category: { type: 'string', enum: trainingCategoryValues },
+      bodySegment: { type: 'string', enum: bodySegmentValues },
+    },
+  },
   response: {
     200: {
-      type: 'array',
-      items: templateWithTrainerSchema,
+      type: 'object',
+      properties: {
+        data: { type: 'array', items: templateWithTrainerSchema },
+        total: { type: 'integer' },
+        page: { type: 'integer' },
+        limit: { type: 'integer' },
+      },
+      required: ['data', 'total', 'page', 'limit'],
     },
     401: errorResponseSchema,
     404: errorResponseSchema,
     429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const batchDeleteTrainingTemplatesSchema = {
+  tags: ['Training Templates'],
+  summary: 'Batch delete training templates',
+  security: [{ bearerAuth: [] }],
+  body: {
+    type: 'object',
+    required: ['ids'],
+    additionalProperties: false,
+    properties: {
+      ids: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        minItems: 1,
+        maxItems: 200,
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        deletedCount: { type: 'integer' },
+      },
+      required: ['deletedCount'],
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
     500: errorResponseSchema,
   },
 };

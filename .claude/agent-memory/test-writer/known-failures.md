@@ -19,8 +19,11 @@ As of 2026-05-02 (staging branch), the following E2E test failures are pre-exist
 
 **Why:** These are tracked separately. Do not treat them as regressions when writing or running tests for unrelated features.
 
-- `test/e2e/training-template.e2e.test.js` — 4 failures in `POST /trainer/trainings/from-template` section. All use `createProtocol(accessToken, assigneeId)` which calls `/trainer/protocols`. That endpoint calls `assertStudentActiveOnPlan()` (added in commit `94710ca`), but the `createAssigneeWithToken` helper never sets up a TrainerStudent link. Tests were written in commit `d5af540` before the plan guard existed. Fix requires adding a `createTrainerStudentLink` setup step in those tests.
+- `test/e2e/training-template.e2e.test.js` — 6 failures in `POST /trainer/trainings/from-template` and `PATCH ...exercises` sections. All use `createProtocol(accessToken, assigneeId)` which calls `/trainer/protocols`. That endpoint calls `assertStudentActiveOnPlan()` (added in commit `94710ca`), but the `createAssigneeWithToken` helper never sets up a TrainerStudent link. Fix requires adding a `createTrainerStudentLink` setup step in those tests.
+- `test/e2e/training-protocol-template.e2e.test.js` — 2 failures in `POST /trainer/protocols/import-from-template (with trainings)` section. Same root cause: `assertStudentActiveOnPlan()` guard rejects because no TrainerStudent link is set up for the assignee.
 
-Total pre-existing: 21 failures across 7 files.
+Total pre-existing: 23 failures across 8 files.
+
+**Note on paginated GET /trainer/protocol-templates:** As of 2026-06-17 (staging branch), the GET list for protocol templates was changed to return `{ data, total, page, limit }` instead of a plain array. Updated pre-existing i18n tests (which destructured from old array shape with `const [item] = response.json()`) to use `response.json().data` instead.
 
 **E2E first-run flakiness:** `workout-session.e2e.test.js` can report 56 failures on the very first cold run (all showing signup → 500 errors). Re-running immediately produces 92/92 passes. Root cause is likely a cold DB or cleanDatabase timing issue on startup. Do NOT treat the first run as ground truth — re-run before diagnosing.

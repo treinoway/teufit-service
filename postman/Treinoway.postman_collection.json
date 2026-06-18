@@ -1621,16 +1621,46 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/trainer/protocol-templates",
+              "raw": "{{baseUrl}}/trainer/protocol-templates?page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "trainer",
                 "protocol-templates"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 100, default 20)"
+                },
+                {
+                  "key": "q",
+                  "value": null,
+                  "description": "Name search (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": null,
+                  "description": "Filter by protocol type: strength, cardio, stretching, mobility, activation",
+                  "disabled": true
+                },
+                {
+                  "key": "trainingLevel",
+                  "value": null,
+                  "description": "Filter by level: beginner, intermediate, advanced, athlete",
+                  "disabled": true
+                }
               ]
             },
-            "description": "Get all protocol templates created by the authenticated trainer. Each template includes a 'trainingsCount' integer showing how many training entries it has."
+            "description": "Get paginated protocol templates created by the authenticated trainer. Returns { data, total, page, limit }. Each template includes trainingsCount. Supports filters: q (name search), type (strength | cardio | stretching | mobility | activation), trainingLevel (beginner | intermediate | advanced | athlete)."
           },
           "response": []
         },
@@ -1721,6 +1751,40 @@
               ]
             },
             "description": "Soft delete a protocol template. Only accessible by the template's trainer."
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Delete Protocol Templates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"b2c3d4e5-f6a7-8901-bcde-f12345678901\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/protocol-templates/batch-delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "protocol-templates",
+                "batch-delete"
+              ]
+            },
+            "description": "Soft-delete multiple protocol templates owned by the trainer. Non-owned IDs are silently skipped. Returns the count of actually deleted records. Accepts 1–200 UUIDs. Requires TRAINER role."
           },
           "response": []
         }
@@ -2031,16 +2095,46 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/trainer/training-templates",
+              "raw": "{{baseUrl}}/trainer/training-templates?page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "trainer",
                 "training-templates"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 100, default 20)"
+                },
+                {
+                  "key": "q",
+                  "value": null,
+                  "description": "Name search (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": null,
+                  "description": "Filter by category: strength, cardio, flexibility, rest, functional, mobility",
+                  "disabled": true
+                },
+                {
+                  "key": "bodySegment",
+                  "value": null,
+                  "description": "Filter by body segment: upper, lower, core, full_body",
+                  "disabled": true
+                }
               ]
             },
-            "description": "Get all training templates (own templates + public templates)."
+            "description": "Get paginated training templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), category (strength | cardio | flexibility | rest | functional | mobility), bodySegment (upper | lower | core | full_body)."
           },
           "response": []
         },
@@ -2325,6 +2419,40 @@
             "description": "Delete a training template. Only accessible by the template's trainer."
           },
           "response": []
+        },
+        {
+          "name": "Batch Delete Training Templates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"b2c3d4e5-f6a7-8901-bcde-f12345678901\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/batch-delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                "batch-delete"
+              ]
+            },
+            "description": "Batch delete multiple training templates by ID. Non-owned IDs are silently skipped. Returns the count of actually deleted records. Accepts 1–200 UUIDs. Requires TRAINER role."
+          },
+          "response": []
         }
       ]
     },
@@ -2370,16 +2498,40 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/trainer/exercise-templates",
+              "raw": "{{baseUrl}}/trainer/exercise-templates?page=1&limit=20",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "trainer",
                 "exercise-templates"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 100, default 20)"
+                },
+                {
+                  "key": "q",
+                  "value": null,
+                  "description": "Name search (partial match)",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": null,
+                  "description": "Filter by exercise type: strength, cardio, mobility, stretching",
+                  "disabled": true
+                }
               ]
             },
-            "description": "Get all exercise templates (own + public)."
+            "description": "Get paginated exercise templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), type (strength | cardio | mobility | stretching)."
           },
           "response": []
         },
@@ -2490,6 +2642,40 @@
               ]
             },
             "description": "Soft delete exercise template. Only accessible by owner."
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Delete Exercise Templates",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"b2c3d4e5-f6a7-8901-bcde-f12345678901\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-templates/batch-delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-templates",
+                "batch-delete"
+              ]
+            },
+            "description": "Batch soft-delete multiple exercise templates by ID. Non-owned IDs are silently skipped. Returns the count of actually deleted records. Accepts 1–200 UUIDs. Requires TRAINER role."
           },
           "response": []
         }
