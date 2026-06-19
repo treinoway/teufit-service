@@ -52,6 +52,24 @@ Use unique email suffixes with `Date.now()` to avoid conflicts across parallel t
 const email = `e2e+<feature>-<role>-${Date.now()}@example.com`;
 ```
 
+## Mocking a service dependency in E2E tests
+
+When a route handler calls a service that makes external network calls (e.g. Apple JWKS, Firebase), mock the service module with `vi.mock()` at the top of the E2E test file. Vitest hoists `vi.mock()` so the mock intercepts the import inside the route file as well. Pattern:
+
+```js
+vi.mock('../../src/services/apple-id-token-service.js', () => ({
+  verifyAppleIdToken: vi.fn(),
+}));
+import { verifyAppleIdToken } from '../../src/services/apple-id-token-service.js';
+
+// In each test:
+verifyAppleIdToken.mockResolvedValue({ subject, email, emailVerified, isPrivateEmail });
+// or:
+const err = new Error('...'); err.code = 'ERR_JWT_EXPIRED'; verifyAppleIdToken.mockRejectedValue(err);
+```
+
+Reset between tests with `vi.clearAllMocks()` in `beforeEach`.
+
 ## Fastify `additionalProperties: false` does NOT cause 400
 
 Fastify 5 uses AJV with `removeAdditional: true` by default (confirmed in `node_modules/fastify/build/build-validation.js`). Extra fields in the request body are silently stripped — the server returns 2xx, not 400. Do NOT write tests asserting `statusCode 400` because a prescription/unknown field was sent. Instead, assert:

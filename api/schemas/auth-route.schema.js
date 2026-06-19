@@ -191,6 +191,32 @@ export const googleMobileSchema = {
   },
 };
 
+export const appleMobileSchema = {
+  tags: authTags,
+  summary: 'Log in with Apple identity token (mobile native Sign in with Apple)',
+  description:
+    'Receives the identityToken from the iOS app (Sign in with Apple), validates it against Apple\'s JWKS, and returns a session. `email` is only present on the user\'s first authorization — subsequent logins omit it, so the account must already exist. Optional `nonce` is the raw nonce used at sign-in for replay protection.',
+  body: {
+    type: 'object',
+    required: ['identityToken'],
+    additionalProperties: false,
+    properties: {
+      identityToken: { type: 'string', description: 'The raw identityToken (JWT) from the Sign in with Apple SDK' },
+      authorizationCode: { type: 'string', description: 'Optional authorization code from Apple (reserved for future server-to-server token exchange)' },
+      nonce: { type: 'string', description: 'Optional raw nonce used at sign-in; server validates SHA256(nonce) against the token nonce claim' },
+    },
+  },
+  response: {
+    200: authSuccessResponseSchema,
+    201: authSuccessResponseSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const googleWebSchema = {
   tags: authTags,
   summary: 'Log in with Firebase ID Token (web)',

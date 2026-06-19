@@ -184,6 +184,38 @@ export async function findOrCreateUserFromOAuth(providerData) {
 }
 
 /**
+ * Look up a linked social account by provider + provider-side user id.
+ * Used by Apple Sign-In to distinguish login (account exists) from first-time
+ * sign-up before delegating to findOrCreateUserFromOAuth.
+ *
+ * @param {string} provider - e.g. 'apple', 'google'
+ * @param {string} providerId - the provider's stable user id (Apple `sub`)
+ * @returns {Promise<Object|null>} account row or null
+ */
+export async function findAccountByProvider(provider, providerId) {
+  if (!provider || !providerId) return null;
+  return prisma.account.findUnique({
+    where: { provider_providerId: { provider, providerId } },
+  });
+}
+
+/**
+ * Case-insensitive lookup of a user by email. Mirrors the matching used inside
+ * findOrCreateUserFromOAuth so callers can predict whether a new user will be
+ * created (e.g. to return 201 vs 200).
+ *
+ * @param {string|null} email
+ * @returns {Promise<Object|null>} user row or null
+ */
+export async function findUserByEmailInsensitive(email) {
+  if (!email || typeof email !== 'string') return null;
+  const normalized = email.trim().toLowerCase();
+  return prisma.user.findFirst({
+    where: { email: { equals: normalized, mode: 'insensitive' } },
+  });
+}
+
+/**
  * Get all accounts for a user
  * @param {string} userId - User ID
  * @returns {Promise<Array>} Array of account objects

@@ -522,6 +522,58 @@
           "response": []
         },
         {
+          "name": "Apple Mobile Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identityToken\": \"eyJraWQiOiJBQkMxMjMiLCJhbGciOiJSUzI1NiJ9.apple-identity-token-placeholder\",\n  \"authorizationCode\": \"c3ab8aa609ea11e793ae92361f002671\",\n  \"nonce\": \"raw-nonce-used-at-sign-in\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/apple/mobile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "apple",
+                "mobile"
+              ]
+            },
+            "description": "Sign in with Apple (mobile native). Validates the identityToken from the iOS Sign in with Apple SDK against Apple's JWKS and returns a session. Returns 200 for existing users and 201 when a new account is created on first login. The optional nonce (raw value) is validated against the SHA-256 claim in the token."
+          },
+          "response": []
+        },
+        {
           "name": "Google Web Auth (Firebase)",
           "event": [
             {

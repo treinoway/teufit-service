@@ -1,7 +1,11 @@
 import fastifyOauth2 from '@fastify/oauth2';
 import 'dotenv/config';
 import config from '../../config/index.js';
-import { findOrCreateUserFromOAuth } from '../../src/helpers/auth.js';
+import {
+  findOrCreateUserFromOAuth,
+  findAccountByProvider,
+  findUserByEmailInsensitive,
+} from '../../src/helpers/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import {
   addEmailToWaitlist,
@@ -12,6 +16,7 @@ import {
   signupWithEmailPasswordStateless,
 } from '../../src/services/auth-service.js';
 import { verifyGoogleIdToken } from '../../src/services/google-id-token-service.js';
+import { verifyAppleIdToken } from '../../src/services/apple-id-token-service.js';
 import { verifyFirebaseIdToken } from '../../src/services/firebase-id-token-service.js';
 import {
   issueAccessToken,
@@ -28,6 +33,7 @@ import {
   googleStartSchema,
   googleCallbackSchema,
   googleMobileSchema,
+  appleMobileSchema,
   googleWebSchema,
   refreshSchema,
   logoutSchema,
@@ -392,6 +398,131 @@ export async function authRoutes(fastify) {
 
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Authentication failed' });
+      }
+    },
+  );
+
+  // Mobile-native Apple auth (Sign in with Apple):
+  // iOS app performs the native Apple flow and sends the identityToken here.
+  // Apple only returns `email` on the user's FIRST authorization — later logins
+  // omit it, so an account with that Apple `sub` must already exist by then.
+  fastify.post(
+    '/auth/apple/mobile',
+    {
+      schema: appleMobileSchema,
+    },
+    async (request, reply) => {
+      try {
+        const body = request.body ?? {};
+        const identityToken = body.identityToken ?? body.identity_token;
+
+        if (!identityToken) {
+          return reply.status(400).send({
+            error: 'APPLE_IDENTITY_TOKEN_REQUIRED',
+            messageCode: 'auth.apple.identityTokenRequired',
+            message: 'Missing Apple identity token',
+            details: {},
+          });
+        }
+
+        const apple = await verifyAppleIdToken({
+          identityToken,
+          audience: process.env.APPLE_BUNDLE_ID,
+          nonce: body.nonce,
+        });
+
+        // Determine login vs first-time sign-up BEFORE creating anything, so we
+        // can both reject email-less first logins and answer 201 on create.
+        const account = await findAccountByProvider('apple', apple.subject);
+        let created = false;
+
+        if (!account) {
+          if (!apple.email) {
+            // First Apple login MUST carry an email; Apple never resends it.
+            return reply.status(401).send({
+              error: 'AUTH_APPLE_FIRST_LOGIN_REQUIRES_EMAIL',
+              messageCode: 'auth.apple.firstLoginRequiresEmail',
+              message: 'First Apple login requires an email. Please sign in again.',
+              details: {},
+            });
+          }
+          const existingByEmail = await findUserByEmailInsensitive(apple.email);
+          created = !existingByEmail;
+        }
+
+        // New users from Apple start with no roles (same default as Google mobile)
+        const user = await findOrCreateUserFromOAuth({
+          provider: 'apple',
+          providerId: apple.subject,
+          email: apple.email,
+          name: apple.email,
+          avatar: null,
+          accessToken: null,
+          refreshToken: null,
+          expiresAt: null,
+          roles: [],
+        });
+
+        const token = issueAccessToken({ fastify, user });
+        const refreshTokenData = await issueRefreshToken({ user });
+
+        return reply.status(created ? 201 : 200).send({
+          user: { id: user.id },
+          token: { accessToken: token.accessToken },
+          refreshToken: refreshTokenData.refreshToken,
+        });
+      } catch (error) {
+        if (error?.code === 'USER_DELETED') {
+          return reply.status(403).send({
+            error: 'USER_DELETED',
+            messageCode: 'auth.user.deleted',
+            message: 'Account deactivated',
+            details: {},
+          });
+        }
+        if (error?.code === 'APPLE_IDENTITY_TOKEN_REQUIRED') {
+          return reply.status(400).send({
+            error: 'APPLE_IDENTITY_TOKEN_REQUIRED',
+            messageCode: 'auth.apple.identityTokenRequired',
+            message: 'Missing Apple identity token',
+            details: {},
+          });
+        }
+        if (error?.code === 'APPLE_AUDIENCE_REQUIRED') {
+          // Server misconfiguration (no APPLE_BUNDLE_ID) — never leak internals.
+          fastify.log.error(error);
+          return reply.status(500).send({
+            error: 'APPLE_AUTH_FAILED',
+            messageCode: 'auth.apple.failed',
+            message: 'Authentication failed',
+            details: {},
+          });
+        }
+        if (
+          error?.code === 'APPLE_NONCE_MISMATCH' ||
+          error?.code === 'INVALID_APPLE_ISSUER' ||
+          error?.code === 'APPLE_SUBJECT_MISSING' ||
+          error?.code === 'ERR_JWT_EXPIRED' ||
+          error?.code === 'ERR_JWS_INVALID' ||
+          error?.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' ||
+          error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED' ||
+          error?.code === 'ERR_JWKS_NO_MATCHING_KEY'
+        ) {
+          return reply.status(401).send({
+            error: 'AUTH_APPLE_INVALID_TOKEN',
+            messageCode: 'auth.apple.invalidToken',
+            message: 'Invalid Apple token',
+            details: {},
+          });
+        }
+
+        fastify.log.error(error);
+        return reply.status(500).send({
+          error: 'APPLE_AUTH_FAILED',
+          messageCode: 'auth.apple.failed',
+          message: 'Authentication failed',
+          details: {},
+        });
       }
     },
   );
