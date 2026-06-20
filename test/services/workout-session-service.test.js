@@ -809,6 +809,7 @@ describe('workout-session-service', () => {
       // C1 fix: tx now calls updateMany (shift) before update (mark substituted) and create
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exerciseLog: {
             updateMany: vi.fn().mockResolvedValue({ count: 0 }),
             update: vi.fn().mockResolvedValue({}),
@@ -917,6 +918,7 @@ describe('workout-session-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exerciseLog: {
             update: txUpdate,
             delete: txDelete,
@@ -951,6 +953,7 @@ describe('workout-session-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exerciseLog: {
             update: vi.fn().mockResolvedValue({}),
             delete: vi.fn().mockResolvedValue({}),
@@ -1185,6 +1188,7 @@ describe('workout-session-service', () => {
         });
         prisma.$transaction.mockImplementation(async (fn) => {
           const tx = {
+            $queryRaw: vi.fn().mockResolvedValue([]),
             exerciseLog: {
               updateMany: vi.fn().mockResolvedValue({ count: 0 }),
               update: vi.fn().mockResolvedValue({}),
@@ -1235,6 +1239,7 @@ describe('workout-session-service', () => {
         prisma.setLog.count.mockResolvedValue(0);
         prisma.$transaction.mockImplementation(async (fn) => {
           const tx = {
+            $queryRaw: vi.fn().mockResolvedValue([]),
             exerciseLog: {
               update: vi.fn().mockResolvedValue({}),
               delete: vi.fn().mockResolvedValue({}),
@@ -1867,6 +1872,104 @@ describe('workout-session-service', () => {
         repetitions: 6,
         tonnage: 420,
       });
+    });
+  });
+
+  // ── lockWorkoutSessionForUpdate — lock ordering ────────────────────────────
+
+  describe('lockWorkoutSessionForUpdate — lock ordering', () => {
+    const makePrincipalLog = (overrides = {}) =>
+      makeExerciseLog({
+        id: 'elog-1',
+        exerciseId: 'ex-1',
+        order: 2,
+        status: ExerciseLogStatus.PENDING,
+        substitutedByExerciseId: null,
+        workoutSession: makeSession({ userId: 'user-1' }),
+        ...overrides,
+      });
+
+    const makeSubstituteExercise = (overrides = {}) => ({
+      id: 'sub-ex-1',
+      substituteForExerciseId: 'ex-1',
+      deletedAt: null,
+      ...overrides,
+    });
+
+    const makeNewLog = (overrides = {}) => ({
+      id: 'elog-new',
+      workoutSessionId: 'session-1',
+      exerciseId: 'sub-ex-1',
+      status: ExerciseLogStatus.PENDING,
+      order: 3,
+      setLogs: [],
+      ...overrides,
+    });
+
+    const makeSubstituteLog = (overrides = {}) =>
+      makeExerciseLog({
+        id: 'elog-sub',
+        exerciseId: 'sub-ex-1',
+        order: 3,
+        status: ExerciseLogStatus.PENDING,
+        substitutedByExerciseId: null,
+        workoutSession: makeSession({ userId: 'user-1' }),
+        ...overrides,
+      });
+
+    const makePrincipalForUndo = (overrides = {}) => ({
+      id: 'elog-principal',
+      workoutSessionId: 'session-1',
+      exerciseId: 'ex-1',
+      status: ExerciseLogStatus.SUBSTITUTED,
+      order: 2,
+      substitutedByExerciseId: 'sub-ex-1',
+      ...overrides,
+    });
+
+    it('substituteExerciseLog — $queryRaw fires before first exerciseLog write', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makePrincipalLog());
+      prisma.exercise.findUnique.mockResolvedValue(makeSubstituteExercise());
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exerciseLog: {
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          update: vi.fn().mockResolvedValue({}),
+          create: vi.fn().mockResolvedValue(makeNewLog()),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await substituteExerciseLog('user-1', 'session-1', 'elog-1', 'sub-ex-1');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exerciseLog.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('undoSubstituteExerciseLog — $queryRaw fires before first exerciseLog write', async () => {
+      prisma.exerciseLog.findUnique.mockResolvedValue(makeSubstituteLog());
+      prisma.exerciseLog.findFirst.mockResolvedValue(makePrincipalForUndo());
+      prisma.setLog.count.mockResolvedValue(0);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exerciseLog: {
+          update: vi.fn().mockResolvedValue({}),
+          delete: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await undoSubstituteExerciseLog('user-1', 'session-1', 'elog-sub');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exerciseLog.update.mock.invocationCallOrder[0],
+      );
     });
   });
 });

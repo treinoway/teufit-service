@@ -9,6 +9,7 @@ import {
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
+import { withDeadlockRetry } from '../helpers/db-retry.js';
 
 /**
  * Verify protocol ownership (trainer context)
@@ -332,7 +333,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     validateWeekDay(data.weekDay);
   }
 
-  const training = await prisma.$transaction(async (tx) => {
+  const training = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     const createdTraining = await tx.training.create({
       data: {
         trainingProtocolId: protocolId,
@@ -396,7 +397,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
         },
       },
     });
-  });
+  }));
 
   return training;
 }

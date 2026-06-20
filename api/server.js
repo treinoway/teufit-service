@@ -53,16 +53,10 @@ import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { healthRoutes } from './routes/health-route.js';
 
-// Sentry is env-gated — when SENTRY_DSN is absent every call below is a no-op.
-// Must be initialised before buildServer() so the scope is active for all requests.
-if (config.sentry.dsn) {
-  Sentry.init({
-    dsn: config.sentry.dsn,
-    environment: config.sentry.environment,
-    // Distributed tracing disabled for beta to avoid overhead.
-    tracesSampleRate: 0,
-  });
-}
+// Sentry is initialised in the `./instrument.js` preload (loaded via
+// `node --import ./instrument.js`), which MUST run before this module so OpenTelemetry
+// can patch http/pg/fastify for performance tracing. We only consume Sentry here
+// (captureException in the error handler below); it is a no-op when SENTRY_DSN is unset.
 
 /**
  * Translate the `message` field of a normalized error payload in place.

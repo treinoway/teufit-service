@@ -1,5 +1,7 @@
 import { prisma } from '../db.js';
 import { AppError } from '../errors/app-error.js';
+import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { lockAnamnesisForUpdate } from '../helpers/row-locks.js';
 import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
@@ -291,7 +293,9 @@ export async function deleteAnamnesis(userId, anamnesisId) {
 
   const now = new Date();
 
-  await prisma.$transaction(async (tx) => {
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockAnamnesisForUpdate(tx, anamnesisId);
+
     const sections = await tx.anamnesisSection.findMany({
       where: { anamnesisId, deletedAt: null },
       select: { id: true },
@@ -315,7 +319,7 @@ export async function deleteAnamnesis(userId, anamnesisId) {
       where: { id: anamnesisId },
       data: { deletedAt: now },
     });
-  });
+  }));
 
   return { id: anamnesisId, deletedAt: now };
 }
@@ -413,7 +417,9 @@ export async function deleteSection(userId, anamnesisId, sectionId) {
 
   const now = new Date();
 
-  await prisma.$transaction(async (tx) => {
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockAnamnesisForUpdate(tx, anamnesisId);
+
     await tx.anamnesisQuestion.updateMany({
       where: { sectionId, deletedAt: null },
       data: { deletedAt: now },
@@ -423,7 +429,7 @@ export async function deleteSection(userId, anamnesisId, sectionId) {
       where: { id: sectionId },
       data: { deletedAt: now },
     });
-  });
+  }));
 
   return { id: sectionId, deletedAt: now };
 }
@@ -446,14 +452,18 @@ export async function reorderSections(userId, anamnesisId, orderedIds) {
   await assertAnamnesisNotLinked(anamnesisId);
   await validateSectionIds(anamnesisId, orderedIds);
 
-  await prisma.$transaction(
-    orderedIds.map((sectionId, index) =>
-      prisma.anamnesisSection.update({
-        where: { id: sectionId },
-        data: { order: index },
-      }),
-    ),
-  );
+  const orderById = new Map(orderedIds.map((id, index) => [id, index]));
+  const sortedIds = [...orderedIds].sort((a, b) => (a < b ? -1 : 1));
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockAnamnesisForUpdate(tx, anamnesisId);
+    for (const id of sortedIds) {
+      await tx.anamnesisSection.update({
+        where: { id },
+        data: { order: orderById.get(id) },
+      });
+    }
+  }));
 
   const sections = await prisma.anamnesisSection.findMany({
     where: { anamnesisId, deletedAt: null },

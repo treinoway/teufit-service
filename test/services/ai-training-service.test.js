@@ -1399,6 +1399,29 @@ describe('ai-training-service', () => {
       expect(prisma.aiMessage.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'conv-1' } })
       expect(prisma.aiConversation.delete).toHaveBeenCalledWith({ where: { id: 'conv-1' } })
     })
+
+    describe('withDeadlockRetry wrapping', () => {
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('retries on deadlock error then resolves successfully', async () => {
+        prisma.aiConversation.findUnique.mockResolvedValue({ userId: 'user-1' })
+
+        const deadlockErr = Object.assign(new Error('deadlock detected'), { code: 'P2034' })
+        prisma.$transaction
+          .mockRejectedValueOnce(deadlockErr)
+          .mockResolvedValueOnce(undefined)
+
+        vi.useFakeTimers()
+
+        const promise = deleteConversation('user-1', 'conv-1')
+        await vi.runAllTimersAsync()
+        await expect(promise).resolves.toBeUndefined()
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(2)
+      })
+    })
   })
 
   // ---------------------------------------------------------------------------

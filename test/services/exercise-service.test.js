@@ -28,6 +28,7 @@ import {
   addSubstitute,
   reorderSubstitutes,
   reorderSupersetMembers,
+  dissolveSuperset,
 } from '../../src/services/exercise-service.js';
 import { ExerciseIntensityMessageCode, SupersetMessageCode, SubstituteMessageCode } from '../../src/constants/training.js';
 
@@ -92,6 +93,7 @@ describe('exercise-service', () => {
       prisma.training.findUnique.mockResolvedValue(makeTraining());
       const created = { id: 'ex1', name: 'Squat', repetitions: { min: 8, max: 12 }, prescriptionMode: 'reps' };
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([]),
@@ -209,6 +211,7 @@ describe('exercise-service', () => {
 
     function makeCreateTxMock(createdExercise, maxOrder = null) {
       return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(createdExercise),
           findMany: vi.fn().mockResolvedValue([createdExercise]),
@@ -402,6 +405,7 @@ describe('exercise-service', () => {
 
     function makeLibraryTxMock(createdExercise) {
       return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(createdExercise),
           findMany: vi.fn().mockResolvedValue([createdExercise]),
@@ -482,6 +486,7 @@ describe('exercise-service', () => {
 
     function makeIntensityTxMock(createdExercise) {
       return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(createdExercise),
           findMany: vi.fn().mockResolvedValue([createdExercise]),
@@ -556,6 +561,7 @@ describe('exercise-service', () => {
       const tplCreate = vi.fn().mockResolvedValue({ id: 'tpl1' });
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exercise: {
             findFirst: vi.fn().mockResolvedValue(null),
             create: txCreate,
@@ -591,6 +597,19 @@ describe('exercise-service', () => {
   });
 
   describe('updateExercise', () => {
+    // updateExercise wraps the actual DB write in a prisma.$transaction with a
+    // training row lock. Tests that reach the write path must wire up a txMock.
+    function makeUpdateTxMock(updatedExercise) {
+      return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockResolvedValue(updatedExercise),
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+    }
+
     it('throws EXERCISE_NOT_FOUND when exercise does not exist', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(null);
@@ -605,12 +624,13 @@ describe('exercise-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
       const updated = { id: 'ex1', notes: 'Exhale on the way up', prescriptionMode: 'reps' };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       const result = await updateExercise('u1', 'ex1', { notes: 'Exhale on the way up' });
 
       expect(result).toEqual(updated);
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ notes: 'Exhale on the way up' }),
       });
@@ -620,11 +640,12 @@ describe('exercise-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
       const updated = { id: 'ex1', notes: null };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { notes: null });
 
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ notes: null }),
       });
@@ -633,11 +654,12 @@ describe('exercise-service', () => {
     it('does not include notes in update payload when notes is not provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', name: 'Lunge' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', name: 'Lunge' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { name: 'Lunge' });
 
-      const callData = prisma.exercise.update.mock.calls[0][0].data;
+      const callData = txMock.exercise.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('notes');
     });
 
@@ -645,12 +667,13 @@ describe('exercise-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
       const updated = { id: 'ex1', restInterval: 60, prescriptionMode: 'reps' };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       const result = await updateExercise('u1', 'ex1', { restInterval: 60 });
 
       expect(result).toEqual(updated);
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ restInterval: 60 }),
       });
@@ -660,11 +683,12 @@ describe('exercise-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
       const updated = { id: 'ex1', restInterval: null };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { restInterval: null });
 
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ restInterval: null }),
       });
@@ -673,22 +697,24 @@ describe('exercise-service', () => {
     it('does not include restInterval in update payload when not provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', name: 'Lunge' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', name: 'Lunge' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { name: 'Lunge' });
 
-      const callData = prisma.exercise.update.mock.calls[0][0].data;
+      const callData = txMock.exercise.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('restInterval');
     });
 
     it('sets prescriptionMode to "duration" and nulls repetitions when switching to duration mode', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', prescriptionMode: 'duration' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', prescriptionMode: 'duration' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { prescriptionMode: 'duration', duration: 60 });
 
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ prescriptionMode: 'duration', duration: 60, repetitions: null }),
       });
@@ -697,11 +723,12 @@ describe('exercise-service', () => {
     it('sets prescriptionMode to "reps" and nulls duration when switching to reps mode', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', prescriptionMode: 'reps' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { prescriptionMode: 'reps', repetitions: { min: 6, max: 10 } });
 
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ prescriptionMode: 'reps', repetitions: { min: 6, max: 10 }, duration: null }),
       });
@@ -710,11 +737,12 @@ describe('exercise-service', () => {
     it('does not include prescriptionMode in update payload when not provided', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise());
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1' });
+      const txMock = makeUpdateTxMock({ id: 'ex1' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { name: 'Lunge' });
 
-      const callData = prisma.exercise.update.mock.calls[0][0].data;
+      const callData = txMock.exercise.update.mock.calls[0][0].data;
       expect(callData).not.toHaveProperty('prescriptionMode');
     });
 
@@ -726,7 +754,7 @@ describe('exercise-service', () => {
         updateExercise('u1', 'ex1', { repetitions: { min: -1, max: 10 } }),
       ).rejects.toMatchObject({ code: 'INVALID_REPETITIONS', statusCode: 400 });
 
-      expect(prisma.exercise.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('throws INVALID_REPETITIONS when repetitions.max is 0', async () => {
@@ -746,7 +774,7 @@ describe('exercise-service', () => {
         updateExercise('u1', 'ex1', { prescriptionMode: 'reps' }),
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', statusCode: 400 });
 
-      expect(prisma.exercise.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('M1: throws VALIDATION_ERROR when flipping to reps mode with repetitions explicitly null', async () => {
@@ -757,19 +785,18 @@ describe('exercise-service', () => {
         updateExercise('u1', 'ex1', { prescriptionMode: 'reps', repetitions: null }),
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', statusCode: 400 });
 
-      expect(prisma.exercise.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('recomputes training duration when sets is updated', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ trainingId: 'tr1' }));
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', sets: 4, prescriptionMode: 'reps' });
-      prisma.exercise.findMany.mockResolvedValue([]);
-      prisma.training.update.mockResolvedValue({});
+      const txMock = makeUpdateTxMock({ id: 'ex1', sets: 4, prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { sets: 4 });
 
-      expect(prisma.training.update).toHaveBeenCalledWith(
+      expect(txMock.training.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'tr1' }, data: { estimatedDurationSeconds: expect.any(Number) } }),
       );
     });
@@ -777,13 +804,12 @@ describe('exercise-service', () => {
     it('recomputes training duration when restInterval is updated', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ trainingId: 'tr1' }));
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', restInterval: 90, prescriptionMode: 'reps' });
-      prisma.exercise.findMany.mockResolvedValue([]);
-      prisma.training.update.mockResolvedValue({});
+      const txMock = makeUpdateTxMock({ id: 'ex1', restInterval: 90, prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { restInterval: 90 });
 
-      expect(prisma.training.update).toHaveBeenCalledWith(
+      expect(txMock.training.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'tr1' }, data: { estimatedDurationSeconds: expect.any(Number) } }),
       );
     });
@@ -791,35 +817,49 @@ describe('exercise-service', () => {
     it('does not recompute training duration when only notes is updated', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ trainingId: 'tr1' }));
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', notes: 'Exhale on the way up', prescriptionMode: 'reps' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', notes: 'Exhale on the way up', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { notes: 'Exhale on the way up' });
 
-      expect(prisma.training.update).not.toHaveBeenCalled();
+      expect(txMock.training.update).not.toHaveBeenCalled();
     });
 
     it('does not recompute training duration when only name is updated', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ trainingId: 'tr1' }));
-      prisma.exercise.update.mockResolvedValue({ id: 'ex1', name: 'Squat v2', prescriptionMode: 'reps' });
+      const txMock = makeUpdateTxMock({ id: 'ex1', name: 'Squat v2', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       await updateExercise('u1', 'ex1', { name: 'Squat v2' });
 
-      expect(prisma.training.update).not.toHaveBeenCalled();
+      expect(txMock.training.update).not.toHaveBeenCalled();
     });
   });
 
   describe('updateExercise — intensity', () => {
+    function makeUpdateTxMock(updatedExercise) {
+      return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockResolvedValue(updatedExercise),
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+    }
+
     it('persists intensity when set on a cardio exercise', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'cardio', intensity: null }));
       const updated = { id: 'ex1', type: 'cardio', intensity: 'vigorous', prescriptionMode: 'reps' };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       const result = await updateExercise('u1', 'ex1', { intensity: 'vigorous' });
 
       expect(result).toEqual(updated);
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ intensity: 'vigorous' }),
       });
@@ -837,7 +877,7 @@ describe('exercise-service', () => {
         statusCode: 400,
       });
 
-      expect(prisma.exercise.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('throws VALIDATION_ERROR when changing type to strength while intensity is set on the exercise', async () => {
@@ -852,19 +892,20 @@ describe('exercise-service', () => {
         statusCode: 400,
       });
 
-      expect(prisma.exercise.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('accepts clearing intensity to null on a cardio exercise', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.exercise.findUnique.mockResolvedValue(makeExercise({ type: 'cardio', intensity: 'light' }));
       const updated = { id: 'ex1', type: 'cardio', intensity: null, prescriptionMode: 'reps' };
-      prisma.exercise.update.mockResolvedValue(updated);
+      const txMock = makeUpdateTxMock(updated);
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
 
       const result = await updateExercise('u1', 'ex1', { intensity: null });
 
       expect(result).toEqual(updated);
-      expect(prisma.exercise.update).toHaveBeenCalledWith({
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ intensity: null }),
       });
@@ -897,6 +938,7 @@ describe('exercise-service', () => {
 
       const created = { id: 'ex1', trainingId: 'tr1', sets: 3, repetitions: { min: 8, max: 12 }, prescriptionMode: 'reps', restInterval: 60, substituteForExerciseId: null, deletedAt: null };
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([created]),
@@ -920,6 +962,7 @@ describe('exercise-service', () => {
 
       const created = { id: 'ex9', trainingId: 'tr1', order: 4, prescriptionMode: 'reps', substituteForExerciseId: null, deletedAt: null };
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([created]),
@@ -958,6 +1001,7 @@ describe('exercise-service', () => {
 
     function makeTxMock(created) {
       return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           create: vi.fn().mockResolvedValue(created),
           findMany: vi.fn().mockResolvedValue([created]),
@@ -1077,7 +1121,7 @@ describe('exercise-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.training.findUnique.mockResolvedValue(makeTrainingWithExercises(activeExercises));
 
-      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      const txMock = { $queryRaw: vi.fn().mockResolvedValue([]), exercise: { update: vi.fn().mockResolvedValue({}) } };
       prisma.$transaction.mockImplementation((fn) => fn(txMock));
 
       return { txMock, exerciseIds };
@@ -1349,7 +1393,7 @@ describe('exercise-service', () => {
         ],
       });
 
-      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      const txMock = { $queryRaw: vi.fn().mockResolvedValue([]), exercise: { update: vi.fn().mockResolvedValue({}) } };
       prisma.$transaction.mockImplementation((fn) => fn(txMock));
 
       // Move the superset group after ex3 — still contiguous
@@ -1366,6 +1410,7 @@ describe('exercise-service', () => {
   describe('deleteExercise — cascade and superset cleanup', () => {
     function makeDeleteTxMock({ findManyResult = [] } = {}) {
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exercise: {
           update: vi.fn().mockResolvedValue({}),
           updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -1536,6 +1581,7 @@ describe('exercise-service', () => {
       const created = { id: 'sub-1', name: 'Alt', substituteOrder: 0, substituteForExerciseId: 'principal-1', prescriptionMode: 'reps' };
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exercise: {
             findFirst: vi.fn().mockResolvedValue(null),
             create: vi.fn().mockResolvedValue(created),
@@ -1561,6 +1607,7 @@ describe('exercise-service', () => {
       const txCreate = vi.fn().mockResolvedValue(created);
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exercise: {
             findFirst: vi.fn().mockResolvedValue(null), // no existing substitutes
             create: txCreate,
@@ -1594,6 +1641,7 @@ describe('exercise-service', () => {
       const txCreate = vi.fn().mockResolvedValue(created);
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exercise: {
             findFirst: vi.fn().mockResolvedValue({ substituteOrder: 0 }), // one existing
             create: txCreate,
@@ -1699,7 +1747,7 @@ describe('exercise-service', () => {
         { id: 'sub2', name: 'Alt 2' },
       ]);
 
-      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      const txMock = { $queryRaw: vi.fn().mockResolvedValue([]), exercise: { update: vi.fn().mockResolvedValue({}) } };
       prisma.$transaction.mockImplementation((fn) => fn(txMock));
 
       const result = await reorderSubstitutes('u1', 'principal-1', ['sub2', 'sub1']);
@@ -1766,7 +1814,7 @@ describe('exercise-service', () => {
         { id: 'ex2', name: 'Flye' },
       ]);
 
-      const txMock = { exercise: { update: vi.fn().mockResolvedValue({}) } };
+      const txMock = { $queryRaw: vi.fn().mockResolvedValue([]), exercise: { update: vi.fn().mockResolvedValue({}) } };
       prisma.$transaction.mockImplementation((fn) => fn(txMock));
 
       const result = await reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex2', 'ex1']);
@@ -1777,6 +1825,390 @@ describe('exercise-service', () => {
       ]);
       expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex2' }, data: { supersetOrder: 0 } });
       expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'ex1' }, data: { supersetOrder: 1 } });
+    });
+  });
+
+  // ─── lockTrainingForUpdate — call ordering ────────────────────────────────────
+
+  describe('lockTrainingForUpdate — lock ordering', () => {
+    it('calls $queryRaw before exercise.create in createExercise happy path', async () => {
+      const makeTrainingForLock = () => ({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
+      });
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingForLock());
+      const created = { id: 'ex1', prescriptionMode: 'reps' };
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          create: vi.fn().mockResolvedValue(created),
+          findMany: vi.fn().mockResolvedValue([created]),
+          aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
+        },
+        exerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.create.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('calls $queryRaw before exercise.update in deleteExercise (soft-delete principal)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(
+        makeExercise({ substituteForExerciseId: null, supersetGroupId: null, trainingId: 'tr1' }),
+      );
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      await deleteExercise('u1', 'ex1');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('calls $queryRaw before exercise.update in reorderExercisesInTraining', async () => {
+      const exercises = [
+        { id: 'ex1', name: 'Squat' },
+        { id: 'ex2', name: 'Lunge' },
+      ];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+        exercises: exercises.map((e) => ({ ...e, substituteForExerciseId: null, supersetGroupId: null })),
+      });
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation((fn) => fn(txMock));
+
+      await reorderExercisesInTraining('u1', 'tr1', ['ex2', 'ex1']);
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.update.mock.invocationCallOrder[0],
+      );
+    });
+  });
+
+  // ─── reorderExercisesInTraining — UUID-sorted lock order ─────────────────────
+
+  describe('reorderExercisesInTraining — id-sorted lock order', () => {
+    it('applies exercise.update calls in ascending UUID order regardless of input order', async () => {
+      // These UUIDs have a known sort order: aaa-id < mmm-id < zzz-id
+      const exerciseIds = ['zzz-id', 'aaa-id', 'mmm-id'];
+      const exercises = [
+        { id: 'zzz-id', name: 'Z Exercise', substituteForExerciseId: null, supersetGroupId: null },
+        { id: 'aaa-id', name: 'A Exercise', substituteForExerciseId: null, supersetGroupId: null },
+        { id: 'mmm-id', name: 'M Exercise', substituteForExerciseId: null, supersetGroupId: null },
+      ];
+
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue({
+        id: 'tr1',
+        deletedAt: null,
+        trainingProtocol: { trainerId: 't1', deletedAt: null },
+        exercises,
+      });
+
+      const updateCalls = [];
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockImplementation(async (args) => {
+            updateCalls.push(args.where.id);
+            return {};
+          }),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await reorderExercisesInTraining('u1', 'tr1', exerciseIds);
+
+      // Updates must be applied in ascending UUID order (aaa < mmm < zzz)
+      expect(updateCalls).toEqual(['aaa-id', 'mmm-id', 'zzz-id']);
+
+      // But assigned order values must follow the INPUT array positions
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'zzz-id' }, data: { order: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'aaa-id' }, data: { order: 1 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'mmm-id' }, data: { order: 2 } });
+    });
+  });
+
+  // ─── reorderSubstitutes — lock ordering ──────────────────────────────────────
+
+  describe('reorderSubstitutes — lock ordering', () => {
+    const makePrincipalRow = (overrides = {}) => ({
+      id: 'principal-1',
+      trainingId: 'tr1',
+      deletedAt: null,
+      substituteForExerciseId: null,
+      training: { deletedAt: null, trainingProtocol: { trainerId: 't1', deletedAt: null } },
+      ...overrides,
+    });
+
+    it('calls $queryRaw lock before the first exercise.update inside the transaction', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'sub1', name: 'Alt 1' },
+        { id: 'sub2', name: 'Alt 2' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await reorderSubstitutes('u1', 'principal-1', ['sub2', 'sub1']);
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('applies exercise.update calls in ascending UUID order regardless of input order', async () => {
+      // zzz-sub > mmm-sub > aaa-sub lexicographically; input order is zzz, aaa, mmm
+      const inputOrder = ['zzz-sub', 'aaa-sub', 'mmm-sub'];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'zzz-sub', name: 'Z Sub' },
+        { id: 'aaa-sub', name: 'A Sub' },
+        { id: 'mmm-sub', name: 'M Sub' },
+      ]);
+
+      const updateCalls = [];
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockImplementation(async (args) => {
+            updateCalls.push(args.where.id);
+            return {};
+          }),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await reorderSubstitutes('u1', 'principal-1', inputOrder);
+
+      // Updates applied in ascending UUID order (aaa < mmm < zzz)
+      expect(updateCalls).toEqual(['aaa-sub', 'mmm-sub', 'zzz-sub']);
+    });
+
+    it('returned array preserves input order with correct substituteOrder index values', async () => {
+      const inputOrder = ['zzz-sub', 'aaa-sub', 'mmm-sub'];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makePrincipalRow());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'zzz-sub', name: 'Z Sub' },
+        { id: 'aaa-sub', name: 'A Sub' },
+        { id: 'mmm-sub', name: 'M Sub' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await reorderSubstitutes('u1', 'principal-1', inputOrder);
+
+      // Return order must follow the caller's input, not the DB apply order
+      expect(result).toEqual([
+        { id: 'zzz-sub', name: 'Z Sub', substituteOrder: 0 },
+        { id: 'aaa-sub', name: 'A Sub', substituteOrder: 1 },
+        { id: 'mmm-sub', name: 'M Sub', substituteOrder: 2 },
+      ]);
+
+      // The substituteOrder values written to DB must also match input-position
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'zzz-sub' }, data: { substituteOrder: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'aaa-sub' }, data: { substituteOrder: 1 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'mmm-sub' }, data: { substituteOrder: 2 } });
+    });
+  });
+
+  // ─── reorderSupersetMembers — lock ordering ───────────────────────────────────
+
+  describe('reorderSupersetMembers — lock ordering', () => {
+    it('calls $queryRaw lock before the first exercise.update inside the transaction', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1', name: 'Bench' },
+        { id: 'ex2', name: 'Flye' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await reorderSupersetMembers('u1', 'tr1', 'group-a', ['ex2', 'ex1']);
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.update.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('applies exercise.update calls in ascending UUID order regardless of input order', async () => {
+      // zzz-ex > mmm-ex > aaa-ex lexicographically; input order is zzz, aaa, mmm
+      const inputOrder = ['zzz-ex', 'aaa-ex', 'mmm-ex'];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'zzz-ex', name: 'Z Member' },
+        { id: 'aaa-ex', name: 'A Member' },
+        { id: 'mmm-ex', name: 'M Member' },
+      ]);
+
+      const updateCalls = [];
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: {
+          update: vi.fn().mockImplementation(async (args) => {
+            updateCalls.push(args.where.id);
+            return {};
+          }),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await reorderSupersetMembers('u1', 'tr1', 'group-a', inputOrder);
+
+      // Updates applied in ascending UUID order (aaa < mmm < zzz)
+      expect(updateCalls).toEqual(['aaa-ex', 'mmm-ex', 'zzz-ex']);
+    });
+
+    it('returned array preserves input order with correct supersetOrder index values', async () => {
+      const inputOrder = ['zzz-ex', 'aaa-ex', 'mmm-ex'];
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'zzz-ex', name: 'Z Member' },
+        { id: 'aaa-ex', name: 'A Member' },
+        { id: 'mmm-ex', name: 'M Member' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await reorderSupersetMembers('u1', 'tr1', 'group-a', inputOrder);
+
+      // Return order must follow the caller's input, not the DB apply order
+      expect(result).toEqual([
+        { id: 'zzz-ex', name: 'Z Member', supersetOrder: 0 },
+        { id: 'aaa-ex', name: 'A Member', supersetOrder: 1 },
+        { id: 'mmm-ex', name: 'M Member', supersetOrder: 2 },
+      ]);
+
+      // The supersetOrder values written to DB must also match input-position
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'zzz-ex' }, data: { supersetOrder: 0 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'aaa-ex' }, data: { supersetOrder: 1 } });
+      expect(txMock.exercise.update).toHaveBeenCalledWith({ where: { id: 'mmm-ex' }, data: { supersetOrder: 2 } });
+    });
+  });
+
+  // ─── dissolveSuperset — lock ordering ────────────────────────────────────────
+
+  describe('dissolveSuperset — lock ordering', () => {
+    it('calls $queryRaw lock before exercise.updateMany inside the transaction', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1' },
+        { id: 'ex2' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await dissolveSuperset('u1', 'tr1', 'group-a');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.exercise.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('issues updateMany with correct where/data payload to clear the group', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1' },
+        { id: 'ex2' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await dissolveSuperset('u1', 'tr1', 'group-a');
+
+      expect(txMock.exercise.updateMany).toHaveBeenCalledWith({
+        where: { trainingId: 'tr1', supersetGroupId: 'group-a', deletedAt: null },
+        data: { supersetGroupId: null, supersetOrder: 0 },
+      });
+    });
+
+    it('returns dissolvedCount equal to the number of pre-locked members', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTraining());
+      prisma.exercise.findMany.mockResolvedValue([
+        { id: 'ex1' },
+        { id: 'ex2' },
+        { id: 'ex3' },
+      ]);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { updateMany: vi.fn().mockResolvedValue({ count: 3 }) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      const result = await dissolveSuperset('u1', 'tr1', 'group-a');
+
+      expect(result).toEqual({
+        supersetGroupId: 'group-a',
+        trainingId: 'tr1',
+        dissolvedCount: 3,
+      });
     });
   });
 });

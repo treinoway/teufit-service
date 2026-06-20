@@ -409,6 +409,14 @@ For new routes that return semantic 4xx/5xx data (not errors), add a similar exc
 plugin scope in server.js — otherwise authenticate runs on /health and blocks unauthenticated monitors.
 Current position: after `asaasWebhookRoutes`, before the protected routes block.
 
+## Deadlock hardening — shared helpers (2026-06-20)
+- `src/helpers/row-locks.js` → exports `lockTrainingForUpdate`, `lockWorkoutSessionForUpdate`, `lockAnamnesisForUpdate`. Call as FIRST statement inside any write transaction on those tables.
+- `src/helpers/db-retry.js` → `withDeadlockRetry(fn)` — wrap any `() => prisma.$transaction(...)` factory.
+- Pattern: `withDeadlockRetry(() => prisma.$transaction(async (tx) => { await lockXForUpdate(tx, id); ...writes... }))`.
+- Reorder anti-deadlock: build `orderById = new Map(orderedIds.map((id,i) => [id,i]))`, then apply in `[...orderedIds].sort()` order (ascending UUID) inside the tx. Return value reflects INPUT-order positions.
+- When adding `lockXForUpdate` to an existing transaction, ALL existing tx mocks in tests that use that transaction MUST get `$queryRaw: vi.fn().mockResolvedValue([])` in the tx object. Missing it causes `TypeError: tx.$queryRaw is not a function`.
+- Exercise-service no longer owns a local `lockTrainingForUpdate` — it imports from `row-locks.js`.
+
 ## Prisma 7.x groupBy panic — `having: {}` crashes the query engine
 **Symptom**: `PrismaClientRustPanicError` / "entered unreachable code" at `group_by.rs:136`
 **Root cause**: Empty `having: {}` in a `groupBy()` call hits an unreachable branch in Prisma 7's query compiler.

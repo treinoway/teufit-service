@@ -7,6 +7,12 @@ export default {
     // Optional — all Sentry calls are no-ops when DSN is absent.
     dsn: process.env.SENTRY_DSN || null,
     environment: process.env.SENTRY_ENVIRONMENT || 'beta',
+    // Fraction of requests traced for performance (0..1). Default 0.1 (10%) keeps
+    // prod within Sentry quota; set SENTRY_TRACES_SAMPLE_RATE=1.0 in staging for
+    // full traces, or =0 to disable tracing in an environment. Empty/unset → 0.1.
+    tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE
+      ? Number(process.env.SENTRY_TRACES_SAMPLE_RATE)
+      : 0.1,
   },
   asaas: {
     apiKey: process.env.ASAAS_API_KEY,

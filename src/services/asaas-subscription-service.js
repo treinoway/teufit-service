@@ -45,8 +45,14 @@ export async function createOrGetAsaasCustomer(prisma, asaasConfig, httpClient, 
     return asaasClient.getCustomer(httpClient, asaasConfig, subscription.asaasCustomerId);
   }
 
+  // User has no `name` column — build a display name from first/last, falling back to
+  // email so Asaas (which requires a non-empty customer name) never gets undefined.
+  const displayName =
+    [trainer.user.firstName, trainer.user.lastName].filter(Boolean).join(' ') ||
+    trainer.user.email;
+
   const asaasCustomer = await asaasClient.createCustomer(httpClient, asaasConfig, {
-    name: trainer.user.name,
+    name: displayName,
     email: trainer.user.email,
   });
 
@@ -194,7 +200,7 @@ function validateTierUpgradeable(tier) {
 async function findTrainerWithUser(prisma, trainerId) {
   const trainer = await prisma.trainer.findUnique({
     where: { id: trainerId },
-    include: { user: { select: { name: true, email: true } } },
+    include: { user: { select: { firstName: true, lastName: true, email: true } } },
   });
   if (!trainer) {
     throw new AppError({

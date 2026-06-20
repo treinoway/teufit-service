@@ -12,6 +12,8 @@ import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
 import { awardWorkoutCompletionPoints } from './gamification-service.js';
 import { markBriefingDirty } from './briefing-service.js';
+import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { lockWorkoutSessionForUpdate } from '../helpers/row-locks.js';
 
 // ─── Briefing invalidation helper ────────────────────────────────────────────
 
@@ -905,7 +907,9 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
     });
   }
 
-  const newLog = await prisma.$transaction(async (tx) => {
+  const newLog = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockWorkoutSessionForUpdate(tx, sessionId);
+
     // Shift all logs after the principal up by 1 so the substitute lands at an integer slot
     await tx.exerciseLog.updateMany({
       where: {
@@ -933,7 +937,7 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
       },
       include: { setLogs: { orderBy: { setNumber: 'asc' } } },
     });
-  });
+  }));
 
   return newLog;
 }
@@ -985,7 +989,9 @@ export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId
     });
   }
 
-  await prisma.$transaction(async (tx) => {
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockWorkoutSessionForUpdate(tx, sessionId);
+
     // Reset principal: clear substitution marker and restore PENDING status
     await tx.exerciseLog.update({
       where: { id: principalLog.id },
@@ -1008,7 +1014,7 @@ export async function undoSubstituteExerciseLog(userId, sessionId, exerciseLogId
       },
       data: { order: { decrement: 1 } },
     });
-  });
+  }));
 }
 
 /**

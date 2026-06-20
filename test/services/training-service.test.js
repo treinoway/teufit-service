@@ -587,6 +587,23 @@ describe('training-service', () => {
       // The training was not returned (transaction did not complete)
       expect(prisma.training.findUnique).not.toHaveBeenCalled();
     });
+
+    it('retries once on deadlock and succeeds on second attempt', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(makeTemplate({ trainingTemplateExerciseTemplates: [] }));
+
+      const deadlockErr = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+      const successResult = { id: 'training-1', exercises: [] };
+      prisma.$transaction
+        .mockRejectedValueOnce(deadlockErr)
+        .mockResolvedValueOnce(successResult);
+
+      const result = await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(result).toEqual(successResult);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('deleteTraining', () => {

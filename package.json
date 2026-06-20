@@ -8,8 +8,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node api/index.js",
-    "dev": "node --watch api/index.js",
+    "start": "node --import ./instrument.js api/index.js",
+    "dev": "node --watch --import ./instrument.js api/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky",

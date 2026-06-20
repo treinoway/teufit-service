@@ -25,6 +25,7 @@ import { updateTraining } from "./training-service.js";
 import { updateExercise } from "./exercise-service.js";
 
 import { getLlmProvider } from "../llm/index.js";
+import { withDeadlockRetry } from "../helpers/db-retry.js";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
 
@@ -1326,7 +1327,7 @@ async function executeTool(userId, toolName, toolInput) {
           existingTemplatesForSnapshot.map((t) => [t.id, t]),
         );
 
-        result = await prisma.$transaction(async (tx) => {
+        result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           // Batch create exercise templates; collect full data for snapshot
           const createdExerciseSnapshots = [];
           if (inlineExercises.length > 0) {
@@ -1420,7 +1421,7 @@ async function executeTool(userId, toolName, toolInput) {
           });
 
           return trainingTemplate;
-        });
+        }));
         break;
       }
 
@@ -1459,7 +1460,7 @@ async function executeTool(userId, toolName, toolInput) {
           }
         }
 
-        result = await prisma.$transaction(async (tx) => {
+        result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           const resolvedTrainings = [];
 
           for (const training of input.trainings || []) {
@@ -1637,7 +1638,7 @@ async function executeTool(userId, toolName, toolInput) {
           });
 
           return protocol;
-        });
+        }));
 
         await maybeMarkFirstProtocolCreated({ trainerId: trainer.id });
         break;
@@ -1693,7 +1694,7 @@ async function executeTool(userId, toolName, toolInput) {
           });
         }
 
-        result = await prisma.$transaction(async (tx) => {
+        result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           const createdTrainings = [];
 
           for (const training of input.trainings) {
@@ -1745,7 +1746,7 @@ async function executeTool(userId, toolName, toolInput) {
           }
 
           return createdTrainings;
-        });
+        }));
 
         break;
       }
@@ -1849,7 +1850,7 @@ async function executeTool(userId, toolName, toolInput) {
           });
         }
 
-        result = await prisma.$transaction(async (tx) => {
+        result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           const created = [];
           for (const exercise of input.exercises) {
             validateExerciseType(exercise.type);
@@ -1876,7 +1877,7 @@ async function executeTool(userId, toolName, toolInput) {
             created.push(ex);
           }
           return created;
-        });
+        }));
         break;
       }
 
@@ -2840,10 +2841,10 @@ export async function deleteConversation(userId, conversationId) {
     });
   }
 
-  await prisma.$transaction([
+  await withDeadlockRetry(() => prisma.$transaction([
     prisma.aiMessage.deleteMany({ where: { conversationId } }),
     prisma.aiConversation.delete({ where: { id: conversationId } }),
-  ]);
+  ]));
 }
 
 // Export internal functions for testing

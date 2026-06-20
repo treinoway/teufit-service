@@ -19,6 +19,8 @@ import {
   SubstituteMessageCode,
 } from '../constants/training.js';
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
+import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { lockTrainingForUpdate } from '../helpers/row-locks.js';
 import { randomUUID } from 'crypto';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
@@ -206,7 +208,8 @@ export async function createExercise(userId, trainingId, data) {
     return normalizeExercisePrescriptionMode(exercise);
   }
 
-  const exercise = await prisma.$transaction(async (tx) => {
+  const exercise = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
     const order = data.order !== undefined
       ? data.order
       : await resolveAppendOrder(tx, trainingId);
@@ -216,7 +219,7 @@ export async function createExercise(userId, trainingId, data) {
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
-  });
+  }));
 
   return normalizeExercisePrescriptionMode(exercise);
 }
@@ -236,7 +239,8 @@ export async function createExercise(userId, trainingId, data) {
  * All queries and mutations run inside a single $transaction.
  */
 async function createSupersetMemberAtomically(trainingId, data, trainerId) {
-  return prisma.$transaction(async (tx) => {
+  return withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
     const allActive = await tx.exercise.findMany({
       where: { trainingId, deletedAt: null },
       orderBy: { order: 'asc' },
@@ -311,7 +315,7 @@ async function createSupersetMemberAtomically(trainingId, data, trainerId) {
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
-  });
+  }));
 }
 
 /**
@@ -365,7 +369,8 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     intensity: effectiveIntensity,
   };
 
-  const exercise = await prisma.$transaction(async (tx) => {
+  const exercise = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
     const order = data.order !== undefined
       ? data.order
       : await resolveAppendOrder(tx, trainingId);
@@ -377,7 +382,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
-  });
+  }));
 
   return normalizeExercisePrescriptionMode(exercise);
 }
@@ -583,14 +588,17 @@ export async function updateExercise(userId, exerciseId, data) {
   const durationAffectingFields = ['sets', 'repetitions', 'duration', 'prescriptionMode', 'restInterval'];
   const shouldRecompute = durationAffectingFields.some((field) => data[field] !== undefined);
 
-  const updated = await prisma.exercise.update({
-    where: { id: exerciseId },
-    data: updateData,
-  });
-
-  if (shouldRecompute) {
-    await recomputeTrainingDuration(prisma, exercise.trainingId);
-  }
+  const updated = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, exercise.trainingId);
+    const result = await tx.exercise.update({
+      where: { id: exerciseId },
+      data: updateData,
+    });
+    if (shouldRecompute) {
+      await recomputeTrainingDuration(tx, exercise.trainingId);
+    }
+    return result;
+  }));
 
   return normalizeExercisePrescriptionMode(updated);
 }
@@ -691,8 +699,9 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
     });
   }
 
-  // Build a map of proposed new orders
-  const proposedOrderMap = new Map(exerciseIds.map((id, index) => [id, index]));
+  // Build a map of proposed new orders (index = new order value). Used for both
+  // superset contiguity validation and the atomic update inside the transaction.
+  const proposedOrderById = new Map(exerciseIds.map((id, index) => [id, index]));
 
   // Check that no superset group is broken by the new order
   const groupIds = [...new Set(
@@ -703,7 +712,7 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
 
   for (const groupId of groupIds) {
     const members = activeExercises.filter((e) => e.supersetGroupId === groupId);
-    const memberOrders = members.map((e) => proposedOrderMap.get(e.id)).sort((a, b) => a - b);
+    const memberOrders = members.map((e) => proposedOrderById.get(e.id)).sort((a, b) => a - b);
     const minOrder = memberOrders[0];
     const maxOrder = memberOrders[memberOrders.length - 1];
 
@@ -728,16 +737,19 @@ export async function reorderExercisesInTraining(userId, trainingId, exerciseIds
 
   const activeExerciseById = Object.fromEntries(principalExercises.map((e) => [e.id, e]));
 
-  await prisma.$transaction((tx) =>
-    Promise.all(
-      exerciseIds.map((id, index) =>
-        tx.exercise.update({
-          where: { id },
-          data: { order: index },
-        }),
-      ),
-    ),
-  );
+  // Sort exercise IDs by their own UUID so all concurrent transactions acquire row locks
+  // in the same order — eliminating intra-transaction lock cycles on the exercise rows.
+  const sortedIds = [...exerciseIds].sort((a, b) => (a < b ? -1 : 1));
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
+    for (const id of sortedIds) {
+      await tx.exercise.update({
+        where: { id },
+        data: { order: proposedOrderById.get(id) },
+      });
+    }
+  }));
 
   return {
     trainingId,
@@ -819,7 +831,8 @@ export async function deleteExercise(userId, exerciseId) {
 
   const now = new Date();
 
-  await prisma.$transaction(async (tx) => {
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, exercise.trainingId);
     // Soft-delete the exercise itself
     await tx.exercise.update({
       where: { id: exerciseId },
@@ -856,7 +869,7 @@ export async function deleteExercise(userId, exerciseId) {
     if (exercise.substituteForExerciseId === null) {
       await recomputeTrainingDuration(tx, exercise.trainingId);
     }
-  });
+  }));
 
   return exercise;
 }
@@ -909,7 +922,8 @@ export async function addSubstitute(userId, principalId, data) {
 
   // substituteOrder lookup + create in one transaction — prevents two concurrent adds
   // from computing the same substituteOrder value (race condition).
-  const substitute = await prisma.$transaction(async (tx) => {
+  const substitute = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, principal.trainingId);
     const lastSubstitute = await tx.exercise.findFirst({
       where: { substituteForExerciseId: principalId, deletedAt: null },
       orderBy: { substituteOrder: 'desc' },
@@ -925,7 +939,7 @@ export async function addSubstitute(userId, principalId, data) {
     );
 
     return tx.exercise.create({ data: substituteData });
-  });
+  }));
 
   return normalizeExercisePrescriptionMode(substitute);
 }
@@ -996,16 +1010,20 @@ export async function reorderSubstitutes(userId, principalId, substituteIds) {
 
   const substituteById = Object.fromEntries(activeSubstitutes.map((e) => [e.id, e]));
 
-  await prisma.$transaction((tx) =>
-    Promise.all(
-      substituteIds.map((id, index) =>
-        tx.exercise.update({
-          where: { id },
-          data: { substituteOrder: index },
-        }),
-      ),
-    ),
-  );
+  // Lock the training row first, then apply updates in id-sorted order so all
+  // concurrent transactions acquire exercise-row locks in the same order — no cycle.
+  const orderById = new Map(substituteIds.map((id, index) => [id, index]));
+  const sortedIds = [...substituteIds].sort((a, b) => (a < b ? -1 : 1));
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, principal.trainingId);
+    for (const id of sortedIds) {
+      await tx.exercise.update({
+        where: { id },
+        data: { substituteOrder: orderById.get(id) },
+      });
+    }
+  }));
 
   return substituteIds.map((id, index) => ({
     id,
@@ -1077,16 +1095,20 @@ export async function reorderSupersetMembers(userId, trainingId, supersetGroupId
 
   const memberById = Object.fromEntries(members.map((e) => [e.id, e]));
 
-  await prisma.$transaction((tx) =>
-    Promise.all(
-      exerciseIds.map((id, index) =>
-        tx.exercise.update({
-          where: { id },
-          data: { supersetOrder: index },
-        }),
-      ),
-    ),
-  );
+  // Lock the training row first, then apply updates in id-sorted order so all
+  // concurrent transactions acquire exercise-row locks in the same order — no cycle.
+  const orderById = new Map(exerciseIds.map((id, index) => [id, index]));
+  const sortedIds = [...exerciseIds].sort((a, b) => (a < b ? -1 : 1));
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
+    for (const id of sortedIds) {
+      await tx.exercise.update({
+        where: { id },
+        data: { supersetOrder: orderById.get(id) },
+      });
+    }
+  }));
 
   return exerciseIds.map((id, index) => ({
     id,
@@ -1142,7 +1164,8 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
 
   const supersetGroupId = randomUUID();
 
-  const updatedMembers = await prisma.$transaction(async (tx) => {
+  const updatedMembers = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
     const allActive = await tx.exercise.findMany({
       where: { trainingId, deletedAt: null },
       orderBy: { order: 'asc' },
@@ -1230,7 +1253,7 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
     }
 
     return results;
-  });
+  }));
 
   return {
     supersetGroupId,
@@ -1276,10 +1299,15 @@ export async function dissolveSuperset(userId, trainingId, groupId) {
     });
   }
 
-  await prisma.exercise.updateMany({
-    where: { trainingId, supersetGroupId: groupId, deletedAt: null },
-    data: { supersetGroupId: null, supersetOrder: 0 },
-  });
+  // Lock the training row first so this multi-row update coordinates with all other
+  // training-scoped writers in a single consistent order — no lock cycle.
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
+    await tx.exercise.updateMany({
+      where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+      data: { supersetGroupId: null, supersetOrder: 0 },
+    });
+  }));
 
   return {
     supersetGroupId: groupId,

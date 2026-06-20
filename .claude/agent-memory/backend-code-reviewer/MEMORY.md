@@ -4,3 +4,4 @@
 - [Mocked Prisma masks DB violations](feedback_mocked_prisma_hides_bugs.md) — fractional writes to Int cols & FK cascade collisions hide behind `$transaction` mocks
 - [Shared schemas leak forbidden fields](feedback_shared_schema_leaks.md) — reused `*BodyProperties` blocks let invariants slip past validation on specialized routes
 - [Migration drift: ai_interaction_logs](project_migration_drift_ai_logs.md) — feature migrations auto-pick-up unrelated `DROP DEFAULT` drift; scan for stray ALTERs
+- [Concurrency write-path checklist](feedback_concurrency_write_paths.md) — deadlock/lock-ordering fixes in exercise-service miss reorderSubstitutes/reorderSupersetMembers/dissolveSuperset; Promise.all reorders reintroduce lock cycles

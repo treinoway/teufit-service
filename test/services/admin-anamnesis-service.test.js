@@ -297,6 +297,7 @@ describe('admin-anamnesis-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisSection: {
             findMany: vi.fn().mockResolvedValue(sections),
             updateMany: vi.fn().mockResolvedValue({ count: 2 }),
@@ -314,6 +315,26 @@ describe('admin-anamnesis-service', () => {
       const result = await deletePublicAnamnesis('anamnesis-1');
 
       expect(result).toMatchObject({ id: 'anamnesis-1', deletedAt: expect.any(Date) });
+    });
+
+    it('lock fires on anamnesis row before first section/question write', async () => {
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.studentAnamnesis.count.mockResolvedValue(0);
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        anamnesisSection: { findMany: vi.fn().mockResolvedValue([]) },
+        anamnesisQuestion: { updateMany: vi.fn() },
+        anamnesis: { update: vi.fn().mockResolvedValue(makeAnamnesis({ deletedAt: new Date() })) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await deletePublicAnamnesis('anamnesis-1');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.anamnesis.update.mock.invocationCallOrder[0],
+      );
     });
   });
 
@@ -397,6 +418,7 @@ describe('admin-anamnesis-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisQuestion: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
           anamnesisSection: {
             update: vi.fn().mockResolvedValue(makeSection({ deletedAt: new Date() })),
@@ -409,6 +431,25 @@ describe('admin-anamnesis-service', () => {
 
       expect(result).toMatchObject({ id: 'section-1', deletedAt: expect.any(Date) });
     });
+
+    it('lock fires on anamnesis row before question and section writes', async () => {
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
+
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        anamnesisQuestion: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        anamnesisSection: { update: vi.fn().mockResolvedValue(makeSection({ deletedAt: new Date() })) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await deletePublicSection('anamnesis-1', 'section-1');
+
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.anamnesisQuestion.updateMany.mock.invocationCallOrder[0],
+      );
+    });
   });
 
   // ── reorderPublicSections ─────────────────────────────────────────────────
@@ -418,8 +459,15 @@ describe('admin-anamnesis-service', () => {
       prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
 
       const orderedIds = ['section-2', 'section-1'];
-      prisma.$transaction.mockImplementation(async (updates) => Promise.all(updates));
-      prisma.anamnesisSection.update.mockResolvedValue(makeSection());
+
+      const txUpdate = vi.fn().mockResolvedValue(makeSection());
+      prisma.$transaction.mockImplementation(async (fn) => {
+        const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
+          anamnesisSection: { update: txUpdate },
+        };
+        return fn(tx);
+      });
       prisma.anamnesisSection.findMany.mockResolvedValue([
         makeSection({ id: 'section-2', order: 0 }),
         makeSection({ id: 'section-1', order: 1 }),
@@ -427,14 +475,55 @@ describe('admin-anamnesis-service', () => {
 
       const result = await reorderPublicSections('anamnesis-1', orderedIds);
 
-      expect(prisma.anamnesisSection.update).toHaveBeenCalledTimes(2);
-      expect(prisma.anamnesisSection.update).toHaveBeenCalledWith(
+      expect(txUpdate).toHaveBeenCalledTimes(2);
+      expect(txUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'section-2' }, data: { order: 0 } }),
       );
-      expect(prisma.anamnesisSection.update).toHaveBeenCalledWith(
+      expect(txUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'section-1' }, data: { order: 1 } }),
       );
       expect(result).toHaveLength(2);
+    });
+
+    it('lock fires before first update and updates applied in id-sorted order', async () => {
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+
+      // Input order: zzz < aaa < mmm (non-alphabetical)
+      const orderedIds = ['zzz-sec', 'aaa-sec', 'mmm-sec'];
+
+      const updateCalls = [];
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        anamnesisSection: {
+          update: vi.fn().mockImplementation(async (args) => {
+            updateCalls.push(args.where.id);
+            return makeSection({ id: args.where.id });
+          }),
+        },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      prisma.anamnesisSection.findMany.mockResolvedValue([
+        makeSection({ id: 'zzz-sec', order: 0 }),
+        makeSection({ id: 'aaa-sec', order: 1 }),
+        makeSection({ id: 'mmm-sec', order: 2 }),
+      ]);
+
+      await reorderPublicSections('anamnesis-1', orderedIds);
+
+      // Lock must fire before first update
+      expect(txMock.$queryRaw).toHaveBeenCalledOnce();
+      expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        txMock.anamnesisSection.update.mock.invocationCallOrder[0],
+      );
+
+      // Updates applied in ascending UUID sort order
+      expect(updateCalls).toEqual(['aaa-sec', 'mmm-sec', 'zzz-sec']);
+
+      // Order values follow the INPUT array positions: zzz→0, aaa→1, mmm→2
+      expect(txMock.anamnesisSection.update).toHaveBeenCalledWith({ where: { id: 'zzz-sec' }, data: { order: 0 } });
+      expect(txMock.anamnesisSection.update).toHaveBeenCalledWith({ where: { id: 'aaa-sec' }, data: { order: 1 } });
+      expect(txMock.anamnesisSection.update).toHaveBeenCalledWith({ where: { id: 'mmm-sec' }, data: { order: 2 } });
     });
   });
 
