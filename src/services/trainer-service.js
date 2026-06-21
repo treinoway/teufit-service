@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import { Prisma } from '@prisma/client';
 import _ from 'lodash';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
+import emailHandler from '../config/email-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { NotFoundAppError, ConflictAppError, AppError } from '../errors/app-error.js';
 import {
@@ -218,6 +219,19 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
   // extra latency is negligible vs. the risk of losing the dirty signal.
   // Hot-path mutations (set logs, sessions) use fire-and-forget instead.
   await markBriefingDirty(prisma, trainerId);
+
+  // Notify the student of the new link (closed beta welcome). Fire-and-forget:
+  // an email failure must never break the link operation.
+  try {
+    const trainerUser = await prisma.user.findUnique({
+      where: { id: trainerUserId },
+      select: { firstName: true, lastName: true },
+    });
+    const trainerName = `${trainerUser?.firstName ?? ''} ${trainerUser?.lastName ?? ''}`.trim();
+    await emailHandler.sendStudentLinkedEmail({ to: student.email, trainerName });
+  } catch (emailError) {
+    console.error('Failed to send student-linked email', emailError);
+  }
 
   const avatarUrl = await s3BucketHandler.resolveUrl(student.avatarUrl);
 

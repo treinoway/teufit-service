@@ -44,8 +44,16 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
   },
 }));
 
+// Mock the email handler — sending is fire-and-forget and tested via the mock.
+vi.mock('../../src/config/email-handler.js', () => ({
+  default: {
+    sendStudentLinkedEmail: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
+import emailHandler from '../../src/config/email-handler.js';
 import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 
@@ -220,6 +228,7 @@ describe('linkStudentByEmail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
+    emailHandler.sendStudentLinkedEmail.mockResolvedValue(undefined);
   });
 
   it('throws student.notFound when no user exists with the given email', async () => {
@@ -278,13 +287,16 @@ describe('linkStudentByEmail', () => {
   });
 
   it('creates the link and returns student profile on success', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      id: 'user-student',
-      email: 'student@example.com',
-      firstName: 'Jane',
-      lastName: 'Doe',
-      avatarUrl: 's3://some-key',
-    });
+    // First findUnique resolves the student (by email), second resolves the trainer (by id).
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-student',
+        email: 'student@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: 's3://some-key',
+      })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
     prisma.trainerStudent.findUnique.mockResolvedValue(null);
     prisma.trainerStudent.create.mockResolvedValue({ id: 'link1', trainerId: 'trainer1', studentId: 'user-student' });
     s3BucketHandler.resolveUrl.mockResolvedValue('https://cdn.example.com/avatar.jpg');
@@ -306,6 +318,94 @@ describe('linkStudentByEmail', () => {
       lastName: 'Doe',
       avatarUrl: 'https://cdn.example.com/avatar.jpg',
     });
+  });
+
+  it('sends a student-linked email with the trainer name on success', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-student',
+        email: 'student@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+
+    await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+    });
+
+    expect(emailHandler.sendStudentLinkedEmail).toHaveBeenCalledWith({
+      to: 'student@example.com',
+      trainerName: 'John Trainer',
+    });
+  });
+
+  it('falls back to an empty trainerName when the trainer has no name set', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-student',
+        email: 'student@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce({ firstName: null, lastName: null });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+
+    await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+    });
+
+    expect(emailHandler.sendStudentLinkedEmail).toHaveBeenCalledWith({
+      to: 'student@example.com',
+      trainerName: '',
+    });
+  });
+
+  it('still links the student when the email send fails', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-student',
+        email: 'student@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+    emailHandler.sendStudentLinkedEmail.mockRejectedValueOnce(new Error('resend down'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+    });
+
+    expect(prisma.trainerStudent.create).toHaveBeenCalledWith({
+      data: { trainerId: 'trainer1', studentId: 'user-student' },
+    });
+    expect(result).toMatchObject({ id: 'user-student', email: 'student@example.com' });
+    consoleSpy.mockRestore();
+  });
+
+  it('does not send an email when the link fails validation', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'unknown@example.com' }),
+    ).rejects.toMatchObject({ messageCode: 'student.notFound' });
+
+    expect(emailHandler.sendStudentLinkedEmail).not.toHaveBeenCalled();
   });
 });
 
