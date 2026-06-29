@@ -312,6 +312,47 @@ describe('createProtocolWithTrainings', () => {
       expect(createCall.data.trainings.create).toHaveLength(0);
     });
 
+    it('auto-assigns sequential order 0..n-1 when exercises omit order', async () => {
+      const trainings = [
+        {
+          name: 'Treino A',
+          category: 'strength',
+          order: 0,
+          exercises: [
+            { name: 'Squat', type: 'strength' },
+            { name: 'Bench', type: 'strength' },
+            { name: 'Deadlift', type: 'strength' },
+          ],
+        },
+      ];
+
+      await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings }));
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const exercises = createCall.data.trainings.create[0].exercises.create;
+      expect(exercises.map((e) => e.order)).toEqual([0, 1, 2]);
+    });
+
+    it('preserves explicit exercise order when provided', async () => {
+      const trainings = [
+        {
+          name: 'Treino A',
+          category: 'strength',
+          order: 0,
+          exercises: [
+            { name: 'Squat', type: 'strength', order: 5 },
+            { name: 'Bench', type: 'strength', order: 2 },
+          ],
+        },
+      ];
+
+      await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings }));
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const exercises = createCall.data.trainings.create[0].exercises.create;
+      expect(exercises.map((e) => e.order)).toEqual([5, 2]);
+    });
+
     it('works with training that has empty exercises array', async () => {
       const trainings = [{ name: 'Treino Vazio', category: 'rest', order: 0, exercises: [] }];
 

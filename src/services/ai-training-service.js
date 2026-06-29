@@ -1716,7 +1716,7 @@ async function executeTool(userId, toolName, toolInput) {
             });
 
             if (training.exercises?.length) {
-              for (const exercise of training.exercises) {
+              for (const [index, exercise] of training.exercises.entries()) {
                 validateExerciseType(exercise.type);
                 if (exercise.repetitions)
                   validateRepetitions(exercise.repetitions);
@@ -1728,6 +1728,9 @@ async function executeTool(userId, toolName, toolInput) {
                   data: {
                     name: exercise.name,
                     type: exercise.type,
+                    // Sequential order by position; without it Prisma's @default(0)
+                    // makes every exercise share order=0 and breaks execution ordering.
+                    order: exercise.order ?? index,
                     sets: exercise.sets || null,
                     repetitions,
                     duration,

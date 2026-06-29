@@ -481,7 +481,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
   const trainingsData = template.trainings.map((templateTraining) => {
     const { trainingTemplate } = templateTraining;
     const exerciseCreateData = trainingTemplate.trainingTemplateExerciseTemplates.map(
-      buildNestedExerciseCreateData,
+      (exercise, index) => buildNestedExerciseCreateData(exercise, index),
     );
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
@@ -544,7 +544,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
  * Used by both importFromTemplate and createProtocolWithTrainings so that any
  * new exercise field only needs to be added here.
  */
-function buildNestedExerciseCreateData(exercise) {
+function buildNestedExerciseCreateData(exercise, index) {
   const resolvedMode = resolvePrescriptionMode(exercise.prescriptionMode, exercise);
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exercise);
 
@@ -553,7 +553,10 @@ function buildNestedExerciseCreateData(exercise) {
     name: exercise.name,
     type: exercise.type,
     videoUrl: exercise.videoUrl ?? null,
-    order: exercise.order,
+    // Fall back to array position when the client omits `order`; otherwise every
+    // exercise inherits Prisma's @default(0) and the training is created with a
+    // duplicated/zeroed order, which breaks execution ordering (orderBy order asc).
+    order: exercise.order ?? index,
     sets: exercise.sets ?? null,
     repetitions,
     duration,
@@ -644,7 +647,9 @@ function collectTemplateIds(trainings) {
 function buildTrainingsData(trainings) {
   return trainings.map((training) => {
     const exercises = training.exercises ?? [];
-    const exerciseCreateData = exercises.map(buildNestedExerciseCreateData);
+    const exerciseCreateData = exercises.map((exercise, index) =>
+      buildNestedExerciseCreateData(exercise, index),
+    );
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
     return {
