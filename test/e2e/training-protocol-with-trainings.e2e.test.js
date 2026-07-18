@@ -439,7 +439,7 @@ e2eDescribe('e2e: POST /trainer/protocols/with-trainings', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns 400 when unknown fields are passed in body', async () => {
+    it('silently strips unknown fields from the body (removeAdditional default)', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: studentId, email: studentEmail } = await createStudentWithToken();
       await linkStudentToTrainer(trainerToken, studentEmail);
@@ -450,11 +450,15 @@ e2eDescribe('e2e: POST /trainer/protocols/with-trainings', () => {
         headers: { authorization: `Bearer ${trainerToken}` },
         payload: {
           ...makeMinimalPayload(studentId),
-          unknownField: 'should be rejected',
+          unknownField: 'should be stripped',
         },
       });
 
-      expect(response.statusCode).toBe(400);
+      // Fastify's schema validation strips additionalProperties silently
+      // (removeAdditional: true default) — unknown keys are ignored, not 400'd.
+      // Same documented behavior as exercise.e2e.test.js.
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).not.toHaveProperty('unknownField');
     });
 
     it('returns 400 for invalid status enum value', async () => {

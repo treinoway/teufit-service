@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -43,7 +45,14 @@ e2eDescribe('e2e: training protocols', () => {
     expect(becomeTrainerResponse.statusCode).toBe(200);
     const { token: { accessToken: trainerToken } } = becomeTrainerResponse.json();
 
-    return { userId, accessToken: trainerToken };
+    const trainerRecord = await prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    await provisionTrainerPlan(trainerRecord.id);
+
+    return { userId, trainerId: trainerRecord.id, accessToken: trainerToken };
   }
 
   async function createAssigneeWithToken(firstName = 'John', lastName = 'Doe') {
@@ -68,10 +77,15 @@ e2eDescribe('e2e: training protocols', () => {
     return { userId, accessToken };
   }
 
+  async function linkStudentToTrainer(trainerId, studentId) {
+    await prisma.trainerStudent.create({ data: { trainerId, studentId } });
+  }
+
   describe('POST /trainer/protocols', () => {
     it('creates protocol and returns assignee with id, firstName, lastName, avatarUrl', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken('Jane', 'Smith');
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -140,8 +154,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('GET /trainer/protocols', () => {
     it('returns protocols with assignee info', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken('Maria', 'Silva');
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       await app.inject({
         method: 'POST',
@@ -174,8 +189,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('GET /trainer/protocols/:id', () => {
     it('returns protocol by id with assignee', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken('Carlos', 'Santos');
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -209,8 +225,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('PATCH /trainer/protocols/:id', () => {
     it('updates protocol and returns assignee', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken('Ana', 'Costa');
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -247,8 +264,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('GET /my/protocols', () => {
     it('returns protocols assigned to authenticated user', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken('Pedro', 'Lima');
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       await app.inject({
         method: 'POST',
@@ -279,8 +297,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('DELETE /trainer/protocols/:id', () => {
     it('returns 409 when protocol status is active', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -305,8 +324,9 @@ e2eDescribe('e2e: training protocols', () => {
     });
 
     it('returns 200 when protocol status is completed', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -334,8 +354,9 @@ e2eDescribe('e2e: training protocols', () => {
     });
 
     it('returns 200 when protocol status is archived', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -389,8 +410,9 @@ e2eDescribe('e2e: training protocols', () => {
 
   describe('i18n labels — training protocol', () => {
     it('GET /trainer/protocols returns statusLabel in pt-BR', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       await app.inject({
         method: 'POST',
@@ -412,8 +434,9 @@ e2eDescribe('e2e: training protocols', () => {
     });
 
     it('GET /trainer/protocols returns statusLabel in en-US', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       await app.inject({
         method: 'POST',
@@ -435,8 +458,9 @@ e2eDescribe('e2e: training protocols', () => {
     });
 
     it('GET /my/protocols returns categoryLabel for nested trainings in pt-BR', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const createResponse = await app.inject({
         method: 'POST',
@@ -502,8 +526,9 @@ e2eDescribe('e2e: training protocols', () => {
     }
 
     it('GET /trainer/protocols/:id exposes estimatedDurationSeconds on nested trainings', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const { protocolId, trainingId } = await buildProtocolWithTrainingAndExercise(trainerToken, assigneeId);
 
@@ -523,8 +548,9 @@ e2eDescribe('e2e: training protocols', () => {
     });
 
     it('GET /my/protocols/:id exposes estimatedDurationSeconds on nested trainings', async () => {
-      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const { protocolId, trainingId } = await buildProtocolWithTrainingAndExercise(trainerToken, assigneeId);
 

@@ -167,7 +167,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     const res = await app.inject({
       method: 'GET',
       url: getUrl(),
-      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US' },
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US', 'app-timezone': 'UTC' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -289,13 +289,13 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     const ptRes = await app.inject({
       method: 'GET',
       url: getUrl(),
-      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'pt-BR' },
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'pt-BR', 'app-timezone': 'UTC' },
     });
 
     const enRes = await app.inject({
       method: 'GET',
       url: getUrl(),
-      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US' },
+      headers: { authorization: `Bearer ${studentToken}`, 'app-language': 'en-US', 'app-timezone': 'UTC' },
     });
 
     expect(ptRes.statusCode).toBe(200);

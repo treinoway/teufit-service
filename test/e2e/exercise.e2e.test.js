@@ -271,7 +271,7 @@ e2eDescribe('e2e: exercises', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const templates = response.json();
+        const { data: templates } = response.json();
         expect(templates).toHaveLength(1);
         expect(templates[0]).toHaveProperty('name', 'Squat');
       });
@@ -1301,7 +1301,7 @@ e2eDescribe('e2e: exercises', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const [template] = response.json();
+      const { data: [template] } = response.json();
       expect(template.type).toBe('strength');
       expect(template.typeLabel).toBe('Força');
     });
@@ -1323,7 +1323,7 @@ e2eDescribe('e2e: exercises', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const [template] = response.json();
+      const { data: [template] } = response.json();
       expect(template.type).toBe('strength');
       expect(template.typeLabel).toBe('Strength');
     });

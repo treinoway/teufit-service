@@ -23,8 +23,8 @@ const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 // Helpers
 // ---------------------------------------------------------------------------
 
-const MULTIPART_BOUNDARY = '----WebKitFormBoundary7MA4YWxkTrZu0gW';
-const MULTIPART_CONTENT_TYPE = `multipart/form-data; boundary=--${MULTIPART_BOUNDARY}`;
+const MULTIPART_BOUNDARY = 'WebKitFormBoundary7MA4YWxkTrZu0gW';
+const MULTIPART_CONTENT_TYPE = `multipart/form-data; boundary=${MULTIPART_BOUNDARY}`;
 
 function buildMinimalXlsxBuffer() {
   const workbook = xlsx.utils.book_new();
@@ -39,12 +39,12 @@ function buildMinimalXlsxBuffer() {
 
 function buildMultipartPayload({ filename, mimetype, content }) {
   const parts = [];
-  parts.push(`------${MULTIPART_BOUNDARY}`);
+  parts.push(`--${MULTIPART_BOUNDARY}`);
   parts.push(`Content-Disposition: form-data; name="file"; filename="${filename}"`);
   parts.push(`Content-Type: ${mimetype}`);
   parts.push('');
   parts.push(content.toString('binary'));
-  parts.push(`------${MULTIPART_BOUNDARY}--`);
+  parts.push(`--${MULTIPART_BOUNDARY}--`);
 
   return {
     payload: parts.join('\r\n'),

@@ -59,13 +59,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
   describe('POST /nutritionist/patients', () => {
     it('links a patient and returns the link with patient info', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       const res = await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       expect(res.statusCode).toBe(201);
@@ -78,13 +78,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('links a patient with optional notes', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { email: patientEmail } = await createPatientWithToken();
 
       const res = await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId, notes: 'Paciente com restrição a lactose' },
+        payload: { email: patientEmail, notes: 'Paciente com restrição a lactose' },
       });
 
       expect(res.statusCode).toBe(201);
@@ -93,20 +93,20 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('returns 409 when patient is already linked', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       const res = await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       expect(res.statusCode).toBe(409);
@@ -118,13 +118,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('returns 404 when patient user does not exist', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const fakePatientId = '00000000-0000-0000-0000-000000000000';
+      const fakePatientEmail = 'nonexistent-patient@example.com';
 
       const res = await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId: fakePatientId },
+        payload: { email: fakePatientEmail },
       });
 
       expect(res.statusCode).toBe(404);
@@ -146,13 +146,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('returns 403 when user is not a nutritionist', async () => {
       const { accessToken } = await createPatientWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { email: patientEmail } = await createPatientWithToken();
 
       const res = await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       expect(res.statusCode).toBe(403);
@@ -160,14 +160,14 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('re-links a previously unlinked patient successfully', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       // link
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       // unlink
@@ -182,7 +182,7 @@ e2eDescribe('e2e: nutritionist patients', () => {
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       expect(res.statusCode).toBe(201);
@@ -208,13 +208,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('returns linked patients with patient info', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       const res = await app.inject({
@@ -231,13 +231,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('does not return unlinked (soft-deleted) patients', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       await app.inject({
@@ -267,13 +267,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
   describe('DELETE /nutritionist/patients/:patientId', () => {
     it('unlinks a patient and returns the updated link record', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       const res = await app.inject({
@@ -317,13 +317,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
   describe('PUT /nutritionist/patients/:patientId/metabolic-profile', () => {
     it('creates metabolic profile with weight and height', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       const res = await app.inject({
@@ -342,7 +342,7 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('calculates TMB and GET when formula and activity level are provided', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       // Update patient profile so the service can derive age/gender
       const { accessToken: _patientToken } = await app
@@ -357,7 +357,7 @@ e2eDescribe('e2e: nutritionist patients', () => {
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       const res = await app.inject({
@@ -398,13 +398,13 @@ e2eDescribe('e2e: nutritionist patients', () => {
 
     it('updates an existing metabolic profile (upsert)', async () => {
       const { accessToken } = await createNutritionistWithToken();
-      const { userId: patientId } = await createPatientWithToken();
+      const { userId: patientId, email: patientEmail } = await createPatientWithToken();
 
       await app.inject({
         method: 'POST',
         url: '/nutritionist/patients',
         headers: { authorization: `Bearer ${accessToken}` },
-        payload: { patientId },
+        payload: { email: patientEmail },
       });
 
       await app.inject({

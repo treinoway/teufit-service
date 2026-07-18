@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -43,7 +45,14 @@ e2eDescribe('e2e: training protocol templates', () => {
     expect(becomeTrainerResponse.statusCode).toBe(200);
     const { token: { accessToken: trainerToken } } = becomeTrainerResponse.json();
 
-    return { userId, accessToken: trainerToken };
+    const trainerRecord = await prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    await provisionTrainerPlan(trainerRecord.id);
+
+    return { userId, trainerId: trainerRecord.id, accessToken: trainerToken };
   }
 
   async function createAssigneeWithToken() {
@@ -59,6 +68,10 @@ e2eDescribe('e2e: training protocol templates', () => {
     const { user: { id: userId }, token: { accessToken } } = signupResponse.json();
 
     return { userId, accessToken };
+  }
+
+  async function linkStudentToTrainer(trainerId, studentId) {
+    await prisma.trainerStudent.create({ data: { trainerId, studentId } });
   }
 
   async function createTrainingTemplate(accessToken, overrides = {}) {
@@ -538,8 +551,9 @@ e2eDescribe('e2e: training protocol templates', () => {
 
   describe('POST /trainer/protocols/import-from-template (with trainings)', () => {
     it('imports protocol and creates trainings with weekDay from template', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
       const tt = await createTrainingTemplate(accessToken, { name: 'Bench Press', category: 'strength' });
 
       const templateResponse = await createProtocolTemplate(accessToken, {
@@ -580,8 +594,9 @@ e2eDescribe('e2e: training protocol templates', () => {
     });
 
     it('imports protocol with no trainings when template has no trainings', async () => {
-      const { accessToken } = await createTrainerWithToken();
+      const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: assigneeId } = await createAssigneeWithToken();
+      await linkStudentToTrainer(trainerId, assigneeId);
 
       const templateResponse = await createProtocolTemplate(accessToken, {
         name: 'Empty Template',

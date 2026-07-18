@@ -581,22 +581,21 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       expect(turn3Res.statusCode).toBe(200)
       expect(turn3Res.json().actionsExecuted).toHaveLength(1)
 
-      // Fetch conversation and check that tool_result and rawContent were persisted
-      const convRes = await app.inject({
-        method: 'GET',
-        url: `/trainer/ai/conversations/${conversationId}`,
-        headers: { authorization: `Bearer ${accessToken}` },
+      // The GET /conversations/:id endpoint deliberately filters out role: 'tool_result'
+      // rows and omits rawContent from its select (internal-only fields — see
+      // getConversation in src/services/ai-training-service.js). So persistence must be
+      // verified directly against the DB rather than through the filtered endpoint.
+      const persistedMessages = await prisma.aiMessage.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'asc' },
       })
-      expect(convRes.statusCode).toBe(200)
-
-      const { messages } = convRes.json()
 
       // A tool_result message should exist
-      const toolResultMsg = messages.find((m) => m.role === 'tool_result')
+      const toolResultMsg = persistedMessages.find((m) => m.role === 'tool_result')
       expect(toolResultMsg).toBeDefined()
 
       // The assistant message that triggered the tool should have rawContent
-      const assistantMsgWithRaw = messages.find(
+      const assistantMsgWithRaw = persistedMessages.find(
         (m) => m.role === 'assistant' && m.rawContent != null,
       )
       expect(assistantMsgWithRaw).toBeDefined()

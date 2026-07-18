@@ -289,7 +289,7 @@ e2eDescribe('e2e: admin anamnesis', () => {
       expect(body.description).toBe('Updated description');
     });
 
-    it('can update even when anamnesis is linked to a student (no 409)', async () => {
+    it('returns 409 when updating an anamnesis that is linked to a student', async () => {
       const { accessToken: adminToken } = await createAdminWithToken();
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: studentId, email: studentEmail } = await createStudentWithToken();
@@ -313,7 +313,10 @@ e2eDescribe('e2e: admin anamnesis', () => {
         payload: { anamnesisId },
       });
 
-      // Admin updates — should succeed even though it's linked
+      // Admin update is blocked while the anamnesis is linked to a student
+      // (assertAnamnesisNotLinked in admin-anamnesis-service.js — the guard was
+      // deliberately added in "Add support for interval"; editing a linked
+      // template must go through the fork flow instead).
       const response = await app.inject({
         method: 'PATCH',
         url: `/admin/anamneses/${anamnesisId}`,
@@ -321,8 +324,8 @@ e2eDescribe('e2e: admin anamnesis', () => {
         payload: { title: 'Still Updated' },
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().title).toBe('Still Updated');
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ error: 'ANAMNESIS_HAS_STUDENT_LINKS' });
     });
   });
 

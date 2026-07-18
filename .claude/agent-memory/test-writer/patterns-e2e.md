@@ -134,3 +134,17 @@ async function createProtocol(trainerId, assigneeId, overrides = {}) {
 Fastify 5 uses AJV with `removeAdditional: true` by default (confirmed in `node_modules/fastify/build/build-validation.js`). Extra fields in the request body are silently stripped — the server returns 2xx, not 400. Do NOT write tests asserting `statusCode 400` because a prescription/unknown field was sent. Instead, assert:
 - The response is 201/200
 - The response body does NOT contain those extra fields
+
+But a **missing required** field is NOT forgiven by `removeAdditional` — that still throws AJV's `required` error → 400, regardless of what other (stripped) extra fields were present. This matters when a test sends a wrong-shaped body to a 401/403 test (see below).
+
+## Body-schema validation runs at different points relative to auth depending on whether auth is global or route-local
+
+`api/server.js` wraps almost every route module (`trainerRoutes`, `nutritionistPatientRoutes`, `userRoutes`, etc.) in one `fastify.register(async (fastify) => { fastify.addHook('onRequest', authenticate); ... })` block (around line 326-360). Fastify's lifecycle is `onRequest → preParsing → preValidation → Validation → preHandler → Handler`. So:
+- **Missing/invalid auth** → caught by the global `onRequest` hook, which runs *before* body validation → correctly returns 401 even if the test's payload is garbage/wrong-shaped for the route's schema.
+- **Wrong role** (`requireRole(...)` in the route's own `preHandler` array) runs *after* body validation. If the test's payload doesn't satisfy the route's body schema (e.g. missing a required field), AJV rejects it with 400 *before* `requireRole` ever runs — the test will get 400, not the expected 403.
+
+Practical rule for writing "returns 403 when wrong role" tests: always send a schema-valid body (right shape, right required fields), even though the value's specific content doesn't matter for a role test — see `trainer-student.e2e.test.js`'s `returns 403 when the user does not have the TRAINER role` test, which sends `payload: { email: 'anyone@example.com' }` rather than an empty or wrong-shaped object. A "401 without authentication" test, by contrast, can get away with a garbage body precisely because the global `onRequest` auth hook short-circuits before validation.
+
+## Nutritionist/trainer "link by X" endpoints use email, not internal ID
+
+`POST /nutritionist/patients` and `POST /trainer/students` both link by the **patient/student's email** in the request body (`{ email }`, not `{ patientId }` / `{ studentId }`) — confirmed in `src/services/nutritionist-patient-service.js` (`linkPatient(db, nutritionistUserId, email, data)`) and `src/services/trainer-service.js` (`linkStudentByEmail`). The internal user ID is only used in URL path params for unlink/list-item/metabolic-profile operations, never in the link-creation body. If an E2E test for one of these link endpoints sends `{ patientId }`/`{ studentId }` in the body, that's a stale test, not a source bug — fix the test to look up `email` from the helper that creates the patient/student user (most of these helpers already return `email` alongside `userId`).

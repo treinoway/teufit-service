@@ -242,6 +242,7 @@ e2eDescribe('e2e: auth flows', () => {
       const loginResponse = await app.inject({
         method: 'POST',
         url: '/auth/login',
+        headers: { 'app-language': 'en-US' },
         payload: { email, password: 'WrongPassw0rd!' },
       });
 
@@ -257,6 +258,7 @@ e2eDescribe('e2e: auth flows', () => {
       const loginResponse = await app.inject({
         method: 'POST',
         url: '/auth/login',
+        headers: { 'app-language': 'en-US' },
         payload: { email: `nonexistent-${Date.now()}@example.com`, password: 'SomePassw0rd!' },
       });
 

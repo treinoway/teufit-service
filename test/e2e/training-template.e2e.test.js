@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { prisma } from '../../src/db.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -93,7 +94,30 @@ e2eDescribe('e2e: training templates', () => {
     return { userId, accessToken };
   }
 
+  // Platform plan guard (assertStudentActiveOnPlan) requires an active
+  // TrainerStudent link before protocol creation. Resolve trainer.id via /me
+  // and upsert the link.
+  async function activatePlanLink(trainerToken, assigneeId) {
+    const meRes = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: { authorization: `Bearer ${trainerToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const trainer = await prisma.trainer.findUnique({
+      where: { userId: meRes.json().id },
+      select: { id: true },
+    });
+    await prisma.trainerStudent.upsert({
+      where: { trainerId_studentId: { trainerId: trainer.id, studentId: assigneeId } },
+      create: { trainerId: trainer.id, studentId: assigneeId, activeOnPlan: true },
+      update: { activeOnPlan: true },
+    });
+  }
+
   async function createProtocol(accessToken, assigneeId) {
+    await activatePlanLink(accessToken, assigneeId);
+
     const response = await app.inject({
       method: 'POST',
       url: '/trainer/protocols',
@@ -359,7 +383,7 @@ e2eDescribe('e2e: training templates', () => {
       });
 
       expect(exerciseTemplatesResponse.statusCode).toBe(200);
-      const templates = exerciseTemplatesResponse.json();
+      const { data: templates } = exerciseTemplatesResponse.json();
       const original = templates.find((t) => t.id === exerciseTemplate.id);
       expect(original).toBeDefined();
       // Library template has no prescription fields
@@ -550,7 +574,7 @@ e2eDescribe('e2e: training templates', () => {
         headers: { authorization: `Bearer ${accessToken}` },
       });
       expect(libraryResponse.statusCode).toBe(200);
-      const library = libraryResponse.json();
+      const { data: library } = libraryResponse.json();
       expect(library.some((t) => t.id === created.exerciseTemplateId)).toBe(true);
     });
 
@@ -666,7 +690,7 @@ e2eDescribe('e2e: training templates', () => {
         url: '/trainer/exercise-templates',
         headers: { authorization: `Bearer ${accessToken}` },
       });
-      const beforeCount = beforeResponse.json().length;
+      const beforeCount = beforeResponse.json().total;
 
       await app.inject({
         method: 'POST',
@@ -680,7 +704,7 @@ e2eDescribe('e2e: training templates', () => {
         url: '/trainer/exercise-templates',
         headers: { authorization: `Bearer ${accessToken}` },
       });
-      expect(afterResponse.json().length).toBe(beforeCount);
+      expect(afterResponse.json().total).toBe(beforeCount);
     });
 
     it('assigns order = (max + 1) when exercises already exist', async () => {
