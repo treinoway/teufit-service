@@ -37,7 +37,7 @@ class EmailHandler {
         }
 
         return this.resendClient.emails.send({
-            from: 'noreply@contato.treinoway.com.br',
+            from: 'noreply@teufit.com.br',
             to,
             html: htmlContent,
             subject: subject,
@@ -178,7 +178,7 @@ class EmailHandler {
         }
 
         return this.resendClient.emails.send({
-            from: 'onboarding@contato.treinoway.com.br',
+            from: 'onboarding@teufit.com.br',
             to,
             html: htmlContent,
             subject: subject,
@@ -289,7 +289,7 @@ class EmailHandler {
         }
 
         return this.resendClient.emails.send({
-            from: 'onboarding@contato.treinoway.com.br',
+            from: 'onboarding@teufit.com.br',
             to,
             html: htmlContent,
             subject: subject,
