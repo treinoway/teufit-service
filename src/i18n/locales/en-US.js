@@ -118,6 +118,13 @@ export default {
       in_person: 'In Person',
       hybrid: 'Hybrid',
     },
+    studentBlocker: {
+      no_active_protocol: 'No active routine',
+      no_subscription: 'No plan',
+      subscription_cancelled: 'Plan cancelled',
+      subscription_overdue: 'Payment overdue',
+      blocked_on_plan: 'Blocked by your quota',
+    },
     mealType: {
       breakfast: 'Breakfast',
       lunch: 'Lunch',
@@ -332,6 +339,10 @@ export default {
     'platformPlan.paymentOverdue': 'There is an overdue payment. Please settle it to keep your plan active.',
     'platformPlan.invalidTier': 'Invalid plan.',
     'platformPlan.alreadyOnTier': 'You are already on this plan.',
+
+    // Asaas webhook (machine-to-machine — message rarely surfaced to a human, but
+    // must not read as a user auth error when someone is debugging the integration)
+    'webhook.invalidSecret': 'Invalid or missing webhook signature.',
 
     // Bulk protocol creation
     'protocol.trainingTemplateNotOwned': 'One or more training templates do not belong to your profile.',

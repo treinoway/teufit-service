@@ -1188,7 +1188,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"uuid-student-1\",\n    \"email\": \"student@example.com\",\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/ana.jpg\",\n    \"adherence\": 75.0,\n    \"adherenceCompleted\": 6,\n    \"adherenceExpected\": 8,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": \"2026-05-16T10:30:00.000Z\",\n    \"currentPrLoad\": 85.0,\n    \"currentPrAt\": \"2026-05-10T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"uuid-student-2\",\n    \"email\": \"student2@example.com\",\n    \"firstName\": \"Carlos\",\n    \"lastName\": \"Mendes\",\n    \"avatarUrl\": null,\n    \"adherence\": null,\n    \"adherenceCompleted\": null,\n    \"adherenceExpected\": null,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": null,\n    \"currentPrLoad\": null,\n    \"currentPrAt\": null\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"uuid-student-1\",\n    \"email\": \"student@example.com\",\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/ana.jpg\",\n    \"adherence\": 75.0,\n    \"adherenceCompleted\": 6,\n    \"adherenceExpected\": 8,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": \"2026-05-16T10:30:00.000Z\",\n    \"currentPrLoad\": 85.0,\n    \"currentPrAt\": \"2026-05-10T09:00:00.000Z\",\n    \"ready\": true,\n    \"blockers\": [],\n    \"blockersLabel\": []\n  },\n  {\n    \"id\": \"uuid-student-2\",\n    \"email\": \"student2@example.com\",\n    \"firstName\": \"Carlos\",\n    \"lastName\": \"Mendes\",\n    \"avatarUrl\": null,\n    \"adherence\": null,\n    \"adherenceCompleted\": null,\n    \"adherenceExpected\": null,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": null,\n    \"currentPrLoad\": null,\n    \"currentPrAt\": null,\n    \"ready\": false,\n    \"blockers\": [\"no_active_protocol\", \"no_subscription\"],\n    \"blockersLabel\": [\"Sem rotina ativa\", \"Sem plano\"]\n  }\n]"
             }
           ]
         },
@@ -1278,6 +1278,52 @@
             "description": "Unlink a student from the authenticated trainer. Requires TRAINER role. Returns 204 on success. Returns 404 if the student is not linked to this trainer."
           },
           "response": []
+        },
+        {
+          "name": "Get Trainer Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "dashboard"
+              ]
+            },
+            "description": "Returns aggregated \"Torre de Controle\" KPIs (plans, routines, finance, engagement) for the trainer Home screen. Requires TRAINER role. Rate limited: 60 requests/minute. engagement.* (except weekPrCount) is read from the trainer briefing snapshot and may be up to ~1 day stale; every other field is computed live."
+          },
+          "response": [
+            {
+              "name": "Get Trainer Dashboard - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/dashboard",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "dashboard"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"plans\": {\n    \"expiredCount\": 3,\n    \"renewingSoonCount\": 2\n  },\n  \"routines\": {\n    \"expiredCount\": 4,\n    \"expiringSoonCount\": 2\n  },\n  \"finance\": {\n    \"monthReceived\": \"2500.00\",\n    \"totalReceived\": \"12000.00\",\n    \"overdueCount\": 3,\n    \"overdueAmount\": \"450.00\"\n  },\n  \"engagement\": {\n    \"inactiveStudentsCount\": 5,\n    \"adherenceMonthPct\": \"78.50\",\n    \"adherenceDeltaPp\": \"3.20\",\n    \"weekPrCount\": 4\n  },\n  \"generatedAt\": \"2026-07-14T12:00:00.000Z\"\n}"
+            }
+          ]
         }
       ]
     },

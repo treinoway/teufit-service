@@ -1,5 +1,5 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
-import { i18nField } from '../../src/i18n/schema-helpers.js';
+import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
 
 const trainerProfileResponseSchema = {
   type: 'object',
@@ -160,6 +160,26 @@ const studentItemSchema = {
   },
 };
 
+// Extended shape returned ONLY by GET /trainer/students (trainer-service.js
+// listStudents). Do NOT spread `ready`/`blockers` into searchStudentsSchema or
+// linkStudentSchema below — searchStudents is a latency-sensitive typeahead
+// path and intentionally does not run the extra readiness queries, and
+// linkStudentByEmail returning blockers would be new, unrequested scope.
+// Keeping this as a separate schema (instead of adding the fields to the
+// shared studentItemSchema) is what keeps that contract true — see
+// computeStudentBlockers()/listStudents() in trainer-service.js.
+const studentListItemSchema = {
+  type: 'object',
+  properties: {
+    ...studentItemSchema.properties,
+    ready: {
+      type: 'boolean',
+      description: 'true when blockers is empty — the student is fully operational.',
+    },
+    ...i18nArrayField('blockers', 'studentBlocker'),
+  },
+};
+
 export const patchTrainerSchema = {
   tags: ['trainer'],
   summary: 'Update trainer profile',
@@ -258,7 +278,7 @@ export const listStudentsSchema = {
   response: {
     200: {
       type: 'array',
-      items: studentItemSchema,
+      items: studentListItemSchema,
     },
     401: errorResponseSchema,
     403: errorResponseSchema,

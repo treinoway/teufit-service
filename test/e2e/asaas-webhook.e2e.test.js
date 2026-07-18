@@ -13,15 +13,15 @@ e2eDescribe('e2e: asaas webhook route', () => {
   let app;
 
   beforeAll(async () => {
-    // Set webhook secret so validation is enabled
-    process.env.ASAAS_WEBHOOK_SECRET = WEBHOOK_SECRET;
-    process.env.ASAAS_ENV = 'sandbox';
+    // ASAAS_WEBHOOK_SECRET is set via vitest.config.js `test.env` (applied before any
+    // module import, including config/index.js). Mutating process.env here would be a
+    // no-op — config/index.js snapshots it once at import time — so WEBHOOK_SECRET
+    // below must match the value configured there.
     app = await setupApp();
   });
 
   afterAll(async () => {
     if (app) await app.close();
-    delete process.env.ASAAS_WEBHOOK_SECRET;
   });
 
   beforeEach(async () => {
@@ -103,6 +103,10 @@ e2eDescribe('e2e: asaas webhook route', () => {
         payload: { event: 'PAYMENT_CONFIRMED' },
       });
       expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({
+        error: 'UNAUTHORIZED',
+        messageCode: 'webhook.invalidSecret',
+      });
     });
 
     it('returns 401 with missing webhook secret header', async () => {
@@ -113,12 +117,64 @@ e2eDescribe('e2e: asaas webhook route', () => {
         payload: { event: 'PAYMENT_CONFIRMED' },
       });
       expect(res.statusCode).toBe(401);
+      expect(res.json()).toMatchObject({
+        error: 'UNAUTHORIZED',
+        messageCode: 'webhook.invalidSecret',
+      });
     });
 
     it('returns 200 with correct secret', async () => {
       const res = await sendWebhook({ event: 'SUBSCRIPTION_CREATED', subscription: { id: 'sub_test' } });
       expect(res.statusCode).toBe(200);
       expect(res.json().received).toBe(true);
+    });
+  });
+
+  // ─── Exploit regression ────────────────────────────────────────────────────
+  //
+  // The original bug: the route processed the webhook body (and mutated the DB)
+  // before validating the secret, so a 401 response did not guarantee the forged
+  // event was ignored. Asserting statusCode === 401 alone does not prove this —
+  // it would still pass even if the handler ran first and rejected afterwards.
+  // This test asserts on DB state directly to prove the forged event never reached
+  // handleWebhookEvent.
+
+  describe('exploit regression: forged tier upgrade must not mutate state', () => {
+    it('does not upgrade tier or record a payment when the webhook secret is missing/wrong', async () => {
+      const { trainerId } = await createTrainerWithSubscription('FREE');
+
+      const forgedPayload = {
+        event: 'PAYMENT_CONFIRMED',
+        payment: {
+          id: 'pay_exploit_attempt_001',
+          subscription: 'sub_webhook_test',
+          value: 49.90,
+          dueDate: '2026-05-16',
+          billingType: 'PIX',
+          externalReference: `tier:DIAMOND:trainer:${trainerId}`,
+          status: 'CONFIRMED',
+        },
+      };
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/asaas',
+        headers: {
+          'content-type': 'application/json',
+          'asaas-access-token': 'forged-token',
+        },
+        payload: forgedPayload,
+      });
+
+      expect(res.statusCode).toBe(401);
+
+      const sub = await prisma.platformSubscription.findUnique({ where: { trainerId } });
+      expect(sub.tier).toBe('FREE');
+
+      const payment = await prisma.platformSubscriptionPayment.findUnique({
+        where: { asaasPaymentId: 'pay_exploit_attempt_001' },
+      });
+      expect(payment).toBeNull();
     });
   });
 

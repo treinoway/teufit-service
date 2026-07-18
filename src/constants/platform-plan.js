@@ -103,6 +103,14 @@ export const PLATFORM_SUBSCRIPTION_STATUSES = Object.freeze({
 
 export const PAST_DUE_GRACE_DAYS = 7;
 
+export const ASAAS_WEBHOOK_ERRORS = Object.freeze({
+  INVALID_SECRET: {
+    code: 'UNAUTHORIZED',
+    messageCode: 'webhook.invalidSecret',
+    status: 401,
+  },
+});
+
 export const ASAAS_WEBHOOK_EVENTS = Object.freeze({
   PAYMENT_CREATED: 'PAYMENT_CREATED',
   PAYMENT_CONFIRMED: 'PAYMENT_CONFIRMED',

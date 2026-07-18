@@ -122,6 +122,13 @@ export default {
       in_person: 'Presencial',
       hybrid: 'Híbrido',
     },
+    studentBlocker: {
+      no_active_protocol: 'Sem rotina ativa',
+      no_subscription: 'Sem plano',
+      subscription_cancelled: 'Plano cancelado',
+      subscription_overdue: 'Pagamento em atraso',
+      blocked_on_plan: 'Bloqueado pela sua cota',
+    },
     mealType: {
       breakfast: 'Café da manhã',
       lunch: 'Almoço',
@@ -332,6 +339,10 @@ export default {
     'platformPlan.paymentOverdue': 'Há um pagamento em atraso. Regularize para manter o plano ativo.',
     'platformPlan.invalidTier': 'Plano inválido.',
     'platformPlan.alreadyOnTier': 'Você já está neste plano.',
+
+    // Asaas webhook (machine-to-machine — message rarely surfaced to a human, but
+    // must not read as a user auth error when someone is debugging the integration)
+    'webhook.invalidSecret': 'Assinatura do webhook inválida ou ausente.',
 
     // Exercise last performance
     'exercise.notFound': 'Exercício não encontrado.',

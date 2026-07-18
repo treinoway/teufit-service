@@ -42,7 +42,9 @@ export const webhookSchema = {
   summary: 'Asaas webhook receiver',
   description:
     'Receives payment and subscription lifecycle events from Asaas. ' +
-    'Always returns 200 unless the body is structurally invalid.',
+    'Requires a valid `asaas-access-token` header (timing-safe compared against ' +
+    'the configured webhook secret). Always returns 200 for authenticated, ' +
+    'structurally valid requests, even on internal processing errors.',
   body: {
     type: 'object',
     required: ['event'],
@@ -64,6 +66,7 @@ export const webhookSchema = {
       },
     },
     400: errorResponseSchema,
+    401: errorResponseSchema,
     500: errorResponseSchema,
   },
 };

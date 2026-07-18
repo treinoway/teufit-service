@@ -13,6 +13,10 @@ export default defineConfig({
       DISABLE_EMAIL: 'true',
       DISABLE_S3_UPLOAD: 'true',
       NODE_ENV: 'test',
+      // Applied before any module is imported, unlike mutating process.env in
+      // beforeAll — config/index.js reads process.env once at top-level import time,
+      // so setting this later has no effect on the cached config snapshot.
+      ASAAS_WEBHOOK_SECRET: 'test-webhook-secret-123',
     },
   },
 });

@@ -12,6 +12,9 @@ import {
 import { markBriefingDirty } from './briefing-service.js';
 import { computeExpectedSessions } from '../helpers/adherence-helpers.js';
 import { assertStudentCap } from './platform-plan-service.js';
+import { TrainingStatus } from '../constants/training.js';
+import { SubscriptionStatus, PaymentStatus } from '../constants/subscription.js';
+import { StudentBlocker } from '../constants/student-blocker.js';
 
 function buildUserUpdateData(trainer) {
   const userData = {};
@@ -245,22 +248,111 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
 }
 
 /**
+ * Compute the readiness blockers for a single student.
+ *
+ * Order is deterministic: conditions are evaluated in exactly the sequence
+ * declared by StudentBlocker and pushed conditionally — the array is never
+ * sorted afterwards. This order is part of the response contract (the mobile
+ * app has no client-side i18n and renders `blockersLabel` positionally).
+ *
+ * Decisions baked in here (not fully specified by the product ask):
+ * - Multiple subscriptions (e.g. an old cancelled one plus a current active
+ *   one — the common case, since history is kept) are judged by the ACTIVE
+ *   subscription only. `subscription_cancelled` fires only when the student
+ *   has subscription history with this trainer but NONE of it is currently
+ *   ACTIVE. It never fires merely because a past subscription was cancelled.
+ * - `subscription_overdue` only looks at ACTIVE subscription(s); a cancelled
+ *   subscription's unpaid history is not surfaced as a blocker (the trainer
+ *   can't collect on a plan the student no longer has).
+ * - A student can have more than one ACTIVE subscription in edge cases
+ *   (e.g. mid-migration between plans); overdue is true if ANY of them has a
+ *   pending payment past due.
+ *
+ * @param {object} params
+ * @param {boolean} params.hasActiveProtocol - true when the student has a non-expired, non-deleted, status=active protocol (regardless of start date)
+ * @param {Array<{ id: string, status: string }>} params.subscriptions - all StudentSubscription rows this student has with this trainer
+ * @param {Set<string>} params.overdueSubscriptionIds - subscription ids (scoped to ACTIVE ones) with a PENDING payment whose dueDate is in the past
+ * @param {boolean} params.activeOnPlan - TrainerStudent.activeOnPlan (trainer's platform-plan seat quota)
+ * @returns {string[]} StudentBlocker codes, in StudentBlocker enum order
+ */
+export function computeStudentBlockers({ hasActiveProtocol, subscriptions, overdueSubscriptionIds, activeOnPlan }) {
+  const blockers = [];
+
+  if (!hasActiveProtocol) {
+    blockers.push(StudentBlocker.NO_ACTIVE_PROTOCOL);
+  }
+
+  if (subscriptions.length === 0) {
+    blockers.push(StudentBlocker.NO_SUBSCRIPTION);
+  } else {
+    const activeSubscriptions = subscriptions.filter((s) => s.status === SubscriptionStatus.ACTIVE);
+    if (activeSubscriptions.length === 0) {
+      blockers.push(StudentBlocker.SUBSCRIPTION_CANCELLED);
+    } else if (activeSubscriptions.some((s) => overdueSubscriptionIds.has(s.id))) {
+      blockers.push(StudentBlocker.SUBSCRIPTION_OVERDUE);
+    }
+  }
+
+  if (!activeOnPlan) {
+    blockers.push(StudentBlocker.BLOCKED_ON_PLAN);
+  }
+
+  return blockers;
+}
+
+/**
  * List all students linked to a trainer.
  *
  * Contract:
  * - Input: trainerId (Trainer.id)
- * - Output: array of student basic profiles with current-month adherence stats.
+ * - Output: array of student basic profiles with current-month adherence stats
+ *   plus readiness (`ready` + `blockers[]`).
  *
  * Adherence is always the current calendar month (UTC), regardless of any other
- * filters. Two batched queries are issued for the entire roster (not per student)
- * to prevent N+1. New fields:
+ * filters. New fields:
  *   - adherence         {number|null} — completed/expected × 100, capped at 100
  *   - adherenceCompleted {number|null} — completed sessions this calendar month
  *   - adherenceExpected  {number|null} — expected sessions this calendar month (up to now)
  *   - adherenceMonth     {string}      — "YYYY-MM-01" (always set; period metadata)
+ *   - ready              {boolean}     — true when blockers is empty
+ *   - blockers           {string[]}    — StudentBlocker codes, see computeStudentBlockers()
  *
  * When the student has no active protocol or expected = 0, adherence,
- * adherenceCompleted and adherenceExpected are all null.
+ * adherenceCompleted and adherenceExpected are all null. Note this is
+ * independent from `blockers`: adherence's "active protocol" window excludes
+ * protocols that haven't started yet, while the `no_active_protocol` blocker
+ * does not — a protocol starting tomorrow already counts as the trainer's
+ * work being done.
+ *
+ * Queries (batched for the whole roster, constant regardless of roster size —
+ * no N+1):
+ *   1) trainerStudent.findMany  — roster + student profile + activeOnPlan
+ *   2) trainingProtocol.findMany — adherence window (existing)
+ *   3) workoutSession.groupBy    — completed sessions this month (existing)
+ *   4) trainingProtocol.findMany — "has a non-expired active protocol" (own query — do NOT reuse #2, see below)
+ *   5) studentSubscription.findMany — all subscriptions this roster has with this trainer
+ *   6) subscriptionPayment.findMany — overdue pending payments for this roster's ACTIVE subscriptions (skipped if there are none)
+ * 2-5 run batched via Promise.all; 6 depends on the subscription ids from 5.
+ *
+ * Why #4 can't reuse #2: #2 filters `startDate: { lt: now }` because it feeds
+ * the adherence *expected sessions* window, which must exclude protocols
+ * that haven't started yet. But a protocol starting tomorrow is still "the
+ * trainer did the work" — reusing #2 would falsely mark that student
+ * `no_active_protocol`. #4 has no startDate filter and instead checks
+ * non-expiration as of *today* (not #2's monthStart cutoff).
+ *
+ * Why #4 filters `trainerId` and #2 does NOT (this is deliberate, not an
+ * inconsistency to "fix" — do not make them match): a student can be linked
+ * to more than one trainer (`TrainerStudent` is N:N, unique on
+ * `[trainerId, studentId]`), and so can a `TrainingProtocol` belong to any
+ * of those trainers. #2 (adherence) answers "did the student train?" — a
+ * session the student logged is real regardless of which trainer assigned
+ * the protocol behind it, so it is intentionally trainer-agnostic. #4 (the
+ * `no_active_protocol` blocker) answers a different question: "did *this*
+ * trainer give this student a routine?" — if trainer B assigned an active
+ * protocol but this trainer (A) never did, A's roster must still show
+ * `no_active_protocol`; inheriting B's protocol would tell A their job is
+ * done when it isn't. Uses `TrainingProtocol.trainerId` + `@@index([trainerId])`.
  */
 export async function listStudents({ trainerId }) {
   const links = await prisma.trainerStudent.findMany({
@@ -279,13 +371,13 @@ export async function listStudents({ trainerId }) {
 
   // Adherence is computed on-read (not denormalized) because the denominator
   // grows with the calendar day even when no write happens — denorm would lie.
-  // Two batched queries fixed, regardless of roster size:
-  //   1) protocols + trainings for all students
-  //   2) completed-session counts grouped by user for the current month
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  // Date-only "today" boundary for the no_active_protocol / subscription_overdue
+  // blocker checks — distinct from monthStart, which is the adherence window.
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-  const [protocols, completedGroups] = await Promise.all([
+  const [protocols, completedGroups, activeProtocolRows, subscriptions] = await Promise.all([
     prisma.trainingProtocol.findMany({
       where: {
         assigneeId: { in: studentIds },
@@ -316,6 +408,31 @@ export async function listStudents({ trainerId }) {
         startedAt: { gte: monthStart, lt: now },
       },
       _count: { _all: true },
+    }),
+    // Own query for the no_active_protocol blocker — see JSDoc above for why
+    // this must NOT be derived from `protocols`, and why it filters
+    // `trainerId` (unlike the adherence query above) — a protocol assigned by
+    // a DIFFERENT trainer this student is also linked to must not clear this
+    // trainer's blocker.
+    prisma.trainingProtocol.findMany({
+      where: {
+        trainerId,
+        assigneeId: { in: studentIds },
+        status: TrainingStatus.ACTIVE,
+        deletedAt: null,
+        OR: [
+          { expirationDate: null },
+          { expirationDate: { gte: today } },
+        ],
+      },
+      select: { assigneeId: true },
+    }),
+    prisma.studentSubscription.findMany({
+      where: {
+        trainerId,
+        studentId: { in: studentIds },
+      },
+      select: { id: true, studentId: true, status: true },
     }),
   ]);
 
@@ -351,9 +468,44 @@ export async function listStudents({ trainerId }) {
     return { adherence: pct, adherenceCompleted: completed, adherenceExpected: expected };
   }
 
+  const studentsWithActiveProtocol = new Set(activeProtocolRows.map((r) => r.assigneeId));
+
+  const subscriptionsByStudent = new Map();
+  for (const subscription of subscriptions) {
+    const existing = subscriptionsByStudent.get(subscription.studentId) ?? [];
+    existing.push(subscription);
+    subscriptionsByStudent.set(subscription.studentId, existing);
+  }
+
+  // #6 depends on #5's active subscription ids — skipped entirely when the
+  // roster has none (common: brand new trainer, or a roster with only
+  // no_subscription/subscription_cancelled blockers).
+  const activeSubscriptionIds = subscriptions
+    .filter((s) => s.status === SubscriptionStatus.ACTIVE)
+    .map((s) => s.id);
+
+  const overduePayments = activeSubscriptionIds.length > 0
+    ? await prisma.subscriptionPayment.findMany({
+      where: {
+        subscriptionId: { in: activeSubscriptionIds },
+        status: PaymentStatus.PENDING,
+        dueDate: { lt: today },
+      },
+      select: { subscriptionId: true },
+    })
+    : [];
+
+  const overdueSubscriptionIds = new Set(overduePayments.map((p) => p.subscriptionId));
+
   return Promise.all(
     links.map(async (link) => {
       const { adherence, adherenceCompleted, adherenceExpected } = adherenceStatsFor(link.studentId);
+      const blockers = computeStudentBlockers({
+        hasActiveProtocol: studentsWithActiveProtocol.has(link.studentId),
+        subscriptions: subscriptionsByStudent.get(link.studentId) ?? [],
+        overdueSubscriptionIds,
+        activeOnPlan: link.activeOnPlan,
+      });
       return {
         id: link.student.id,
         email: link.student.email,
@@ -367,6 +519,8 @@ export async function listStudents({ trainerId }) {
         lastWorkoutAt: link.lastWorkoutAt,
         currentPrLoad: link.currentPrLoad,
         currentPrAt: link.currentPrAt,
+        ready: blockers.length === 0,
+        blockers,
       };
     }),
   );

@@ -46,12 +46,14 @@ import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { healthRoutes } from './routes/health-route.js';
+import { assertAsaasWebhookSecretConfigured } from '../src/helpers/asaas-webhook-helpers.js';
 
 // Sentry is initialised in the `./instrument.js` preload (loaded via
 // `node --import ./instrument.js`), which MUST run before this module so OpenTelemetry
@@ -75,6 +77,17 @@ function translateErrorPayloadMessage(payload, language) {
 }
 
 export async function buildServer(options = {}) {
+  // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
+  // production/staging, boot without a webhook secret must not succeed — otherwise
+  // /webhooks/asaas would fail-open and let anyone forge a PAYMENT_CONFIRMED event to
+  // upgrade a trainer's tier for free. No-op while Asaas isn't integrated yet, and
+  // no-op in development/test even with a sandbox API key configured locally.
+  assertAsaasWebhookSecretConfigured({
+    env: config.env,
+    apiKey: config.asaas.apiKey,
+    webhookSecret: config.asaas.webhookSecret,
+  });
+
   const llmProvider = process.env.LLM_PROVIDER || 'anthropic';
   if (llmProvider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
     console.warn('ANTHROPIC_API_KEY not set — AI assistant feature will be unavailable');
@@ -355,6 +368,7 @@ export async function buildServer(options = {}) {
     await fastify.register(studentSubscriptionRoutes);
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
+    await fastify.register(trainerDashboardRoutes);
     await fastify.register(platformPlanRoutes);
   });
 

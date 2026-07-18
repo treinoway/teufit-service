@@ -3,6 +3,9 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { StudentBlocker } from '../../src/constants/student-blocker.js';
+import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
+import { getDateOnlyAsMidnightUtc, addDaysMs } from '../../src/helpers/date-helpers.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -44,11 +47,16 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     expect(becomeRes.statusCode).toBe(200);
     const { token: { accessToken: trainerToken } } = becomeRes.json();
 
-    return { userId, accessToken: trainerToken, email };
+    const trainerRecord = await prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    return { userId, trainerId: trainerRecord.id, accessToken: trainerToken, email };
   }
 
   async function createStudent() {
-    const email = `e2e+student-${Date.now()}@example.com`;
+    const email = `e2e+student-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
     const password = 'StrongPassw0rd!';
 
     const signupRes = await app.inject({
@@ -60,6 +68,80 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     const { user: { id: userId }, token: { accessToken } } = signupRes.json();
 
     return { userId, accessToken, email };
+  }
+
+  // ─── Readiness-blocker fixture helpers (direct Prisma — exact control over
+  // status/dueDate/expirationDate boundaries, same pattern used in
+  // trainer-dashboard.e2e.test.js) ────────────────────────────────────────────
+
+  function daysFromToday(days) {
+    const today = getDateOnlyAsMidnightUtc(new Date());
+    return addDaysMs(today, days);
+  }
+
+  async function createProtocol(trainerId, assigneeId, overrides = {}) {
+    return prisma.trainingProtocol.create({
+      data: {
+        trainerId,
+        assigneeId,
+        name: 'Protocolo E2E Readiness',
+        status: 'active',
+        startDate: daysFromToday(-30),
+        ...overrides,
+      },
+    });
+  }
+
+  async function createPlan(trainerId, overrides = {}) {
+    return prisma.subscriptionPlan.create({
+      data: {
+        trainerId,
+        name: 'Plano E2E Readiness',
+        recurrence: 'monthly',
+        price: 100,
+        ...overrides,
+      },
+    });
+  }
+
+  async function createSubscription(trainerId, studentId, planId, overrides = {}) {
+    return prisma.studentSubscription.create({
+      data: {
+        trainerId,
+        studentId,
+        planId,
+        recurrence: 'monthly',
+        price: 100,
+        startDate: daysFromToday(-60),
+        status: SubscriptionStatus.ACTIVE,
+        ...overrides,
+      },
+    });
+  }
+
+  async function createPayment(subscriptionId, overrides = {}) {
+    return prisma.subscriptionPayment.create({
+      data: {
+        subscriptionId,
+        cycleStartDate: daysFromToday(-30),
+        cycleEndDate: daysFromToday(0),
+        dueDate: daysFromToday(0),
+        amount: 100,
+        status: PaymentStatus.PENDING,
+        ...overrides,
+      },
+    });
+  }
+
+  async function linkStudent(trainerToken, studentEmail) {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/trainer/students',
+      headers: { authorization: `Bearer ${trainerToken}` },
+      payload: { email: studentEmail },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json();
   }
 
   describe('POST /trainer/students', () => {
@@ -342,6 +424,370 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       });
 
       expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET /trainer/students — readiness (ready + blockers)', () => {
+    it('includes ready, blockers, and blockersLabel of matching length on every item', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toHaveLength(1);
+      const [student] = body;
+      expect(student.id).toBe(studentId);
+      expect(typeof student.ready).toBe('boolean');
+      expect(Array.isArray(student.blockers)).toBe(true);
+      expect(Array.isArray(student.blockersLabel)).toBe(true);
+      expect(student.blockersLabel).toHaveLength(student.blockers.length);
+      student.blockers.forEach((code) => {
+        expect(typeof code).toBe('string');
+      });
+    });
+
+    it('translates blockersLabel per the app-language header for the same blocker code', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail } = await createStudent();
+      // Linked but given no protocol and no subscription → no_active_protocol
+      // is guaranteed to be present regardless of other fixtures.
+      await linkStudent(trainerToken, studentEmail);
+
+      const ptBrRes = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'pt-BR' },
+      });
+      const enUsRes = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}`, 'app-language': 'en-US' },
+      });
+
+      expect(ptBrRes.statusCode).toBe(200);
+      expect(enUsRes.statusCode).toBe(200);
+
+      const [ptBrStudent] = ptBrRes.json();
+      const [enUsStudent] = enUsRes.json();
+
+      expect(ptBrStudent.blockers).toContain(StudentBlocker.NO_ACTIVE_PROTOCOL);
+      const blockerIndex = ptBrStudent.blockers.indexOf(StudentBlocker.NO_ACTIVE_PROTOCOL);
+
+      expect(ptBrStudent.blockersLabel[blockerIndex]).toBe('Sem rotina ativa');
+      expect(enUsStudent.blockersLabel[blockerIndex]).toBe('No active routine');
+    });
+
+    it('flags no_active_protocol and no_subscription in order for a student with neither', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.ready).toBe(false);
+      expect(student.blockers).toEqual([
+        StudentBlocker.NO_ACTIVE_PROTOCOL,
+        StudentBlocker.NO_SUBSCRIPTION,
+      ]);
+    });
+
+    it('returns ready: true and no blockers for a fully operational student', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      // Active, non-expired protocol.
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+
+      // Active subscription with no overdue payment (due date in the future).
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, {
+        status: PaymentStatus.PENDING,
+        dueDate: daysFromToday(10),
+      });
+
+      // activeOnPlan defaults to true on link creation for a fresh trainer
+      // within their free-tier seat quota — no explicit override needed.
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.id).toBe(studentId);
+      expect(student.ready).toBe(true);
+      expect(student.blockers).toEqual([]);
+      expect(student.blockersLabel).toEqual([]);
+    });
+
+    // This is the primary regression guard for the one trap this feature was
+    // built around: the adherence query (a sibling query inside the same
+    // listStudents call) intentionally excludes protocols that haven't
+    // started yet via `startDate: { lt: now }`. The no_active_protocol
+    // blocker check must NOT share that filter — a protocol starting
+    // tomorrow means the trainer already did their part. This can only be
+    // proven against a real `where` clause hitting Postgres: a mocked-Prisma
+    // unit test can be made to pass regardless of which query got which
+    // filter (see the unit-test comment in trainer-service.test.js for the
+    // call-order-mock pitfall this replaces).
+    it('does not flag no_active_protocol for a protocol starting in the future', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      // Starts tomorrow — excluded from this month's adherence window, but
+      // still an active, assigned routine.
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(1),
+        expirationDate: null,
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(10) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.id).toBe(studentId);
+      expect(student.blockers).not.toContain(StudentBlocker.NO_ACTIVE_PROTOCOL);
+      expect(student.ready).toBe(true);
+      expect(student.blockers).toEqual([]);
+    });
+
+    it('flags subscription_cancelled when the student has subscription history but nothing currently active', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      await createSubscription(trainerId, studentId, plan.id, {
+        status: SubscriptionStatus.CANCELLED,
+        cancelledAt: new Date(),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).toEqual([StudentBlocker.SUBSCRIPTION_CANCELLED]);
+    });
+
+    it('does not flag a subscription blocker when an old cancelled subscription coexists with a current healthy active one', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      // Old, cancelled subscription — history only.
+      await createSubscription(trainerId, studentId, plan.id, {
+        status: SubscriptionStatus.CANCELLED,
+        startDate: daysFromToday(-200),
+        cancelledAt: daysFromToday(-100),
+      });
+      // Current, healthy, active subscription.
+      const activeSubscription = await createSubscription(trainerId, studentId, plan.id, {
+        status: SubscriptionStatus.ACTIVE,
+        startDate: daysFromToday(-60),
+      });
+      await createPayment(activeSubscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(10) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.ready).toBe(true);
+      expect(student.blockers).toEqual([]);
+    });
+
+    it('flags subscription_overdue when the active subscription has a payment past due', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-1) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).toEqual([StudentBlocker.SUBSCRIPTION_OVERDUE]);
+    });
+
+    it('flags blocked_on_plan when the trainer-side seat quota is not active for the student', async () => {
+      const { trainerId, accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudent();
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(10) });
+
+      // Bypass the POST /trainer/students link flow (which always sets
+      // activeOnPlan: true) — this state only arises from the trainer's own
+      // seat-quota enforcement, not from anything the student did.
+      await prisma.trainerStudent.create({
+        data: { trainerId, studentId, activeOnPlan: false },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).toEqual([StudentBlocker.BLOCKED_ON_PLAN]);
+    });
+
+    // ── Date-boundary tests: dueDate/expirationDate comparisons only exist
+    // inside Prisma `where` clauses, so they are structurally impossible to
+    // prove with mocked unit tests — only these E2E tests, against a real
+    // Postgres row, can show whether the boundary is inclusive or exclusive.
+
+    it('does not flag subscription_overdue when the pending payment is due today (inclusive, not yet overdue)', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(0) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).not.toContain(StudentBlocker.SUBSCRIPTION_OVERDUE);
+      expect(student.ready).toBe(true);
+    });
+
+    it('flags subscription_overdue when the pending payment was due yesterday (exclusive, past due)', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-1) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).toContain(StudentBlocker.SUBSCRIPTION_OVERDUE);
+    });
+
+    it('does not flag no_active_protocol when the protocol expires today (inclusive, still active)', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(0),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).not.toContain(StudentBlocker.NO_ACTIVE_PROTOCOL);
+    });
+
+    it('flags no_active_protocol when the protocol expired yesterday (exclusive, no longer active)', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(-1),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).toContain(StudentBlocker.NO_ACTIVE_PROTOCOL);
     });
   });
 

@@ -31,6 +31,12 @@ vi.mock('../../src/db.js', () => {
       workoutSession: {
         groupBy: vi.fn().mockResolvedValue([]),
       },
+      studentSubscription: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      subscriptionPayment: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
       trainerBriefingSnapshot: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
@@ -54,8 +60,10 @@ vi.mock('../../src/config/email-handler.js', () => ({
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import emailHandler from '../../src/config/email-handler.js';
-import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
+import { StudentBlocker } from '../../src/constants/student-blocker.js';
+import { SubscriptionStatus } from '../../src/constants/subscription.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -522,10 +530,17 @@ describe('listStudents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
-    // Default the adherence queries to empty so tests not focused on adherence
-    // don't need to wire them up explicitly.
+    // Default the adherence + blocker-support queries to empty so tests not
+    // focused on those areas don't need to wire them up explicitly. Note
+    // trainingProtocol.findMany is called twice inside listStudents (adherence
+    // window, then the active-protocol blocker check) — a single
+    // mockResolvedValue applies to both calls unless a test overrides with
+    // mockResolvedValueOnce chaining (call order: adherence first, then the
+    // active-protocol check).
     prisma.trainingProtocol.findMany.mockResolvedValue([]);
     prisma.workoutSession.groupBy.mockResolvedValue([]);
+    prisma.studentSubscription.findMany.mockResolvedValue([]);
+    prisma.subscriptionPayment.findMany.mockResolvedValue([]);
   });
 
   it('returns an empty array when the trainer has no linked students', async () => {
@@ -545,6 +560,7 @@ describe('listStudents', () => {
     prisma.trainerStudent.findMany.mockResolvedValue([
       {
         studentId: 's1',
+        activeOnPlan: true,
         lastWorkoutAt: lastWorkout,
         currentPrLoad: 120,
         currentPrAt: prAt,
@@ -552,6 +568,7 @@ describe('listStudents', () => {
       },
       {
         studentId: 's2',
+        activeOnPlan: true,
         lastWorkoutAt: null,
         currentPrLoad: null,
         currentPrAt: null,
@@ -568,6 +585,10 @@ describe('listStudents', () => {
     const now = new Date();
     const expectedAdherenceMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
 
+    // Neither student has an active protocol or a subscription mocked, so both
+    // pick up the same two blockers (activeOnPlan: true rules out blocked_on_plan).
+    const expectedBlockers = [StudentBlocker.NO_ACTIVE_PROTOCOL, StudentBlocker.NO_SUBSCRIPTION];
+
     expect(result).toEqual([
       {
         id: 's1',
@@ -582,6 +603,8 @@ describe('listStudents', () => {
         lastWorkoutAt: lastWorkout,
         currentPrLoad: 120,
         currentPrAt: prAt,
+        ready: false,
+        blockers: expectedBlockers,
       },
       {
         id: 's2',
@@ -596,6 +619,8 @@ describe('listStudents', () => {
         lastWorkoutAt: null,
         currentPrLoad: null,
         currentPrAt: null,
+        ready: false,
+        blockers: expectedBlockers,
       },
     ]);
   });
@@ -637,6 +662,210 @@ describe('listStudents', () => {
     expect(result[0].adherenceExpected).toBe(15);
     expect(result[0].adherenceMonth).toBe('2026-05-01');
     vi.useRealTimers();
+  });
+
+  it('does not flag no_active_protocol for a protocol that has not started yet', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        activeOnPlan: true,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+    // `trainingProtocol.findMany` is called twice with different `where`
+    // shapes. Branch on the presence of `where.startDate` (only the adherence
+    // query has it) instead of relying on mock call ORDER — a call-order mock
+    // (mockResolvedValueOnce chaining) would pass even if both queries were
+    // accidentally given the same `where`, since it doesn't inspect arguments
+    // at all. This is defense-in-depth only; the E2E test in
+    // trainer-student.e2e.test.js ("does not flag no_active_protocol for a
+    // protocol starting in the future") is what actually proves this against
+    // a real `where` clause hitting Postgres.
+    prisma.trainingProtocol.findMany.mockImplementation(({ where }) => {
+      if (where.startDate) {
+        // Adherence query excludes the not-yet-started protocol.
+        return Promise.resolve([]);
+      }
+      // Active-protocol blocker check has no startDate filter, so the same
+      // protocol counts there.
+      return Promise.resolve([{ assigneeId: 's1' }]);
+    });
+    prisma.studentSubscription.findMany.mockResolvedValue([
+      { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+    ]);
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(result[0].ready).toBe(true);
+    expect(result[0].blockers).toEqual([]);
+  });
+
+  it('skips the subscriptionPayment query when the roster has no active subscriptions', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        activeOnPlan: true,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+    prisma.studentSubscription.findMany.mockResolvedValue([
+      { id: 'sub1', studentId: 's1', status: SubscriptionStatus.CANCELLED },
+    ]);
+
+    await listStudents({ trainerId: 'trainer1' });
+
+    expect(prisma.subscriptionPayment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('orders multiple simultaneous blockers per the StudentBlocker enum declaration order', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        activeOnPlan: false,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+    // No active protocol mocked, no subscription mocked, activeOnPlan: false
+    // → all three blocker sources fire simultaneously.
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(result[0].ready).toBe(false);
+    expect(result[0].blockers).toEqual([
+      StudentBlocker.NO_ACTIVE_PROTOCOL,
+      StudentBlocker.NO_SUBSCRIPTION,
+      StudentBlocker.BLOCKED_ON_PLAN,
+    ]);
+  });
+
+  it('flags blocked_on_plan when activeOnPlan is false even though the student is otherwise fully ready', async () => {
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        activeOnPlan: false,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+    // Branch on `where.startDate` presence rather than call order — see the
+    // comment in the "not started yet" test above for why.
+    prisma.trainingProtocol.findMany.mockImplementation(({ where }) => (
+      where.startDate ? Promise.resolve([]) : Promise.resolve([{ assigneeId: 's1' }])
+    ));
+    prisma.studentSubscription.findMany.mockResolvedValue([
+      { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+    ]);
+
+    const result = await listStudents({ trainerId: 'trainer1' });
+
+    expect(result[0].ready).toBe(false);
+    expect(result[0].blockers).toEqual([StudentBlocker.BLOCKED_ON_PLAN]);
+  });
+});
+
+describe('computeStudentBlockers', () => {
+  // A baseline set of params representing a fully "ready" student — each test
+  // overrides exactly the field(s) relevant to the scenario under test.
+  const readyParams = {
+    hasActiveProtocol: true,
+    subscriptions: [{ id: 'sub1', status: SubscriptionStatus.ACTIVE }],
+    overdueSubscriptionIds: new Set(),
+    activeOnPlan: true,
+  };
+
+  it('returns an empty array when nothing is wrong', () => {
+    expect(computeStudentBlockers(readyParams)).toEqual([]);
+  });
+
+  it('flags no_active_protocol in isolation when hasActiveProtocol is false', () => {
+    const result = computeStudentBlockers({ ...readyParams, hasActiveProtocol: false });
+    expect(result).toEqual([StudentBlocker.NO_ACTIVE_PROTOCOL]);
+  });
+
+  it('flags no_subscription in isolation when the student has no subscription history', () => {
+    const result = computeStudentBlockers({ ...readyParams, subscriptions: [] });
+    expect(result).toEqual([StudentBlocker.NO_SUBSCRIPTION]);
+  });
+
+  it('flags subscription_cancelled in isolation when no subscription is currently active', () => {
+    const result = computeStudentBlockers({
+      ...readyParams,
+      subscriptions: [{ id: 'sub1', status: SubscriptionStatus.CANCELLED }],
+    });
+    expect(result).toEqual([StudentBlocker.SUBSCRIPTION_CANCELLED]);
+  });
+
+  it('flags subscription_overdue in isolation when the active subscription has an overdue payment', () => {
+    const result = computeStudentBlockers({
+      ...readyParams,
+      overdueSubscriptionIds: new Set(['sub1']),
+    });
+    expect(result).toEqual([StudentBlocker.SUBSCRIPTION_OVERDUE]);
+  });
+
+  it('flags blocked_on_plan in isolation when activeOnPlan is false', () => {
+    const result = computeStudentBlockers({ ...readyParams, activeOnPlan: false });
+    expect(result).toEqual([StudentBlocker.BLOCKED_ON_PLAN]);
+  });
+
+  it('orders multiple simultaneous blockers per the StudentBlocker enum declaration order', () => {
+    const result = computeStudentBlockers({
+      hasActiveProtocol: false,
+      subscriptions: [],
+      overdueSubscriptionIds: new Set(),
+      activeOnPlan: false,
+    });
+    expect(result).toEqual([
+      StudentBlocker.NO_ACTIVE_PROTOCOL,
+      StudentBlocker.NO_SUBSCRIPTION,
+      StudentBlocker.BLOCKED_ON_PLAN,
+    ]);
+  });
+
+  it('does not flag a subscription blocker when an old cancelled subscription coexists with a healthy active one', () => {
+    const result = computeStudentBlockers({
+      ...readyParams,
+      subscriptions: [
+        { id: 'old-sub', status: SubscriptionStatus.CANCELLED },
+        { id: 'sub1', status: SubscriptionStatus.ACTIVE },
+      ],
+    });
+    expect(result).toEqual([]);
+  });
+
+  it('flags subscription_cancelled when the student has subscription history but none is currently active', () => {
+    const result = computeStudentBlockers({
+      ...readyParams,
+      subscriptions: [
+        { id: 'old-sub-1', status: SubscriptionStatus.CANCELLED },
+        { id: 'old-sub-2', status: SubscriptionStatus.CANCELLED },
+      ],
+    });
+    expect(result).toEqual([StudentBlocker.SUBSCRIPTION_CANCELLED]);
+  });
+
+  it('flags subscription_overdue for the active subscription while ignoring an unrelated past cancelled one', () => {
+    const result = computeStudentBlockers({
+      hasActiveProtocol: true,
+      subscriptions: [
+        { id: 'old-sub', status: SubscriptionStatus.CANCELLED },
+        { id: 'sub1', status: SubscriptionStatus.ACTIVE },
+      ],
+      overdueSubscriptionIds: new Set(['sub1']),
+      activeOnPlan: true,
+    });
+    expect(result).toEqual([StudentBlocker.SUBSCRIPTION_OVERDUE]);
   });
 });
 

@@ -205,5 +205,8 @@ export default {
       cancel: { max: 5, timeWindow: '1 minute' },
       change: { max: 5, timeWindow: '1 minute' },
     },
+    trainerDashboard: {
+      get: { max: 60, timeWindow: '1 minute' },
+    },
   },
 };

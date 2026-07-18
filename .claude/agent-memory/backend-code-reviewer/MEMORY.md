@@ -1,7 +1,8 @@
 - [i18n legacy-error translation gap](project_i18n_legacy_error_gap.md) — legacy `.code` errors bypass translation and return English to pt-BR clients until migrated to stable messageCodes
 - [Exercise field copy flow checklist](feedback_exercise_copy_flows.md) — full list of sites that snapshot Exercise fields; backend-engineer reliably misses one (esp. `training-service.importFromTemplate`)
 - [backend-engineer skips E2E tests](feedback_e2e_test_gap.md) — "all tests pass" usually means unit-only; verify E2E coverage independently
-- [Mocked Prisma masks DB violations](feedback_mocked_prisma_hides_bugs.md) — fractional writes to Int cols & FK cascade collisions hide behind `$transaction` mocks
-- [Shared schemas leak forbidden fields](feedback_shared_schema_leaks.md) — reused `*BodyProperties` blocks let invariants slip past validation on specialized routes
+- [Mocked Prisma masks DB violations](feedback_mocked_prisma_hides_bugs.md) — Int/FK violations hide behind `$transaction` mocks; `mockResolvedValueOnce` chains make `where`-clause tests vacuous
+- [Shared schemas leak fields both ways](feedback_shared_schema_leaks.md) — reused property blocks let invariants past validation (requests) and advertise never-populated fields (responses)
 - [Migration drift: ai_interaction_logs](project_migration_drift_ai_logs.md) — feature migrations auto-pick-up unrelated `DROP DEFAULT` drift; scan for stray ALTERs
+- [Hand-rolled error replies lose their message](feedback_handrolled_error_replies.md) — preSerialization hook overwrites `message` from `messageCode`; route-specific literals are dead code
 - [Concurrency write-path checklist](feedback_concurrency_write_paths.md) — deadlock/lock-ordering fixes in exercise-service miss reorderSubstitutes/reorderSupersetMembers/dissolveSuperset; Promise.all reorders reintroduce lock cycles

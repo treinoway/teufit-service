@@ -1,131 +1,77 @@
-# Frontend Brief — Library Pagination, Search/Filter & Batch Delete
+# Frontend Brief — Student Readiness Indicators
 
-**Backend branch**: staging · **Generated**: 2026-06-17
+**Backend branch**: staging · **Generated**: 2026-07-15
 
 ## Elevator pitch
-Trainers can now search, filter, and paginate their exercise, training, and protocol template libraries — and bulk-remove items in a single action — instead of scrolling through unbounded flat lists.
+The trainer's student list now tells them, at a glance, exactly what is stopping each student from being fully operational — no active routine, no plan, a cancelled plan, an overdue payment, or a trainer-side seat/quota block — instead of leaving the trainer to guess or dig into each student's profile.
 
 ## User story
-As a trainer, I want to search my template library by name, filter by type/category, navigate paginated results, and bulk-delete items I no longer need, so that I can manage large libraries quickly without losing context.
+As a trainer, I want to see what's blocking each of my students from being ready (no routine, no plan, payment overdue, etc.) directly in my student list, so that I know exactly what action to take for each student without opening their individual profile.
 
 ## User flows
-
-1. **Entry point**: Library screens accessed from the Trainer dashboard — "Exercise Templates", "Training Templates", and "Protocol Templates" list pages.
-
-2. **Happy path — search and filter**:
-   1. Trainer opens a library list page (e.g. Exercise Templates).
-   2. A search input is visible at the top of the list.
-   3. Trainer types a name query; the list updates (debounced) to show matching items.
-   4. Trainer optionally selects a filter from a dropdown (e.g. "Type: Strength").
-   5. Pagination controls appear at the bottom showing current page / total pages.
-   6. Trainer navigates between pages.
-
-3. **Happy path — batch delete**:
-   1. Trainer taps a "Select" toggle to enter selection mode.
-   2. Checkboxes appear on each list item.
-   3. Trainer selects one or more items (up to 200).
-   4. A "Delete selected (N)" action appears (floating bar or top toolbar).
-   5. Confirmation dialog asks "Delete N items?".
-   6. On confirm, a `POST .../batch-delete` request is sent with the selected IDs.
-   7. Success: the list refreshes from page 1, a toast shows "N items deleted".
-
-4. **Branches**:
-   - Empty search result: show empty state "No templates found for this search".
-   - All selected items are public (non-owned): `deletedCount: 0` returned — show a warning "Nothing was deleted — you can only delete your own templates".
-   - Mix of owned and non-owned selected: `deletedCount` will be less than items selected — show "N items deleted (some non-owned items were skipped)".
+1. **Entry point**: The trainer's student roster/list screen (wherever `GET /trainer/students` is currently rendered — student cards or rows).
+2. **Happy path**:
+   1. Trainer opens the student list.
+   2. Each student row/card now carries a readiness signal: either "all good" (no blockers) or one-to-many blocker chips/icons (e.g. "No active routine", "Payment overdue").
+   3. Trainer scans the list and immediately spots students needing attention — a student with a cancelled plan, another with no routine assigned, another blocked by the trainer's own seat quota.
+   4. Trainer taps a blocker (or the student) to go fix it — e.g. tapping "No active routine" could deep-link to assigning a protocol; tapping "Payment overdue" could deep-link to the subscription/billing screen for that student.
+3. **Branches**:
+   - A student can show **multiple blockers at once** (e.g. no routine AND an overdue payment simultaneously) — the UI must support showing more than one chip per student, not just a single status label.
+   - `blocked_on_plan` is a signal about the **trainer's own** platform plan/seat limit, not something the student did — copy and iconography should make clear this is the trainer's problem to resolve (e.g. "Upgrade your plan"), not a judgment on the student.
 
 ## UI states to cover
-- **Loading**: skeleton rows while the paginated list is fetching.
-- **Empty** (no templates at all): "Create your first template" CTA.
-- **Empty search/filter result**: "No results for '[query]'" with a "Clear filters" link.
-- **Selection mode**: checkboxes visible on each item, floating "Delete selected (N)" bar. "Select" button disabled when count is 0.
-- **Batch delete in progress**: spinner on the delete bar, list dimmed, button disabled.
-- **Pagination**: previous/next buttons + "Page N of M" indicator. Disable prev on page 1, disable next on last page.
-- **deletedCount: 0 response**: warning toast "Nothing was deleted".
+- **Ready / no blockers**: `ready: true`, `blockers: []` — show a positive/neutral state (e.g. no chip, or a subtle "All set" badge). Do not show an empty blocker row.
+- **One blocker**: single chip/icon with the translated label from `blockersLabel`.
+- **Multiple blockers**: all present blockers should be visible (stacked chips, a "+N more" affordance, or an expandable list) — array order from the API is intentional and stable, safe to render in that order without re-sorting.
+- **Loading**: existing student-list loading state applies (no new loading state — this ships as part of the same response).
+- **Permissions**: no change — this is part of the existing trainer-only `GET /trainer/students` response.
 
 ## API contract
 
-### GET /trainer/exercise-templates
-- **Auth**: Bearer, TRAINER role
-- **Request** (querystring):
+### GET /trainer/students
+- **Auth**: Bearer token, TRAINER role
+- **Request**: no change (no new params)
+- **Success** (200) — each item in the array gains two fields:
   ```json
-  { "page": 1, "limit": 20, "q": "bench press", "type": "strength" }
+  {
+    "id": "uuid",
+    "email": "student@example.com",
+    "firstName": "Ana",
+    "lastName": "Silva",
+    "avatarUrl": null,
+    "adherence": 80,
+    "adherenceCompleted": 4,
+    "adherenceExpected": 5,
+    "adherenceMonth": "2026-07-01",
+    "lastWorkoutAt": "2026-07-10T12:00:00.000Z",
+    "currentPrLoad": 100,
+    "currentPrAt": "2026-07-10T12:00:00.000Z",
+    "ready": false,
+    "blockers": ["no_active_protocol", "subscription_overdue"],
+    "blockersLabel": ["Sem rotina ativa", "Pagamento em atraso"]
+  }
   ```
-- **Success** (200):
-  ```json
-  { "data": [...], "total": 42, "page": 1, "limit": 20 }
-  ```
-- **Errors**:
-  - `401` — auth failed
+- **Errors**: unchanged from the existing endpoint (401, 403, 409 trainer-profile-missing, 429, 500).
 
-### POST /trainer/exercise-templates/batch-delete
-- **Auth**: Bearer, TRAINER role
-- **Request**:
-  ```json
-  { "ids": ["uuid1", "uuid2"] }
-  ```
-- **Success** (200):
-  ```json
-  { "deletedCount": 3 }
-  ```
-- **Errors**:
-  - `400` · `VALIDATION_ERROR` · `validation.failed` · `ids` empty or invalid UUIDs
-  - `401` — auth failed
-
-### GET /trainer/training-templates
-- **Auth**: Bearer, TRAINER role
-- **Request** (querystring):
-  ```json
-  { "page": 1, "limit": 20, "q": "string", "category": "strength", "bodySegment": "upper" }
-  ```
-- **Success** (200):
-  ```json
-  { "data": [...], "total": 18, "page": 1, "limit": 20 }
-  ```
-
-### POST /trainer/training-templates/batch-delete
-- **Auth**: Bearer, TRAINER role
-- **Request** / **Success**: same shape as exercise-templates batch-delete.
-
-### GET /trainer/protocol-templates
-- **Auth**: Bearer, TRAINER role
-- **Request** (querystring):
-  ```json
-  { "page": 1, "limit": 20, "q": "string", "type": "strength", "trainingLevel": "beginner" }
-  ```
-- **Success** (200):
-  ```json
-  { "data": [...], "total": 5, "page": 1, "limit": 20 }
-  ```
-
-### POST /trainer/protocol-templates/batch-delete
-- **Auth**: Bearer, TRAINER role
-- **Request** / **Success**: same shape as exercise-templates batch-delete.
+Note: `GET /trainer/students/search` (the fuzzy search endpoint) reuses the same student item shape but does **not** populate `ready`/`blockers` — those fields will be absent/undefined on search results. Don't rely on them there.
 
 ## i18n keys required
-No new `messageCode` values were introduced. Frontend should map:
-- `validation.failed` → suggested copy: "Some fields are invalid."
+`blockersLabel` is pre-translated by the backend based on the `app-language` header — the frontend does not need to translate these strings itself, just render them. For reference, the five possible values and their backend-provided pt-BR copy:
+- `no_active_protocol` → "Sem rotina ativa"
+- `no_subscription` → "Sem plano"
+- `subscription_cancelled` → "Plano cancelado"
+- `subscription_overdue` → "Pagamento em atraso"
+- `blocked_on_plan` → "Bloqueado pela sua cota"
 
 ## Acceptance criteria
-- [ ] Search input is visible on all 3 library list pages; results update within 300 ms debounce after the user stops typing.
-- [ ] Filter dropdowns show the correct enum options per entity (type, category, bodySegment, trainingLevel).
-- [ ] Pagination controls appear and navigate correctly.
-- [ ] "Select" toggle activates checkboxes on list items; a counter reflects the selection count.
-- [ ] "Delete selected" is disabled when no items are selected.
-- [ ] Confirmation dialog is shown before executing batch delete.
-- [ ] After batch delete, list refetches from page 1 and a toast shows "N item(s) deleted".
-- [ ] When `deletedCount: 0`, a warning toast "Nothing was deleted — you can only delete your own templates" is shown.
-- [ ] Empty search/filter result shows a "No results" state with a clear-filters affordance.
-
-## Out of scope
-- Sorting options (order is fixed as `createdAt desc` in this cycle).
-- Multi-select drag or range-select interactions.
-- Undo / restore after batch delete.
-- Public template filter toggle.
+- [ ] A student with `ready: true` shows no blocker chips (or a clear "all set" indicator, per design).
+- [ ] A student with one or more entries in `blockers` shows a chip/badge per entry, using `blockersLabel` text (never hardcode English/Portuguese strings for these — always render the label the API returns).
+- [ ] A student with multiple simultaneous blockers renders all of them, not just the first.
+- [ ] `blocked_on_plan` is visually/copy-distinct from the other four (it's the trainer's issue, not the student's).
+- [ ] The student list continues to work correctly for students returned by `/trainer/students/search`, where these fields are absent (no crash, no blank chip).
 
 ## Open design questions
-- Should filter dropdowns be a separate filter panel (slide-in tray) or always-visible selects above the list?
-- Should the search bar be inside a collapsible header or always visible?
-- Should the user be able to change the page size (e.g. 10 / 20 / 50)?
-- Should selection mode include a "Select all on this page" checkbox?
-- Is the batch delete confirmation modal dismissible by tapping outside, or must the user explicitly cancel?
+- Visual treatment: colored chips, small icons, or a single "attention needed" badge that expands on tap?
+- Should blockers be actionable (deep-link to the fix) in this cycle, or purely informational for now?
+- How should `blocked_on_plan` be visually differentiated from student-caused blockers (e.g. a distinct color/icon signaling "this is on you, trainer")?
+- Should the student list support filtering/sorting by readiness (e.g. "show not-ready students first")? Not covered by this backend change — worth flagging as a possible fast-follow.

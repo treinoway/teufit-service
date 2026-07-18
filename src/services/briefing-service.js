@@ -37,10 +37,23 @@ function daysAgo(days, from = new Date()) {
 
 /**
  * Return the first moment (UTC) of the current calendar month.
+ * Exported so other services (e.g. trainer-dashboard-service) that need the
+ * same "current month" window share this exact boundary rather than
+ * reimplementing it.
+ *
+ * `from` is injectable — same pattern as daysAgo() above — so a caller that
+ * already captured `now` can pass it through and guarantee `monthStart` is
+ * derived from the exact same instant. Without this, two independent
+ * `new Date()` calls a few milliseconds apart can straddle a month boundary
+ * (e.g. called at 23:59:59.999 on the last day of the month): one call sees
+ * February, the other still sees January, producing an inverted/empty
+ * `[monthStart, now)` range. Defaults to `new Date()` so existing callers
+ * (computeBriefing below) are unaffected.
+ *
+ * @param {Date} [from] - instant to derive the month boundary from
  */
-function startOfCurrentMonth() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+export function startOfCurrentMonth(from = new Date()) {
+  return new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
 }
 
 /**
@@ -520,9 +533,33 @@ export async function refreshBriefing(prisma, trainerId) {
 }
 
 /**
- * Get the briefing for the authenticated trainer user.
- * Resolves the trainer record from the user ID, then reads the snapshot.
+ * Get the briefing snapshot for a trainer already resolved by Trainer.id.
  * Recomputes synchronously if the snapshot is missing or dirty.
+ *
+ * Extracted from getBriefing() so callers that already resolved the trainer
+ * (e.g. trainer-dashboard-service) don't pay for a duplicate
+ * `trainer.findUnique` lookup.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} trainerId - Trainer.id (not userId)
+ * @returns {Promise<object>}
+ */
+export async function getBriefingByTrainerId(prisma, trainerId) {
+  const snapshot = await prisma.trainerBriefingSnapshot.findUnique({
+    where: { trainerId },
+  });
+
+  if (!snapshot || snapshot.isDirty) {
+    return refreshBriefing(prisma, trainerId);
+  }
+
+  return formatSnapshot(snapshot);
+}
+
+/**
+ * Get the briefing for the authenticated trainer user.
+ * Resolves the trainer record from the user ID, then delegates to
+ * getBriefingByTrainerId for the snapshot lookup.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} userId - User.id of the authenticated trainer
@@ -541,15 +578,7 @@ export async function getBriefing(prisma, userId) {
     });
   }
 
-  const snapshot = await prisma.trainerBriefingSnapshot.findUnique({
-    where: { trainerId: trainer.id },
-  });
-
-  if (!snapshot || snapshot.isDirty) {
-    return refreshBriefing(prisma, trainer.id);
-  }
-
-  return formatSnapshot(snapshot);
+  return getBriefingByTrainerId(prisma, trainer.id);
 }
 
 /**

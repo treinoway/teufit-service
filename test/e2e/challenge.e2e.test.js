@@ -3,6 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 import { ChallengeParticipantMode, ChallengeStatus, ChallengeErrorCode } from '../../src/constants/challenge.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -55,6 +56,12 @@ e2eDescribe('e2e: challenges', () => {
       where: { userId },
       select: { id: true },
     });
+
+    // Trainers created via signup + become-trainer have no PlatformSubscription
+    // row, so getTrainerPlan() defaults them to FREE (championships: false).
+    // Provision DIAMOND so challenge routes under test aren't blocked by the
+    // plan gate.
+    await provisionTrainerPlan(trainerRecord.id);
 
     return { userId, trainerId: trainerRecord.id, accessToken: trainerToken };
   }

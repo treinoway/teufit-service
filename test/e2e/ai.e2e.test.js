@@ -1,7 +1,9 @@
 import 'dotenv/config'
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest'
+import { prisma } from '../../src/db.js'
 import { setupApp } from '../helpers/setup-app.js'
 import { cleanDatabase } from '../helpers/db-cleanup.js'
+import { provisionTrainerPlan } from '../helpers/platform-plan.js'
 
 // Mock the Anthropic SDK so no real API calls are made.
 // We do NOT mock the whole ai-training-service so that real service logic
@@ -75,7 +77,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       url: '/auth/signup',
       payload: { email, password: 'Test1234!' },
     })
-    const userToken = signupRes.json().token.accessToken
+    const { user: { id: userId }, token: { accessToken: userToken } } = signupRes.json()
 
     const becomeRes = await app.inject({
       method: 'PATCH',
@@ -83,6 +85,13 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       headers: { authorization: `Bearer ${userToken}` },
     })
     const { token: { accessToken } } = becomeRes.json()
+
+    // Trainers created via signup + become-trainer have no PlatformSubscription
+    // row, so getTrainerPlan() defaults them to FREE (no AI access). Provision
+    // DIAMOND so AI-gated routes under test aren't blocked by the plan gate.
+    const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } })
+    await provisionTrainerPlan(trainer.id)
+
     return { accessToken }
   }
 

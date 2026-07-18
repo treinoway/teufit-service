@@ -317,6 +317,11 @@ model TrainingProtocol {
 
   @@index([assigneeId, status, startDate(sort: Desc)])
   @@index([trainerId])
+  // Added for GET /trainer/dashboard: routines.expiredCount/expiringSoonCount
+  // filter by trainerId + status + expirationDate together — this composite
+  // turns those COUNT(*) queries into index scans instead of a trainerId
+  // index lookup followed by a heap filter on status/expirationDate.
+  @@index([trainerId, status, expirationDate])
   @@map("training_protocols")
 }
 
@@ -1161,6 +1166,14 @@ model SubscriptionPayment {
 
   @@index([subscriptionId, status])
   @@index([dueDate])
+  // Added for GET /trainer/dashboard: monthReceived filters status=paid within
+  // a paidAt window per resolved subscriptionId list — this composite makes
+  // that a range scan instead of a full scan of the trainer's paid history.
+  @@index([subscriptionId, status, paidAt])
+  // Added for GET /trainer/dashboard: plans.renewingSoonCount needs
+  // MAX(cycleEndDate) per subscription — this composite avoids scanning
+  // every payment row for each active subscription.
+  @@index([subscriptionId, cycleEndDate])
   @@map("subscription_payments")
 }
 
