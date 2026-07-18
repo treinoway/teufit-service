@@ -1852,10 +1852,6 @@ e2eDescribe('e2e: anamnesis', () => {
 
     it('parent deletion via ON DELETE SET NULL makes child unconditional', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
-      const { anamnesisId, sectionId } = (() => {
-        // We use a helper but need to inline it because we can't use async/await outside test body
-        return { anamnesisId: null, sectionId: null };
-      })();
 
       // Create fresh anamnesis
       const createResp = await createAnamnesis(trainerToken, {

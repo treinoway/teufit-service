@@ -15,7 +15,7 @@ import {
   updateFoodItem,
   deleteFoodItem,
 } from '../../src/services/diet-food-item-service.js';
-import { DietErrorCode, DietMessageCode } from '../../src/constants/diet.js';
+import { DietErrorCode } from '../../src/constants/diet.js';
 
 // ─── Shared fixtures ────────────────────────────────────────────────────────
 

@@ -158,7 +158,7 @@ describe('AnthropicProvider', () => {
       anthropicStream.mockReturnValue(mockStream)
 
       // Drain the generator
-      // eslint-disable-next-line no-unused-vars
+       
       for await (const _chunk of provider.chatStream(baseParams)) { /* drain */ }
 
       const callArgs = anthropicStream.mock.calls[0][0]

@@ -29,8 +29,6 @@ import {
 import { Roles } from '../../src/constants/roles.js';
 import {
   TrainingStatus,
-  TrainingCategory,
-  WeekDays,
   ExerciseLogStatus,
   WorkoutSessionStatus,
   PrescriptionMode,

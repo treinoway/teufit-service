@@ -23,7 +23,6 @@ describe('searchFoods', () => {
 
   it('defaults source to taco', async () => {
     await searchFoods(db);
-    const [findManyCall] = db.$transaction.mock.calls[0][0];
     // findMany is called inside the transaction array; check the where passed
     expect(db.food.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ source: 'taco' }) }),

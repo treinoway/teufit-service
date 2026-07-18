@@ -61,7 +61,7 @@ export class LlmProvider {
    * @param {number} params.maxTokens - Maximum tokens to generate
    * @returns {AsyncGenerator}
    */
-  // eslint-disable-next-line no-unused-vars, require-yield
+  // eslint-disable-next-line no-unused-vars
   async *chatStream({ system, tools, messages, maxTokens }) {
     throw new Error('LlmProvider.chatStream() must be implemented by subclass')
   }

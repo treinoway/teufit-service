@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
-import { TmbFormula, ActivityLevel } from '../../src/constants/diet.js';
+import { ActivityLevel } from '../../src/constants/diet.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -345,7 +345,7 @@ e2eDescribe('e2e: nutritionist patients', () => {
       const { userId: patientId } = await createPatientWithToken();
 
       // Update patient profile so the service can derive age/gender
-      const { accessToken: patientToken } = await app
+      const { accessToken: _patientToken } = await app
         .inject({
           method: 'GET',
           url: '/me',

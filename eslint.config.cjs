@@ -19,6 +19,20 @@ module.exports = [
         ...globals.node,
       },
     },
+    rules: {
+      // Honor the `_`-prefix convention for intentional throwaways, and ignore
+      // destructure siblings that only exist to omit keys from a rest spread
+      // (e.g. `const { sets, ...rest } = overrides`).
+      'no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
   // Test files (Vitest) – allow common test globals
   {

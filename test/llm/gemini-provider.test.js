@@ -136,7 +136,7 @@ describe('GeminiProvider', () => {
       ]
 
       // Drain the generator
-      // eslint-disable-next-line no-unused-vars
+       
       for await (const _chunk of provider.chatStream({ ...baseParams, system: systemBlocks })) { /* drain */ }
 
       const callArgs = geminiGenerateContentStream.mock.calls[0][0]
@@ -152,7 +152,7 @@ describe('GeminiProvider', () => {
       }
       geminiGenerateContentStream.mockResolvedValue(mockStream)
 
-      // eslint-disable-next-line no-unused-vars
+       
       for await (const _chunk of provider.chatStream({ ...baseParams, system: 'plain string' })) { /* drain */ }
 
       const callArgs = geminiGenerateContentStream.mock.calls[0][0]

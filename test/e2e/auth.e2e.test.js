@@ -321,7 +321,6 @@ e2eDescribe('e2e: auth flows', () => {
 
     it('matches case-insensitively for users registered via OAuth-style mixed case', async () => {
       const email = `forgot-case-${Date.now()}@example.com`;
-      const password = 'StrongPassw0rd!';
 
       // Simulate a legacy user with mixed-case email (e.g. from OAuth).
       const created = await prisma.user.create({

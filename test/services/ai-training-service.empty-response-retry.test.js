@@ -686,7 +686,7 @@ describe('processAiChatStream — read-only tool second LLM call', () => {
       .mockImplementationOnce(makeToolUseStream())
       .mockImplementationOnce(makeAnalysisStream(analysisText))
 
-    // eslint-disable-next-line no-unused-vars
+     
     for await (const _ of processAiChatStream('user-1', { message: 'Desempenho' })) { /* drain */ }
 
     expect(mockChatStream).toHaveBeenCalledTimes(2)
@@ -760,7 +760,7 @@ describe('processAiChatStream — read-only tool second LLM call', () => {
 
     mockChatStream.mockImplementationOnce(writeToolStreamResponse)
 
-    // eslint-disable-next-line no-unused-vars
+     
     for await (const _ of processAiChatStream('user-1', { message: 'Confirmo', conversationId: 'conv-write-stream' })) { /* drain */ }
 
     // Write tools skip the second chatStream call

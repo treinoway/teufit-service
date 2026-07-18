@@ -162,7 +162,6 @@ function hashToken(token) {
 
 function safeUser(user) {
   if (!user) return user;
-  // eslint-disable-next-line no-unused-vars
   const { passwordHash, ...rest } = user;
   return rest;
 }
