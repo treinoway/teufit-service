@@ -25,10 +25,72 @@ class EmailHandler {
     }
 
     sendResetPasswordEmail({to, passwordToken}) {
-        const subject = 'Treinoway - Pedido de alteração de senha';
+        const subject = 'TeuFit - Código para redefinir tua senha';
         const htmlContent = `
-            <p>Utilize este código de 6 dígitos para redefinir sua senha (ele expira em 15 minutos):</p>
-            <p><strong>${passwordToken}</strong></p>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir senha</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,700;6..12,800&display=swap" rel="stylesheet">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">Usa este código para redefinir tua senha. Ele expira em 15 minutos.</div>
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(16, 84, 178, 0.08); border-radius: 16px; overflow: hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 44px 40px;">
+                            <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
+                                Redefinir tua senha
+                            </h2>
+
+                            <p style="margin: 0 0 28px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
+                                Usa o código abaixo para criar uma nova senha. Ele expira em <strong>15 minutos</strong>.
+                            </p>
+
+                            <!-- Code -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: separate; margin: 0 0 28px;">
+                                <tr>
+                                    <td align="center" style="background-color: #D6E5F8; border-radius: 16px; padding: 24px;">
+                                        <span style="color: #1054B2; font-size: 36px; font-weight: 800; letter-spacing: 0.35em; font-family: 'Nunito Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">${passwordToken}</span>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.7; text-align: center;">
+                                Se você não pediu essa alteração, pode ignorar este e-mail.<br>
+                                Tua senha continua a mesma.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                © 2026 TeuFit. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
         `;
 
         // In test mode with no client configured, act as a no-op
