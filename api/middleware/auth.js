@@ -1,3 +1,8 @@
+import config from '../../config/index.js';
+import { hasBetaAccess } from '../../src/helpers/beta-access.js';
+import { ForbiddenAppError, UnauthorizedAppError } from '../../src/errors/app-error.js';
+import { InviteMessageCode } from '../../src/constants/trainer-invite.js';
+
 // Middleware to check if user is authenticated
 export async function authenticate(request, reply) {
   // 1) Prefer server-side session (web)
@@ -77,6 +82,33 @@ export function requireRole(allowedRoles) {
       });
     }
     
+    request.user = user;
+  };
+}
+
+// Middleware to close the /become-trainer self-promotion bypass during the
+// closed beta. Exempts admins, existing trainers, and the bootstrap admin
+// (via hasBetaAccess) — only a plain roles:[] user without an accepted
+// TrainerInvite is blocked. Gated behind BETA_INVITE_GATE_ENABLED so the
+// gate can be killed in an emergency without a deploy.
+export function requireBetaAccess() {
+  return async function (request) {
+    if (config.betaInviteGate?.enabled === false) return;
+
+    const user = request.user || request.session?.get?.('user');
+    if (!user) {
+      throw new UnauthorizedAppError({ message: 'Authentication required' });
+    }
+
+    const allowed = await hasBetaAccess(user);
+    if (!allowed) {
+      throw new ForbiddenAppError({
+        error: 'INVITE_REQUIRED',
+        messageCode: InviteMessageCode.REQUIRED,
+        message: 'A trainer invite is required to access this feature during the closed beta.',
+      });
+    }
+
     request.user = user;
   };
 }

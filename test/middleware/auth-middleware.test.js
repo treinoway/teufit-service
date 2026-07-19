@@ -1,6 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { authenticate, requireActiveUser, requireRole } from '../../api/middleware/auth.js';
+import { authenticate, requireActiveUser, requireRole, requireBetaAccess } from '../../api/middleware/auth.js';
+import config from '../../config/index.js';
+import { InviteMessageCode } from '../../src/constants/trainer-invite.js';
+
+vi.mock('../../src/helpers/beta-access.js', () => {
+  return {
+    hasBetaAccess: vi.fn(),
+  };
+});
+
+import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 
 function makeSession(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -114,5 +124,62 @@ describe('api/middleware/auth.js', () => {
     await mw(request, reply);
 
     expect(reply.statusCode).toBe(null);
+  });
+
+  // requireBetaAccess throws AppError instances directly (unlike the legacy
+  // middlewares above, which call reply.status().send()) — assert on the
+  // thrown error's shape, not on reply.statusCode.
+  describe('requireBetaAccess', () => {
+    beforeEach(() => {
+      hasBetaAccess.mockReset();
+      config.betaInviteGate.enabled = true;
+    });
+
+    it('allows through and sets request.user when hasBetaAccess resolves true', async () => {
+      hasBetaAccess.mockResolvedValue(true);
+      const mw = requireBetaAccess();
+      const user = { id: 'u1', email: 'admin@example.com', roles: ['admin'] };
+      const request = { session: makeSession({ user }) };
+
+      await expect(mw(request)).resolves.toBeUndefined();
+
+      expect(hasBetaAccess).toHaveBeenCalledWith(user);
+      expect(request.user).toEqual(user);
+    });
+
+    it('throws ForbiddenAppError (invite.required) when hasBetaAccess resolves false', async () => {
+      hasBetaAccess.mockResolvedValue(false);
+      const mw = requireBetaAccess();
+      const user = { id: 'u1', email: 'plain@example.com', roles: [] };
+      const request = { session: makeSession({ user }) };
+
+      await expect(mw(request)).rejects.toMatchObject({
+        httpStatus: 403,
+        error: 'INVITE_REQUIRED',
+        messageCode: InviteMessageCode.REQUIRED,
+      });
+    });
+
+    it('throws UnauthorizedAppError when there is no authenticated user', async () => {
+      const mw = requireBetaAccess();
+      const request = { session: makeSession({}) };
+
+      await expect(mw(request)).rejects.toMatchObject({ httpStatus: 401 });
+      expect(hasBetaAccess).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op that allows through (even with no user) when the kill-switch disables the gate', async () => {
+      config.betaInviteGate.enabled = false;
+      const mw = requireBetaAccess();
+      const request = { session: makeSession({}) };
+
+      try {
+        await expect(mw(request)).resolves.toBeUndefined();
+        expect(hasBetaAccess).not.toHaveBeenCalled();
+        expect(request.user).toBeUndefined();
+      } finally {
+        config.betaInviteGate.enabled = true;
+      }
+    });
   });
 });

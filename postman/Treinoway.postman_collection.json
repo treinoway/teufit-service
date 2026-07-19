@@ -52,6 +52,18 @@
       "key": "subscriptionPaymentId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "inviteId",
+      "value": "",
+      "type": "string",
+      "description": "Trainer invite UUID — used in /admin/trainer-invites/:id/revoke"
+    },
+    {
+      "key": "inviteCode",
+      "value": "",
+      "type": "string",
+      "description": "Plain trainer invite code (e.g. TW-XXXX-XXXX-XX) returned by POST /admin/trainer-invites — used to test POST /invite/redeem"
     }
   ],
   "auth": {
@@ -1019,9 +1031,140 @@
                 "become-trainer"
               ]
             },
-            "description": "Set the user's active profile to trainer. This adds the TRAINER role and creates a trainer profile if it doesn't exist. Returns new tokens with updated roles."
+            "description": "Set the user's active profile to trainer. This adds the TRAINER role and creates a trainer profile if it doesn't exist. Returns new tokens with updated roles. During closed beta, may also return 403 with messageCode \"invite.required\" if the user has no admin/trainer role and no accepted trainer invite — redeem an invite first via POST /invite/redeem."
           },
           "response": []
+        },
+        {
+          "name": "Redeem Trainer Invite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invite/redeem",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invite",
+                "redeem"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Redeem a trainer invite code (closed beta) — grants the trainer role. The authenticated user must be logged in with the same email the invite was sent to. On success, the trainer role is granted and fresh tokens are issued (same pattern as PATCH /become-trainer). Dashes/prefix in the code are optional and case-insensitive. Rate limited: ~10 requests/hour. Errors: 400 validation, 401, 403 (invite.revoked / invite.expired / invite.emailMismatch), 404 invite.notFound, 409 invite.alreadyAccepted, 429."
+          },
+          "response": [
+            {
+              "name": "Redeem Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/invite/redeem",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "invite",
+                    "redeem"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"betaAccess\": true,\n  \"activeProfile\": \"trainer\",\n  \"token\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.new-access-token\"\n  },\n  \"refreshToken\": \"8f14e45f-ceea-467e-b391-33c574e6f5b0\"\n}"
+            },
+            {
+              "name": "Redeem Trainer Invite - 403 Forbidden (invite.expired)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/invite/redeem",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "invite",
+                    "redeem"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"FORBIDDEN\",\n  \"messageCode\": \"invite.expired\",\n  \"message\": \"This invite has expired.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Grant Admin Role",
@@ -5531,6 +5674,311 @@
             "description": "Soft-delete a video (sets deletedAt). Returns id and deletedAt timestamp. Requires ADMIN role."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Trainer Invites - Admin",
+      "item": [
+        {
+          "name": "Create Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/trainer-invites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "trainer-invites"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.trainer@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Create a trainer invite (closed beta). Sends a magic-link + code invite to the given email. Any prior pending invite for that email is revoked. Returns the plain code (shown once, also emailed). Requires ADMIN role. Errors: 400 validation, 401, 403 (not admin), 409 invite.alreadyActiveForEmail (email already has an accepted invite), 429, 500."
+          },
+          "response": [
+            {
+              "name": "Create Trainer Invite - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/trainer-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "trainer-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"new.trainer@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"invite\": {\n    \"id\": \"b2f3a1d4-8e6c-4a2b-9f31-7c4e5d8a9b10\",\n    \"email\": \"new.trainer@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"expiresAt\": \"2026-07-21T12:00:00.000Z\"\n  },\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}"
+            },
+            {
+              "name": "Create Trainer Invite - 409 Conflict (invite.alreadyActiveForEmail)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/trainer-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "trainer-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"new.trainer@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"invite.alreadyActiveForEmail\",\n  \"message\": \"This email already has an active invite.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Trainer Invites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/trainer-invites?status=pending&email=&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "trainer-invites"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "description": "Filter by status: pending | accepted | revoked | expired"
+                },
+                {
+                  "key": "email",
+                  "value": "",
+                  "description": "Filter by email (partial match)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min: 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (max: 100)"
+                }
+              ]
+            },
+            "description": "List/search trainer invites (closed beta). All query params are optional. Requires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "List Trainer Invites - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/trainer-invites?status=pending&email=&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "trainer-invites"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "pending"
+                    },
+                    {
+                      "key": "email",
+                      "value": ""
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"b2f3a1d4-8e6c-4a2b-9f31-7c4e5d8a9b10\",\n      \"email\": \"new.trainer@example.com\",\n      \"status\": \"pending\",\n      \"statusLabel\": \"Pendente\",\n      \"invitedByUserId\": \"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n      \"userId\": null,\n      \"expiresAt\": \"2026-07-21T12:00:00.000Z\",\n      \"acceptedAt\": null,\n      \"revokedAt\": null,\n      \"createdAt\": \"2026-07-14T12:00:00.000Z\"\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Revoke Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/trainer-invites/:id/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "trainer-invites",
+                ":id",
+                "revoke"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{inviteId}}",
+                  "description": "Trainer invite UUID"
+                }
+              ]
+            },
+            "description": "Revoke a pending trainer invite. Only pending invites can be revoked. Requires ADMIN role. Errors: 404 invite.notFound, 409 (conflict — only pending invites can be revoked)."
+          },
+          "response": [
+            {
+              "name": "Revoke Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/trainer-invites/:id/revoke",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "trainer-invites",
+                    ":id",
+                    "revoke"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{inviteId}}",
+                      "description": "Trainer invite UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"invite\": {\n    \"id\": \"b2f3a1d4-8e6c-4a2b-9f31-7c4e5d8a9b10\",\n    \"email\": \"new.trainer@example.com\",\n    \"status\": \"revoked\",\n    \"statusLabel\": \"Revogado\",\n    \"invitedByUserId\": \"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"userId\": null,\n    \"expiresAt\": \"2026-07-21T12:00:00.000Z\",\n    \"acceptedAt\": null,\n    \"revokedAt\": \"2026-07-15T09:30:00.000Z\",\n    \"createdAt\": \"2026-07-14T12:00:00.000Z\"\n  }\n}"
+            }
+          ]
         }
       ]
     },

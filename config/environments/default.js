@@ -19,6 +19,15 @@ export default {
     webhookSecret: process.env.ASAAS_WEBHOOK_SECRET,
     env: process.env.ASAAS_ENV || 'sandbox',
   },
+  web: {
+    // Used to build the trainer-invite magic link: `${baseUrl}/invite?code=...`
+    baseUrl: process.env.WEB_BASE_URL || 'https://teufit.com.br',
+  },
+  betaInviteGate: {
+    // Emergency kill-switch for the /become-trainer beta gate — set
+    // BETA_INVITE_GATE_ENABLED=false to disable without a deploy.
+    enabled: process.env.BETA_INVITE_GATE_ENABLED !== 'false',
+  },
   rateLimit: {
     global: {
       max: 100,
@@ -74,6 +83,10 @@ export default {
       uploadAvatar: {
         max: 5,
         timeWindow: '1 minute',
+      },
+      redeemInvite: {
+        max: 10,
+        timeWindow: '1 hour',
       },
     },
     trainer: {

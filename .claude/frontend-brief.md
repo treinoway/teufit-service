@@ -1,77 +1,105 @@
-# Frontend Brief — Student Readiness Indicators
+# Frontend Brief — Trainer Invite System (Closed Beta)
 
-**Backend branch**: staging · **Generated**: 2026-07-15
+**Backend branch**: master · **Generated**: 2026-07-19
 
 ## Elevator pitch
-The trainer's student list now tells them, at a glance, exactly what is stopping each student from being fully operational — no active routine, no plan, a cancelled plan, an overdue payment, or a trainer-side seat/quota block — instead of leaving the trainer to guess or dig into each student's profile.
+Teufit web is going into closed beta: only trainers who received an invite email (or code) from an admin can actually use the app. Everyone else who logs in gets redirected to a screen where they can redeem their invite code.
 
 ## User story
-As a trainer, I want to see what's blocking each of my students from being ready (no routine, no plan, payment overdue, etc.) directly in my student list, so that I know exactly what action to take for each student without opening their individual profile.
+As an invited trainer, I want to enter the code I received by email (or click the link in that email) so that I can unlock the trainer app and start using it.
+
+As any other logged-in user without an invite, I want to be clearly told the app is invite-only right now and given a place to enter a code, instead of hitting a confusing dead end.
 
 ## User flows
-1. **Entry point**: The trainer's student roster/list screen (wherever `GET /trainer/students` is currently rendered — student cards or rows).
+
+1. **Entry point**: A brand-new public route, `/invite`, reachable while a user is authenticated but not yet granted access (do not fold it behind the normal authenticated app shell). Also reachable directly from an email link: `teufit.com.br/invite?code=TW-XXXX-XXXX-XX`.
 2. **Happy path**:
-   1. Trainer opens the student list.
-   2. Each student row/card now carries a readiness signal: either "all good" (no blockers) or one-to-many blocker chips/icons (e.g. "No active routine", "Payment overdue").
-   3. Trainer scans the list and immediately spots students needing attention — a student with a cancelled plan, another with no routine assigned, another blocked by the trainer's own seat quota.
-   4. Trainer taps a blocker (or the student) to go fix it — e.g. tapping "No active routine" could deep-link to assigning a protocol; tapping "Payment overdue" could deep-link to the subscription/billing screen for that student.
+   1. User receives an email with an "Aceitar convite" button (linking to `/invite?code=...`) and the same code printed for manual entry.
+   2. User clicks the link (or navigates to `/invite` and pastes the code manually) — if arriving with `?code=`, the field is prefilled.
+   3. User submits. On success, the app refreshes the session (new tokens, role now includes trainer) and takes them straight into the trainer app.
 3. **Branches**:
-   - A student can show **multiple blockers at once** (e.g. no routine AND an overdue payment simultaneously) — the UI must support showing more than one chip per student, not just a single status label.
-   - `blocked_on_plan` is a signal about the **trainer's own** platform plan/seat limit, not something the student did — copy and iconography should make clear this is the trainer's problem to resolve (e.g. "Upgrade your plan"), not a judgment on the student.
+   - User isn't logged in yet: they should be able to sign up / log in first (with the SAME email the invite was sent to), then land back on `/invite` to redeem.
+   - User is already logged in with a different email than the invite: redeeming fails with a clear "this invite belongs to a different email" message — they need to log out and use the invited account.
+   - User redeems a code they already redeemed before (e.g. double-click, back button): should succeed silently and feel like nothing broke.
+   - Any already-authenticated user without beta access who tries to reach any other part of the trainer app gets bounced to `/invite` instead of seeing a broken/empty screen.
 
 ## UI states to cover
-- **Ready / no blockers**: `ready: true`, `blockers: []` — show a positive/neutral state (e.g. no chip, or a subtle "All set" badge). Do not show an empty blocker row.
-- **One blocker**: single chip/icon with the translated label from `blockersLabel`.
-- **Multiple blockers**: all present blockers should be visible (stacked chips, a "+N more" affordance, or an expandable list) — array order from the API is intentional and stable, safe to render in that order without re-sorting.
-- **Loading**: existing student-list loading state applies (no new loading state — this ships as part of the same response).
-- **Permissions**: no change — this is part of the existing trainer-only `GET /trainer/students` response.
+- Loading (submitting the code)
+- Empty (code field empty, user hasn't typed/pasted anything yet)
+- Error states, each with a distinct user-facing message:
+  - Unknown/mistyped code
+  - Expired invite
+  - Revoked invite
+  - Invite already used by someone else
+  - Invite is for a different email than the one currently logged in
+  - Generic/network error
+- Success (brief confirmation before redirecting into the app)
+- Gate redirect: any signed-in user whose `betaAccess` is `false` should be redirected to `/invite` before reaching any other authenticated screen (trainer dashboard, onboarding, etc.) — this must run before role-based or onboarding-based redirects.
 
 ## API contract
 
-### GET /trainer/students
-- **Auth**: Bearer token, TRAINER role
-- **Request**: no change (no new params)
-- **Success** (200) — each item in the array gains two fields:
+### POST /invite/redeem
+- **Auth**: required (any authenticated user, any role)
+- **Rate limit**: ~10 requests/hour per user
+- **Request**:
+  ```json
+  { "code": "TW-XXXX-XXXX-XX" }
+  ```
+  Dashes and the `TW-` prefix are optional and matching is case-insensitive — accept whatever the user pastes.
+- **Success** (200):
   ```json
   {
-    "id": "uuid",
-    "email": "student@example.com",
-    "firstName": "Ana",
-    "lastName": "Silva",
-    "avatarUrl": null,
-    "adherence": 80,
-    "adherenceCompleted": 4,
-    "adherenceExpected": 5,
-    "adherenceMonth": "2026-07-01",
-    "lastWorkoutAt": "2026-07-10T12:00:00.000Z",
-    "currentPrLoad": 100,
-    "currentPrAt": "2026-07-10T12:00:00.000Z",
-    "ready": false,
-    "blockers": ["no_active_protocol", "subscription_overdue"],
-    "blockersLabel": ["Sem rotina ativa", "Pagamento em atraso"]
+    "betaAccess": true,
+    "activeProfile": "trainer",
+    "token": { "accessToken": "..." },
+    "refreshToken": "..."
   }
   ```
-- **Errors**: unchanged from the existing endpoint (401, 403, 409 trainer-profile-missing, 429, 500).
+  Treat this exactly like the existing "become trainer" token refresh: store the new tokens and re-fetch `/me` so the UI picks up the new role and `betaAccess: true`.
+- **Errors** (status · error · messageCode · when):
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · code missing/blank
+  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · not logged in
+  - `403` · `FORBIDDEN` · `invite.revoked` · invite was revoked by an admin
+  - `403` · `FORBIDDEN` · `invite.expired` · invite is older than 7 days
+  - `403` · `FORBIDDEN` · `invite.emailMismatch` · logged-in email doesn't match the invited email
+  - `404` · `NOT_FOUND` · `invite.notFound` · code doesn't match any invite (also covers typos — no enumeration hint given)
+  - `409` · `CONFLICT` · `invite.alreadyAccepted` · invite was already redeemed by a different account
+  - `429` · — · `request.rateLimitExceeded` · too many attempts
 
-Note: `GET /trainer/students/search` (the fuzzy search endpoint) reuses the same student item shape but does **not** populate `ready`/`blockers` — those fields will be absent/undefined on search results. Don't rely on them there.
+### GET /me (existing endpoint, new field)
+- **Auth**: required
+- **New response field**: `betaAccess: boolean` — `true` for admins, existing trainers, the bootstrap admin, and anyone with an accepted invite; `false` otherwise. This is the single source of truth for whether the gate redirect should fire. Mobile clients can ignore this field entirely.
+
+### PATCH /become-trainer (existing endpoint, new failure mode)
+- **Auth**: required
+- Previously anyone could call this to self-promote to trainer. Now blocked for non-exempt users:
+  - `403` · `FORBIDDEN` · `invite.required` · user has no admin/trainer role and no accepted invite — if this screen/flow still exists anywhere in the UI, it should surface this as "you need an invite" rather than a generic error.
 
 ## i18n keys required
-`blockersLabel` is pre-translated by the backend based on the `app-language` header — the frontend does not need to translate these strings itself, just render them. For reference, the five possible values and their backend-provided pt-BR copy:
-- `no_active_protocol` → "Sem rotina ativa"
-- `no_subscription` → "Sem plano"
-- `subscription_cancelled` → "Plano cancelado"
-- `subscription_overdue` → "Pagamento em atraso"
-- `blocked_on_plan` → "Bloqueado pela sua cota"
+Stable messageCodes the frontend needs to translate for this feature:
+- `invite.notFound` → suggested copy: "Convite não encontrado. Verifique o código e tente novamente."
+- `invite.expired` → suggested copy: "Este convite expirou. Peça um novo convite."
+- `invite.revoked` → suggested copy: "Este convite foi revogado."
+- `invite.alreadyAccepted` → suggested copy: "Este convite já foi utilizado."
+- `invite.emailMismatch` → suggested copy: "Este convite pertence a outro e-mail. Entre com a conta correta."
+- `invite.required` → suggested copy: "Você precisa de um convite para acessar o Teufit durante o teste fechado."
 
 ## Acceptance criteria
-- [ ] A student with `ready: true` shows no blocker chips (or a clear "all set" indicator, per design).
-- [ ] A student with one or more entries in `blockers` shows a chip/badge per entry, using `blockersLabel` text (never hardcode English/Portuguese strings for these — always render the label the API returns).
-- [ ] A student with multiple simultaneous blockers renders all of them, not just the first.
-- [ ] `blocked_on_plan` is visually/copy-distinct from the other four (it's the trainer's issue, not the student's).
-- [ ] The student list continues to work correctly for students returned by `/trainer/students/search`, where these fields are absent (no crash, no blank chip).
+- [ ] A signed-in user with `betaAccess: false` is redirected to `/invite` from anywhere else in the app, before any other redirect logic runs.
+- [ ] `/invite` is reachable without already having beta access (it must be exempt from the gate redirect, or it becomes unreachable).
+- [ ] Arriving at `/invite?code=XXXX` prefills the code field; the user can also type/paste it manually with or without dashes.
+- [ ] Successful redemption updates the stored session (new tokens) and takes the user into the trainer app without a manual refresh.
+- [ ] Each error case above shows a distinct, translated message — no generic "something went wrong" for all of them.
+- [ ] Redeeming a code the user already successfully redeemed before does not show an error.
+- [ ] Existing trainers and admins never see the `/invite` screen (their `betaAccess` is always `true`).
+
+## Out of scope
+- Any admin-facing UI for creating/listing/revoking invites (this cycle ships the redeem-side experience only; invite creation is admin/backend-only for now, e.g. via Postman/internal tooling).
+- Trainer-initiated invites (inviting your own colleagues) — the backend has a seam for this but it's not enabled yet.
+- Mobile app changes — this entire feature is web-only; the mobile app is unaffected and should ignore `betaAccess`.
 
 ## Open design questions
-- Visual treatment: colored chips, small icons, or a single "attention needed" badge that expands on tap?
-- Should blockers be actionable (deep-link to the fix) in this cycle, or purely informational for now?
-- How should `blocked_on_plan` be visually differentiated from student-caused blockers (e.g. a distinct color/icon signaling "this is on you, trainer")?
-- Should the student list support filtering/sorting by readiness (e.g. "show not-ready students first")? Not covered by this backend change — worth flagging as a possible fast-follow.
+- Visual treatment of the `/invite` screen: reuse the existing auth-card/forgot-password layout, or something more "welcome to the beta" branded?
+- Should the code input auto-format as the user types (inserting dashes at TW-XXXX-XXXX-XX boundaries), or accept free-form paste only?
+- Copy/tone for the `invite.required` case if a stray UI element still links to "become a trainer" — should that entry point be hidden entirely for non-exempt users instead of surfacing an error after the fact?
+- Where should a logged-in user with the wrong email (emailMismatch case) be pointed to log out / switch accounts from the `/invite` screen itself?

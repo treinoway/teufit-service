@@ -105,6 +105,7 @@ export const getMeSchema = {
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
+        betaAccess: { type: 'boolean', description: 'True if the user may use the web app during the closed beta (admin, trainer, bootstrap admin, or accepted trainer invite)' },
         address: {
           type: 'object',
           nullable: true,
@@ -303,6 +304,7 @@ export const updateProfileSchema = {
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
+        betaAccess: { type: 'boolean', description: 'True if the user may use the web app during the closed beta (admin, trainer, bootstrap admin, or accepted trainer invite)' },
         address: { type: 'object', nullable: true, additionalProperties: true },
         socials: { type: 'object', nullable: true, additionalProperties: true },
         preferences: { type: 'object', nullable: true, additionalProperties: true },
@@ -358,6 +360,10 @@ export const becomeTrainerSchema = {
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
+    403: {
+      description: 'Forbidden — a trainer invite is required during the closed beta (invite.required)',
+      ...errorResponseSchema,
+    },
     429: errorResponseSchema,
     500: errorResponseSchema,
   },

@@ -179,6 +179,12 @@ export default {
       pending: 'Pending',
       paid: 'Paid',
     },
+    inviteStatus: {
+      pending: 'Pending',
+      accepted: 'Accepted',
+      revoked: 'Revoked',
+      expired: 'Expired',
+    },
   },
 
   errors: {
@@ -355,6 +361,15 @@ export default {
     'video.invalidBodySegment': 'Invalid body segment.',
     'video.titleRequired': 'Video title is required.',
     'video.tagsExceeded': 'Maximum number of tags exceeded.',
+
+    // Trainer invite (closed beta)
+    'invite.notFound': 'Invite not found or invalid code.',
+    'invite.expired': 'This invite has expired.',
+    'invite.revoked': 'This invite has been revoked.',
+    'invite.alreadyAccepted': 'This invite has already been used.',
+    'invite.emailMismatch': 'This invite is bound to a different email address.',
+    'invite.required': 'A trainer invite is required to access this feature during the closed beta.',
+    'invite.alreadyActiveForEmail': 'This email already has an active invite.',
   },
 
   notes: {

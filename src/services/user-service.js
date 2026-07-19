@@ -7,6 +7,7 @@ import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
 import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
 import { buildPlatformPlanForMe } from './platform-plan-service.js';
+import { hasBetaAccess } from '../helpers/beta-access.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -16,7 +17,7 @@ async function computeHasActiveTrainer(userId) {
 	return Boolean(link);
 }
 
-async function toUserProfile(user, { hasActiveTrainer, platformPlan } = {}) {
+async function toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess } = {}) {
 	if (!user) return null;
 
 	const avatarUrl = await s3BucketHandler.resolveUrl(user.avatarUrl);
@@ -32,6 +33,7 @@ async function toUserProfile(user, { hasActiveTrainer, platformPlan } = {}) {
 		birthDate: formatDateOnly(user.birthDate),
 		avatarUrl,
 		hasActiveTrainer: hasActiveTrainer === true,
+		betaAccess: betaAccess === true,
 	};
 
 	// Only include relations that were loaded (not undefined)
@@ -155,7 +157,11 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		user.trainer = undefined;
 	}
 
-	return toUserProfile(user, { hasActiveTrainer, platformPlan });
+	// Roles/bootstrap-admin/trainer are exempt (no DB hit); only a plain
+	// roles:[] user triggers the accepted-invite lookup inside hasBetaAccess.
+	const betaAccess = await hasBetaAccess(user);
+
+	return toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess });
 }
 
 export async function setActiveProfileToTrainer(userId) {
@@ -414,9 +420,12 @@ if (!userId) {
 		await maybeMarkProfileComplete({ userId });
 	}
 
-	const hasActiveTrainer = await computeHasActiveTrainer(userId);
+	const [hasActiveTrainer, betaAccess] = await Promise.all([
+		computeHasActiveTrainer(userId),
+		hasBetaAccess(updatedUser),
+	]);
 
-	return toUserProfile(updatedUser, { hasActiveTrainer });
+	return toUserProfile(updatedUser, { hasActiveTrainer, betaAccess });
 	}catch (err) {
 		console.error('Error in updateUserProfile:', err);
 		throw err;

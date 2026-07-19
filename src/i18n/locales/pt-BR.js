@@ -183,6 +183,12 @@ export default {
       pending: 'Pendente',
       paid: 'Pago',
     },
+    inviteStatus: {
+      pending: 'Pendente',
+      accepted: 'Aceito',
+      revoked: 'Revogado',
+      expired: 'Expirado',
+    },
   },
 
   errors: {
@@ -359,6 +365,15 @@ export default {
     'video.invalidBodySegment': 'Segmento corporal inválido.',
     'video.titleRequired': 'O título do vídeo é obrigatório.',
     'video.tagsExceeded': 'Quantidade máxima de tags excedida.',
+
+    // Trainer invite (closed beta)
+    'invite.notFound': 'Convite não encontrado ou código inválido.',
+    'invite.expired': 'Este convite expirou.',
+    'invite.revoked': 'Este convite foi revogado.',
+    'invite.alreadyAccepted': 'Este convite já foi utilizado.',
+    'invite.emailMismatch': 'Este convite está vinculado a outro e-mail.',
+    'invite.required': 'É necessário um convite de treinador para acessar esta funcionalidade durante o teste fechado.',
+    'invite.alreadyActiveForEmail': 'Este e-mail já possui um convite ativo.',
   },
 
   notes: {

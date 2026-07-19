@@ -37,10 +37,10 @@ export class ValidationAppError extends AppError {
 }
 
 export class UnauthorizedAppError extends AppError {
-  constructor({ message = 'Authentication required', messageCode = 'auth.unauthorized', details } = {}) {
+  constructor({ message = 'Authentication required', messageCode = 'auth.unauthorized', error = 'UNAUTHORIZED', details } = {}) {
     super({
       httpStatus: 401,
-      error: 'UNAUTHORIZED',
+      error,
       messageCode,
       message,
       details,
@@ -50,10 +50,10 @@ export class UnauthorizedAppError extends AppError {
 }
 
 export class ForbiddenAppError extends AppError {
-  constructor({ message = 'Forbidden', messageCode = 'auth.forbidden', details } = {}) {
+  constructor({ message = 'Forbidden', messageCode = 'auth.forbidden', error = 'FORBIDDEN', details } = {}) {
     super({
       httpStatus: 403,
-      error: 'FORBIDDEN',
+      error,
       messageCode,
       message,
       details,
@@ -63,10 +63,10 @@ export class ForbiddenAppError extends AppError {
 }
 
 export class NotFoundAppError extends AppError {
-  constructor({ message = 'Resource not found', messageCode = 'resource.notFound', details } = {}) {
+  constructor({ message = 'Resource not found', messageCode = 'resource.notFound', error = 'NOT_FOUND', details } = {}) {
     super({
       httpStatus: 404,
-      error: 'NOT_FOUND',
+      error,
       messageCode,
       message,
       details,
@@ -76,10 +76,10 @@ export class NotFoundAppError extends AppError {
 }
 
 export class ConflictAppError extends AppError {
-  constructor({ message = 'Conflict', messageCode = 'resource.conflict', details } = {}) {
+  constructor({ message = 'Conflict', messageCode = 'resource.conflict', error = 'CONFLICT', details } = {}) {
     super({
       httpStatus: 409,
-      error: 'CONFLICT',
+      error,
       messageCode,
       message,
       details,

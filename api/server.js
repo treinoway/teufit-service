@@ -17,6 +17,7 @@ import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { nutritionistRoutes } from './routes/nutritionist-route.js';
 import { userRoutes } from './routes/user-route.js';
+import { trainerInviteRoutes } from './routes/trainer-invite-route.js';
 import { addressRoutes } from './routes/address-route.js';
 import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
 import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
@@ -339,6 +340,7 @@ export async function buildServer(options = {}) {
     await fastify.register(trainerRoutes);
     await fastify.register(nutritionistRoutes);
     await fastify.register(userRoutes);
+    await fastify.register(trainerInviteRoutes);
     await fastify.register(addressRoutes);
     await fastify.register(trainingProtocolTemplateRoutes);
     await fastify.register(trainingProtocolRoutes);
