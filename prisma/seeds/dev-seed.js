@@ -199,6 +199,38 @@ async function main() {
     },
   });
 
+  // 2·admin. Admin account — ADMIN + TRAINER roles so it can manage beta invites
+  // (/admin/invites) AND use the full trainer app. Bypasses the beta gate (admin
+  // is exempt via hasBetaAccess). DIAMOND plan so premium features work.
+  const adminUser = await prisma.user.create({
+    data: {
+      email: 'admin@treinoway.local',
+      passwordHash: hashPassword('admin123'),
+      roles: [Roles.ADMIN, Roles.TRAINER],
+      status: 'active',
+      firstName: 'Admin',
+      lastName: 'Dev',
+      gender: 'male',
+      birthDate: new Date('1990-01-01'),
+    },
+  });
+  const adminTrainer = await prisma.trainer.create({
+    data: {
+      userId: adminUser.id,
+      serviceMode: 'online',
+      profileCompletedAt: NOW,
+    },
+  });
+  await prisma.platformSubscription.create({
+    data: {
+      trainerId: adminTrainer.id,
+      tier: PLATFORM_PLAN_TIERS.DIAMOND,
+      status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+      currentPeriodStart: NOW,
+      currentPeriodEnd: new Date(NOW.getTime() + 30 * DAY_MS),
+    },
+  });
+
   // 2a. DIAMOND trainer — premium features, currentPeriodEnd 30 days ahead.
   const diamondTrainerUser = await prisma.user.create({
     data: {
@@ -738,6 +770,7 @@ async function main() {
   // ─── Summary ───────────────────────────────────────────────────────────────
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log('Dev seed complete:');
+  console.log(`  ✓ ${counts('Admin', 1)} — admin@treinoway.local / admin123 [ADMIN + TRAINER, DIAMOND]`);
   console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password} [DIAMOND]`);
   console.log(`  ✓ DIAMOND trainer — ${TRAINER_DIAMOND.email} / ${TRAINER_DIAMOND.password}`);
   console.log(`  ✓ PLATINUM trainer — ${TRAINER_PLATINUM.email} / ${TRAINER_PLATINUM.password} (50 students, 5 AI events)`);

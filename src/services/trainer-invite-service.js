@@ -24,7 +24,7 @@ function normalizeEmail(email) {
 }
 
 /**
- * Generates a `TW-XXXX-XXXX-XX` code: 10 characters from a 32-symbol
+ * Generates a `TF-XXXX-XXXX-XX` code: 10 characters from a 32-symbol
  * Crockford base32 alphabet ≈ 50 bits of entropy. crypto.randomInt is used
  * (rather than slicing randomBytes) since 32 divides evenly, avoiding modulo bias.
  */
@@ -33,17 +33,17 @@ function generateInviteCode() {
     { length: 10 },
     () => INVITE_CODE_ALPHABET[crypto.randomInt(0, INVITE_CODE_ALPHABET.length)],
   ).join('');
-  return `TW-${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 10)}`;
+  return `TF-${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 10)}`;
 }
 
 /**
- * Accepts the code with or without the `TW-` prefix/dashes, case-insensitive,
+ * Accepts the code with or without the `TF-` prefix/dashes, case-insensitive,
  * so manual entry is forgiving. The normalized core is what gets hashed —
  * generation and redemption must agree on this shape.
  */
 function normalizeInviteCode(code) {
   if (typeof code !== 'string') return '';
-  return code.trim().toUpperCase().replace(/^TW-?/, '').replace(/[^A-Z0-9]/g, '');
+  return code.trim().toUpperCase().replace(/^TF-?/, '').replace(/[^A-Z0-9]/g, '');
 }
 
 function hashInviteCode(code) {

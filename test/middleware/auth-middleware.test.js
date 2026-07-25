@@ -168,6 +168,23 @@ describe('api/middleware/auth.js', () => {
       expect(hasBetaAccess).not.toHaveBeenCalled();
     });
 
+    // requireBetaAccess has no code of its own for the tester-email allowlist —
+    // it delegates entirely to hasBetaAccess (see src/helpers/beta-access.js,
+    // covered by test/helpers/beta-access.test.js). This test just documents
+    // that the middleware honors whatever hasBetaAccess decides, including
+    // when the true stems from tester-allowlist membership.
+    it('allows a tester-allowlisted user through because it trusts whatever hasBetaAccess resolves', async () => {
+      hasBetaAccess.mockResolvedValue(true);
+      const mw = requireBetaAccess();
+      const user = { id: 'u1', email: 'qa@example.com', roles: [] };
+      const request = { session: makeSession({ user }) };
+
+      await expect(mw(request)).resolves.toBeUndefined();
+
+      expect(hasBetaAccess).toHaveBeenCalledWith(user);
+      expect(request.user).toEqual(user);
+    });
+
     it('is a no-op that allows through (even with no user) when the kill-switch disables the gate', async () => {
       config.betaInviteGate.enabled = false;
       const mw = requireBetaAccess();

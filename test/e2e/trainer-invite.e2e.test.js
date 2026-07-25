@@ -78,7 +78,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
     expect(response.statusCode).toBe(201);
     const body = response.json();
     expect(body.invite).toMatchObject({ email: 'invitee@example.com', status: 'pending' });
-    expect(body.code).toMatch(/^TW-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{2}$/);
+    expect(body.code).toMatch(/^TF-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{2}$/);
 
     const persisted = await prisma.trainerInvite.findUnique({ where: { id: body.invite.id } });
     expect(persisted).not.toBeNull();
@@ -130,7 +130,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
   it('redeeming an unknown code returns 404 invite.notFound', async () => {
     const { accessToken } = await signup('redeemer@example.com');
 
-    const response = await redeemInvite(accessToken, 'TW-ZZZZ-ZZZZ-99');
+    const response = await redeemInvite(accessToken, 'TF-ZZZZ-ZZZZ-99');
 
     expect(response.statusCode).toBe(404);
     expect(response.json().messageCode).toBe('invite.notFound');

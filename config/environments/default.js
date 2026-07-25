@@ -1,3 +1,13 @@
+// Comma-separated list → normalized (trimmed, lowercased), non-empty emails.
+// Used to parse BETA_TESTER_EMAILS below.
+function parseEmailAllowlist(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  return raw
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export default {
   auth: {
     accessTokenTtlSeconds: 60 * 15, // 15 minutes
@@ -27,6 +37,9 @@ export default {
     // Emergency kill-switch for the /become-trainer beta gate — set
     // BETA_INVITE_GATE_ENABLED=false to disable without a deploy.
     enabled: process.env.BETA_INVITE_GATE_ENABLED !== 'false',
+    // Allowlist of emails that skip the invite gate entirely (for QA/testing).
+    // Comma-separated, normalized to trimmed lowercase. Default: none exempt.
+    testerEmails: parseEmailAllowlist(process.env.BETA_TESTER_EMAILS),
   },
   rateLimit: {
     global: {

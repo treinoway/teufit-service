@@ -258,15 +258,15 @@ class EmailHandler {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Você foi vinculado a um time</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Exo 2', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5;">
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F1F5F9;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F1F5F9;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(30, 111, 219, 0.08); border-radius: 16px; overflow: hidden;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 24px rgba(16, 84, 178, 0.10); border-radius: 20px; overflow: hidden;">
 
                     <!-- Header -->
                     <tr>
-                        <td style="background: #0f172a; padding: 40px 30px; text-align: center;">
+                        <td style="background: linear-gradient(160deg, #1054B2, #0D47A1); padding: 40px 30px; text-align: center;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">
                                 TEUFIT
                             </h1>
@@ -280,7 +280,7 @@ class EmailHandler {
                             <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse;">
                                 <tr>
                                     <td align="center">
-                                        <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px;">
+                                        <span style="display: inline-block; background-color: #FFECDC; color: #1E293B; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px;">
                                             🚀 Acesso antecipado • Teste fechado
                                         </span>
                                     </td>
@@ -369,15 +369,15 @@ class EmailHandler {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Seu convite Teufit</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Exo 2', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5;">
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F1F5F9;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F1F5F9;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(30, 111, 219, 0.08); border-radius: 16px; overflow: hidden;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 24px rgba(16, 84, 178, 0.10); border-radius: 20px; overflow: hidden;">
 
                     <!-- Header -->
                     <tr>
-                        <td style="background: #0f172a; padding: 40px 30px; text-align: center;">
+                        <td style="background: linear-gradient(160deg, #1054B2, #0D47A1); padding: 40px 30px; text-align: center;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">
                                 TEUFIT
                             </h1>
@@ -391,7 +391,7 @@ class EmailHandler {
                             <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse;">
                                 <tr>
                                     <td align="center">
-                                        <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px;">
+                                        <span style="display: inline-block; background-color: #FFECDC; color: #1E293B; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px;">
                                             🚀 Acesso antecipado • Teste fechado
                                         </span>
                                     </td>
@@ -410,7 +410,7 @@ class EmailHandler {
                             <table role="presentation" style="width: 100%; margin: 0 0 28px; border-collapse: collapse;">
                                 <tr>
                                     <td align="center">
-                                        <a href="${inviteUrl}" style="display: inline-block; background-color: #1e6fdb; color: #ffffff; font-size: 16px; font-weight: 700; text-decoration: none; padding: 16px 36px; border-radius: 12px;">
+                                        <a href="${inviteUrl}" style="display: inline-block; background-color: #1054B2; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 40px; border-radius: 14px; text-transform: uppercase; letter-spacing: 0.06em;">
                                             Aceitar convite
                                         </a>
                                     </td>

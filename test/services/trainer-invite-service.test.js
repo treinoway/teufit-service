@@ -112,7 +112,7 @@ describe('createInvite', () => {
   it('creates an invite with a properly shaped code and a hashed (not raw) codeHash', async () => {
     const { invite, code } = await createInvite({ actingUserId: ADMIN_ID, email: 'Invitee@Example.com' });
 
-    expect(code).toMatch(/^TW-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{2}$/);
+    expect(code).toMatch(/^TF-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{2}$/);
 
     const createCall = prisma.trainerInvite.create.mock.calls[0][0];
     expect(createCall.data.email).toBe('invitee@example.com');
@@ -291,7 +291,7 @@ describe('redeemInvite', () => {
   it('throws NotFoundAppError when no invite matches the code hash', async () => {
     prisma.trainerInvite.findUnique.mockResolvedValue(null);
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 404,
       error: InviteErrorCode.INVITE_NOT_FOUND,
       messageCode: InviteMessageCode.NOT_FOUND,
@@ -301,7 +301,7 @@ describe('redeemInvite', () => {
   it('throws ForbiddenAppError when the invite is revoked', async () => {
     prisma.trainerInvite.findUnique.mockResolvedValue(baseInvite({ status: InviteStatus.REVOKED }));
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 403,
       error: InviteErrorCode.INVITE_REVOKED,
       messageCode: InviteMessageCode.REVOKED,
@@ -313,7 +313,7 @@ describe('redeemInvite', () => {
       baseInvite({ status: InviteStatus.PENDING, expiresAt: new Date(Date.now() - 1000) }),
     );
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 403,
       error: InviteErrorCode.INVITE_EXPIRED,
       messageCode: InviteMessageCode.EXPIRED,
@@ -331,7 +331,7 @@ describe('redeemInvite', () => {
       baseInvite({ status: InviteStatus.PENDING, email: 'someone-else@example.com' }),
     );
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 403,
       error: InviteErrorCode.INVITE_EMAIL_MISMATCH,
       messageCode: InviteMessageCode.EMAIL_MISMATCH,
@@ -344,7 +344,7 @@ describe('redeemInvite', () => {
       baseInvite({ status: InviteStatus.ACCEPTED, userId: 'someone-else' }),
     );
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 409,
       error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
       messageCode: InviteMessageCode.ALREADY_ACCEPTED,
@@ -356,7 +356,7 @@ describe('redeemInvite', () => {
     const acceptedInvite = baseInvite({ status: InviteStatus.ACCEPTED, userId: USER_ID });
     prisma.trainerInvite.findUnique.mockResolvedValue(acceptedInvite);
 
-    const { invite, preferences } = await redeemInvite({ user, code: 'TW-ABCD-EFGH-12' });
+    const { invite, preferences } = await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' });
 
     expect(invite).toBe(acceptedInvite);
     expect(setActiveProfileToTrainer).toHaveBeenCalledWith(USER_ID);
@@ -373,7 +373,7 @@ describe('redeemInvite', () => {
       .mockResolvedValueOnce(acceptedInvite); // refetch after updateMany
     prisma.trainerInvite.updateMany.mockResolvedValue({ count: 1 });
 
-    const { invite, preferences } = await redeemInvite({ user, code: 'TW-ABCD-EFGH-12' });
+    const { invite, preferences } = await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' });
 
     expect(prisma.trainerInvite.updateMany).toHaveBeenCalledWith({
       where: { id: INVITE_ID, status: InviteStatus.PENDING },
@@ -391,7 +391,7 @@ describe('redeemInvite', () => {
     // conditional updateMany matches zero rows because status is no longer 'pending'.
     prisma.trainerInvite.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(redeemInvite({ user, code: 'TW-ABCD-EFGH-12' })).rejects.toMatchObject({
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
       httpStatus: 409,
       error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
       messageCode: InviteMessageCode.ALREADY_ACCEPTED,
@@ -402,7 +402,7 @@ describe('redeemInvite', () => {
   it('normalizes the code (prefix/dashes/case) so equivalent inputs hash identically', async () => {
     prisma.trainerInvite.findUnique.mockResolvedValue(null);
 
-    await redeemInvite({ user, code: 'TW-ABCD-EFGH-12' }).catch(() => {});
+    await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' }).catch(() => {});
     const hashFromCanonical = prisma.trainerInvite.findUnique.mock.calls[0][0].where.codeHash;
 
     vi.clearAllMocks();
