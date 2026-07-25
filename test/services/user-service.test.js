@@ -18,6 +18,9 @@ vi.mock('../../src/db.js', () => {
       trainerStudent: {
         findFirst: vi.fn(),
       },
+      trainerInvite: {
+        findFirst: vi.fn(),
+      },
     },
   };
 });
@@ -45,6 +48,9 @@ describe('userService', () => {
     vi.clearAllMocks();
     // Default: no active trainer link — individual tests override when needed
     prisma.trainerStudent.findFirst.mockResolvedValue(null);
+    // Default: no accepted invite — betaAccess falls through to false for
+    // plain student users (hasBetaAccess invite lookup)
+    prisma.trainerInvite.findFirst.mockResolvedValue(null);
     // Default: no trainer profile (student-only user)
     prisma.trainer.findUnique.mockResolvedValue(null);
   });
@@ -123,6 +129,7 @@ describe('userService', () => {
     birthDate: null,
     avatarUrl: null,
     hasActiveTrainer: false,
+    betaAccess: false,
     address: {
       id: 'a1',
       line1: null,
@@ -668,6 +675,7 @@ describe('userService', () => {
         birthDate: '1990-01-01',
         avatarUrl: 'https://example.com/avatar.jpg',
         hasActiveTrainer: false,
+        betaAccess: false,
       });
       expect(result).not.toHaveProperty('address');
       expect(result).not.toHaveProperty('socials');

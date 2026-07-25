@@ -1,9 +1,13 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.js'],
+    // E2E has its own config (vitest.e2e.config.js) — it needs a Testcontainers
+    // Postgres. Excluding it here keeps unit runs and watch mode from ever
+    // touching a real database.
+    exclude: [...configDefaults.exclude, 'test/e2e/**'],
     restoreMocks: true,
     clearMocks: true,
     mockReset: true,

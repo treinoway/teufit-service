@@ -4,11 +4,12 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import config from '../../config/index.js';
+import { Roles } from '../../src/constants/roles.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 
-const BOOTSTRAP_EMAIL = 'n.santos1897@gmail.com';
+const ADMIN_EMAIL = 'admin@example.com';
 const PASSWORD = 'StrongPassw0rd!';
 
 e2eDescribe('e2e: trainer invite system (closed beta)', () => {
@@ -32,16 +33,22 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
     return { userId: res.json().user.id, accessToken: res.json().token.accessToken };
   }
 
-  // Bootstrap-admin signup + self-grant, mirroring test/e2e/grant-admin.e2e.test.js.
+  // Admin is granted purely by role. There is no self-grant endpoint: seed the
+  // ADMIN role directly in the DB (mirrors the manual prod bootstrap), then log
+  // in again so the issued token reflects the new role.
   async function makeAdmin() {
-    const { accessToken } = await signup(BOOTSTRAP_EMAIL);
-    const grant = await app.inject({
-      method: 'POST',
-      url: '/me/grant-admin',
-      headers: { authorization: `Bearer ${accessToken}` },
+    const { userId } = await signup(ADMIN_EMAIL);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { roles: { set: [Roles.ADMIN] } },
     });
-    expect(grant.statusCode).toBe(200);
-    return grant.json().token.accessToken;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: ADMIN_EMAIL, password: PASSWORD },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json().token.accessToken;
   }
 
   function createInvite(adminToken, email) {

@@ -297,9 +297,6 @@ export default {
     'diet.mealNotFound': 'Refeição não encontrada.',
     'diet.foodItemNotFound': 'Item alimentar não encontrado.',
 
-    // Admin
-    'admin.grantNotAllowed': 'Sua conta não tem permissão para virar administrador.',
-
     // Dashboard
     'dashboard.invalidDateRange': 'Intervalo de datas inválido (dataInicial > dataFinal).',
     'dashboard.windowTooLarge': 'Janela de datas excede o máximo de 365 dias.',

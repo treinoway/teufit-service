@@ -1,7 +1,6 @@
 import config from '../../config/index.js';
 import { prisma } from '../db.js';
 import { Roles } from '../constants/roles.js';
-import { isBootstrapAdminEmail } from '../constants/admin.js';
 import { InviteStatus } from '../constants/trainer-invite.js';
 
 /**
@@ -23,10 +22,10 @@ function isTesterAllowlistedEmail(email) {
 /**
  * Whether a user may use the web app during the closed beta.
  *
- * Exempt (no DB hit): bootstrap admin, admin role, trainer role, tester
- * allowlist (BETA_TESTER_EMAILS) — this is what keeps grandfathered prod
- * trainers, the bootstrap admin, and QA testers unlocked with no data
- * backfill. Everyone else needs an accepted TrainerInvite row.
+ * Exempt (no DB hit): admin role, trainer role, tester allowlist
+ * (BETA_TESTER_EMAILS) — this is what keeps grandfathered prod trainers,
+ * admins, and QA testers unlocked with no data backfill. Everyone else
+ * needs an accepted TrainerInvite row.
  *
  * Lives outside trainer-invite-service.js (which it is re-exported from) so
  * user-service.js can depend on it without creating a cycle: trainer-invite-
@@ -40,7 +39,6 @@ export async function hasBetaAccess(user) {
 
   const roles = Array.isArray(user.roles) ? user.roles : [];
   if (
-    isBootstrapAdminEmail(user.email) ||
     isTesterAllowlistedEmail(user.email) ||
     roles.includes(Roles.ADMIN) ||
     roles.includes(Roles.TRAINER)

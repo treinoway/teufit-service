@@ -16,7 +16,6 @@ import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 import { InviteStatus } from '../../src/constants/trainer-invite.js';
 import config from '../../config/index.js';
 
-const BOOTSTRAP_EMAIL = 'n.santos1897@gmail.com';
 const USER_ID = 'user-1';
 
 describe('hasBetaAccess', () => {
@@ -27,18 +26,6 @@ describe('hasBetaAccess', () => {
   it('returns false when user is falsy', async () => {
     const result = await hasBetaAccess(null);
     expect(result).toBe(false);
-    expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
-  });
-
-  it('returns true for the bootstrap admin email without hitting the DB', async () => {
-    const result = await hasBetaAccess({ id: USER_ID, email: BOOTSTRAP_EMAIL, roles: [] });
-    expect(result).toBe(true);
-    expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
-  });
-
-  it('matches the bootstrap admin email case-insensitively without hitting the DB', async () => {
-    const result = await hasBetaAccess({ id: USER_ID, email: '  N.Santos1897@GMAIL.com  ', roles: [] });
-    expect(result).toBe(true);
     expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
   });
 

@@ -87,8 +87,8 @@ export function requireRole(allowedRoles) {
 }
 
 // Middleware to close the /become-trainer self-promotion bypass during the
-// closed beta. Exempts admins, existing trainers, and the bootstrap admin
-// (via hasBetaAccess) — only a plain roles:[] user without an accepted
+// closed beta. Exempts admins, existing trainers, and tester-allowlisted
+// emails (via hasBetaAccess) — only a plain roles:[] user without an accepted
 // TrainerInvite is blocked. Gated behind BETA_INVITE_GATE_ENABLED so the
 // gate can be killed in an emergency without a deploy.
 export function requireBetaAccess() {

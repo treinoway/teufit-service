@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import { prisma } from '../db.js';
 import config from '../../config/index.js';
 import { Roles } from '../constants/roles.js';
-import { isBootstrapAdminEmail } from '../constants/admin.js';
 import {
   InviteStatus,
   InviteErrorCode,
@@ -64,13 +63,13 @@ function clampPageSize(value) {
 
 /**
  * Authorization seam for invite creation.
- * Today: admin-only (or the bootstrap admin email). Future trainer-sent
- * invites plug in here as an additional `||` branch with a quota check —
- * no other call site needs to change.
+ * Today: admin-only (role-based). Future trainer-sent invites plug in here as
+ * an additional `||` branch with a quota check — no other call site needs to
+ * change.
  */
 export function assertCanCreateInvite(actingUser) {
   const roles = Array.isArray(actingUser?.roles) ? actingUser.roles : [];
-  const isAllowed = roles.includes(Roles.ADMIN) || isBootstrapAdminEmail(actingUser?.email);
+  const isAllowed = roles.includes(Roles.ADMIN);
   // Future: || (roles.includes(Roles.TRAINER) && trainerInviteQuotaOk(actingUser))
   if (!isAllowed) {
     throw new ForbiddenAppError({

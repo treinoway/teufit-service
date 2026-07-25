@@ -59,7 +59,6 @@ import {
 const ADMIN_ID = 'admin-1';
 const USER_ID = 'user-1';
 const INVITE_ID = 'invite-1';
-const BOOTSTRAP_EMAIL = 'n.santos1897@gmail.com';
 
 function baseInvite(overrides = {}) {
   return {
@@ -80,10 +79,6 @@ function baseInvite(overrides = {}) {
 describe('assertCanCreateInvite', () => {
   it('allows a user with the admin role', () => {
     expect(() => assertCanCreateInvite({ roles: [Roles.ADMIN], email: 'admin@example.com' })).not.toThrow();
-  });
-
-  it('allows the bootstrap admin email even without the admin role', () => {
-    expect(() => assertCanCreateInvite({ roles: [], email: BOOTSTRAP_EMAIL })).not.toThrow();
   });
 
   it('throws ForbiddenAppError for a plain user without the admin role', () => {

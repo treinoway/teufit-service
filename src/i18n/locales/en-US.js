@@ -297,9 +297,6 @@ export default {
     'dashboard.invalidDateRange': 'Invalid date range (dateFrom must be before dateTo).',
     'dashboard.windowTooLarge': 'Date window exceeds the 365-day maximum.',
 
-    // Admin
-    'admin.grantNotAllowed': 'Your account is not allowed to become an administrator.',
-
     // Superset / bi-set
     'exercise.supersetMembershipInvalid': 'Superset exercises must be contiguous in the training sequence.',
     'exercise.supersetMinMembers': 'A superset requires at least 2 exercises.',

@@ -1165,40 +1165,6 @@
               "body": "{\n  \"error\": \"FORBIDDEN\",\n  \"messageCode\": \"invite.expired\",\n  \"message\": \"This invite has expired.\",\n  \"details\": {}\n}"
             }
           ]
-        },
-        {
-          "name": "Grant Admin Role",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
-                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/me/grant-admin",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "me",
-                "grant-admin"
-              ]
-            },
-            "description": "Bootstrap path. Adds the admin role to the authenticated user only when their email is part of the server-side allowlist. Returns rotated tokens that already reflect the new role. Errors: 401 (unauthenticated), 403 ADMIN_GRANT_NOT_ALLOWED (email not in allowlist), 404 (user not found)."
-          },
-          "response": []
         }
       ]
     },

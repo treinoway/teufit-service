@@ -6,6 +6,23 @@
 - The `backend-engineer` agent MUST always invoke the `test-writer` agent to write/update tests for any code it changes. No exceptions — implementation is not complete until tests are written.
 
 
+## Admin Role
+
+Admin access is **purely role-based** (`roles` contains `admin`). There is no
+self-grant endpoint and no email allowlist — never reintroduce hardcoded or
+env-based admin emails.
+
+**Bootstrapping the first admin** is a manual DB operation (no code path):
+
+```sql
+UPDATE "User" SET roles = array_append(roles, 'admin')
+WHERE email = 'someone@example.com' AND NOT ('admin' = ANY(roles));
+```
+
+Or via Prisma Studio (`npm run db:studio`) → edit the user's `roles`. The user
+must obtain a fresh token (re-login) for the new role to take effect, since
+roles are carried in the JWT.
+
 ## Error Handling
 
 All error responses follow this contract — never deviate:

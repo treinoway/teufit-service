@@ -1,12 +1,10 @@
 import { authenticate, requireBetaAccess } from '../middleware/auth.js';
 import { getUserProfileById, setActiveProfileToTrainer, setActiveProfileToNutritionist, updateUserProfile } from '../../src/services/user-service.js';
-import { grantAdminToSelf } from '../../src/services/admin-bootstrap-service.js';
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
-import { prisma } from '../../src/db.js';
-import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema, grantAdminSchema } from '../schemas/user-route.schema.js';
+import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
 import config from '../../config/index.js';
 
 export async function userRoutes(fastify) {
@@ -252,27 +250,5 @@ export async function userRoutes(fastify) {
         return reply.status(500).send({ error: 'Internal server error' });
       }
     }
-  );
-
-  fastify.post(
-    '/me/grant-admin',
-    {
-      preHandler: [authenticate],
-      schema: grantAdminSchema,
-    },
-    async (request, reply) => {
-      const userId = request.user.id;
-      const { user } = await grantAdminToSelf(prisma, userId);
-
-      const fullUser = await getUserProfileById(user.id);
-      const access = issueAccessToken({ fastify, user: fullUser });
-      const refresh = await issueRefreshToken({ user: fullUser });
-
-      return reply.send({
-        user: fullUser,
-        token: { accessToken: access.accessToken },
-        refreshToken: refresh.refreshToken,
-      });
-    },
   );
 }
