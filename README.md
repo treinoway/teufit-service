@@ -77,11 +77,17 @@ Wait a few seconds for the database to initialize.
 npm run db:migrate
 ```
 
+### 6. Seed dev
+
+```bash
+npm run db:reset-and-populate
+```
+
 This will:
 - Create the database schema
 - Generate Prisma Client
 
-### 6. Start Development Server
+### 7. Start Development Server
 
 ```bash
 npm run dev
