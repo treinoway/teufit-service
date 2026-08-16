@@ -60,6 +60,11 @@ const ADMIN_ID = 'admin-1';
 const USER_ID = 'user-1';
 const INVITE_ID = 'invite-1';
 
+// Frozen at module load: tests compare two separate baseInvite() results with
+// toEqual, so reading the clock per call flakes whenever the millisecond ticks
+// between the mock setup and the assertion.
+const NOW = Date.now();
+
 function baseInvite(overrides = {}) {
   return {
     id: INVITE_ID,
@@ -68,10 +73,10 @@ function baseInvite(overrides = {}) {
     status: InviteStatus.PENDING,
     invitedByUserId: ADMIN_ID,
     userId: null,
-    expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+    expiresAt: new Date(NOW + 1000 * 60 * 60),
     acceptedAt: null,
     revokedAt: null,
-    createdAt: new Date(),
+    createdAt: new Date(NOW),
     ...overrides,
   };
 }
