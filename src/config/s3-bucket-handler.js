@@ -2,8 +2,9 @@
 
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { parseBool } from '../helpers/env.js';
 
-const disableS3Upload = process.env.DISABLE_S3_UPLOAD === 'true';
+const disableS3Upload = parseBool(process.env.DISABLE_S3_UPLOAD, false);
 const awsRegion = process.env.AWS_DEFAULT_REGION;
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;

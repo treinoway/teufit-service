@@ -8,6 +8,7 @@ import { getAddressByPostalCode } from './address-service.js';
 import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
 import { buildPlatformPlanForMe } from './platform-plan-service.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
+import { parseBool } from '../helpers/env.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -286,7 +287,7 @@ if (!userId) {
 	const { address, socials, preferences, firstName, lastName, birthDate, avatarUrl, gender } = data;
 
 	// Validate CEP existence before proceeding (skipped in test environments)
-	if (address?.postalCode && process.env.DISABLE_POSTAL_CODE_VALIDATION !== 'true') {
+	if (address?.postalCode && !parseBool(process.env.DISABLE_POSTAL_CODE_VALIDATION, false)) {
 		await getAddressByPostalCode(address.postalCode);
 	}
 

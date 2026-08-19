@@ -1,3 +1,5 @@
+import { parseBool } from '../../src/helpers/env.js';
+
 // Comma-separated list → normalized (trimmed, lowercased), non-empty emails.
 // Used to parse BETA_TESTER_EMAILS below.
 function parseEmailAllowlist(raw) {
@@ -35,8 +37,10 @@ export default {
   },
   betaInviteGate: {
     // Emergency kill-switch for the /become-trainer beta gate — set
-    // BETA_INVITE_GATE_ENABLED=false to disable without a deploy.
-    enabled: process.env.BETA_INVITE_GATE_ENABLED !== 'false',
+    // BETA_INVITE_GATE_ENABLED=false to disable without a deploy. Parsed
+    // case/whitespace-tolerantly since this is hand-typed into a Railway
+    // dashboard; default true preserves today's default-enabled behavior.
+    enabled: parseBool(process.env.BETA_INVITE_GATE_ENABLED, true),
     // Allowlist of emails that skip the invite gate entirely (for QA/testing).
     // Comma-separated, normalized to trimmed lowercase. Default: none exempt.
     testerEmails: parseEmailAllowlist(process.env.BETA_TESTER_EMAILS),

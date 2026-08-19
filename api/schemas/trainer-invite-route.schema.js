@@ -1,6 +1,7 @@
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { inviteStatusValues, INVITE_LIST_PAGE_SIZE_MAX } from '../../src/constants/trainer-invite.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
+import { betaAccessFieldSchema } from './user-route.schema.js';
 
 const inviteSchema = {
   type: 'object',
@@ -148,7 +149,7 @@ export const redeemInviteSchema = {
       type: 'object',
       required: ['betaAccess', 'activeProfile', 'token', 'refreshToken'],
       properties: {
-        betaAccess: { type: 'boolean' },
+        betaAccess: betaAccessFieldSchema,
         activeProfile: {
           type: 'string',
           enum: ['student', 'trainer', 'nutritionist'],

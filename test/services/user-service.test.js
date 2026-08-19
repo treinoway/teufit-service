@@ -42,6 +42,7 @@ import { getAddressByPostalCode } from '../../src/services/address-service.js';
 import { maybeMarkProfileComplete } from '../../src/services/trainer-onboarding-service.js';
 import { buildPlatformPlanForMe } from '../../src/services/platform-plan-service.js';
 import { getUserProfileById, setActiveProfileToTrainer, updateUserProfile } from '../../src/services/user-service.js';
+import config from '../../config/index.js';
 
 describe('userService', () => {
   beforeEach(() => {
@@ -76,6 +77,17 @@ describe('userService', () => {
   });
 
   it('returns user profile without passwordHash when found with all relations', async () => {
+    // This test asserts betaAccess: false via the accepted-invite DB lookup
+    // path (prisma.trainerInvite.findFirst mocked to null in beforeEach) for
+    // a plain 'student'-role user. Force the kill-switch on — it defaults
+    // OFF in the test environment (config/environments/test.js), which would
+    // otherwise short-circuit hasBetaAccess to true before ever touching the
+    // DB. Capture/restore the prior value (rather than hardcoding `false`)
+    // so state doesn't leak into other tests, and set the flag immediately
+    // before the try so a throw in between can't leave it stuck on.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = true;
+    try {
     prisma.user.findUnique.mockResolvedValue({
     id: 'u1',
     email: 'test@example.com',
@@ -157,6 +169,9 @@ describe('userService', () => {
     rawPreferences: null,
     },
   });
+  } finally {
+    config.betaInviteGate.enabled = originalGateEnabled;
+  }
   });
 
   it('setActiveProfileToTrainer throws USER_ID_REQUIRED when userId is missing', async () => {
@@ -650,19 +665,33 @@ describe('userService', () => {
 
   describe('getUserProfileById with lazy loading', () => {
     it('returns minimal payload when no relations are requested', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'u1',
-        email: 'test@example.com',
-        roles: ['student'],
-        status: 'active',
-        firstName: 'John',
-        lastName: 'Doe',
-        gender: 'male',
-        birthDate: new Date('1990-01-01'),
-        avatarUrl: 'https://example.com/avatar.jpg',
-      });
+      // Same rationale as the 'all relations' test above: this asserts
+      // betaAccess: false via the accepted-invite DB lookup path for a plain
+      // 'student'-role user, so the kill-switch (OFF by default in the test
+      // environment) must be forced on to reach that code path at all.
+      // Capture/restore the prior value and set the flag immediately before
+      // the try so a throw in between can't leave it stuck on.
+      const originalGateEnabled = config.betaInviteGate.enabled;
+      config.betaInviteGate.enabled = true;
 
-      const result = await getUserProfileById('u1', []);
+      let result;
+      try {
+        prisma.user.findUnique.mockResolvedValue({
+          id: 'u1',
+          email: 'test@example.com',
+          roles: ['student'],
+          status: 'active',
+          firstName: 'John',
+          lastName: 'Doe',
+          gender: 'male',
+          birthDate: new Date('1990-01-01'),
+          avatarUrl: 'https://example.com/avatar.jpg',
+        });
+
+        result = await getUserProfileById('u1', []);
+      } finally {
+        config.betaInviteGate.enabled = originalGateEnabled;
+      }
 
       expect(result).toEqual({
         id: 'u1',
