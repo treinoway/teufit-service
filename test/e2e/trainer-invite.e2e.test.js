@@ -117,6 +117,9 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
     // assertion that actually exercises the gate, so flip it on just for this
     // test and restore it afterwards — mirrors the same mutation pattern used
     // in test/middleware/auth-middleware.test.js's requireBetaAccess suite.
+    // Capture/restore the prior value rather than hardcoding `false`, so this
+    // doesn't silently corrupt state if the test-env default ever changes.
+    const originalGateEnabled = config.betaInviteGate.enabled;
     config.betaInviteGate.enabled = true;
     try {
       const { accessToken } = await signup('fresh-user@example.com');
@@ -130,7 +133,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
       expect(response.statusCode).toBe(403);
       expect(response.json().messageCode).toBe('invite.required');
     } finally {
-      config.betaInviteGate.enabled = false;
+      config.betaInviteGate.enabled = originalGateEnabled;
     }
   });
 
@@ -144,48 +147,97 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
   });
 
   it('redeems a valid invite — grants trainer role, activates betaAccess, and re-issued token works on a trainer-only route', async () => {
-    const adminToken = await makeAdmin();
-    const { code } = (await createInvite(adminToken, 'new-trainer@example.com')).json();
+    // hasBetaAccess() (src/helpers/beta-access.js) short-circuits to `true`
+    // for every authenticated user whenever config.betaInviteGate.enabled is
+    // false — and that's the default in the test environment (see
+    // config/environments/test.js). The pre-redemption assertion below is
+    // only meaningful with the gate actually enabled, so flip it on for this
+    // test and restore it afterward, mirroring the pattern used above for
+    // the PATCH /become-trainer gate assertion. Capture/restore the prior
+    // value rather than hardcoding `false`.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = true;
+    try {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'new-trainer@example.com')).json();
 
-    const { accessToken: preRedeemToken } = await signup('new-trainer@example.com');
-    const preMe = await getMe(preRedeemToken);
-    expect(preMe.json().betaAccess).toBe(false);
-    expect(preMe.json().roles).not.toContain('trainer');
+      const { accessToken: preRedeemToken } = await signup('new-trainer@example.com');
+      const preMe = await getMe(preRedeemToken);
+      expect(preMe.json().betaAccess).toBe(false);
+      expect(preMe.json().roles).not.toContain('trainer');
 
-    const redeemRes = await redeemInvite(preRedeemToken, code);
-    expect(redeemRes.statusCode).toBe(200);
-    const body = redeemRes.json();
-    expect(body.betaAccess).toBe(true);
-    expect(body.activeProfile).toBe('trainer');
-    expect(body.token.accessToken).toBeTypeOf('string');
-    expect(body.refreshToken).toBeTypeOf('string');
+      const redeemRes = await redeemInvite(preRedeemToken, code);
+      expect(redeemRes.statusCode).toBe(200);
+      const body = redeemRes.json();
+      expect(body.betaAccess).toBe(true);
+      expect(body.activeProfile).toBe('trainer');
+      expect(body.token.accessToken).toBeTypeOf('string');
+      expect(body.refreshToken).toBeTypeOf('string');
 
-    const newAccessToken = body.token.accessToken;
+      const newAccessToken = body.token.accessToken;
 
-    const meAfter = await getMe(newAccessToken);
-    expect(meAfter.statusCode).toBe(200);
-    expect(meAfter.json().betaAccess).toBe(true);
-    expect(meAfter.json().roles).toContain('trainer');
+      const meAfter = await getMe(newAccessToken);
+      expect(meAfter.statusCode).toBe(200);
+      expect(meAfter.json().betaAccess).toBe(true);
+      expect(meAfter.json().roles).toContain('trainer');
 
-    const trainerRoute = await app.inject({
-      method: 'GET',
-      url: '/trainer/protocols',
-      headers: { authorization: `Bearer ${newAccessToken}` },
-    });
-    expect(trainerRoute.statusCode).toBe(200);
+      const trainerRoute = await app.inject({
+        method: 'GET',
+        url: '/trainer/protocols',
+        headers: { authorization: `Bearer ${newAccessToken}` },
+      });
+      expect(trainerRoute.statusCode).toBe(200);
+    } finally {
+      config.betaInviteGate.enabled = originalGateEnabled;
+    }
+  });
+
+  it('GET /me reflects betaAccess: true for a plain roles:[] user when the beta invite gate kill-switch is disabled', async () => {
+    // Regression coverage for the kill-switch short-circuit in hasBetaAccess
+    // (src/helpers/beta-access.js): when config.betaInviteGate.enabled is
+    // false, EVERY authenticated user gets betaAccess: true — including a
+    // freshly signed-up user with no roles and no accepted invite. Set the
+    // flag explicitly (don't just assert the test-env default) so this test
+    // still proves the point if that default ever changes, and so it doesn't
+    // depend on a prior test's cleanup having run.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = false;
+    try {
+      const { accessToken } = await signup('kill-switch-user@example.com');
+
+      const me = await getMe(accessToken);
+
+      expect(me.statusCode).toBe(200);
+      expect(me.json().betaAccess).toBe(true);
+      expect(me.json().roles).not.toContain('trainer');
+    } finally {
+      config.betaInviteGate.enabled = originalGateEnabled;
+    }
   });
 
   it('GET /me reflects betaAccess: true after redemption', async () => {
-    const adminToken = await makeAdmin();
-    const { code } = (await createInvite(adminToken, 'beta-check@example.com')).json();
-    const { accessToken } = await signup('beta-check@example.com');
+    // Must run with the gate ENABLED — otherwise hasBetaAccess() short-
+    // circuits to true for everyone regardless of redemption, and this
+    // assertion would pass even if redeemInvite() were deleted entirely.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = true;
+    try {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'beta-check@example.com')).json();
+      const { accessToken } = await signup('beta-check@example.com');
 
-    const redeemRes = await redeemInvite(accessToken, code);
-    const newAccessToken = redeemRes.json().token.accessToken;
+      const preMe = await getMe(accessToken);
+      expect(preMe.json().betaAccess).toBe(false);
 
-    const me = await getMe(newAccessToken);
-    expect(me.statusCode).toBe(200);
-    expect(me.json().betaAccess).toBe(true);
+      const redeemRes = await redeemInvite(accessToken, code);
+      const newAccessToken = redeemRes.json().token.accessToken;
+
+      const me = await getMe(newAccessToken);
+      expect(me.statusCode).toBe(200);
+      expect(me.json().betaAccess).toBe(true);
+    } finally {
+      config.betaInviteGate.enabled = originalGateEnabled;
+    }
   });
 
   it('email mismatch: a different logged-in user cannot redeem an invite bound to another email', async () => {
@@ -201,17 +253,27 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
   });
 
   it('redeeming twice with the same user is idempotent — 200 both times', async () => {
-    const adminToken = await makeAdmin();
-    const { code } = (await createInvite(adminToken, 'idempotent@example.com')).json();
-    const { accessToken } = await signup('idempotent@example.com');
+    // Gate must be ENABLED so `betaAccess: true` on the second redemption
+    // actually proves the accepted invite still grants access, rather than
+    // trivially passing via the disabled-gate short-circuit regardless of
+    // what redeemInvite() does.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = true;
+    try {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'idempotent@example.com')).json();
+      const { accessToken } = await signup('idempotent@example.com');
 
-    const first = await redeemInvite(accessToken, code);
-    expect(first.statusCode).toBe(200);
+      const first = await redeemInvite(accessToken, code);
+      expect(first.statusCode).toBe(200);
 
-    const second = await redeemInvite(first.json().token.accessToken, code);
-    expect(second.statusCode).toBe(200);
-    expect(second.json().betaAccess).toBe(true);
-    expect(second.json().activeProfile).toBe('trainer');
+      const second = await redeemInvite(first.json().token.accessToken, code);
+      expect(second.statusCode).toBe(200);
+      expect(second.json().betaAccess).toBe(true);
+      expect(second.json().activeProfile).toBe('trainer');
+    } finally {
+      config.betaInviteGate.enabled = originalGateEnabled;
+    }
   });
 
   it('a second, different user cannot redeem an already-accepted invite — 409 invite.alreadyAccepted', async () => {
@@ -251,24 +313,33 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
   });
 
   it('re-inviting the same email supersedes the prior pending invite: old code stops working, new code redeems', async () => {
-    const adminToken = await makeAdmin();
-    const first = await createInvite(adminToken, 'resend@example.com');
-    expect(first.statusCode).toBe(201);
-    const oldCode = first.json().code;
+    // Gate must be ENABLED so `betaAccess: true` on the new-code redemption
+    // actually proves the new invite grants access, rather than trivially
+    // passing via the disabled-gate short-circuit.
+    const originalGateEnabled = config.betaInviteGate.enabled;
+    config.betaInviteGate.enabled = true;
+    try {
+      const adminToken = await makeAdmin();
+      const first = await createInvite(adminToken, 'resend@example.com');
+      expect(first.statusCode).toBe(201);
+      const oldCode = first.json().code;
 
-    const second = await createInvite(adminToken, 'resend@example.com');
-    expect(second.statusCode).toBe(201);
-    const newCode = second.json().code;
-    expect(newCode).not.toBe(oldCode);
+      const second = await createInvite(adminToken, 'resend@example.com');
+      expect(second.statusCode).toBe(201);
+      const newCode = second.json().code;
+      expect(newCode).not.toBe(oldCode);
 
-    const { accessToken: userA } = await signup('resend@example.com');
-    const oldAttempt = await redeemInvite(userA, oldCode);
-    expect(oldAttempt.statusCode).toBe(403);
-    expect(oldAttempt.json().messageCode).toBe('invite.revoked');
+      const { accessToken: userA } = await signup('resend@example.com');
+      const oldAttempt = await redeemInvite(userA, oldCode);
+      expect(oldAttempt.statusCode).toBe(403);
+      expect(oldAttempt.json().messageCode).toBe('invite.revoked');
 
-    const newAttempt = await redeemInvite(userA, newCode);
-    expect(newAttempt.statusCode).toBe(200);
-    expect(newAttempt.json().betaAccess).toBe(true);
+      const newAttempt = await redeemInvite(userA, newCode);
+      expect(newAttempt.statusCode).toBe(200);
+      expect(newAttempt.json().betaAccess).toBe(true);
+    } finally {
+      config.betaInviteGate.enabled = originalGateEnabled;
+    }
   });
 
   it('creating a second invite while one is already accepted for that email conflicts with 409 invite.alreadyActiveForEmail', async () => {

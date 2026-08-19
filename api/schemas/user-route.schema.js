@@ -3,6 +3,14 @@ import { badRequestErrorResponseSchema, errorResponseSchema } from './error-resp
 import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
 import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../../src/constants/platform-plan.js';
 
+// Shared across GET /me, PATCH /me/profile (this file), and POST
+// /invite/redeem (trainer-invite-route.schema.js) — all three surface the
+// same field with the same meaning.
+export const betaAccessFieldSchema = {
+  type: 'boolean',
+  description: 'True if the user may use the web app during the closed beta (admin, trainer, tester allowlist, or accepted trainer invite). Always true for every authenticated user when the BETA_INVITE_GATE_ENABLED kill-switch is administratively disabled.',
+};
+
 const platformPlanShape = {
   type: 'object',
   nullable: true,
@@ -105,7 +113,7 @@ export const getMeSchema = {
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
-        betaAccess: { type: 'boolean', description: 'True if the user may use the web app during the closed beta (admin, trainer, bootstrap admin, or accepted trainer invite)' },
+        betaAccess: betaAccessFieldSchema,
         address: {
           type: 'object',
           nullable: true,
@@ -304,7 +312,7 @@ export const updateProfileSchema = {
         birthDate: { type: 'string', format: 'date', nullable: true },
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
-        betaAccess: { type: 'boolean', description: 'True if the user may use the web app during the closed beta (admin, trainer, bootstrap admin, or accepted trainer invite)' },
+        betaAccess: betaAccessFieldSchema,
         address: { type: 'object', nullable: true, additionalProperties: true },
         socials: { type: 'object', nullable: true, additionalProperties: true },
         preferences: { type: 'object', nullable: true, additionalProperties: true },

@@ -22,7 +22,31 @@ function isTesterAllowlistedEmail(email) {
 /**
  * Whether a user may use the web app during the closed beta.
  *
- * Exempt (no DB hit): admin role, trainer role, tester allowlist
+ * When `config.betaInviteGate.enabled` is false (kill-switch), everyone has
+ * access — short-circuits before any exemption check or DB hit, so this is
+ * the single source of truth for the `betaAccess` flag returned on `/me`.
+ * Callers that need the boolean (user-service.js's toUserProfile, trainer-
+ * invite-route.js via redeemInvite's updatedUser.betaAccess) should never
+ * see `false` for a gate the middleware would actually let them through.
+ *
+ * This does NOT check the ordering the same way requireBetaAccess() does in
+ * api/middleware/auth.js: that middleware checks the gate flag before the
+ * `!request.user` guard (config.betaInviteGate?.enabled === false returns
+ * before authentication is even verified), while this helper checks `!user`
+ * first and the gate second. Both are correct for where each is actually
+ * called — the middleware's ordering means a disabled gate skips the auth
+ * check entirely on its one mounted route (PATCH /become-trainer, which
+ * still requires `authenticate` as a separate preHandler ahead of it), while
+ * this helper is only ever invoked with a user already resolved by the
+ * caller, so `!user` is a defensive guard, not a live path.
+ *
+ * Side effect worth knowing: while the gate is disabled, `betaAccess` is
+ * `true` for every user, including one holding a pending, unredeemed
+ * invite — nothing prompts them to redeem it. `POST /invite/redeem` still
+ * works if reached directly. When the gate is re-enabled, everyone who
+ * didn't redeem during the disabled window is gated again at once.
+ *
+ * Otherwise, exempt (no DB hit): admin role, trainer role, tester allowlist
  * (BETA_TESTER_EMAILS) — this is what keeps grandfathered prod trainers,
  * admins, and QA testers unlocked with no data backfill. Everyone else
  * needs an accepted TrainerInvite row.
@@ -36,6 +60,8 @@ function isTesterAllowlistedEmail(email) {
  */
 export async function hasBetaAccess(user) {
   if (!user) return false;
+
+  if (config.betaInviteGate?.enabled === false) return true;
 
   const roles = Array.isArray(user.roles) ? user.roles : [];
   if (

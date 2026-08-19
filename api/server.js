@@ -13,6 +13,7 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { translate } from '../src/i18n/index.js';
+import { parseBool } from '../src/helpers/env.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { nutritionistRoutes } from './routes/nutritionist-route.js';
@@ -379,7 +380,7 @@ export async function buildServer(options = {}) {
   // TODO(scaling): if running multiple instances, gate this with a leader-election or
   // DB advisory lock so only one instance runs the cron.
   const cronEnabled =
-    process.env.NODE_ENV === 'production' || process.env.ENABLE_BRIEFING_CRON === 'true';
+    process.env.NODE_ENV === 'production' || parseBool(process.env.ENABLE_BRIEFING_CRON, false);
   if (cronEnabled) {
     startBriefingCron(prisma, fastify.log);
     fastify.log.info('[cron:briefing] daily 22:00 UTC refresh scheduled');

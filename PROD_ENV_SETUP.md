@@ -83,6 +83,11 @@ DATABASE_URL="${{treinoway-service-db-prod.DATABASE_URL}}"
 - `JWT_SECRET` — optional, falls back to `SESSION_SECRET`.
 - `DISABLE_EMAIL` / `DISABLE_S3_UPLOAD` / `DISABLE_POSTAL_CODE_VALIDATION` — leaving
   them unset keeps email/upload/validation ON (correct for prod).
+- `BETA_INVITE_GATE_ENABLED` — leaving it unset keeps the closed-beta invite gate ON
+  (default `true`). Decision: prod and staging both keep the gate enabled, so this
+  should stay unset in both. If it's ever set explicitly, note it now accepts
+  true/false, 1/0, yes/no, on/off, case-insensitive/trimmed (not just the exact
+  string `"false"`).
 - `ASAAS_API_KEY` / `ASAAS_WEBHOOK_SECRET` / `ASAAS_ENV` — Asaas not live. **Warning:**
   the day `ASAAS_API_KEY` is set in prod WITHOUT `ASAAS_WEBHOOK_SECRET`, the server
   refuses to boot (intentional — `src/helpers/asaas-webhook-helpers.js:34`).

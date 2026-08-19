@@ -1,9 +1,10 @@
 'use strict'
 
 import { Resend } from 'resend';
+import { parseBool } from '../helpers/env.js';
 
 const resendApiKey = process.env.RESEND_API_KEY;
-const disableEmail = process.env.DISABLE_EMAIL === 'true';
+const disableEmail = parseBool(process.env.DISABLE_EMAIL, false);
 /**
  * Email handler configuration and setup.
  */

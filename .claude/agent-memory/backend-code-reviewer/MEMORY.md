@@ -6,3 +6,5 @@
 - [Migration drift: ai_interaction_logs](project_migration_drift_ai_logs.md) — feature migrations auto-pick-up unrelated `DROP DEFAULT` drift; scan for stray ALTERs
 - [Hand-rolled error replies lose their message](feedback_handrolled_error_replies.md) — preSerialization hook overwrites `message` from `messageCode`; route-specific literals are dead code
 - [Concurrency write-path checklist](feedback_concurrency_write_paths.md) — deadlock/lock-ordering fixes in exercise-service miss reorderSubstitutes/reorderSupersetMembers/dissolveSuperset; Promise.all reorders reintroduce lock cycles
+- [Config-flag short-circuits make assertions vacuous](feedback_config_flag_test_vacuity.md) — test env defaults flags to the short-circuit value; same-polarity assertions silently stop verifying anything
+- [Helper-extraction refactors land partially](feedback_partial_helper_migration.md) — grep the old inline pattern repo-wide; the stated exclusion list is always incomplete (and check `.env.example` / `PROD_ENV_SETUP.md`)

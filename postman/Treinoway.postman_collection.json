@@ -875,7 +875,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false\n}"
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"betaAccess\": false\n}"
             },
             {
               "name": "Get Current User with trainerOnboarding - 200 OK",
@@ -907,7 +907,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"trainer@example.com\",\n  \"roles\": [\n    \"trainer\"\n  ],\n  \"rolesLabel\": [\n    \"Treinador\"\n  ],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Silva\",\n  \"gender\": \"female\",\n  \"genderLabel\": \"Feminino\",\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"trainerOnboarding\": {\n    \"profileCompletedAt\": \"2025-01-15T10:00:00.000Z\",\n    \"firstStudentLinkedAt\": null,\n    \"firstProtocolCreatedAt\": null,\n    \"profileCompleted\": true,\n    \"firstStudentLinked\": false,\n    \"firstProtocolCreated\": false\n  }\n}"
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"trainer@example.com\",\n  \"roles\": [\n    \"trainer\"\n  ],\n  \"rolesLabel\": [\n    \"Treinador\"\n  ],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Silva\",\n  \"gender\": \"female\",\n  \"genderLabel\": \"Feminino\",\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"betaAccess\": true,\n  \"trainerOnboarding\": {\n    \"profileCompletedAt\": \"2025-01-15T10:00:00.000Z\",\n    \"firstStudentLinkedAt\": null,\n    \"firstProtocolCreatedAt\": null,\n    \"profileCompleted\": true,\n    \"firstStudentLinked\": false,\n    \"firstProtocolCreated\": false\n  }\n}"
             }
           ]
         },
@@ -968,7 +968,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
+              "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"betaAccess\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
             }
           ]
         },

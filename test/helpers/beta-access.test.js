@@ -19,8 +19,26 @@ import config from '../../config/index.js';
 const USER_ID = 'user-1';
 
 describe('hasBetaAccess', () => {
+  // Most tests below exercise the gate-ENABLED exemption/invite-lookup logic
+  // (admin/trainer role exemption, tester allowlist, accepted-invite DB
+  // lookup). The test environment defaults the kill-switch OFF (see
+  // config/environments/test.js — dozens of unrelated e2e fixtures
+  // self-promote to trainer and would 403 otherwise), so force it on here
+  // and restore afterward so state doesn't leak into other test files. The
+  // "beta invite gate kill-switch disabled" describe block below overrides
+  // this per-test to cover the short-circuit branch itself.
+  // Capture whatever config/environments/test.js sets as the baseline (rather
+  // than hardcoding `false`) so this file doesn't silently corrupt state if
+  // that default ever changes.
+  const originalGateEnabled = config.betaInviteGate.enabled;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    config.betaInviteGate.enabled = true;
+  });
+
+  afterEach(() => {
+    config.betaInviteGate.enabled = originalGateEnabled;
   });
 
   it('returns false when user is falsy', async () => {
@@ -121,6 +139,49 @@ describe('hasBetaAccess', () => {
 
       expect(result).toBe(false);
       expect(prisma.trainerInvite.findFirst).toHaveBeenCalled();
+    });
+  });
+
+  // config.betaInviteGate.enabled === false is the emergency kill-switch:
+  // once !user is ruled out, every authenticated user gets true with zero DB
+  // hits, before isTesterAllowlistedEmail/roles/prisma are ever touched.
+  describe('beta invite gate kill-switch disabled', () => {
+    beforeEach(() => {
+      config.betaInviteGate.enabled = false;
+    });
+
+    it('returns true for a plain user with roles: [] and a real id, without hitting the DB', async () => {
+      const result = await hasBetaAccess({ id: USER_ID, email: 'plain@example.com', roles: [] });
+
+      expect(result).toBe(true);
+      expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('returns true even for a user with no id at all', async () => {
+      const result = await hasBetaAccess({ email: 'plain@example.com', roles: [] });
+
+      expect(result).toBe(true);
+      expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('still returns false when user is falsy, regardless of the gate flag', async () => {
+      const result = await hasBetaAccess(null);
+
+      expect(result).toBe(false);
+      expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('does not depend on the tester allowlist or roles — a non-admin, non-tester email still gets true', async () => {
+      config.betaInviteGate.testerEmails = ['qa@example.com'];
+
+      try {
+        const result = await hasBetaAccess({ id: USER_ID, email: 'not-a-tester@example.com', roles: [] });
+
+        expect(result).toBe(true);
+        expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
+      } finally {
+        config.betaInviteGate.testerEmails = [];
+      }
     });
   });
 });
