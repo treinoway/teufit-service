@@ -127,6 +127,7 @@ model Trainer {
   platformSubscription      PlatformSubscription?
   aiUsageEvents             AiUsageEvent[]
   aiInteractionLogs         AiInteractionLog[]
+  exerciseCategories        ExerciseCategory[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -389,6 +390,7 @@ model ExerciseTemplate {
   trainer                           Trainer                            @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   exercises                         Exercise[]
   trainingTemplateExerciseTemplates TrainingTemplateExerciseTemplate[]
+  categories                        ExerciseTemplateExerciseCategory[]
 
   @@index([trainerId, type])
   @@index([trainerId, deletedAt])
@@ -467,11 +469,80 @@ model Exercise {
   exerciseLogs          ExerciseLog[]
   substituteFor         Exercise?         @relation("ExerciseSubstitutes", fields: [substituteForExerciseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   substitutes           Exercise[]        @relation("ExerciseSubstitutes")
+  categories            ExerciseExerciseCategory[]
 
   @@index([trainingId])
   @@index([trainingId, supersetGroupId])
   @@index([substituteForExerciseId])
   @@map("exercises")
+}
+
+// Categorização de exercícios — RFC 002 (addendum v3.1: coluna isPublic).
+//
+// isPublic é a fonte de verdade de visibilidade — nunca infira de trainerId.
+// trainerId fica NULL em toda linha pública (requisito de produto: categoria
+// pública não carrega o id do personal na tabela); a CHECK constraint abaixo
+// garante que as duas colunas nunca divergem.
+//
+// ATENÇÃO: a unicidade real NÃO está totalmente declarada aqui. São DOIS índices
+// únicos PARCIAIS (um por escopo — privado e público), mais a CHECK constraint,
+// criados em SQL cru na migration M1 — Prisma não expressa WHERE em @@unique nem
+// CHECK condicional. Se uma migration futura gerar "-- DropIndex" ou
+// "-- DropConstraint" tocando exercise_categories, é drift do Prisma (schema.prisma
+// não "vê" esses objetos) — remova o Drop antes de aplicar. Coberto por
+// teste-guarda em test/e2e/exercise-category.e2e.test.js e pelo gate de CI em
+// ci/check-exercise-category-drift.sh.
+model ExerciseCategory {
+  id             String  @id @default(uuid()) @db.Uuid
+  /// true = pública (compartilhada por toda a plataforma, somente leitura via API).
+  isPublic       Boolean @default(false) @map("is_public")
+  /// NULL em toda linha pública; preenchido = categoria privada daquele treinador.
+  trainerId      String? @map("trainer_id") @db.Uuid
+  name           String  @db.Text
+  /// Shadow column para dedup case/acento-insensitive. Mantida pelo service.
+  nameNormalized String  @map("name_normalized") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer?                          @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  exercises ExerciseExerciseCategory[]
+  templates ExerciseTemplateExerciseCategory[]
+
+  @@index([trainerId, deletedAt])
+  @@index([isPublic, deletedAt])
+  @@map("exercise_categories")
+}
+
+model ExerciseExerciseCategory {
+  id                 String @id @default(uuid()) @db.Uuid
+  exerciseId         String @map("exercise_id") @db.Uuid
+  exerciseCategoryId String @map("exercise_category_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  exercise         Exercise         @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exerciseCategory ExerciseCategory @relation(fields: [exerciseCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, exerciseCategoryId])
+  @@index([exerciseCategoryId, exerciseId])
+  @@map("exercise_exercise_categories")
+}
+
+model ExerciseTemplateExerciseCategory {
+  id                 String @id @default(uuid()) @db.Uuid
+  exerciseTemplateId String @map("exercise_template_id") @db.Uuid
+  exerciseCategoryId String @map("exercise_category_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  exerciseTemplate ExerciseTemplate @relation(fields: [exerciseTemplateId], references: [id], onDelete: Cascade)
+  exerciseCategory ExerciseCategory @relation(fields: [exerciseCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseTemplateId, exerciseCategoryId])
+  @@index([exerciseCategoryId, exerciseTemplateId])
+  @@map("exercise_template_exercise_categories")
 }
 
 model ProtocolTemplateTraining {
