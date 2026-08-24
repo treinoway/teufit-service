@@ -477,29 +477,14 @@ model Exercise {
   @@map("exercises")
 }
 
-// Categorização de exercícios — RFC 002 (addendum v3.1: coluna isPublic).
-//
-// isPublic é a fonte de verdade de visibilidade — nunca infira de trainerId.
-// trainerId fica NULL em toda linha pública (requisito de produto: categoria
-// pública não carrega o id do personal na tabela); a CHECK constraint abaixo
-// garante que as duas colunas nunca divergem.
-//
-// ATENÇÃO: a unicidade real NÃO está totalmente declarada aqui. São DOIS índices
-// únicos PARCIAIS (um por escopo — privado e público), mais a CHECK constraint,
-// criados em SQL cru na migration M1 — Prisma não expressa WHERE em @@unique nem
-// CHECK condicional. Se uma migration futura gerar "-- DropIndex" ou
-// "-- DropConstraint" tocando exercise_categories, é drift do Prisma (schema.prisma
-// não "vê" esses objetos) — remova o Drop antes de aplicar. Coberto por
-// teste-guarda em test/e2e/exercise-category.e2e.test.js e pelo gate de CI em
-// ci/check-exercise-category-drift.sh.
+// RFC 002. isPublic é a fonte de verdade de visibilidade — nunca infira de trainerId.
+// Índices únicos parciais e CHECK constraint só existem na migration (raw SQL) —
+// ver test/e2e/exercise-category.e2e.test.js.
 model ExerciseCategory {
   id             String  @id @default(uuid()) @db.Uuid
-  /// true = pública (compartilhada por toda a plataforma, somente leitura via API).
   isPublic       Boolean @default(false) @map("is_public")
-  /// NULL em toda linha pública; preenchido = categoria privada daquele treinador.
   trainerId      String? @map("trainer_id") @db.Uuid
   name           String  @db.Text
-  /// Shadow column para dedup case/acento-insensitive. Mantida pelo service.
   nameNormalized String  @map("name_normalized") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

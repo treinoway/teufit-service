@@ -5,18 +5,8 @@ import { prisma } from '../../src/db.js';
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 
-// Guard test for RFC 002 §5.6 / addendum v3.1: the two partial unique indexes and
-// the CHECK constraint on exercise_categories are NOT representable in
-// schema.prisma (WHERE on @@unique, conditional CHECK), so they live only in
-// prisma/migrations/<ts>_add_exercise_categories/migration.sql as hand-added raw
-// SQL. `prisma migrate dev` diffs the migration history against schema.prisma —
-// an object it doesn't "see" there reads as something to remove, and it has
-// silently dropped indexes like this before in this repo (see
-// 20260617232122_library_search_indexes -> 20260617235213_add_pagination_on_library,
-// 31 minutes apart). If that happens here, nothing errors: the app just starts
-// accepting duplicate categories or a trainer_id/isPublic mismatch. This test is
-// the only mitigation that doesn't depend on a human noticing a DropIndex/
-// DropConstraint in a future migration diff.
+// Guards the partial unique indexes and CHECK constraint that only exist as raw
+// SQL in the migration (not representable in schema.prisma).
 e2eDescribe('e2e: exercise_categories indexes and constraint (drift guard)', () => {
   it('keeps the private-scope partial unique index intact', async () => {
     const indexes = await prisma.$queryRaw`
@@ -90,9 +80,8 @@ e2eDescribe('e2e: exercise_categories indexes and constraint (drift guard)', () 
         }),
       ).rejects.toThrow();
     } finally {
-      // Public rows aren't touched by cleanDatabase()'s trainer-cascade truncate
-      // (trainer_id is NULL by design) — delete explicitly so repeated runs don't
-      // accumulate rows in a shared dev/test database.
+      // Public rows have trainer_id NULL, so cleanDatabase()'s trainer-cascade
+      // truncate doesn't reach them — delete explicitly.
       await prisma.exerciseCategory.delete({ where: { id: created.id } });
     }
   });
@@ -100,8 +89,7 @@ e2eDescribe('e2e: exercise_categories indexes and constraint (drift guard)', () 
   it('rejects a row where is_public and trainer_id disagree', async () => {
     const trainer = await prisma.trainer.findFirst({ select: { id: true } });
     if (!trainer) {
-      // No trainer fixture in this environment — the private-scope half of the
-      // CHECK (is_public = false requires trainer_id NOT NULL) is still provable.
+      // No trainer fixture — still provable via the private-scope half.
       await expect(
         prisma.$executeRaw`
           INSERT INTO exercise_categories (id, is_public, trainer_id, name, name_normalized)
