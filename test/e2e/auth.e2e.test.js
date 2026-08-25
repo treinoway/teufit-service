@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
@@ -271,6 +272,80 @@ e2eDescribe('e2e: auth flows', () => {
     });
   });
 
+  describe('login against a deleted account (USER_DELETED)', () => {
+    async function seedDeletedUserWithToken(suffix) {
+      const email = `login-deleted-${suffix}-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupResponse.statusCode).toBe(201);
+      const {
+        user: { id: userId },
+        token: { accessToken },
+      } = signupResponse.json();
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      await prisma.user.update({ where: { id: userId }, data: { email } });
+
+      return { email, password };
+    }
+
+    it('returns the full 4-field error contract (error, messageCode, message, details) with 403 USER_DELETED', async () => {
+      const { email, password } = await seedDeletedUserWithToken('403');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        error: 'USER_DELETED',
+        messageCode: 'auth.user.deleted',
+        message: expect.any(String),
+        details: {},
+      });
+    });
+
+    it('translates the message to pt-BR by default', async () => {
+      const { email, password } = await seedDeletedUserWithToken('pt-br');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('Esta conta foi excluída.');
+    });
+
+    it('translates the message to en-US when the app-language header requests it', async () => {
+      const { email, password } = await seedDeletedUserWithToken('en-us');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        headers: { 'app-language': 'en-US' },
+        payload: { email, password },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('This account has been deleted.');
+    });
+  });
+
   describe('forgot password', () => {
     it('returns generic message and creates a token when user exists', async () => {
       const email = `forgot-existing-${Date.now()}@example.com`;
@@ -385,6 +460,106 @@ e2eDescribe('e2e: auth flows', () => {
       // Older token marked used; newest still active
       expect(tokens[0].used).toBe(true);
       expect(tokens[1].used).toBe(false);
+    });
+  });
+
+  describe('reset password against a deleted account (USER_DELETED)', () => {
+    async function seedDeletedUserWithResetToken(suffix) {
+      const email = `reset-deleted-${suffix}-${Date.now()}@example.com`;
+      const password = 'StrongPassw0rd!';
+
+      const signupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email, password },
+      });
+      expect(signupResponse.statusCode).toBe(201);
+      const {
+        user: { id: userId },
+        token: { accessToken },
+      } = signupResponse.json();
+
+      const forgotResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/forgot-password',
+        payload: { email },
+      });
+      expect(forgotResponse.statusCode).toBe(200);
+      const { resetToken } = forgotResponse.json();
+      expect(typeof resetToken).toBe('string');
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+      await prisma.passwordResetToken.create({
+        data: {
+          tokenHash,
+          userId,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+      });
+
+      return { resetToken };
+    }
+
+    it('returns 403 USER_DELETED when resetting the password of a deleted account', async () => {
+      const { resetToken } = await seedDeletedUserWithResetToken('403');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/reset-password',
+        payload: {
+          token: resetToken,
+          password: 'BrandNewPassw0rd!',
+          passwordConfirmation: 'BrandNewPassw0rd!',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        error: 'USER_DELETED',
+        messageCode: 'auth.user.deleted',
+      });
+    });
+
+    it('translates the message to pt-BR by default', async () => {
+      const { resetToken } = await seedDeletedUserWithResetToken('pt-br');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/reset-password',
+        payload: {
+          token: resetToken,
+          password: 'BrandNewPassw0rd!',
+          passwordConfirmation: 'BrandNewPassw0rd!',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('Esta conta foi excluída.');
+    });
+
+    it('translates the message to en-US when the app-language header requests it', async () => {
+      const { resetToken } = await seedDeletedUserWithResetToken('en-us');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/reset-password',
+        headers: { 'app-language': 'en-US' },
+        payload: {
+          token: resetToken,
+          password: 'BrandNewPassw0rd!',
+          passwordConfirmation: 'BrandNewPassw0rd!',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('This account has been deleted.');
     });
   });
 

@@ -201,6 +201,8 @@ export default {
     'auth.apple.firstLoginRequiresEmail': 'O primeiro login com a Apple precisa de e-mail. Faça login novamente.',
     'auth.apple.invalidToken': 'Token da Apple inválido.',
     'auth.apple.failed': 'Falha na autenticação. Tente novamente.',
+    'auth.user.deleted': 'Esta conta foi excluída.',
+    'account.deletion.professionalUnsupported': 'A exclusão de conta ainda não está disponível para contas de treinador ou nutricionista. Entre em contato com o suporte para encerrar uma conta profissional.',
     'resource.notFound': 'Recurso não encontrado.',
     'resource.conflict': 'Este registro já existe.',
     'request.rateLimitExceeded': 'Muitas tentativas. Aguarde um momento e tente novamente.',

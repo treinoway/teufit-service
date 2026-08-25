@@ -380,4 +380,85 @@ e2eDescribe('e2e: POST /auth/apple/mobile', () => {
       expect(body.message).not.toContain('bundle id');
     });
   });
+
+  describe('deleted account', () => {
+    async function seedDeletedAppleUserWithAccessToken(suffix) {
+      const subject = `apple.deleted.${suffix}.${Date.now()}`;
+      const email = `apple-deleted-${suffix}-${Date.now()}@privaterelay.appleid.com`;
+
+      const user = await seedAppleUser({ subject, email });
+      verifyAppleIdToken.mockResolvedValue(makeApplePayload({ subject, email }));
+
+      const firstLoginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/apple/mobile',
+        payload: { identityToken: 'mock-valid-token' },
+      });
+      expect(firstLoginResponse.statusCode).toBe(200);
+      const { token: { accessToken } } = firstLoginResponse.json();
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      await prisma.account.create({
+        data: {
+          userId: user.id,
+          provider: 'apple',
+          providerId: subject,
+          accessToken: null,
+          refreshToken: null,
+          expiresAt: null,
+        },
+      });
+
+      return { subject, email };
+    }
+
+    it('should return 403 USER_DELETED when the linked account was deleted', async () => {
+      await seedDeletedAppleUserWithAccessToken('403');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/apple/mobile',
+        payload: { identityToken: 'mock-valid-token' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        error: 'USER_DELETED',
+        messageCode: 'auth.user.deleted',
+      });
+    });
+
+    it('should translate the message to pt-BR by default', async () => {
+      await seedDeletedAppleUserWithAccessToken('pt-br');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/apple/mobile',
+        payload: { identityToken: 'mock-valid-token' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('Esta conta foi excluída.');
+    });
+
+    it('should translate the message to en-US when the app-language header requests it', async () => {
+      await seedDeletedAppleUserWithAccessToken('en-us');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/apple/mobile',
+        headers: { 'app-language': 'en-US' },
+        payload: { identityToken: 'mock-valid-token' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().message).toBe('This account has been deleted.');
+    });
+  });
 });

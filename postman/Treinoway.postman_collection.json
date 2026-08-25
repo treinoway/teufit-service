@@ -302,7 +302,7 @@
                 "login"
               ]
             },
-            "description": "Log in with email and password. Rate limited to 5 requests per minute."
+            "description": "Log in with email and password. Rate limited to 5 requests per minute. If the account was soft-deleted (see DELETE /me), returns 403 with the full unified error contract: { error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: <translated>, details: {} }. This was standardized in this PR — it previously replied with just { error: 'Account deactivated' } (no messageCode, no details), so a translated message never reached the client for this route. Known remaining debt (NOT fixed in this PR, same bare-string reply): /auth/signup, /auth/google/callback, /auth/change-password (no messageCode/details at all), and /auth/refresh (has error: USER_DELETED but no messageCode/details). /auth/reset-password, /auth/apple/mobile, and /auth/google/web already had the full contract."
           },
           "response": [
             {
@@ -529,7 +529,7 @@
                 "mobile"
               ]
             },
-            "description": "Log in with Google ID Token from mobile native SDK. Returns JWT tokens for mobile app authentication."
+            "description": "Log in with Google ID Token from mobile native SDK. Returns JWT tokens for mobile app authentication. If the account was soft-deleted (see DELETE /me), returns 403 with the full unified error contract: { error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: <translated>, details: {} }. This was standardized in this PR — it previously replied with just { error: 'Account deactivated' } (no messageCode, no details), so a translated message never reached the client for this route. Known remaining debt (NOT fixed in this PR, same bare-string reply): /auth/signup, /auth/google/callback, /auth/change-password (no messageCode/details at all), and /auth/refresh (has error: USER_DELETED but no messageCode/details). /auth/reset-password, /auth/apple/mobile, and /auth/google/web already had the full contract."
           },
           "response": []
         },
@@ -999,6 +999,24 @@
               ]
             },
             "description": "Upload or replace user avatar image. Accepts JPEG, PNG, or WebP. Maximum file size: 5MB. Old avatar is automatically deleted. Returns { avatarUrl } with a signed URL (expires in 7 days)."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Permanently soft-delete and anonymize the authenticated user's own account (App Store guideline 5.1.1(v) / Google Play account deletion compliance). Only available for plain (student) accounts today — an account with an active Trainer or Nutritionist profile gets 409 instead (see below); that professional graph (billing, linked students/patients, branding, protocols) needs its own teardown design and is tracked as separate follow-up work.\n\nClears PII on the user row (email, username, password hash, first/last name, gender, birth date, avatar) and sets deletedAt. Deletes linked OAuth/email accounts, refresh tokens, password reset tokens, address, social networks, health details, preferences, metabolic profile, workout sessions (and their exercise/set logs), anamnesis responses, AI conversations, gamification records (points/challenges), trainer-student/nutritionist-patient links where this user is the student/patient, and trainer invites addressed to or redeemed by this user (by userId and by email).\n\nScrubbed, not deleted: AiInteractionLog rows where this user was the student in a trainer's AI conversation about them keep the row (trainer diagnostic record + beta usage metrics) but have studentId/userMessage/responseText nulled — that's specifically where this user's PII could appear.\n\nRetained (not deleted): subscription/payment records (tax/accounting reasons), and any TrainingProtocol/DietProtocol assigned to this user (trainer/nutritionist-owned content). Clearing the email frees it up for a future signup with the same address — note a prior accepted trainer invite is deleted, not restored, so a fresh signup does not automatically regain beta access.\n\nIrreversible.\n\nReturns 204 on success (no body). Returns 403 (error: USER_DELETED, messageCode: auth.user.deleted) if the account was already deleted previously. Returns 404 (error: USER_NOT_FOUND, messageCode: resource.notFound) if the user row is not found (edge case). Returns 409 (error: PROFESSIONAL_ACCOUNT_DELETION_UNSUPPORTED, messageCode: account.deletion.professionalUnsupported) if the account has an active Trainer or Nutritionist profile. Rate limited: 3 requests/hour in production (1000/hour in dev/staging)."
           },
           "response": []
         },

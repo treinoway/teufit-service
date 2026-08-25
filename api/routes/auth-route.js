@@ -161,7 +161,12 @@ export async function authRoutes(fastify) {
           return reply.status(401).send({ error: 'INVALID_CREDENTIALS', messageCode: 'auth.invalidCredentials', message: 'Invalid email or password.' });
         }
         if (error?.code === 'USER_DELETED') {
-          return reply.status(403).send({ error: 'Account deactivated' });
+          return reply.status(403).send({
+            error: 'USER_DELETED',
+            messageCode: 'auth.user.deleted',
+            message: 'Account deactivated',
+            details: {},
+          });
         }
         if (error?.code === 'PASSWORD_NOT_SET') {
           return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
@@ -384,7 +389,12 @@ export async function authRoutes(fastify) {
         });
       } catch (error) {
         if (error?.code === 'USER_DELETED') {
-          return reply.status(403).send({ error: 'Account deactivated' });
+          return reply.status(403).send({
+            error: 'USER_DELETED',
+            messageCode: 'auth.user.deleted',
+            message: 'Account deactivated',
+            details: {},
+          });
         }
         if (error?.code === 'ID_TOKEN_REQUIRED') {
           return reply.status(400).send({ error: 'Missing idToken' });
