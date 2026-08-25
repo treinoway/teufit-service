@@ -423,6 +423,53 @@ export const becomeNutritionistSchema = {
   },
 };
 
+export const deleteMeSchema = {
+  tags: ['user'],
+  summary: 'Delete own account',
+  description: `Soft-deletes and anonymizes the authenticated user's account. Required by App Store guideline 5.1.1(v) and Google Play's account deletion policy.
+
+- Linked social/email accounts (Google/Apple/email), refresh and password-reset tokens.
+- Address, social networks, health details, preferences, metabolic profile.
+- Workout sessions (and their exercise/set logs).
+- Anamnesis responses, AI conversations, gamification records (points, challenge participation).
+- Trainer-student / nutritionist-patient links where this user is the student/patient.
+- Trainer invites addressed to or redeemed by this user (both by \`userId\` and by email — see below).
+
+- Subscription and payment records (\`StudentSubscription\`), kept for tax/accounting obligations independent of the erasure request.
+- Any \`TrainingProtocol\`/\`DietProtocol\` assigned to this user (trainer/nutritionist-owned content, not deleted by the student's own request).
+
+Irreversible. The access token already issued remains valid until it naturally expires; only refresh tokens are revoked immediately.`,
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  response: {
+    204: { type: 'null', description: 'Account deleted successfully. No content returned.' },
+    401: errorResponseSchema,
+    403: {
+      description: 'Account already deleted (error: USER_DELETED, messageCode: auth.user.deleted)',
+      ...errorResponseSchema,
+    },
+    404: {
+      description: 'User not found (error: USER_NOT_FOUND)',
+      ...errorResponseSchema,
+    },
+    409: {
+      description: 'Account has an active trainer or nutritionist profile — self-service deletion is not yet supported for professional accounts (error: PROFESSIONAL_ACCOUNT_DELETION_UNSUPPORTED, messageCode: account.deletion.professionalUnsupported)',
+      ...errorResponseSchema,
+    },
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const uploadAvatarSchema = {
   tags: ['user'],
   summary: 'Upload user avatar',

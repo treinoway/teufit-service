@@ -20,7 +20,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
  * @param {string} storedValue - Value from database
  * @returns {boolean}
  */
-function isS3Key(storedValue) {
+export function isS3Key(storedValue) {
   if (!storedValue) return false;
   return storedValue.startsWith('avatars/');
 }

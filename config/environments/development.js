@@ -34,6 +34,10 @@ export default {
               max: 1000,
               timeWindow: '1 hour',
             },
+            deleteAccount: {
+              max: 1000,
+              timeWindow: '1 hour',
+            },
           },
         trainer: {
           searchStudents: { max: 1000, timeWindow: '1 minute' },

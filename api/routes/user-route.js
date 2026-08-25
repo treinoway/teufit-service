@@ -3,8 +3,9 @@ import { getUserProfileById, setActiveProfileToTrainer, setActiveProfileToNutrit
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
+import { deleteOwnAccount } from '../../src/services/account-deletion-service.js';
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
-import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema } from '../schemas/user-route.schema.js';
+import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema, deleteMeSchema } from '../schemas/user-route.schema.js';
 import config from '../../config/index.js';
 
 export async function userRoutes(fastify) {
@@ -249,6 +250,24 @@ export async function userRoutes(fastify) {
 
         return reply.status(500).send({ error: 'Internal server error' });
       }
+    }
+  );
+
+  fastify.delete(
+    '/me',
+    {
+      config: {
+        rateLimit: config.rateLimit.user.deleteAccount,
+      },
+      preHandler: [authenticate],
+      schema: deleteMeSchema,
+    },
+    async (request, reply) => {
+      const userId = request.user.id;
+
+      await deleteOwnAccount(userId, request.log);
+
+      return reply.status(204).send();
     }
   );
 }

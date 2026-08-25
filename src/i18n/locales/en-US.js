@@ -197,6 +197,8 @@ export default {
     'auth.apple.firstLoginRequiresEmail': 'First Apple login requires an email. Please sign in again.',
     'auth.apple.invalidToken': 'Invalid Apple token.',
     'auth.apple.failed': 'Authentication failed. Please try again.',
+    'auth.user.deleted': 'This account has been deleted.',
+    'account.deletion.professionalUnsupported': 'Account deletion is not yet available for trainer or nutritionist accounts. Please contact support to close a professional account.',
     'resource.notFound': 'Resource not found.',
     'resource.conflict': 'This record already exists.',
     'request.rateLimitExceeded': 'Too many requests. Please wait a moment and try again.',
