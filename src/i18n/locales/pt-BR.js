@@ -247,9 +247,6 @@ export default {
     'anamnesis.conditionReferencesRemovedOption': 'Não é possível remover uma opção referenciada por uma pergunta condicional.',
     'anamnesis.conditionalDepthExceeded': 'Perguntas condicionais não podem encadear (apenas um nível).',
 
-    // Import
-    'import.primecoaching.formatChanged': 'O arquivo não corresponde ao formato esperado do PrimeCoaching. Verifique se você exportou a planilha correta.',
-
     // AI assistant
     'ai.trainerNotFound': 'Perfil de treinador não encontrado.',
     'ai.conversationNotFound': 'Conversa não encontrada.',

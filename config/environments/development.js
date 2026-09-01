@@ -1,4 +1,16 @@
+import { parseBool } from '../../src/helpers/env.js';
+
 export default {
+    // Sentry desligado em dev mesmo com SENTRY_DSN presente no .env: erros de
+    // desenvolvimento (import quebrado, watcher reiniciando) viram issue no
+    // projeto de verdade, e o Sentry.init() carrega auto-instrumentação OTel
+    // que custa ~33MB de RSS. Para depurar a integração localmente, defina
+    // SENTRY_FORCE_LOCAL=true.
+    sentry: {
+      dsn: parseBool(process.env.SENTRY_FORCE_LOCAL, false)
+        ? process.env.SENTRY_DSN || null
+        : null,
+    },
     rateLimit: {
         global: { max: 10000, timeWindow: '1 minute' },
         globalPerUser: { max: 10000, timeWindow: '1 minute' },

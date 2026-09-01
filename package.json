@@ -8,7 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --import ./instrument.js api/index.js",
+    "start": "node --max-old-space-size=320 --max-semi-space-size=4 --optimize-for-size --import ./instrument.js api/index.js",
     "dev": "node --watch --import ./instrument.js api/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -76,7 +76,6 @@
     "node-cron": "^4.2.1",
     "pg": "^8.16.3",
     "prisma": "^7.2.0",
-    "resend": "^6.8.0",
-    "xlsx": "^0.18.5"
+    "resend": "^6.8.0"
   }
 }

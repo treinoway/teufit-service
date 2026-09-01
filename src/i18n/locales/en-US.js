@@ -243,9 +243,6 @@ export default {
     'anamnesis.conditionReferencesRemovedOption': 'Cannot remove an option referenced by a conditional question.',
     'anamnesis.conditionalDepthExceeded': 'Conditional questions cannot be chained — only one level of depth is allowed.',
 
-    // Import
-    'import.primecoaching.formatChanged': 'The file does not match the expected PrimeCoaching format. Please verify you exported the correct spreadsheet.',
-
     // AI assistant
     'ai.trainerNotFound': 'Trainer profile not found.',
     'ai.conversationNotFound': 'Conversation not found.',

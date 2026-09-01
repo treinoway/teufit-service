@@ -116,12 +116,6 @@ export default {
         timeWindow: '1 minute',
       },
     },
-    import: {
-      primecoachingPreview: {
-        max: 3,
-        timeWindow: '1 minute',
-      },
-    },
     trainingProtocol: {
       create: {
         max: 20,
