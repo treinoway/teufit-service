@@ -121,15 +121,17 @@ async function resolveActiveStudentIds(prisma, rosterIds) {
   if (rosterIds.length === 0) return [];
   const since = daysAgo(BriefingThresholds.ACTIVE_WINDOW_DAYS);
 
-  const rows = await prisma.workoutSession.findMany({
+  // groupBy, not findMany+distinct: Prisma's `distinct` is applied in memory —
+  // it fetches every matching session row and dedupes in JS. groupBy compiles to
+  // SQL GROUP BY, so the database returns at most one row per student.
+  const rows = await prisma.workoutSession.groupBy({
+    by: ['userId'],
     where: {
       userId: { in: rosterIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: since },
     },
-    select: { userId: true },
-    distinct: ['userId'],
   });
 
   return rows.map((r) => r.userId);
@@ -156,30 +158,28 @@ async function computeReturningThisWeek(prisma, trainerId, activeStudentIds) {
   const fourteenDaysAgo = daysAgo(BriefingThresholds.RETURNING_GAP_DAYS * 2, now);
 
   // Students with a completed session in the last 7 days
-  const recentRows = await prisma.workoutSession.findMany({
+  const recentRows = await prisma.workoutSession.groupBy({
+    by: ['userId'],
     where: {
       userId: { in: activeStudentIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: sevenDaysAgo },
     },
-    select: { userId: true },
-    distinct: ['userId'],
   });
 
   const recentStudentIds = recentRows.map((r) => r.userId);
   if (recentStudentIds.length === 0) return 0;
 
   // Among those, find students who had NO session between 14d and 7d ago
-  const hadSessionInGap = await prisma.workoutSession.findMany({
+  const hadSessionInGap = await prisma.workoutSession.groupBy({
+    by: ['userId'],
     where: {
       userId: { in: recentStudentIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo },
     },
-    select: { userId: true },
-    distinct: ['userId'],
   });
 
   const studentIdsActiveInGap = new Set(hadSessionInGap.map((r) => r.userId));
@@ -189,15 +189,17 @@ async function computeReturningThisWeek(prisma, trainerId, activeStudentIds) {
   // "Returning" requires prior history. A student's very first session ever
   // is not "voltou após gap" — it's onboarding. Require at least one completed
   // session older than the gap window (i.e., before 14d ago).
-  const hadPreGapHistory = await prisma.workoutSession.findMany({
+  // Unbounded window (no lower bound on startedAt) — this reads the student's
+  // entire session history. groupBy keeps the dedupe in SQL so the result is one
+  // row per student instead of every session ever recorded.
+  const hadPreGapHistory = await prisma.workoutSession.groupBy({
+    by: ['userId'],
     where: {
       userId: { in: candidateIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { lt: fourteenDaysAgo },
     },
-    select: { userId: true },
-    distinct: ['userId'],
   });
 
   return hadPreGapHistory.length;
@@ -335,15 +337,14 @@ async function computeInactiveStudents(prisma, rosterIds) {
   const since = daysAgo(BriefingThresholds.INACTIVE_NO_SESSION_DAYS);
 
   // Students who DID complete a session in the window
-  const activeSessions = await prisma.workoutSession.findMany({
+  const activeSessions = await prisma.workoutSession.groupBy({
+    by: ['userId'],
     where: {
       userId: { in: rosterIds },
       status: WorkoutSessionStatus.COMPLETED,
       deletedAt: null,
       startedAt: { gte: since },
     },
-    select: { userId: true },
-    distinct: ['userId'],
   });
 
   const activeSet = new Set(activeSessions.map((r) => r.userId));
@@ -617,9 +618,10 @@ export async function markBriefingDirty(prisma, trainerId) {
  */
 export async function refreshAllBriefings(prisma, logger) {
   // Find distinct trainerIds that have at least one roster student
-  const trainerRows = await prisma.trainerStudent.findMany({
-    select: { trainerId: true },
-    distinct: ['trainerId'],
+  // groupBy compiles to SQL GROUP BY. findMany+distinct would read the entire
+  // trainer_students table into memory just to extract the distinct trainer ids.
+  const trainerRows = await prisma.trainerStudent.groupBy({
+    by: ['trainerId'],
   });
 
   const trainerIds = trainerRows.map((r) => r.trainerId);

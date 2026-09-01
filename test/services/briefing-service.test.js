@@ -10,6 +10,7 @@ import {
   computeBriefing,
   getBriefing,
   markBriefingDirty,
+  refreshAllBriefings,
   refreshBriefing,
 } from '../../src/services/briefing-service.js';
 
@@ -33,6 +34,9 @@ function buildMockPrisma(overrides = {}) {
     },
     trainerStudent: {
       findMany: vi.fn().mockResolvedValue([]),
+      // refreshAllBriefings uses groupBy(['trainerId']) — SQL GROUP BY — rather
+      // than findMany+distinct, which would read the whole roster table.
+      groupBy: vi.fn().mockResolvedValue([]),
       ...overrides.trainerStudent,
     },
     trainingProtocol: {
@@ -40,7 +44,7 @@ function buildMockPrisma(overrides = {}) {
       ...overrides.trainingProtocol,
     },
     workoutSession: {
-      findMany: vi.fn().mockResolvedValue([]),
+      groupBy: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       ...overrides.workoutSession,
     },
@@ -66,7 +70,7 @@ describe('computeBriefing', () => {
     const prisma = buildMockPrisma({
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       setLog: { findMany: vi.fn().mockResolvedValue([]) },
@@ -86,7 +90,7 @@ describe('computeBriefing', () => {
     const prisma = buildMockPrisma({
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       setLog: { findMany: vi.fn().mockResolvedValue([]) },
@@ -106,7 +110,7 @@ describe('computeBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           // First call: resolveActiveStudentIds — returns 2 distinct users
           .mockResolvedValueOnce([{ userId: studentA }, { userId: studentB }])
           // Second call: returningThisWeek (recent 7d)
@@ -136,14 +140,14 @@ describe('computeBriefing', () => {
     const studentB = 'student-b';
     const studentC = 'student-c';
 
-    // workoutSession.findMany call order (when returningThisWeek recent returns empty,
+    // workoutSession.groupBy call order (when returningThisWeek recent returns empty,
     // the gap-window call is short-circuited):
     //   1. resolveActiveStudentIds → [studentA]
     //   2. returningThisWeek recent (last 7d) → [] (short-circuits gap check)
     //   3. inactiveStudents active-in-7d → [studentA]
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           .mockResolvedValueOnce([{ userId: studentA }]) // resolveActiveStudentIds
           .mockResolvedValueOnce([])                      // returningThisWeek recent (→ skip gap)
           .mockResolvedValueOnce([{ userId: studentA }]), // inactiveStudents
@@ -165,10 +169,10 @@ describe('computeBriefing', () => {
     expect(result.inactiveStudents).toBe(2);
   });
 
-  // Dispatch workoutSession.findMany results based on the shape of `where`.
+  // Dispatch workoutSession.groupBy results based on the shape of `where`.
   // Branches of computeBriefing run via Promise.all so call order is not stable;
   // routing by the query's distinguishing fields makes the test deterministic.
-  function workoutSessionFindManyMock({ active, recent, gap, preGap, inactive }) {
+  function workoutSessionGroupByMock({ active, recent, gap, preGap, inactive }) {
     return vi.fn().mockImplementation(({ where }) => {
       const { startedAt } = where;
       if (startedAt?.gte && startedAt?.lt) {
@@ -188,8 +192,8 @@ describe('computeBriefing', () => {
         // Distinguish by whether the inactive branch is set.
         // The two are run with different gte values; if same, use heuristic by call shape.
         // Both queries use the same shape — disambiguate by call count.
-        if (!workoutSessionFindManyMock._recentReturned) {
-          workoutSessionFindManyMock._recentReturned = true;
+        if (!workoutSessionGroupByMock._recentReturned) {
+          workoutSessionGroupByMock._recentReturned = true;
           return recent ?? [];
         }
         return inactive ?? [];
@@ -199,12 +203,12 @@ describe('computeBriefing', () => {
   }
 
   it('counts returningThisWeek: student had session in last 7d but NOT in 7-14d window AND has pre-gap history', async () => {
-    workoutSessionFindManyMock._recentReturned = false;
+    workoutSessionGroupByMock._recentReturned = false;
     const studentA = 'student-a';
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: workoutSessionFindManyMock({
+        groupBy: workoutSessionGroupByMock({
           active: [{ userId: studentA }],
           recent: [{ userId: studentA }],
           gap: [],
@@ -225,12 +229,12 @@ describe('computeBriefing', () => {
   });
 
   it('does NOT count as returning when student has no pre-gap history (first sessions ever)', async () => {
-    workoutSessionFindManyMock._recentReturned = false;
+    workoutSessionGroupByMock._recentReturned = false;
     const studentA = 'student-a';
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: workoutSessionFindManyMock({
+        groupBy: workoutSessionGroupByMock({
           active: [{ userId: studentA }],
           recent: [{ userId: studentA }],
           gap: [],
@@ -255,7 +259,7 @@ describe('computeBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           // resolveActiveStudentIds
           .mockResolvedValueOnce([{ userId: studentA }])
           // returningThisWeek: recent 7d → studentA present
@@ -299,7 +303,7 @@ describe('computeBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           .mockResolvedValueOnce([{ userId: studentA }]) // resolveActiveStudentIds
           .mockResolvedValueOnce([]) // returningThisWeek recent
           .mockResolvedValueOnce([]) // returningThisWeek gap
@@ -341,7 +345,7 @@ describe('computeBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           .mockResolvedValueOnce([{ userId: studentA }])
           .mockResolvedValueOnce([])
           .mockResolvedValueOnce([])
@@ -366,7 +370,7 @@ describe('computeBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn()
+        groupBy: vi.fn()
           .mockResolvedValueOnce([{ userId: studentA }])
           .mockResolvedValueOnce([])
           .mockResolvedValueOnce([])
@@ -424,7 +428,7 @@ describe('computeBriefing', () => {
     const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]), // active students irrelevant
+        groupBy: vi.fn().mockResolvedValue([]), // active students irrelevant
         count: adherenceCountMock({ currentCompleted: 15, priorCompleted: 0 }),
       },
       trainerStudent: {
@@ -449,7 +453,7 @@ describe('computeBriefing', () => {
     const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: adherenceCountMock({ currentCompleted: 30, priorCompleted: 0 }), // expected=15
       },
       trainerStudent: {
@@ -474,7 +478,7 @@ describe('computeBriefing', () => {
     const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: {
@@ -499,7 +503,7 @@ describe('computeBriefing', () => {
     const studentA = 'student-a';
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         // expected = 15 both months. 12/15 = 80%, 9/15 = 60%.
         count: adherenceCountMock({ currentCompleted: 12, priorCompleted: 9 }),
       },
@@ -523,7 +527,7 @@ describe('computeBriefing', () => {
     const trainerStudentFindMany = vi.fn().mockResolvedValue([]);
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: trainerStudentFindMany },
@@ -544,7 +548,7 @@ describe('computeBriefing', () => {
     const trainerStudentFindMany = vi.fn().mockResolvedValue([]);
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: trainerStudentFindMany },
@@ -567,7 +571,7 @@ describe('computeBriefing', () => {
     const count = vi.fn().mockResolvedValue(0);
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count,
       },
       trainerStudent: {
@@ -599,7 +603,7 @@ describe('computeBriefing', () => {
     const count = vi.fn().mockResolvedValue(0);
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count,
       },
       trainerStudent: {
@@ -673,7 +677,7 @@ describe('refreshBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
@@ -708,7 +712,7 @@ describe('refreshBriefing', () => {
 
     const prisma = buildMockPrisma({
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
@@ -765,7 +769,7 @@ describe('getBriefing', () => {
         updateMany: vi.fn(),
       },
       workoutSession: {
-        findMany: workoutSessionFindMany,
+        groupBy: workoutSessionFindMany,
         count: vi.fn(),
       },
     });
@@ -809,7 +813,7 @@ describe('getBriefing', () => {
         updateMany: vi.fn(),
       },
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
@@ -846,7 +850,7 @@ describe('getBriefing', () => {
         updateMany: vi.fn(),
       },
       workoutSession: {
-        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
       },
       trainerStudent: { findMany: vi.fn().mockResolvedValue([]) },
@@ -857,5 +861,79 @@ describe('getBriefing', () => {
 
     expect(upsert).toHaveBeenCalledOnce();
     expect(result.activeStudents).toBe(0);
+  });
+});
+
+// ─── refreshAllBriefings ─────────────────────────────────────────────────────
+
+describe('refreshAllBriefings', () => {
+  const SNAPSHOT = {
+    activeStudents: 0,
+    returningThisWeek: 0,
+    stagnantProgress: 0,
+    inactiveStudents: 0,
+    overallAdherence: '0.00',
+    adherenceDeltaPp: '0.00',
+    computedAt: new Date('2026-05-15T22:00:00.000Z'),
+    isDirty: false,
+  };
+
+  function buildCronPrisma({ trainerIds = [], upsert } = {}) {
+    return buildMockPrisma({
+      trainerStudent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        groupBy: vi.fn().mockResolvedValue(trainerIds.map((trainerId) => ({ trainerId }))),
+      },
+      trainerBriefingSnapshot: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        upsert: upsert ?? vi.fn().mockResolvedValue(SNAPSHOT),
+        updateMany: vi.fn(),
+      },
+    });
+  }
+
+  it('collects distinct trainer ids with groupBy so the dedupe happens in SQL', async () => {
+    const prisma = buildCronPrisma({ trainerIds: ['trainer-a'] });
+
+    await refreshAllBriefings(prisma);
+
+    // findMany+distinct would pull every roster row into memory to dedupe in JS.
+    expect(prisma.trainerStudent.groupBy).toHaveBeenCalledWith({ by: ['trainerId'] });
+  });
+
+  it('refreshes one snapshot per trainer', async () => {
+    const upsert = vi.fn().mockResolvedValue(SNAPSHOT);
+    const prisma = buildCronPrisma({ trainerIds: ['trainer-a', 'trainer-b'], upsert });
+
+    await refreshAllBriefings(prisma);
+
+    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(upsert.mock.calls[0][0].where).toEqual({ trainerId: 'trainer-a' });
+    expect(upsert.mock.calls[1][0].where).toEqual({ trainerId: 'trainer-b' });
+  });
+
+  it('does nothing when no trainer has roster students', async () => {
+    const upsert = vi.fn().mockResolvedValue(SNAPSHOT);
+    const prisma = buildCronPrisma({ trainerIds: [], upsert });
+
+    await refreshAllBriefings(prisma);
+
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('keeps going and logs when one trainer fails — a single failure must not abort the run', async () => {
+    const boom = new Error('db exploded');
+    const upsert = vi
+      .fn()
+      .mockRejectedValueOnce(boom)
+      .mockResolvedValueOnce(SNAPSHOT);
+    const prisma = buildCronPrisma({ trainerIds: ['trainer-a', 'trainer-b'], upsert });
+    const logger = { error: vi.fn() };
+
+    await expect(refreshAllBriefings(prisma, logger)).resolves.toBeUndefined();
+
+    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledOnce();
+    expect(logger.error.mock.calls[0][0]).toMatchObject({ err: boom, trainerId: 'trainer-a' });
   });
 });
