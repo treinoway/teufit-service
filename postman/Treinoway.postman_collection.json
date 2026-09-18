@@ -140,7 +140,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"status\": \"ok\",\n  \"version\": \"0.0.1\",\n  \"uptimeSeconds\": 142.38,\n  \"db\": \"ok\"\n}"
+              "body": "{\n  \"status\": \"ok\",\n  \"version\": \"0.0.1\",\n  \"uptimeSeconds\": 142.38,\n  \"db\": \"ok\",\n  \"memory\": {\n    \"heapUsedMb\": 118.4,\n    \"heapLimitMb\": 320.0,\n    \"heapUsedPercent\": 37.0,\n    \"rssMb\": 268.1\n  }\n}"
             },
             {
               "name": "503 – Degraded (DB unreachable)",
@@ -167,7 +167,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"status\": \"degraded\",\n  \"version\": \"0.0.1\",\n  \"uptimeSeconds\": 142.38,\n  \"db\": \"down\"\n}"
+              "body": "{\n  \"status\": \"degraded\",\n  \"version\": \"0.0.1\",\n  \"uptimeSeconds\": 142.38,\n  \"db\": \"down\",\n  \"memory\": {\n    \"heapUsedMb\": 118.4,\n    \"heapLimitMb\": 320.0,\n    \"heapUsedPercent\": 37.0,\n    \"rssMb\": 268.1\n  }\n}"
             }
           ]
         }

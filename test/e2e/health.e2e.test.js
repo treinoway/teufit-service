@@ -30,6 +30,10 @@ e2eDescribe('e2e: GET /health', () => {
     expect(body.version.length).toBeGreaterThan(0);
     expect(typeof body.uptimeSeconds).toBe('number');
     expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+    expect(body.memory.heapUsedMb).toBeGreaterThan(0);
+    expect(body.memory.heapLimitMb).toBeGreaterThan(0);
+    expect(body.memory.heapUsedPercent).toBeGreaterThan(0);
+    expect(body.memory.rssMb).toBeGreaterThan(0);
   });
 
   it('returns 200 without requiring an Authorization header', async () => {

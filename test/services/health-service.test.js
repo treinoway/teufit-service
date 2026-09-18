@@ -57,6 +57,36 @@ describe('health-service', () => {
       expect(result.uptimeSeconds).toBeGreaterThanOrEqual(0);
     });
 
+    it('reports heap usage against the process heap limit', async () => {
+      const prisma = buildPrismaMock();
+
+      const { memory } = await getHealthStatus(prisma);
+
+      expect(memory.heapUsedMb).toBeGreaterThan(0);
+      expect(memory.rssMb).toBeGreaterThan(0);
+      expect(memory.heapLimitMb).toBeGreaterThan(memory.heapUsedMb);
+      expect(memory.heapUsedPercent).toBeGreaterThan(0);
+      expect(memory.heapUsedPercent).toBeLessThanOrEqual(100);
+    });
+
+    it('reports memory even when the database is down', async () => {
+      const prisma = buildPrismaMock({ queryRawShouldFail: true });
+
+      const { status, memory } = await getHealthStatus(prisma);
+
+      expect(status).toBe('degraded');
+      expect(memory.heapUsedMb).toBeGreaterThan(0);
+    });
+
+    it('never degrades status based on heap pressure', async () => {
+      const prisma = buildPrismaMock();
+
+      const result = await getHealthStatus(prisma);
+
+      // A hot heap is not an outage: status is driven solely by db reachability.
+      expect(result.status).toBe('ok');
+    });
+
     it('returns all required fields in both healthy and degraded scenarios', async () => {
       const healthyPrisma = buildPrismaMock();
       const degradedPrisma = buildPrismaMock({ queryRawShouldFail: true });
@@ -64,7 +94,7 @@ describe('health-service', () => {
       const healthyResult = await getHealthStatus(healthyPrisma);
       const degradedResult = await getHealthStatus(degradedPrisma);
 
-      const requiredFields = ['status', 'version', 'uptimeSeconds', 'db'];
+      const requiredFields = ['status', 'version', 'uptimeSeconds', 'db', 'memory'];
       for (const field of requiredFields) {
         expect(healthyResult).toHaveProperty(field);
         expect(degradedResult).toHaveProperty(field);

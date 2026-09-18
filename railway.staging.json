@@ -2,6 +2,6 @@
   "$schema": "https://railway.com/railway.schema.json",
   "deploy": {
     "preDeployCommand": "npm run deploy:railway",
-    "startCommand": "node --max-old-space-size=160 --optimize-for-size --import ./instrument.js api/index.js"
+    "startCommand": "node --max-old-space-size=320 --optimize-for-size --import ./instrument.js api/index.js"
   }
 }

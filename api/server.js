@@ -272,10 +272,14 @@ export async function buildServer(options = {}) {
     routePrefix: '/docs',
   });
 
-  // Register session support
+  // Register session support.
+  // saveUninitialized:false is required, not tuning: the plugin defaults it to true on
+  // top of a Map with no TTL or eviction, so every cookieless request leaked a session
+  // (~2.2 KB) until the heap ran out.
   const isDev = process.env.NODE_ENV === 'development';
   await fastify.register(fastifySession, {
     secret: process.env.SESSION_SECRET,
+    saveUninitialized: false,
     cookie: {
       secure: !isDev, // use secure cookies in staging/production (HTTPS required)
       httpOnly: true,
