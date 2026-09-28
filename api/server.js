@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import * as Sentry from '@sentry/node';
 import Fastify from 'fastify';
+import { SerializerSelector } from '@fastify/fast-json-stringify-compiler';
 import config from '../config/index.js';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
@@ -14,6 +15,7 @@ import { prisma } from '../src/db.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { translate } from '../src/i18n/index.js';
 import { parseBool } from '../src/helpers/env.js';
+import { createErrorSerializerCacheFactory } from '../src/helpers/error-serializer-cache.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { nutritionistRoutes } from './routes/nutritionist-route.js';
@@ -102,6 +104,13 @@ export async function buildServer(options = {}) {
     // Railway runs behind a reverse proxy. Trust it so Fastify correctly detects HTTPS,
     // client IPs, and sets secure cookies consistently.
     trustProxy: true,
+    // Error schemas are shared by almost every route; compile each one once instead of
+    // once per route × status (~40 MB of heap otherwise). See error-serializer-cache.js.
+    schemaController: {
+      compilersFactory: {
+        buildSerializer: createErrorSerializerCacheFactory(SerializerSelector()),
+      },
+    },
   });
 
   // Make prisma available to route handlers and services that need transactions.
