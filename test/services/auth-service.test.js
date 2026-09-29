@@ -27,6 +27,7 @@ vi.mock('../../src/db.js', () => {
         findUnique: vi.fn(),
         create: vi.fn(),
       },
+      $queryRaw: vi.fn(),
       $transaction: vi.fn(async (ops) => {
         // Simple mock: if ops is an array of promises, resolve them.
         if (Array.isArray(ops)) {
@@ -223,7 +224,7 @@ describe('authService', () => {
 
   describe('signupWithEmailPassword', () => {
     it('normalizes email, hashes password, creates user and account in transaction', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.$queryRaw.mockResolvedValue([]);
 
       // Mock the transaction callback
       prisma.$transaction.mockImplementation(async (callback) => {
@@ -262,9 +263,8 @@ describe('authService', () => {
         password: 'password123',
       });
 
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: { equals: 'test@example.com', mode: 'insensitive' } },
-      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw.mock.calls[0][1]).toBe('test@example.com');
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -310,7 +310,8 @@ describe('authService', () => {
     }
 
     it('logs in with correct credentials and does not expose passwordHash', async () => {
-      prisma.user.findFirst.mockResolvedValue({
+      prisma.$queryRaw.mockResolvedValue([{ id: 'u1' }]);
+      prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -322,15 +323,16 @@ describe('authService', () => {
       });
 
       const user = await loginWithEmailPassword({ email: 'TEST@EXAMPLE.COM', password: 'password123' });
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: { equals: 'test@example.com', mode: 'insensitive' } },
-      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw.mock.calls[0][1]).toBe('test@example.com');
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'u1' } });
       expect(user.passwordHash).toBeUndefined();
       expect(user.id).toBe('u1');
     });
 
     it('rejects invalid credentials', async () => {
-      prisma.user.findFirst.mockResolvedValue({
+      prisma.$queryRaw.mockResolvedValue([{ id: 'u1' }]);
+      prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -348,7 +350,8 @@ describe('authService', () => {
     });
 
     it('rejects users without passwordHash (OAuth-only accounts)', async () => {
-      prisma.user.findFirst.mockResolvedValue({
+      prisma.$queryRaw.mockResolvedValue([{ id: 'u1' }]);
+      prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         roles: ['trainer'],
@@ -366,7 +369,8 @@ describe('authService', () => {
 
   describe('password reset flow', () => {
     it('requestPasswordReset creates a token when user exists', async () => {
-      prisma.user.findFirst.mockResolvedValue({
+      prisma.$queryRaw.mockResolvedValue([{ id: 'u1' }]);
+      prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         email: 'test@example.com',
         deletedAt: null,
@@ -385,7 +389,7 @@ describe('authService', () => {
     });
 
     it('requestPasswordReset does nothing visible when user does not exist', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.$queryRaw.mockResolvedValue([]);
 
       const res = await requestPasswordReset({ email: 'missing@example.com' });
 

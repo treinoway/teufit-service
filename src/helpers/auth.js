@@ -4,6 +4,7 @@
 
 import { prisma } from '../../src/db.js';
 import { roleValues } from '../constants/roles.js';
+import { findUserIdByEmailCaseInsensitive } from './email-lookup.js';
 
 /**
  * Find or create a user from OAuth provider data
@@ -137,9 +138,8 @@ export async function findOrCreateUserFromOAuth(providerData) {
     });
   } else {
     // Case-insensitive lookup: legacy users may have mixed-case email saved.
-    user = await prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-    });
+    const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
+    user = existingUserId ? await prisma.user.findUnique({ where: { id: existingUserId } }) : null;
 
     if (user?.deletedAt) {
       const err = new Error('User account is deactivated');
@@ -208,11 +208,9 @@ export async function findAccountByProvider(provider, providerId) {
  * @returns {Promise<Object|null>} user row or null
  */
 export async function findUserByEmailInsensitive(email) {
-  if (!email || typeof email !== 'string') return null;
-  const normalized = email.trim().toLowerCase();
-  return prisma.user.findFirst({
-    where: { email: { equals: normalized, mode: 'insensitive' } },
-  });
+  const userId = await findUserIdByEmailCaseInsensitive(prisma, email);
+  if (!userId) return null;
+  return prisma.user.findUnique({ where: { id: userId } });
 }
 
 /**

@@ -1,0 +1,19 @@
+-- Case-insensitive exact-match lookups on users.email currently rely on
+-- Prisma's `{ email: { equals, mode: 'insensitive' } }`, which compiles to
+-- `email ILIKE $1`. Besides being unable to use a btree index (forcing a
+-- sequential scan on `users`), ILIKE treats `_` and `%` in the parameter as
+-- wildcards, so an invite for `joao_silva@gmail.com` can wrongly match an
+-- existing user `joao.silva@gmail.com`.
+--
+-- This expression index supports exact `lower(email) = lower($1)` lookups
+-- (see src/helpers/email-lookup.js), which is both correct (no wildcard
+-- behavior) and fast (index scan instead of seq scan).
+--
+-- Intentionally NOT partial (no `WHERE deleted_at IS NULL`): existing call
+-- sites that look up users by email (login, signup uniqueness check,
+-- password reset, OAuth account linking) do not filter on deleted_at
+-- themselves, so the index must cover soft-deleted rows too to preserve
+-- their current semantics. This is a separate index from the partial
+-- `users_email_trgm_idx` (fuzzy/partial search, active users only) added in
+-- migration 20260223201000.
+CREATE INDEX IF NOT EXISTS "users_email_lower_idx" ON "users" (lower("email"));

@@ -1292,6 +1292,89 @@ e2eDescribe('e2e: user profile flows', () => {
       expect(survivingInvite).toBeNull();
     });
 
+    it('does not delete a different pending invite whose email differs only by "_" vs "." (wildcard-safety regression)', async () => {
+      const suffix = Date.now();
+      // Differ only by "." vs "_" at the same position — an ILIKE-based match
+      // would let the "_" in emailB's invite wildcard-match emailA's user row.
+      const emailA = `joao.silva.${suffix}@gmail.com`;
+      const emailB = `joao_silva.${suffix}@gmail.com`;
+
+      const signupA = await app.inject({
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email: emailA, password: 'StrongPassw0rd!' },
+      });
+      expect(signupA.statusCode).toBe(201);
+      const { user: { id: userIdA }, token: { accessToken: accessTokenA } } = signupA.json();
+
+      const { userId: inviteSenderId } = await signup('wildcard-sender');
+
+      const inviteA = await prisma.trainerInvite.create({
+        data: {
+          email: emailA,
+          codeHash: crypto.randomBytes(16).toString('hex'),
+          status: InviteStatus.ACCEPTED,
+          invitedByUserId: inviteSenderId,
+          userId: userIdA,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          acceptedAt: new Date(),
+        },
+      });
+
+      // A DIFFERENT pending invite for emailB — deliberately NOT linked to user A.
+      const inviteB = await prisma.trainerInvite.create({
+        data: {
+          email: emailB,
+          codeHash: crypto.randomBytes(16).toString('hex'),
+          status: InviteStatus.PENDING,
+          invitedByUserId: inviteSenderId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessTokenA}` },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      expect(await prisma.trainerInvite.findUnique({ where: { id: inviteA.id } })).toBeNull();
+      expect(await prisma.trainerInvite.findUnique({ where: { id: inviteB.id } })).not.toBeNull();
+    });
+
+    it('still deletes the redeemer\'s own unlinked invite by email when the user\'s stored email is legacy mixed-case', async () => {
+      const { userId, accessToken } = await signup('legacy-mixed-case');
+      const { userId: inviteSenderId } = await signup('legacy-mixed-case-sender');
+
+      // Signup always normalizes to lowercase; simulate a legacy mixed-case
+      // row by writing it directly, bypassing the app's normalization.
+      const storedUser = await prisma.user.findUnique({ where: { id: userId } });
+      const mixedCaseEmail = storedUser.email.toUpperCase();
+      await prisma.user.update({ where: { id: userId }, data: { email: mixedCaseEmail } });
+
+      // Deliberately not linked by userId — only the lowercase email match
+      // (against the user's own, now mixed-case, stored email) should find it.
+      const invite = await prisma.trainerInvite.create({
+        data: {
+          email: storedUser.email, // TrainerInvite.email is always written lowercase
+          codeHash: crypto.randomBytes(16).toString('hex'),
+          status: InviteStatus.PENDING,
+          invitedByUserId: inviteSenderId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: '/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+
+      expect(await prisma.trainerInvite.findUnique({ where: { id: invite.id } })).toBeNull();
+    });
+
     it('scrubs studentId/userMessage/responseText on an AiInteractionLog row but keeps the row and its metrics', async () => {
       const { userId: trainerUserId } = await createTrainerWithToken('ai-log-scrub');
       const { userId, accessToken } = await signup('ai-log-scrub');
