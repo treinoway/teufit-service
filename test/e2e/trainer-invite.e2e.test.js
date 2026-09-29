@@ -1,10 +1,20 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import config from '../../config/index.js';
 import { Roles } from '../../src/constants/roles.js';
+
+// Mirrors normalizeInviteCode()/hashInviteCode() in
+// src/services/trainer-invite-service.js (not exported) — needed to seed a
+// TrainerInvite row directly via Prisma with a codeHash the service will
+// recognize when the plaintext code is later sent to the API.
+function hashInviteCodeForSeed(code) {
+  const normalized = code.trim().toUpperCase().replace(/^TF-?/, '').replace(/[^A-Z0-9]/g, '');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -74,6 +84,14 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
       method: 'GET',
       url: '/me',
       headers: { authorization: `Bearer ${accessToken}` },
+    });
+  }
+
+  // Deliberately sends NO Authorization header — /invite/preview is public.
+  function previewInvite(code) {
+    return app.inject({
+      method: 'GET',
+      url: `/invite/preview?code=${encodeURIComponent(code)}`,
     });
   }
 
@@ -392,5 +410,223 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
     const adminToken = await makeAdmin();
     const response = await createInvite(adminToken, 'not-an-email');
     expect(response.statusCode).toBe(400);
+  });
+
+  describe('GET /invite/preview (public, unauthenticated)', () => {
+    it('returns 200 with the exact { email, invitedByName, expiresAt, accountExists } shape for a valid pending invite, with no Authorization header sent', async () => {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'preview-valid@example.com')).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Object.keys(body).sort()).toEqual(['accountExists', 'email', 'expiresAt', 'invitedByName'].sort());
+      expect(body.email).toBe('preview-valid@example.com');
+      expect(typeof body.expiresAt).toBe('string');
+      expect(new Date(body.expiresAt).toString()).not.toBe('Invalid Date');
+      expect(typeof body.accountExists).toBe('boolean');
+    });
+
+    it('returns invitedByName as trimmed "first last" when the inviter has a name set', async () => {
+      const adminToken = await makeAdmin();
+      await prisma.user.update({
+        where: { email: ADMIN_EMAIL },
+        data: { firstName: 'Ada', lastName: 'Lovelace' },
+      });
+      const { code } = (await createInvite(adminToken, 'preview-named-inviter@example.com')).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().invitedByName).toBe('Ada Lovelace');
+    });
+
+    it('returns invitedByName: null when the inviter has no name set', async () => {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'preview-nameless-inviter@example.com')).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().invitedByName).toBeNull();
+    });
+
+    it('returns 404 invite.notFound for an unknown code', async () => {
+      const response = await previewInvite('TF-ZZZZ-ZZZZ-99');
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({
+        error: 'INVITE_NOT_FOUND',
+        messageCode: 'invite.notFound',
+      });
+    });
+
+    it('returns 403 invite.revoked for a revoked invite', async () => {
+      const adminToken = await makeAdmin();
+      const { invite, code } = (await createInvite(adminToken, 'preview-revoked@example.com')).json();
+      const revokeRes = await app.inject({
+        method: 'POST',
+        url: `/admin/trainer-invites/${invite.id}/revoke`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(revokeRes.statusCode).toBe(200);
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().messageCode).toBe('invite.revoked');
+    });
+
+    it('returns 409 invite.alreadyAccepted for an already-redeemed invite', async () => {
+      const originalGateEnabled = config.betaInviteGate.enabled;
+      config.betaInviteGate.enabled = true;
+      try {
+        const adminToken = await makeAdmin();
+        const { code } = (await createInvite(adminToken, 'preview-accepted@example.com')).json();
+        const { accessToken } = await signup('preview-accepted@example.com');
+        const redeemRes = await redeemInvite(accessToken, code);
+        expect(redeemRes.statusCode).toBe(200);
+
+        const response = await previewInvite(code);
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json().messageCode).toBe('invite.alreadyAccepted');
+      } finally {
+        config.betaInviteGate.enabled = originalGateEnabled;
+      }
+    });
+
+    it('returns 403 invite.expired for an expired pending invite, and never mutates the invite row (read-only)', async () => {
+      await makeAdmin();
+      const admin = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+      const code = 'TF-EXPI-REDX-99';
+      await prisma.trainerInvite.create({
+        data: {
+          email: 'preview-expired@example.com',
+          codeHash: hashInviteCodeForSeed(code),
+          invitedByUserId: admin.id,
+          expiresAt: new Date(Date.now() - 60 * 1000),
+        },
+      });
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().messageCode).toBe('invite.expired');
+
+      // Critical read-only guarantee: unlike POST /invite/redeem, preview
+      // must never flip an expired pending invite's status to 'expired'.
+      const persisted = await prisma.trainerInvite.findUnique({
+        where: { codeHash: hashInviteCodeForSeed(code) },
+      });
+      expect(persisted.status).toBe('pending');
+    });
+
+    it('returns 400 VALIDATION_ERROR when the code querystring is missing', async () => {
+      const response = await app.inject({ method: 'GET', url: '/invite/preview' });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns accountExists: true when a user already exists for the invited email', async () => {
+      const adminToken = await makeAdmin();
+      await signup('preview-existing-account@example.com');
+      const { code } = (await createInvite(adminToken, 'preview-existing-account@example.com')).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().accountExists).toBe(true);
+    });
+
+    it('returns accountExists: false when no user exists for the invited email', async () => {
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, 'preview-no-account@example.com')).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().accountExists).toBe(false);
+    });
+
+    it('does not treat "_" in the invite email as a wildcard matching a differently-punctuated existing user (wildcard-safety regression)', async () => {
+      const suffix = Date.now();
+      // Differ only by "." vs "_" at the same position — proves the lookup is
+      // an exact match, not an ILIKE pattern where "_" matches any character.
+      const userEmail = `joao.silva.${suffix}@gmail.com`;
+      const inviteEmail = `joao_silva.${suffix}@gmail.com`;
+
+      await signup(userEmail);
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, inviteEmail)).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().accountExists).toBe(false);
+    });
+
+    it('returns accountExists: true for a legacy mixed-case stored user email matched case-insensitively', async () => {
+      const suffix = Date.now();
+      const mixedCaseEmail = `Mixed.Case.${suffix}@Example.com`;
+
+      // /auth/signup always normalizes to lowercase, so a mixed-case row can
+      // only exist as legacy data — bypass the API and write it directly.
+      await prisma.user.create({
+        data: { email: mixedCaseEmail, roles: [], status: 'pending' },
+      });
+
+      const adminToken = await makeAdmin();
+      const { code } = (await createInvite(adminToken, mixedCaseEmail)).json();
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().accountExists).toBe(true);
+    });
+
+    it('returns 403 invite.expired for an invite whose STORED status is already "expired" (not merely past expiresAt)', async () => {
+      await makeAdmin();
+      const admin = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+      const code = 'TF-STOR-EXPD-77';
+      await prisma.trainerInvite.create({
+        data: {
+          email: 'preview-stored-expired@example.com',
+          codeHash: hashInviteCodeForSeed(code),
+          status: 'expired',
+          invitedByUserId: admin.id,
+          expiresAt: new Date(Date.now() - 60 * 1000),
+        },
+      });
+
+      const response = await previewInvite(code);
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        error: 'INVITE_EXPIRED',
+        messageCode: 'invite.expired',
+      });
+    });
+  });
+
+  describe('GET /admin/trainer-invites email filter — wildcard safety', () => {
+    it('does not wildcard-match an invite whose email differs only by "_" vs "." at the same position', async () => {
+      const suffix = Date.now();
+      const adminToken = await makeAdmin();
+      const dotEmail = `filter.name.${suffix}@example.com`;
+      await createInvite(adminToken, dotEmail);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/admin/trainer-invites?email=${encodeURIComponent(`filter_name.${suffix}@example.com`)}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().total).toBe(0);
+      expect(response.json().items).toEqual([]);
+    });
   });
 });

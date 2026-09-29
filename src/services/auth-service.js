@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import { findOrCreateUserFromOAuth } from '../helpers/auth.js';
+import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
 import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
 import { issueAccessToken, issueRefreshToken, revokeAllUserRefreshTokens } from './token-service.js';
@@ -202,9 +203,8 @@ export async function signupWithEmailPassword({ email, password, roles }) {
     throw err;
   }
 
-  const existing = await prisma.user.findFirst({
-    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-  });
+  const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
+  const existing = existingUserId ? await prisma.user.findUnique({ where: { id: existingUserId } }) : null;
   if (existing && !existing.deletedAt) {
     const err = new Error('Email already in use');
     err.code = 'EMAIL_IN_USE';
@@ -272,9 +272,8 @@ export async function loginWithEmailPassword({ email, password }) {
     throw err;
   }
 
-  const user = await prisma.user.findFirst({
-    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-  });
+  const userId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
   if (!user) {
     const err = new Error('Invalid credentials');
     err.code = 'INVALID_CREDENTIALS';
@@ -325,9 +324,8 @@ export async function requestPasswordReset({ email }) {
     throw err;
   }
 
-  const user = await prisma.user.findFirst({
-    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-  });
+  const userId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
 
   // To avoid user enumeration, do not reveal whether the user exists.
   if (!user || user.deletedAt) {

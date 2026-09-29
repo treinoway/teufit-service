@@ -80,6 +80,14 @@ export default {
       max: 10,
       timeWindow: '1 minute',
     },
+    // Public (unauthenticated), IP-keyed by default — no keyGenerator override,
+    // same as auth.* above.
+    invite: {
+      preview: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+    },
     user: {
       getMe: {
         max: 30,

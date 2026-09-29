@@ -194,7 +194,7 @@ describe('account-deletion-service', () => {
           data: { studentId: null, userMessage: null, responseText: null },
         });
         expect(prisma.trainerInvite.deleteMany).toHaveBeenCalledExactlyOnceWith({
-          where: { OR: [{ userId: USER_ID }, { email: { equals: USER_EMAIL, mode: 'insensitive' } }] },
+          where: { OR: [{ userId: USER_ID }, { email: USER_EMAIL.trim().toLowerCase() }] },
         });
 
         expect(prisma.user.update).toHaveBeenCalledExactlyOnceWith({
@@ -227,6 +227,21 @@ describe('account-deletion-service', () => {
 
         expect(prisma.trainerInvite.deleteMany).toHaveBeenCalledExactlyOnceWith({
           where: { userId: USER_ID },
+        });
+      });
+
+      it('normalizes (trims + lowercases) a mixed-case stored user email before matching TrainerInvite rows, as a plain string (no ILIKE/wildcard object)', async () => {
+        prisma.user.findUnique.mockResolvedValue({
+          id: USER_ID,
+          email: '  User1@Example.COM  ',
+          avatarUrl: null,
+          deletedAt: null,
+        });
+
+        await deleteOwnAccount(USER_ID);
+
+        expect(prisma.trainerInvite.deleteMany).toHaveBeenCalledExactlyOnceWith({
+          where: { OR: [{ userId: USER_ID }, { email: 'user1@example.com' }] },
         });
       });
 

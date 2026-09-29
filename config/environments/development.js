@@ -25,6 +25,12 @@ export default {
           max: 1000,
           timeWindow: '1 minute',
         },
+        invite: {
+          preview: {
+            max: 1000,
+            timeWindow: '1 minute',
+          },
+        },
         user: {
             getMe: {
               max: 1000,

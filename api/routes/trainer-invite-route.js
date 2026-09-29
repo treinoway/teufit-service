@@ -6,6 +6,7 @@ import {
   listInvites,
   revokeInvite,
   redeemInvite,
+  getInvitePreview,
 } from '../../src/services/trainer-invite-service.js';
 import { getUserProfileById } from '../../src/services/user-service.js';
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
@@ -24,6 +25,36 @@ function serializeInvite(invite) {
     revokedAt: invite.revokedAt ? invite.revokedAt.toISOString() : null,
     createdAt: invite.createdAt.toISOString(),
   };
+}
+
+/**
+ * Public, unauthenticated invite routes. Registered separately from
+ * `trainerInviteRoutes` (below) because that plugin is mounted inside
+ * server.js's protected block, which adds an `onRequest` authenticate hook
+ * to every route registered under it — a hook that cannot be opted out of
+ * per-route. `/invite/preview` must stay reachable pre-signup, so it lives
+ * in its own plugin registered in the public section of server.js instead.
+ */
+export async function trainerInvitePreviewRoutes(fastify) {
+  fastify.get(
+    '/invite/preview',
+    {
+      config: {
+        rateLimit: config.rateLimit.invite.preview,
+      },
+      schema: schema.previewInviteSchema,
+    },
+    async (request, reply) => {
+      const preview = await getInvitePreview({ code: request.query.code });
+
+      return reply.send({
+        email: preview.email,
+        invitedByName: preview.invitedByName,
+        expiresAt: preview.expiresAt.toISOString(),
+        accountExists: preview.accountExists,
+      });
+    },
+  );
 }
 
 export async function trainerInviteRoutes(fastify) {

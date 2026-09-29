@@ -9,7 +9,9 @@ vi.mock('../../src/db.js', () => {
       },
       user: {
         findFirst: vi.fn(),
+        findUnique: vi.fn(),
       },
+      $queryRaw: vi.fn(),
     },
   };
 });
@@ -84,55 +86,75 @@ describe('findUserByEmailInsensitive', () => {
   it('should return null when email is null', async () => {
     const result = await findUserByEmailInsensitive(null);
     expect(result).toBeNull();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('should return null when email is undefined', async () => {
     const result = await findUserByEmailInsensitive(undefined);
     expect(result).toBeNull();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('should return null when email is not a string', async () => {
     const result = await findUserByEmailInsensitive(42);
     expect(result).toBeNull();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('should return null when email is empty string', async () => {
     const result = await findUserByEmailInsensitive('');
     expect(result).toBeNull();
-    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('should query prisma with insensitive mode and normalized email', async () => {
+  it('should look up the id via $queryRaw with the normalized email, then fetch the full user by id', async () => {
     const mockUser = { id: 'user-1', email: 'test@example.com' };
-    prisma.user.findFirst.mockResolvedValue(mockUser);
+    prisma.$queryRaw.mockResolvedValue([{ id: 'user-1' }]);
+    prisma.user.findUnique.mockResolvedValue(mockUser);
 
     const result = await findUserByEmailInsensitive('TEST@EXAMPLE.COM');
 
-    expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: { email: { equals: 'test@example.com', mode: 'insensitive' } },
-    });
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('test@example.com');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-1' } });
     expect(result).toEqual(mockUser);
   });
 
   it('should trim whitespace from email before querying', async () => {
     const mockUser = { id: 'user-2', email: 'trimmed@example.com' };
-    prisma.user.findFirst.mockResolvedValue(mockUser);
+    prisma.$queryRaw.mockResolvedValue([{ id: 'user-2' }]);
+    prisma.user.findUnique.mockResolvedValue(mockUser);
 
     await findUserByEmailInsensitive('  trimmed@example.com  ');
 
-    expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: { email: { equals: 'trimmed@example.com', mode: 'insensitive' } },
-    });
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('trimmed@example.com');
   });
 
-  it('should return null when no user matches the email', async () => {
-    prisma.user.findFirst.mockResolvedValue(null);
+  it('should still normalize (lowercase) a mixed-case stored-legacy-style email before querying', async () => {
+    prisma.$queryRaw.mockResolvedValue([{ id: 'user-3' }]);
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-3', email: 'mixedcase@example.com' });
+
+    await findUserByEmailInsensitive('MixedCase@Example.com');
+
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('mixedcase@example.com');
+  });
+
+  it('should pass the email as an exact parameterized value, not a wildcard pattern, so "_" is not treated as a wildcard', async () => {
+    prisma.$queryRaw.mockResolvedValue([]);
+
+    await findUserByEmailInsensitive('joao_silva@gmail.com');
+
+    const callArgs = prisma.$queryRaw.mock.calls[0];
+    expect(callArgs[1]).toBe('joao_silva@gmail.com');
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('should return null when no row matches, without calling findUnique', async () => {
+    prisma.$queryRaw.mockResolvedValue([]);
 
     const result = await findUserByEmailInsensitive('nobody@example.com');
 
     expect(result).toBeNull();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 });

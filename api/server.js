@@ -20,7 +20,7 @@ import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
 import { nutritionistRoutes } from './routes/nutritionist-route.js';
 import { userRoutes } from './routes/user-route.js';
-import { trainerInviteRoutes } from './routes/trainer-invite-route.js';
+import { trainerInviteRoutes, trainerInvitePreviewRoutes } from './routes/trainer-invite-route.js';
 import { addressRoutes } from './routes/address-route.js';
 import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
 import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
@@ -330,6 +330,11 @@ export async function buildServer(options = {}) {
 
   // Health check endpoint (public — registered before the authenticate onRequest hook below).
   await fastify.register(healthRoutes);
+
+  // Trainer invite preview (public — pre-signup code validation; must stay
+  // outside the protected block below since that block's onRequest hook
+  // cannot be opted out of per-route).
+  await fastify.register(trainerInvitePreviewRoutes);
 
   // Root liveness probe (public)
   fastify.get('/', async () => {
