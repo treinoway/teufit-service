@@ -53,7 +53,7 @@ export const createInviteSchema = {
       required: ['invite', 'code'],
       properties: {
         invite: createdInviteSchema,
-        code: { type: 'string', description: 'Plain invite code, e.g. TW-XXXX-XXXX-XX. Shown once.' },
+        code: { type: 'string', description: 'Plain invite code, e.g. TF-XXXX-XXXX-XX. Shown once.' },
       },
       additionalProperties: false,
     },
@@ -131,6 +131,48 @@ export const revokeInviteSchema = {
   },
 };
 
+export const previewInviteSchema = {
+  tags: ['Trainer Invites'],
+  summary: 'Preview a trainer invite code before signup — public',
+  description: 'Public, unauthenticated endpoint used by the web signup flow (`/invite?code=…` → `/signup?code=…`) to validate a code before account creation, show the inviter name, and prefill + lock the invited email. Note: the invite code functions as a bearer token bound to the email — returning that email to whoever holds a valid code is an accepted trade-off, since the code itself is only ever delivered via the invite email.',
+  querystring: {
+    type: 'object',
+    required: ['code'],
+    properties: {
+      code: { type: 'string', minLength: 1, maxLength: 32, description: 'Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive.' },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['email', 'invitedByName', 'expiresAt', 'accountExists'],
+      properties: {
+        email: { type: 'string', format: 'email', description: 'Email the invite is bound to — the web app should prefill and lock this field.' },
+        invitedByName: { type: 'string', nullable: true, description: 'Trimmed "first last" name of the inviter, or null if unavailable.' },
+        expiresAt: { type: 'string', format: 'date-time' },
+        accountExists: { type: 'boolean', description: 'Whether `email` already has an account — lets the web app route to login instead of signup.' },
+      },
+      additionalProperties: false,
+    },
+    400: badRequestErrorResponseSchema,
+    403: {
+      description: 'Forbidden — invite.revoked or invite.expired',
+      ...errorResponseSchema,
+    },
+    404: {
+      description: 'Not found — invite.notFound (unknown/mistyped code)',
+      ...errorResponseSchema,
+    },
+    409: {
+      description: 'Conflict — invite.alreadyAccepted (already redeemed)',
+      ...errorResponseSchema,
+    },
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const redeemInviteSchema = {
   tags: ['Trainer Invites'],
   summary: 'Redeem a trainer invite code — grants the trainer role',
@@ -140,7 +182,7 @@ export const redeemInviteSchema = {
     type: 'object',
     required: ['code'],
     properties: {
-      code: { type: 'string', minLength: 1, maxLength: 32, description: 'Invite code, e.g. TW-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive.' },
+      code: { type: 'string', minLength: 1, maxLength: 32, description: 'Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive.' },
     },
     additionalProperties: false,
   },

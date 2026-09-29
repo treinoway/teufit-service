@@ -71,9 +71,15 @@ export async function deleteOwnAccount(userId, logger = console) {
       data: { studentId: null, userMessage: null, responseText: null },
     });
 
+    // TrainerInvite.email is always written lowercase (the only write path
+    // normalizes it — see normalizeEmail/createInvite in
+    // trainer-invite-service.js), so a plain lowercase equality match is
+    // correct here and avoids ILIKE's wildcard risk: with
+    // `mode: 'insensitive'` (which compiles to ILIKE), a `user.email`
+    // containing `_`/`%` could match and delete a DIFFERENT person's invite.
     await tx.trainerInvite.deleteMany({
       where: user.email
-        ? { OR: [{ userId }, { email: { equals: user.email, mode: 'insensitive' } }] }
+        ? { OR: [{ userId }, { email: user.email.trim().toLowerCase() }] }
         : { userId },
     });
 

@@ -63,7 +63,7 @@
       "key": "inviteCode",
       "value": "",
       "type": "string",
-      "description": "Plain trainer invite code (e.g. TW-XXXX-XXXX-XX) returned by POST /admin/trainer-invites — used to test POST /invite/redeem"
+      "description": "Plain trainer invite code (e.g. TF-XXXX-XXXX-XX) returned by POST /admin/trainer-invites — used to test POST /invite/redeem"
     }
   ],
   "auth": {
@@ -1054,6 +1054,137 @@
           "response": []
         },
         {
+          "name": "Preview Trainer Invite",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invite/preview?code=TF-4H7K-M2QR-9X",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invite",
+                "preview"
+              ],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "TF-4H7K-M2QR-9X",
+                  "description": "Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive."
+                }
+              ]
+            },
+            "description": "Preview a trainer invite code before signup (public, unauthenticated). Used by the web signup flow (/invite?code=… → /signup?code=…) to validate the code before account creation, show the inviter's name, and prefill + lock the invited email in the signup form. Also returns whether that email already has an account, so the frontend can route to login instead of signup. Read-only — unlike POST /invite/redeem, does not flip the invite's status even if it has expired. Rate limited: 10 requests/minute per IP. Errors: 400 validation, 403 (invite.revoked / invite.expired), 404 invite.notFound, 409 invite.alreadyAccepted, 429."
+          },
+          "response": [
+            {
+              "name": "Preview Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/invite/preview?code=TF-4H7K-M2QR-9X",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "invite",
+                    "preview"
+                  ],
+                  "query": [
+                    {
+                      "key": "code",
+                      "value": "TF-4H7K-M2QR-9X",
+                      "description": "Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive."
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"email\": \"new.trainer@example.com\",\n  \"invitedByName\": \"Jane Doe\",\n  \"expiresAt\": \"2026-10-05T12:00:00.000Z\",\n  \"accountExists\": false\n}"
+            },
+            {
+              "name": "Preview Trainer Invite - 404 Not Found (invite.notFound)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/invite/preview?code=TF-0000-0000-00",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "invite",
+                    "preview"
+                  ],
+                  "query": [
+                    {
+                      "key": "code",
+                      "value": "TF-0000-0000-00"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"invite.notFound\",\n  \"message\": \"Invite not found.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Preview Trainer Invite - 409 Conflict (invite.alreadyAccepted)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/invite/preview?code=TF-4H7K-M2QR-9X",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "invite",
+                    "preview"
+                  ],
+                  "query": [
+                    {
+                      "key": "code",
+                      "value": "TF-4H7K-M2QR-9X",
+                      "description": "Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive."
+                    }
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"invite.alreadyAccepted\",\n  \"message\": \"This invite has already been accepted.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
           "name": "Redeem Trainer Invite",
           "event": [
             {
@@ -1090,7 +1221,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+              "raw": "{\n  \"code\": \"TF-4H7K-M2QR-9X\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1122,7 +1253,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+                  "raw": "{\n  \"code\": \"TF-4H7K-M2QR-9X\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1163,7 +1294,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}",
+                  "raw": "{\n  \"code\": \"TF-4H7K-M2QR-9X\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -5743,7 +5874,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"invite\": {\n    \"id\": \"b2f3a1d4-8e6c-4a2b-9f31-7c4e5d8a9b10\",\n    \"email\": \"new.trainer@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"expiresAt\": \"2026-07-21T12:00:00.000Z\"\n  },\n  \"code\": \"TW-4H7K-M2QR-9X\"\n}"
+              "body": "{\n  \"invite\": {\n    \"id\": \"b2f3a1d4-8e6c-4a2b-9f31-7c4e5d8a9b10\",\n    \"email\": \"new.trainer@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"expiresAt\": \"2026-07-21T12:00:00.000Z\"\n  },\n  \"code\": \"TF-4H7K-M2QR-9X\"\n}"
             },
             {
               "name": "Create Trainer Invite - 409 Conflict (invite.alreadyActiveForEmail)",

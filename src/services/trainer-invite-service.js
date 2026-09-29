@@ -16,6 +16,7 @@ import { ValidationAppError, ForbiddenAppError, NotFoundAppError, ConflictAppErr
 import { setActiveProfileToTrainer } from './user-service.js';
 import emailHandler from '../config/email-handler.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
+import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
 
 function normalizeEmail(email) {
   if (typeof email !== 'string') return '';
@@ -160,7 +161,11 @@ export async function listInvites({ status, email, page, pageSize } = {}) {
   }
 
   if (email) {
-    where.email = { equals: normalizeEmail(email), mode: 'insensitive' };
+    // TrainerInvite.email is always written lowercase (see normalizeEmail in
+    // createInvite — it is the only write path), so an exact match on the
+    // normalized value is sufficient and correct: no ILIKE/wildcard risk,
+    // and it can use the plain unique/email btree index.
+    where.email = normalizeEmail(email);
   }
 
   const currentPage = clampPage(page);
@@ -204,17 +209,32 @@ export async function revokeInvite({ inviteId }) {
 }
 
 /**
- * Redeems an invite code for the given authenticated user, granting the
- * trainer role via setActiveProfileToTrainer on success.
+ * Loads an invite by its plaintext code and asserts it is in a state that
+ * can be acted upon. Shared by redeemInvite (mutating) and getInvitePreview
+ * (read-only) so the notFound/revoked/alreadyAccepted/expired branches —
+ * status, error, messageCode, message — cannot drift between the two call
+ * sites.
  *
- * Race safety: the pending → accepted transition is a conditional
- * `updateMany` (`where: { status: 'pending' }`). If two requests race to
- * redeem the same still-pending invite, only one updates a row (count 1);
- * the loser sees count 0 and is rejected with a 409 — it does not re-read to
- * decide whether it "actually" was the same user, matching the documented
- * edge-case contract exactly.
+ * Two seams let a caller layer its own semantics on top without duplicating
+ * the branching:
+ * - `isAlreadyAcceptedException(invite)`: when the invite is already
+ *   accepted, return true to skip the generic alreadyAccepted throw (used by
+ *   redeemInvite for its idempotent same-user reuse). Omitted → always throws.
+ * - `onExpiredPending(invite)`: side effect run when a pending invite is
+ *   found expired, immediately before the expired error is thrown (used by
+ *   redeemInvite to flip the row to EXPIRED). Omitted → read-only.
+ *
+ * @param {string} code - plaintext invite code (as typed/pasted by the user)
+ * @param {object} [options]
+ * @param {object} [options.include] - forwarded to the underlying
+ *   `trainerInvite.findUnique` (e.g. to include the inviter relation)
+ * @param {(invite: object) => boolean} [options.isAlreadyAcceptedException]
+ * @param {(invite: object) => Promise<void>} [options.onExpiredPending]
  */
-export async function redeemInvite({ user, code }) {
+async function loadInviteAndAssertActionable(
+  code,
+  { include, isAlreadyAcceptedException, onExpiredPending } = {},
+) {
   if (typeof code !== 'string' || !code.trim()) {
     throw new ValidationAppError({
       message: 'Invite code is required.',
@@ -226,7 +246,10 @@ export async function redeemInvite({ user, code }) {
 
   const codeHash = hashInviteCode(code);
   // Generic 404 on miss — do not reveal whether a code "almost" matched.
-  const invite = await prisma.trainerInvite.findUnique({ where: { codeHash } });
+  const invite = await prisma.trainerInvite.findUnique({
+    where: { codeHash },
+    ...(include ? { include } : {}),
+  });
 
   if (!invite) {
     throw new NotFoundAppError({
@@ -245,11 +268,8 @@ export async function redeemInvite({ user, code }) {
   }
 
   if (invite.status === InviteStatus.ACCEPTED) {
-    if (invite.userId === user.id) {
-      // Idempotent reuse: setActiveProfileToTrainer is safe to re-run (role-add
-      // no-ops when already present) so a stale client retry still succeeds.
-      const preferences = await setActiveProfileToTrainer(user.id);
-      return { invite, preferences };
+    if (isAlreadyAcceptedException?.(invite)) {
+      return invite;
     }
     throw new ConflictAppError({
       error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
@@ -258,12 +278,15 @@ export async function redeemInvite({ user, code }) {
     });
   }
 
-  // status === pending beyond this point.
+  // Only PENDING (possibly stale) invites reach this point: REVOKED and
+  // ACCEPTED were already handled above. A row whose *stored* status is
+  // already EXPIRED also falls through here — the expiresAt check below
+  // still throws EXPIRED for it, it just skips onExpiredPending since the
+  // row is already in that state.
   if (invite.expiresAt < new Date()) {
-    await prisma.trainerInvite.updateMany({
-      where: { id: invite.id, status: InviteStatus.PENDING },
-      data: { status: InviteStatus.EXPIRED },
-    });
+    if (onExpiredPending) {
+      await onExpiredPending(invite);
+    }
     throw new ForbiddenAppError({
       error: InviteErrorCode.INVITE_EXPIRED,
       messageCode: InviteMessageCode.EXPIRED,
@@ -271,6 +294,39 @@ export async function redeemInvite({ user, code }) {
     });
   }
 
+  return invite;
+}
+
+/**
+ * Redeems an invite code for the given authenticated user, granting the
+ * trainer role via setActiveProfileToTrainer on success.
+ *
+ * Race safety: the pending → accepted transition is a conditional
+ * `updateMany` (`where: { status: 'pending' }`). If two requests race to
+ * redeem the same still-pending invite, only one updates a row (count 1);
+ * the loser sees count 0 and is rejected with a 409 — it does not re-read to
+ * decide whether it "actually" was the same user, matching the documented
+ * edge-case contract exactly.
+ */
+export async function redeemInvite({ user, code }) {
+  const invite = await loadInviteAndAssertActionable(code, {
+    isAlreadyAcceptedException: (candidate) => candidate.userId === user.id,
+    onExpiredPending: (candidate) =>
+      prisma.trainerInvite.updateMany({
+        where: { id: candidate.id, status: InviteStatus.PENDING },
+        data: { status: InviteStatus.EXPIRED },
+      }),
+  });
+
+  if (invite.status === InviteStatus.ACCEPTED) {
+    // Idempotent reuse (matched isAlreadyAcceptedException above):
+    // setActiveProfileToTrainer is safe to re-run (role-add no-ops when
+    // already present) so a stale client retry still succeeds.
+    const preferences = await setActiveProfileToTrainer(user.id);
+    return { invite, preferences };
+  }
+
+  // status === pending, not expired, beyond this point.
   if (normalizeEmail(invite.email) !== normalizeEmail(user.email)) {
     throw new ForbiddenAppError({
       error: InviteErrorCode.INVITE_EMAIL_MISMATCH,
@@ -296,6 +352,39 @@ export async function redeemInvite({ user, code }) {
   const updatedInvite = await prisma.trainerInvite.findUnique({ where: { id: invite.id } });
 
   return { invite: updatedInvite, preferences };
+}
+
+function buildInviterName(inviter) {
+  const name = `${inviter?.firstName ?? ''} ${inviter?.lastName ?? ''}`.trim();
+  return name || null;
+}
+
+/**
+ * Public, unauthenticated invite preview — read-only by construction (the
+ * shared loader is called with no `onExpiredPending`/mutating hooks). Used
+ * by the web signup flow to validate a code, show the inviter, and prefill +
+ * lock the bound email before the account exists.
+ *
+ * Trade-off (accepted): the invite code is effectively a bearer token bound
+ * to one email. Whoever holds a valid code can see the email it targets via
+ * this endpoint. The code itself is only ever delivered through the invite
+ * email, so this does not widen exposure beyond "holds the link".
+ */
+export async function getInvitePreview({ code }) {
+  const invite = await loadInviteAndAssertActionable(code, {
+    include: { invitedBy: { select: { firstName: true, lastName: true } } },
+  });
+
+  // Case-insensitive match: legacy users may have mixed-case email saved
+  // (same convention as findUserByEmailInsensitive in src/helpers/auth.js).
+  const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, invite.email);
+
+  return {
+    email: invite.email,
+    invitedByName: buildInviterName(invite.invitedBy),
+    expiresAt: invite.expiresAt,
+    accountExists: Boolean(existingUserId),
+  };
 }
 
 export { hasBetaAccess };

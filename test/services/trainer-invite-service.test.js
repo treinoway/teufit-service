@@ -15,7 +15,9 @@ vi.mock('../../src/db.js', () => {
       },
       user: {
         findUnique: vi.fn(),
+        findFirst: vi.fn(),
       },
+      $queryRaw: vi.fn(),
       $transaction: vi.fn(async (ops) => {
         if (Array.isArray(ops)) {
           return Promise.all(ops);
@@ -54,6 +56,7 @@ import {
   listInvites,
   revokeInvite,
   redeemInvite,
+  getInvitePreview,
 } from '../../src/services/trainer-invite-service.js';
 
 const ADMIN_ID = 'admin-1';
@@ -220,10 +223,17 @@ describe('listInvites', () => {
     expect(prisma.trainerInvite.findMany).not.toHaveBeenCalled();
   });
 
-  it('filters by email using a case-insensitive equals match', async () => {
+  it('normalizes the email filter to lowercase before an exact equals match', async () => {
     await listInvites({ email: 'Invitee@Example.com' });
     expect(prisma.trainerInvite.findMany.mock.calls[0][0].where).toEqual({
-      email: { equals: 'invitee@example.com', mode: 'insensitive' },
+      email: 'invitee@example.com',
+    });
+  });
+
+  it('passes an email filter containing "_" through as the literal lowercased string, not a wildcard/contains pattern', async () => {
+    await listInvites({ email: 'Joao_Silva@Gmail.com' });
+    expect(prisma.trainerInvite.findMany.mock.calls[0][0].where).toEqual({
+      email: 'joao_silva@gmail.com',
     });
   });
 });
@@ -417,5 +427,171 @@ describe('redeemInvite', () => {
 
     expect(hashFromCanonical).toBe(hashFromLowercaseNoPrefix);
     expect(hashFromCanonical).toBe(hashFromNoDashesNoPrefix);
+  });
+});
+
+describe('getInvitePreview', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.$queryRaw.mockResolvedValue([]);
+  });
+
+  function baseInviteWithInviter(overrides = {}) {
+    return baseInvite({
+      invitedBy: { firstName: 'Ada', lastName: 'Lovelace' },
+      ...overrides,
+    });
+  }
+
+  it('throws ValidationAppError when code is missing/blank', async () => {
+    await expect(getInvitePreview({ code: '' })).rejects.toMatchObject({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      details: [
+        expect.objectContaining({ field: 'code', messageCode: 'validation.code.required' }),
+      ],
+    });
+    expect(prisma.trainerInvite.findUnique).not.toHaveBeenCalled();
+
+    await expect(getInvitePreview({ code: '   ' })).rejects.toMatchObject({ httpStatus: 400 });
+  });
+
+  it('passes the invitedBy include to the invite lookup', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(baseInviteWithInviter());
+
+    await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(prisma.trainerInvite.findUnique).toHaveBeenCalledWith({
+      where: { codeHash: expect.any(String) },
+      include: { invitedBy: { select: { firstName: true, lastName: true } } },
+    });
+  });
+
+  it('throws NotFoundAppError when no invite matches the code hash', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(null);
+
+    await expect(getInvitePreview({ code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+      httpStatus: 404,
+      error: InviteErrorCode.INVITE_NOT_FOUND,
+      messageCode: InviteMessageCode.NOT_FOUND,
+    });
+  });
+
+  it('throws ForbiddenAppError when the invite is revoked', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(baseInviteWithInviter({ status: InviteStatus.REVOKED }));
+
+    await expect(getInvitePreview({ code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+      httpStatus: 403,
+      error: InviteErrorCode.INVITE_REVOKED,
+      messageCode: InviteMessageCode.REVOKED,
+    });
+  });
+
+  it('throws ConflictAppError when the invite is already accepted, regardless of which user redeemed it', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInviteWithInviter({ status: InviteStatus.ACCEPTED, userId: USER_ID }),
+    );
+
+    await expect(getInvitePreview({ code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+      httpStatus: 409,
+      error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
+      messageCode: InviteMessageCode.ALREADY_ACCEPTED,
+    });
+  });
+
+  it('throws ForbiddenAppError for a pending but expired invite, and never mutates the invite (read-only)', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInviteWithInviter({ status: InviteStatus.PENDING, expiresAt: new Date(Date.now() - 1000) }),
+    );
+
+    await expect(getInvitePreview({ code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+      httpStatus: 403,
+      error: InviteErrorCode.INVITE_EXPIRED,
+      messageCode: InviteMessageCode.EXPIRED,
+    });
+
+    // Critical read-only guarantee: unlike redeemInvite, preview must never
+    // flip an expired pending invite's status to EXPIRED.
+    expect(prisma.trainerInvite.updateMany).not.toHaveBeenCalled();
+    expect(prisma.trainerInvite.update).not.toHaveBeenCalled();
+  });
+
+  it('returns accountExists: true when a user already exists for the invite email', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInviteWithInviter({ status: InviteStatus.PENDING, email: 'invitee@example.com' }),
+    );
+    prisma.$queryRaw.mockResolvedValue([{ id: 'existing-user-id' }]);
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.accountExists).toBe(true);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw.mock.calls[0][1]).toBe('invitee@example.com');
+  });
+
+  it('returns accountExists: false when no user exists for the invite email', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInviteWithInviter({ status: InviteStatus.PENDING, email: 'nobody@example.com' }),
+    );
+    prisma.$queryRaw.mockResolvedValue([]);
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.accountExists).toBe(false);
+  });
+
+  it('returns the invite email and raw (non-stringified) expiresAt Date', async () => {
+    const invite = baseInviteWithInviter({ status: InviteStatus.PENDING, email: 'invitee@example.com' });
+    prisma.trainerInvite.findUnique.mockResolvedValue(invite);
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.email).toBe('invitee@example.com');
+    expect(preview.expiresAt).toBeInstanceOf(Date);
+    expect(preview.expiresAt).toEqual(invite.expiresAt);
+  });
+
+  it('builds invitedByName as trimmed "first last" when the inviter has both names', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInvite({ status: InviteStatus.PENDING, invitedBy: { firstName: 'Ada', lastName: 'Lovelace' } }),
+    );
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.invitedByName).toBe('Ada Lovelace');
+  });
+
+  it('returns invitedByName: null when the inviter relation is missing', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInvite({ status: InviteStatus.PENDING, invitedBy: null }),
+    );
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.invitedByName).toBeNull();
+  });
+
+  it('returns invitedByName: null when the inviter has both firstName and lastName blank', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(
+      baseInvite({ status: InviteStatus.PENDING, invitedBy: { firstName: '', lastName: '' } }),
+    );
+
+    const preview = await getInvitePreview({ code: 'TF-ABCD-EFGH-12' });
+
+    expect(preview.invitedByName).toBeNull();
+  });
+
+  it('normalizes the code (prefix/dashes/case) the same way redeemInvite does', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(null);
+
+    await getInvitePreview({ code: 'TF-ABCD-EFGH-12' }).catch(() => {});
+    const hashFromCanonical = prisma.trainerInvite.findUnique.mock.calls[0][0].where.codeHash;
+
+    vi.clearAllMocks();
+    prisma.trainerInvite.findUnique.mockResolvedValue(null);
+    await getInvitePreview({ code: 'abcd-efgh-12' }).catch(() => {});
+    const hashFromLowercaseNoPrefix = prisma.trainerInvite.findUnique.mock.calls[0][0].where.codeHash;
+
+    expect(hashFromCanonical).toBe(hashFromLowercaseNoPrefix);
   });
 });
