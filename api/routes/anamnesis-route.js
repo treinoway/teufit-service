@@ -337,7 +337,7 @@ export async function anamnesisRoutes(fastify) {
     },
   );
 
-  // POST /my/anamneses/:anamnesisId/response — Submit response to an anamnesis
+  // POST /my/anamneses/:anamnesisId/response — Submit (finalize) response to an anamnesis
   fastify.post(
     '/my/anamneses/:anamnesisId/response',
     {
@@ -346,6 +346,23 @@ export async function anamnesisRoutes(fastify) {
     },
     async (request, reply) => {
       const result = await service.submitAnamnesisResponse(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // PATCH /my/anamneses/:anamnesisId/response/draft — Save a partial (draft) response
+  fastify.patch(
+    '/my/anamneses/:anamnesisId/response/draft',
+    {
+      preHandler: [authenticate],
+      schema: schema.saveAnamnesisResponseDraftSchema,
+    },
+    async (request, reply) => {
+      const result = await service.saveAnamnesisResponseDraft(
         request.user.id,
         request.params.anamnesisId,
         request.body,

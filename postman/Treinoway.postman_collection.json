@@ -4817,7 +4817,7 @@
                 }
               ]
             },
-            "description": "Get a student's response to a specific anamnesis. Trainer must own the trainer-student relationship and have linked the anamnesis to the student. Returns 404 if the student has not submitted a response yet."
+            "description": "Get a student's submitted response to a specific anamnesis (includes status \"submitted\"). Trainer must own the trainer-student relationship and have linked the anamnesis to the student. Drafts are not visible to trainers: returns 404 ANAMNESIS_RESPONSE_NOT_FOUND if the student has not submitted a response yet (including when only a draft exists)."
           },
           "response": []
         }
@@ -4846,9 +4846,41 @@
                 "anamneses"
               ]
             },
-            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info."
+            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info. Each item also carries a `response` summary ({ status, statusLabel, answeredCount, updatedAt }) describing the student's saved response: status is \"draft\" (partial answers saved via PATCH .../response/draft) or \"submitted\" (finalized via POST .../response); `response` is null when nothing was saved yet."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Get My Anamneses - 200 OK (draft and no response)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667771\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n      \"title\": \"Anamnese Geral\",\n      \"description\": null,\n      \"isGeneral\": true,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n          \"title\": \"Histórico de saúde\",\n          \"description\": null,\n          \"order\": 1,\n          \"questions\": [\n            {\n              \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n              \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n              \"text\": \"Você pratica atividade física regularmente?\",\n              \"type\": \"dichotomous\",\n              \"typeLabel\": \"Dicotômica\",\n              \"required\": true,\n              \"order\": 1,\n              \"config\": null,\n              \"parentQuestionId\": null,\n              \"condition\": null,\n              \"options\": [],\n              \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n              \"updatedAt\": null\n            }\n          ],\n          \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n          \"updatedAt\": null\n        }\n      ]\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": {\n      \"status\": \"draft\",\n      \"statusLabel\": \"Rascunho\",\n      \"answeredCount\": 1,\n      \"updatedAt\": \"2026-09-28T14:20:00.000Z\"\n    },\n    \"createdAt\": \"2026-09-01T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667772\",\n    \"anamnesisId\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n      \"title\": \"Avaliação de Lesões\",\n      \"description\": \"Histórico de lesões\",\n      \"isGeneral\": false,\n      \"createdAt\": \"2026-08-10T12:00:00.000Z\",\n      \"sections\": []\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": null,\n    \"createdAt\": \"2026-09-02T09:00:00.000Z\"\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Submit Anamnesis Response",
@@ -4885,16 +4917,334 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"\",\n      \"value\": \"yes\"\n    }\n  ]\n}",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Submit or re-submit a response to an anamnesis. All required questions must be answered. Subsequent submissions fully replace all previous answers. The anamnesis must be linked to the student's account."
+            "description": "Finalize (submit) the response to an anamnesis. All required visible questions must be answered. The payload fully replaces all previously stored answers and the response is marked as submitted (status \"submitted\"). If a draft was saved earlier via PATCH /my/anamneses/:anamnesisId/response/draft, it is converted into the submitted response. Re-submitting is allowed (idempotent upsert, always 200). The anamnesis must be linked to the student's account."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Submit Anamnesis Response - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"status\": \"submitted\",\n  \"statusLabel\": \"Enviada\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Anamnesis Response Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "anamneses",
+                ":anamnesisId",
+                "response",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Save a partial (draft) response to an anamnesis. Upserts only the answers present in the payload (1 to 300 items, no duplicate questionId); other stored answers are untouched. An empty value (null, blank string or empty array) clears that question's stored answer. Required questions are NOT validated and answers of currently hidden conditional questions are kept. Drafts are invisible to trainers until the response is finalized with POST /my/anamneses/:anamnesisId/response. Errors: 400 VALIDATION_ERROR (invalid body or duplicate questionId), 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response was finalized."
+          },
+          "response": [
+            {
+              "name": "Save Anamnesis Response Draft - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            },
+            {
+              "name": "Save Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_ALREADY_SUBMITTED\",\n  \"messageCode\": \"anamnesis.response.alreadySubmitted\",\n  \"message\": \"Esta anamnese já foi enviada.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Save Anamnesis Response Draft - 404 ANAMNESIS_NOT_LINKED_TO_STUDENT",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_NOT_LINKED_TO_STUDENT\",\n  \"messageCode\": \"anamnesis.notLinkedToStudent\",\n  \"message\": \"Esta anamnese não está vinculada ao seu perfil.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Save Anamnesis Response Draft - 404 ANAMNESIS_QUESTION_NOT_FOUND",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_QUESTION_NOT_FOUND\",\n  \"messageCode\": \"anamnesis.question.notFound\",\n  \"message\": \"Pergunta não encontrada.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Get My Anamnesis Response",
@@ -4925,9 +5275,50 @@
                 }
               ]
             },
-            "description": "Get the authenticated student's previously submitted response to an anamnesis, including all answers. Returns 404 if not linked or not yet submitted."
+            "description": "Get the authenticated student's response to an anamnesis, including all answers. Works for both a draft (status \"draft\", submittedAt null) and a submitted response (status \"submitted\"). Returns 404 if the anamnesis is not linked or no response (draft or submitted) exists."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Get My Anamnesis Response - 200 OK (draft)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     },
