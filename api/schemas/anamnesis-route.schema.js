@@ -1,4 +1,5 @@
-import { anamnesisQuestionTypeValues } from '../../src/constants/anamnesis.js';
+import { anamnesisQuestionTypeValues, ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
+import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import {
   questionOptionSchema,
@@ -488,6 +489,16 @@ const myAnamnesisItemSchema = {
         },
       },
     },
+    response: {
+      type: 'object',
+      nullable: true,
+      description: 'Summary of the student response (draft or submitted); null when nothing was saved yet',
+      properties: {
+        ...i18nField('status', 'anamnesisResponseStatus'),
+        answeredCount: { type: 'integer' },
+        updatedAt: { type: 'string', format: 'date-time', nullable: true },
+      },
+    },
     createdAt: { type: 'string', format: 'date-time' },
   },
 };
@@ -576,6 +587,7 @@ const anamnesisResponseSchema = {
     submittedAt: { type: 'string', format: 'date-time', nullable: true },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
+    ...i18nField('status', 'anamnesisResponseStatus'),
     answers: { type: 'array', items: anamnesisAnswerSchema },
   },
 };
@@ -585,15 +597,11 @@ const answerBodySchema = {
   required: ['questionId', 'value'],
   properties: {
     questionId: { type: 'string', format: 'uuid' },
+    // Intentionally untyped: with Fastify's `coerceTypes: 'array'`, a typed anyOf
+    // coerces ["A"] → "A", 0 → "0", false → "false" and null → "", which hides
+    // conditional children of single-selection multiple-choice parents.
     value: {
-      anyOf: [
-        { type: 'string' },
-        { type: 'number' },
-        { type: 'boolean' },
-        { type: 'array' },
-        { type: 'object' },
-        { type: 'null' },
-      ],
+      description: 'Answer value (string, number, boolean, array, object or null), stored as sent.',
     },
   },
   additionalProperties: false,
@@ -601,7 +609,11 @@ const answerBodySchema = {
 
 export const submitAnamnesisResponseSchema = {
   tags: ['Anamnesis - My'],
-  summary: 'Submit (or resubmit) a response to an anamnesis — idempotent upsert, always returns 200',
+  summary: 'Submit (finalize) a response to an anamnesis — idempotent upsert, always returns 200',
+  description:
+    'Finalizes the response: validates required visible questions, replaces all stored answers with the ' +
+    'payload and marks the response as submitted (status "submitted"). If a draft was saved earlier via ' +
+    'PATCH /my/anamneses/{anamnesisId}/response/draft, it is converted into the submitted response.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -629,9 +641,48 @@ export const submitAnamnesisResponseSchema = {
   },
 };
 
+export const saveAnamnesisResponseDraftSchema = {
+  tags: ['Anamnesis - My'],
+  summary: 'Save a partial (draft) response to an anamnesis',
+  description:
+    'Upserts only the answers present in the payload; other stored answers are untouched. An empty value ' +
+    '(null, blank string or empty array) clears that question\'s stored answer. Required questions are NOT ' +
+    'validated and answers of currently hidden conditional questions are kept. Drafts are invisible to ' +
+    'trainers until the response is finalized with POST /my/anamneses/{anamnesisId}/response. ' +
+    'Returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response has been submitted.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  body: {
+    type: 'object',
+    required: ['answers'],
+    properties: {
+      answers: {
+        type: 'array',
+        items: answerBodySchema,
+        minItems: 1,
+        maxItems: ANAMNESIS_DRAFT_MAX_ANSWERS,
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const getMyAnamnesisResponseSchema = {
   tags: ['Anamnesis - My'],
-  summary: 'Get my response to an anamnesis',
+  summary: 'Get my response to an anamnesis (draft or submitted)',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -649,7 +700,7 @@ export const getMyAnamnesisResponseSchema = {
 
 export const getStudentAnamnesisResponseSchema = {
   tags: ['Anamnesis - Student Linking'],
-  summary: "Get a student's response to an anamnesis (trainer view)",
+  summary: "Get a student's submitted response to an anamnesis (trainer view) — drafts are not visible (404)",
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',

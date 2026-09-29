@@ -3,7 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
-import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
+import { AnamnesisQuestionType, ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -2293,6 +2293,1011 @@ e2eDescribe('e2e: anamnesis', () => {
       const body = response.json();
       expect(body.answers).toHaveLength(1);
       expect(body.answers[0].questionId).toBe(parentId);
+    });
+
+    // Regression: a typed anyOf body schema made AJV coerce ["Hypertension"] into
+    // "Hypertension", which hid the child and silently dropped its answer.
+    it('child is required when a single triggering option is selected', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const { anamnesisId, parentId } = await setupMultipleChoiceConditional(trainerToken, studentId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: {
+          answers: [{ questionId: parentId, value: ['Hypertension'] }],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+    });
+
+    it('persists the child answer and keeps the array when a single option is selected', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const { anamnesisId, parentId, childId } = await setupMultipleChoiceConditional(trainerToken, studentId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: {
+          answers: [
+            { questionId: parentId, value: ['Hypertension'] },
+            { questionId: childId, value: 'Losartan' },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const answersByQuestionId = Object.fromEntries(
+        response.json().answers.map((answer) => [answer.questionId, answer.value]),
+      );
+      expect(answersByQuestionId[parentId]).toEqual(['Hypertension']);
+      expect(answersByQuestionId[childId]).toBe('Losartan');
+    });
+  });
+
+  describe('Student response: answer values are stored without type coercion', () => {
+    it('keeps numeric 0 as a number and boolean false as a boolean', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken, email: studentEmail } = await createStudentWithToken();
+      await linkTrainerStudent(trainerToken, studentEmail);
+
+      const createResp = await createAnamnesis(trainerToken, {
+        title: 'Value Types Form',
+        sections: [
+          {
+            title: 'Numbers',
+            questions: [
+              { text: 'Cigarettes per day', type: AnamnesisQuestionType.NUMERIC },
+              { text: 'Free notes', type: AnamnesisQuestionType.FREE_TEXT },
+            ],
+          },
+        ],
+      });
+      expect(createResp.statusCode).toBe(201);
+      const anamnesisId = createResp.json().id;
+      const [numericQuestion, textQuestion] = createResp.json().sections[0].questions;
+
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { anamnesisId },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: { authorization: `Bearer ${studentToken}` },
+        payload: {
+          answers: [
+            { questionId: numericQuestion.id, value: 0 },
+            { questionId: textQuestion.id, value: false },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const answersByQuestionId = Object.fromEntries(
+        response.json().answers.map((answer) => [answer.questionId, answer.value]),
+      );
+      expect(answersByQuestionId[numericQuestion.id]).toBe(0);
+      expect(answersByQuestionId[textQuestion.id]).toBe(false);
+    });
+  });
+
+  // ─── Anamnesis response draft ──────────────────────────────────────────────
+
+  describe('Anamnesis response draft', () => {
+    const LANG_PT_BR = { 'app-language': 'pt-BR' };
+    const LANG_EN_US = { 'app-language': 'en-US' };
+    const UNKNOWN_QUESTION_ID = '00000000-0000-0000-0000-0000000000aa';
+    const UNLINKED_ANAMNESIS_ID = '00000000-0000-0000-0000-000000000099';
+
+    const bearer = (token, extraHeaders = {}) => ({ authorization: `Bearer ${token}`, ...extraHeaders });
+
+    async function linkAnamnesisToStudent(trainerToken, studentId, anamnesisId) {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: bearer(trainerToken),
+        payload: { anamnesisId },
+      });
+      expect(response.statusCode).toBe(201);
+    }
+
+    /**
+     * Trainer + linked student + an anamnesis with: a required dichotomous parent ("smoke"),
+     * a required free-text ("notes"), an optional multiple choice ("sports") and a required numeric
+     * child of "smoke" that is only visible when smoke = yes.
+     */
+    async function setupDraftScenario() {
+      const trainer = await createTrainerWithToken();
+      const student = await createStudentWithToken();
+      await linkTrainerStudent(trainer.accessToken, student.email);
+
+      const createResponse = await createAnamnesis(trainer.accessToken, {
+        title: 'Draft Form',
+        sections: [
+          {
+            title: 'Habits',
+            questions: [
+              { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true },
+              { text: 'Notes', type: AnamnesisQuestionType.FREE_TEXT, required: true },
+              {
+                text: 'Which sports?',
+                type: AnamnesisQuestionType.MULTIPLE_CHOICE,
+                options: [{ text: 'Running' }, { text: 'Swimming' }, { text: 'Cycling' }],
+              },
+            ],
+          },
+        ],
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const anamnesis = createResponse.json();
+      const [smoke, notes, sports] = anamnesis.sections[0].questions;
+
+      const childResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${anamnesis.id}/sections/${anamnesis.sections[0].id}/questions`,
+        headers: bearer(trainer.accessToken),
+        payload: {
+          text: 'How many cigarettes per day?',
+          type: AnamnesisQuestionType.NUMERIC,
+          required: true,
+          parentQuestionId: smoke.id,
+          condition: { operator: 'equals', value: 'yes' },
+        },
+      });
+      expect(childResponse.statusCode).toBe(201);
+
+      await linkAnamnesisToStudent(trainer.accessToken, student.userId, anamnesis.id);
+
+      return {
+        trainer,
+        student,
+        anamnesisId: anamnesis.id,
+        sectionId: anamnesis.sections[0].id,
+        smokeId: smoke.id,
+        notesId: notes.id,
+        sportsId: sports.id,
+        cigarettesId: childResponse.json().id,
+      };
+    }
+
+    const patchDraft = (token, anamnesisId, answers, extraHeaders = {}) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/my/anamneses/${anamnesisId}/response/draft`,
+        headers: bearer(token, extraHeaders),
+        payload: { answers },
+      });
+
+    const submitFinal = (token, anamnesisId, answers, extraHeaders = {}) =>
+      app.inject({
+        method: 'POST',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: bearer(token, extraHeaders),
+        payload: { answers },
+      });
+
+    const getMyResponse = (token, anamnesisId) =>
+      app.inject({
+        method: 'GET',
+        url: `/my/anamneses/${anamnesisId}/response`,
+        headers: bearer(token),
+      });
+
+    const getTrainerViewOfResponse = (trainerToken, studentId, anamnesisId) =>
+      app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/anamneses/${anamnesisId}/response`,
+        headers: bearer(trainerToken),
+      });
+
+    const getMyAnamnesesList = (token, extraHeaders = {}) =>
+      app.inject({ method: 'GET', url: '/my/anamneses', headers: bearer(token, extraHeaders) });
+
+    const answersByQuestionId = (body) =>
+      Object.fromEntries(body.answers.map((answer) => [answer.questionId, answer.value]));
+
+    const expectErrorContract = (response, { statusCode, error, messageCode }) => {
+      expect(response.statusCode).toBe(statusCode);
+      expect(response.json()).toMatchObject({ error, messageCode, message: expect.any(String) });
+    };
+
+    // ── Happy path: saving and reading drafts ────────────────────────────────
+
+    describe('saving a draft', () => {
+      it('saves a partial draft without validating required questions', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          id: expect.any(String),
+          anamnesisId,
+          studentId: student.userId,
+          submittedAt: null,
+          status: 'draft',
+          statusLabel: 'Rascunho',
+        });
+        expect(answersByQuestionId(response.json())).toEqual({ [smokeId]: 'no' });
+      });
+
+      it('translates statusLabel using the app-language header', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+
+        const response = await patchDraft(
+          student.accessToken,
+          anamnesisId,
+          [{ questionId: smokeId, value: 'no' }],
+          LANG_EN_US,
+        );
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ status: 'draft', statusLabel: 'Draft' });
+      });
+
+      it('persists exactly one draft response row with submittedAt null', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+
+        const rows = await prisma.anamnesisResponse.findMany({
+          where: { anamnesisId, studentId: student.userId },
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].submittedAt).toBeNull();
+      });
+
+      it('keeps the answer of a hidden conditional question in the draft', async () => {
+        const { student, anamnesisId, smokeId, cigarettesId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: cigarettesId, value: '20' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(answersByQuestionId(response.json())).toEqual({ [smokeId]: 'no', [cigarettesId]: '20' });
+      });
+
+      it('lets the student read the draft through GET /my/anamneses/:id/response', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'yes' }]);
+
+        const response = await getMyResponse(student.accessToken, anamnesisId);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          anamnesisId,
+          submittedAt: null,
+          status: 'draft',
+          statusLabel: 'Rascunho',
+        });
+        expect(answersByQuestionId(response.json())).toEqual({ [smokeId]: 'yes' });
+      });
+
+      it('hides the draft from the trainer with 404 ANAMNESIS_RESPONSE_NOT_FOUND', async () => {
+        const { trainer, student, anamnesisId, smokeId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'yes' }]);
+
+        const response = await getTrainerViewOfResponse(trainer.accessToken, student.userId, anamnesisId);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_RESPONSE_NOT_FOUND',
+          messageCode: 'anamnesis.response.notFound',
+        });
+      });
+    });
+
+    describe('updating a draft', () => {
+      it('changes only the answers in the payload and preserves the others', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'first note' },
+        ]);
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: sportsId, value: ['Running', 'Swimming'] },
+          { questionId: notesId, value: 'edited note' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(answersByQuestionId(response.json())).toEqual({
+          [smokeId]: 'no',
+          [notesId]: 'edited note',
+          [sportsId]: ['Running', 'Swimming'],
+        });
+      });
+
+      it.each([
+        ['an empty string', ''],
+        ['a blank string', '   '],
+        ['an empty array', []],
+        ['null', null],
+      ])('clears a stored answer when its value is %s, preserving the others', async (_label, emptyValue) => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'to be cleared' },
+        ]);
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: emptyValue },
+          { questionId: sportsId, value: ['Cycling', 'Running'] },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(answersByQuestionId(response.json())).toEqual({
+          [smokeId]: 'no',
+          [sportsId]: ['Cycling', 'Running'],
+        });
+      });
+
+      it('accepts clearing an answer that was never stored', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: '' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(answersByQuestionId(response.json())).toEqual({ [smokeId]: 'no' });
+      });
+
+      it('advances updatedAt on every save while keeping the same response row', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        const first = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+
+        const second = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: 'more info' },
+        ]);
+
+        expect(second.json().id).toBe(first.json().id);
+        expect(new Date(second.json().updatedAt).getTime()).toBeGreaterThan(
+          new Date(first.json().updatedAt).getTime(),
+        );
+      });
+
+      it('advances updatedAt even when the save clears an answer that does not exist', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        const first = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+
+        const second = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: null },
+        ]);
+
+        expect(new Date(second.json().updatedAt).getTime()).toBeGreaterThan(
+          new Date(first.json().updatedAt).getTime(),
+        );
+      });
+    });
+
+    describe('GET /my/anamneses response summary', () => {
+      it('returns null response for links that have no response yet', async () => {
+        const { student } = await setupDraftScenario();
+
+        const response = await getMyAnamnesesList(student.accessToken);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toHaveLength(1);
+        expect(response.json()[0].response).toBeNull();
+      });
+
+      it('returns the draft summary with translated statusLabel, answeredCount and updatedAt', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        const saved = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        const response = await getMyAnamnesesList(student.accessToken, LANG_PT_BR);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()[0].response).toEqual({
+          status: 'draft',
+          statusLabel: 'Rascunho',
+          answeredCount: 2,
+          updatedAt: saved.json().updatedAt,
+        });
+      });
+
+      it('translates the nested statusLabel with app-language en-US', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+
+        const response = await getMyAnamnesesList(student.accessToken, LANG_EN_US);
+
+        expect(response.json()[0].response).toMatchObject({ status: 'draft', statusLabel: 'Draft' });
+      });
+
+      it('counts only the answers that are currently stored (cleared answers are not counted)', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+        ]);
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: notesId, value: '' }]);
+
+        const response = await getMyAnamnesesList(student.accessToken);
+
+        expect(response.json()[0].response.answeredCount).toBe(1);
+      });
+
+      it('returns a draft summary for one link and null for another link without a response', async () => {
+        const { trainer, student, anamnesisId, smokeId } = await setupDraftScenario();
+        const otherAnamnesisId = (await createAnamnesis(trainer.accessToken, { title: 'Other Form' })).json().id;
+        await linkAnamnesisToStudent(trainer.accessToken, student.userId, otherAnamnesisId);
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+
+        const response = await getMyAnamnesesList(student.accessToken);
+
+        const byAnamnesisId = Object.fromEntries(response.json().map((item) => [item.anamnesisId, item]));
+        expect(byAnamnesisId[anamnesisId].response).toMatchObject({ status: 'draft', answeredCount: 1 });
+        expect(byAnamnesisId[otherAnamnesisId].response).toBeNull();
+      });
+
+      it("does not leak another student's response into the summary", async () => {
+        const { trainer, student, anamnesisId, smokeId } = await setupDraftScenario();
+        const otherStudent = await createStudentWithToken();
+        await linkTrainerStudent(trainer.accessToken, otherStudent.email);
+        await linkAnamnesisToStudent(trainer.accessToken, otherStudent.userId, anamnesisId);
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+
+        const response = await getMyAnamnesesList(otherStudent.accessToken);
+
+        expect(response.json()[0].response).toBeNull();
+      });
+    });
+
+    describe('finalizing a draft', () => {
+      it('runs the complete draft -> final submit -> read-only lifecycle', async () => {
+        const { trainer, student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+
+        // Draft 1: partial, required "notes" unanswered
+        const firstSave = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+        expect(firstSave.json()).toMatchObject({ status: 'draft', submittedAt: null });
+
+        // Trainer cannot see the draft
+        const hiddenFromTrainer = await getTrainerViewOfResponse(trainer.accessToken, student.userId, anamnesisId);
+        expectErrorContract(hiddenFromTrainer, {
+          statusCode: 404,
+          error: 'ANAMNESIS_RESPONSE_NOT_FOUND',
+          messageCode: 'anamnesis.response.notFound',
+        });
+
+        // Final submit still enforces required questions
+        const incompleteSubmit = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+        expectErrorContract(incompleteSubmit, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+        const stillDraft = await getMyResponse(student.accessToken, anamnesisId);
+        expect(stillDraft.json()).toMatchObject({ status: 'draft', submittedAt: null });
+
+        // Final submit with everything required
+        const finalAnswers = [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'all good' },
+          { questionId: sportsId, value: ['Running', 'Cycling'] },
+        ];
+        const submitted = await submitFinal(student.accessToken, anamnesisId, finalAnswers);
+        expect(submitted.statusCode).toBe(200);
+        expect(submitted.json()).toMatchObject({
+          id: firstSave.json().id,
+          status: 'submitted',
+          statusLabel: 'Enviada',
+          submittedAt: expect.any(String),
+        });
+        expect(answersByQuestionId(submitted.json())).toEqual({
+          [smokeId]: 'no',
+          [notesId]: 'all good',
+          [sportsId]: ['Running', 'Cycling'],
+        });
+
+        // Trainer now sees the submitted response
+        const trainerView = await getTrainerViewOfResponse(trainer.accessToken, student.userId, anamnesisId);
+        expect(trainerView.statusCode).toBe(200);
+        expect(trainerView.json()).toMatchObject({ status: 'submitted', statusLabel: 'Enviada' });
+        expect(trainerView.json().answers).toHaveLength(3);
+
+        // Student can no longer edit the draft
+        const lateDraft = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: 'sneaky edit' },
+        ]);
+        expectErrorContract(lateDraft, {
+          statusCode: 409,
+          error: 'ANAMNESIS_RESPONSE_ALREADY_SUBMITTED',
+          messageCode: 'anamnesis.response.alreadySubmitted',
+        });
+      });
+
+      it('validates required visible questions on the final submit even when the draft holds partial data', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: notesId, value: 'text' }]);
+
+        const response = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().details).toEqual(
+          expect.arrayContaining([expect.objectContaining({ questionId: smokeId })]),
+        );
+      });
+
+      it('drops hidden conditional answers stored in the draft when finalizing', async () => {
+        const { student, anamnesisId, smokeId, notesId, cigarettesId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: cigarettesId, value: '20' },
+        ]);
+
+        const submitted = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+          { questionId: cigarettesId, value: '20' },
+        ]);
+
+        expect(submitted.statusCode).toBe(200);
+        expect(answersByQuestionId(submitted.json())).toEqual({ [smokeId]: 'no', [notesId]: 'text' });
+      });
+
+      it('replaces the stored draft answers with exactly the final payload', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: sportsId, value: ['Running', 'Swimming'] },
+        ]);
+
+        const submitted = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        expect(answersByQuestionId(submitted.json())).toEqual({ [smokeId]: 'no', [notesId]: 'text' });
+      });
+
+      it('shows a submitted summary with translated label in GET /my/anamneses', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+        await patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]);
+        await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        const pt = await getMyAnamnesesList(student.accessToken, LANG_PT_BR);
+        const en = await getMyAnamnesesList(student.accessToken, LANG_EN_US);
+
+        expect(pt.json()[0].response).toMatchObject({
+          status: 'submitted',
+          statusLabel: 'Enviada',
+          answeredCount: 2,
+        });
+        expect(en.json()[0].response).toMatchObject({ status: 'submitted', statusLabel: 'Submitted' });
+      });
+
+      it('returns status submitted from a first-time final submit without a prior draft', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+
+        const response = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ status: 'submitted', statusLabel: 'Enviada' });
+      });
+    });
+
+    describe('already submitted responses (409)', () => {
+      async function setupSubmittedResponse() {
+        const scenario = await setupDraftScenario();
+        const { student, anamnesisId, smokeId, notesId } = scenario;
+        const submitted = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'original' },
+        ]);
+        expect(submitted.statusCode).toBe(200);
+        return scenario;
+      }
+
+      it('returns 409 with the pt-BR translated message', async () => {
+        const { student, anamnesisId, notesId } = await setupSubmittedResponse();
+
+        const response = await patchDraft(
+          student.accessToken,
+          anamnesisId,
+          [{ questionId: notesId, value: 'edit' }],
+          LANG_PT_BR,
+        );
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toMatchObject({
+          error: 'ANAMNESIS_RESPONSE_ALREADY_SUBMITTED',
+          messageCode: 'anamnesis.response.alreadySubmitted',
+          message: 'Esta anamnese já foi enviada.',
+        });
+      });
+
+      it('returns 409 with the en-US translated message', async () => {
+        const { student, anamnesisId, notesId } = await setupSubmittedResponse();
+
+        const response = await patchDraft(
+          student.accessToken,
+          anamnesisId,
+          [{ questionId: notesId, value: 'edit' }],
+          LANG_EN_US,
+        );
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toMatchObject({
+          error: 'ANAMNESIS_RESPONSE_ALREADY_SUBMITTED',
+          messageCode: 'anamnesis.response.alreadySubmitted',
+          message: 'This anamnesis has already been submitted.',
+        });
+      });
+
+      it('leaves the submitted answers and submittedAt untouched', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupSubmittedResponse();
+        const before = (await getMyResponse(student.accessToken, anamnesisId)).json();
+
+        const rejected = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: '' },
+          { questionId: sportsId, value: ['Running', 'Swimming'] },
+        ]);
+        const after = (await getMyResponse(student.accessToken, anamnesisId)).json();
+
+        expect(rejected.statusCode).toBe(409);
+        expect(after.submittedAt).toBe(before.submittedAt);
+        expect(after.updatedAt).toBe(before.updatedAt);
+        expect(answersByQuestionId(after)).toEqual({ [smokeId]: 'no', [notesId]: 'original' });
+      });
+
+      it('still allows re-submitting via the final endpoint (idempotent upsert)', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupSubmittedResponse();
+
+        const response = await submitFinal(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'resubmitted' },
+        ]);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ status: 'submitted' });
+      });
+    });
+
+    describe('request validation and authorization', () => {
+      it('returns 401 without authentication', async () => {
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/anamneses/${UNLINKED_ANAMNESIS_ID}/response/draft`,
+          payload: { answers: [{ questionId: UNKNOWN_QUESTION_ID, value: 'x' }] },
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+
+      it('returns 404 ANAMNESIS_NOT_LINKED_TO_STUDENT when the anamnesis is not linked to the student', async () => {
+        const { accessToken } = await createStudentWithToken();
+
+        const response = await patchDraft(accessToken, UNLINKED_ANAMNESIS_ID, [
+          { questionId: UNKNOWN_QUESTION_ID, value: 'x' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
+          messageCode: 'anamnesis.notLinkedToStudent',
+        });
+      });
+
+      it("returns 404 not linked when another student tries to save on someone else's link", async () => {
+        const { anamnesisId, smokeId } = await setupDraftScenario();
+        const intruder = await createStudentWithToken();
+
+        const response = await patchDraft(intruder.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
+          messageCode: 'anamnesis.notLinkedToStudent',
+        });
+        expect(await prisma.anamnesisResponse.count({ where: { anamnesisId } })).toBe(0);
+      });
+
+      it('returns 404 ANAMNESIS_QUESTION_NOT_FOUND for an unknown questionId and saves nothing', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'no' },
+          { questionId: UNKNOWN_QUESTION_ID, value: 'x' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_QUESTION_NOT_FOUND',
+          messageCode: 'anamnesis.question.notFound',
+        });
+        expect(await prisma.anamnesisResponse.count({ where: { anamnesisId } })).toBe(0);
+        expect(await prisma.anamnesisAnswer.count()).toBe(0);
+      });
+
+      it('returns 404 ANAMNESIS_QUESTION_NOT_FOUND for a question that belongs to another anamnesis', async () => {
+        const { trainer, student, anamnesisId } = await setupDraftScenario();
+        const foreignAnamnesis = (
+          await createAnamnesis(trainer.accessToken, {
+            title: 'Foreign Form',
+            sections: [
+              {
+                title: 'Other',
+                questions: [{ text: 'Foreign question', type: AnamnesisQuestionType.FREE_TEXT }],
+              },
+            ],
+          })
+        ).json();
+        await linkAnamnesisToStudent(trainer.accessToken, student.userId, foreignAnamnesis.id);
+        const foreignQuestionId = foreignAnamnesis.sections[0].questions[0].id;
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: foreignQuestionId, value: 'leaked' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_QUESTION_NOT_FOUND',
+          messageCode: 'anamnesis.question.notFound',
+        });
+        expect(await prisma.anamnesisAnswer.count()).toBe(0);
+      });
+
+      it('returns 404 ANAMNESIS_QUESTION_NOT_FOUND for a soft-deleted question', async () => {
+        const { student, anamnesisId, notesId } = await setupDraftScenario();
+        await prisma.anamnesisQuestion.update({ where: { id: notesId }, data: { deletedAt: new Date() } });
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: notesId, value: 'text' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 404,
+          error: 'ANAMNESIS_QUESTION_NOT_FOUND',
+          messageCode: 'anamnesis.question.notFound',
+        });
+      });
+
+      it('returns 400 VALIDATION_ERROR with details for a duplicated questionId and saves nothing', async () => {
+        const { student, anamnesisId, smokeId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: smokeId, value: 'yes' },
+          { questionId: smokeId, value: 'no' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+        expect(response.json().details).toEqual([expect.objectContaining({ questionId: smokeId })]);
+        expect(await prisma.anamnesisResponse.count({ where: { anamnesisId } })).toBe(0);
+      });
+
+      it('returns 400 VALIDATION_ERROR for an empty answers array', async () => {
+        const { student, anamnesisId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, []);
+
+        expectErrorContract(response, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+      });
+
+      it('returns 400 VALIDATION_ERROR when more than 300 answers are sent', async () => {
+        const { student, anamnesisId } = await setupDraftScenario();
+        const tooManyAnswers = Array.from({ length: ANAMNESIS_DRAFT_MAX_ANSWERS + 1 }, (_, index) => ({
+          questionId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+          value: 'x',
+        }));
+
+        const response = await patchDraft(student.accessToken, anamnesisId, tooManyAnswers);
+
+        expectErrorContract(response, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+      });
+
+      it('accepts up to the maximum number of answers at the schema level (fails later on unknown questions, not on size)', async () => {
+        const { student, anamnesisId } = await setupDraftScenario();
+        const maxAnswers = Array.from({ length: ANAMNESIS_DRAFT_MAX_ANSWERS }, (_, index) => ({
+          questionId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+          value: 'x',
+        }));
+
+        const response = await patchDraft(student.accessToken, anamnesisId, maxAnswers);
+
+        expect(response.statusCode).toBe(404);
+        expect(response.json().error).toBe('ANAMNESIS_QUESTION_NOT_FOUND');
+      });
+
+      it('returns 400 VALIDATION_ERROR for a non-uuid questionId', async () => {
+        const { student, anamnesisId } = await setupDraftScenario();
+
+        const response = await patchDraft(student.accessToken, anamnesisId, [
+          { questionId: 'not-a-uuid', value: 'x' },
+        ]);
+
+        expectErrorContract(response, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+      });
+
+      it('returns 400 VALIDATION_ERROR when the answers property is missing', async () => {
+        const { student, anamnesisId } = await setupDraftScenario();
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/my/anamneses/${anamnesisId}/response/draft`,
+          headers: bearer(student.accessToken),
+          payload: {},
+        });
+
+        expectErrorContract(response, {
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+      });
+    });
+
+    describe('concurrency', () => {
+      it('handles two simultaneous first-time draft saves without a 500 and creates exactly one response row', async () => {
+        const { student, anamnesisId, smokeId, notesId } = await setupDraftScenario();
+
+        const [first, second] = await Promise.all([
+          patchDraft(student.accessToken, anamnesisId, [{ questionId: smokeId, value: 'no' }]),
+          patchDraft(student.accessToken, anamnesisId, [{ questionId: notesId, value: 'text' }]),
+        ]);
+
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(200);
+        expect(await prisma.anamnesisResponse.count({ where: { anamnesisId, studentId: student.userId } })).toBe(1);
+        expect(first.json().id).toBe(second.json().id);
+      });
+
+      it('keeps every answer when several first-time draft saves for different questions race', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId, cigarettesId } = await setupDraftScenario();
+        const payloads = [
+          [{ questionId: smokeId, value: 'yes' }],
+          [{ questionId: notesId, value: 'text' }],
+          [{ questionId: sportsId, value: ['Running', 'Swimming'] }],
+          [{ questionId: cigarettesId, value: '5' }],
+        ];
+
+        const responses = await Promise.all(payloads.map((answers) => patchDraft(student.accessToken, anamnesisId, answers)));
+
+        expect(responses.map((response) => response.statusCode)).toEqual([200, 200, 200, 200]);
+        expect(await prisma.anamnesisResponse.count({ where: { anamnesisId, studentId: student.userId } })).toBe(1);
+        const stored = await getMyResponse(student.accessToken, anamnesisId);
+        expect(answersByQuestionId(stored.json())).toEqual({
+          [smokeId]: 'yes',
+          [notesId]: 'text',
+          [sportsId]: ['Running', 'Swimming'],
+          [cigarettesId]: '5',
+        });
+      });
+
+      it('never leaves a submitted response whose answers differ from the final payload when a draft save races the final submit', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+        const finalAnswers = [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'final note' },
+        ];
+        const ITERATIONS = 5;
+
+        for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+          // Reset to an existing draft so both requests contend on the same row
+          await prisma.anamnesisAnswer.deleteMany({ where: { response: { anamnesisId } } });
+          await prisma.anamnesisResponse.deleteMany({ where: { anamnesisId } });
+          const seeded = await patchDraft(student.accessToken, anamnesisId, [
+            { questionId: smokeId, value: 'yes' },
+          ]);
+          expect(seeded.statusCode).toBe(200);
+
+          const [draftSave, finalSubmit] = await Promise.all([
+            patchDraft(student.accessToken, anamnesisId, [
+              { questionId: sportsId, value: ['Running', 'Swimming'] },
+              { questionId: notesId, value: `draft note ${iteration}` },
+            ]),
+            submitFinal(student.accessToken, anamnesisId, finalAnswers),
+          ]);
+
+          expect(finalSubmit.statusCode).toBe(200);
+          expect([200, 409]).toContain(draftSave.statusCode);
+
+          const stored = await prisma.anamnesisResponse.findMany({
+            where: { anamnesisId, studentId: student.userId },
+            include: { answers: true },
+          });
+          expect(stored).toHaveLength(1);
+          expect(stored[0].submittedAt).not.toBeNull();
+          expect(Object.fromEntries(stored[0].answers.map((a) => [a.questionId, a.value]))).toEqual({
+            [smokeId]: 'no',
+            [notesId]: 'final note',
+          });
+        }
+      });
+
+      it('never leaves a submitted response whose answers differ from the final payload when a first-time draft save races the final submit', async () => {
+        const { student, anamnesisId, smokeId, notesId, sportsId } = await setupDraftScenario();
+        const finalAnswers = [
+          { questionId: smokeId, value: 'no' },
+          { questionId: notesId, value: 'final note' },
+        ];
+        const ITERATIONS = 5;
+
+        for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+          // No response row exists: both requests race to create it
+          await prisma.anamnesisAnswer.deleteMany({ where: { response: { anamnesisId } } });
+          await prisma.anamnesisResponse.deleteMany({ where: { anamnesisId } });
+
+          const [draftSave, finalSubmit] = await Promise.all([
+            patchDraft(student.accessToken, anamnesisId, [{ questionId: sportsId, value: ['Running', 'Swimming'] }]),
+            submitFinal(student.accessToken, anamnesisId, finalAnswers),
+          ]);
+
+          expect(finalSubmit.statusCode).toBe(200);
+          expect([200, 409]).toContain(draftSave.statusCode);
+
+          const stored = await prisma.anamnesisResponse.findMany({
+            where: { anamnesisId, studentId: student.userId },
+            include: { answers: true },
+          });
+          expect(stored).toHaveLength(1);
+          expect(stored[0].submittedAt).not.toBeNull();
+          expect(Object.fromEntries(stored[0].answers.map((a) => [a.questionId, a.value]))).toEqual({
+            [smokeId]: 'no',
+            [notesId]: 'final note',
+          });
+        }
+      });
     });
   });
 });

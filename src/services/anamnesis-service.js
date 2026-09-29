@@ -1,12 +1,13 @@
 import { prisma } from '../db.js';
 import { AppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
-import { lockAnamnesisForUpdate } from '../helpers/row-locks.js';
+import { lockAnamnesisForUpdate, lockAnamnesisResponseForUpdate } from '../helpers/row-locks.js';
 import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
   questionTypesWithOptions,
   isQuestionVisible,
+  toResponseStatus,
 } from '../constants/anamnesis.js';
 import {
   fullAnamnesisInclude,
@@ -831,6 +832,41 @@ export async function unlinkAnamnesisFromStudent(userId, studentId, anamnesisId)
 // ─── Student view ─────────────────────────────────────────────────────────────
 
 /**
+ * Attach a compact `response` summary (or null) to each student-anamnesis link.
+ * Uses a single query for all links — no N+1.
+ *
+ * @param {object[]} links - StudentAnamnesis rows
+ * @param {string} studentId
+ * @returns {Promise<object[]>}
+ */
+async function attachResponseSummaries(links, studentId) {
+  if (links.length === 0) return links;
+
+  const responses = await prisma.anamnesisResponse.findMany({
+    where: { studentId, anamnesisId: { in: links.map((link) => link.anamnesisId) } },
+    select: {
+      anamnesisId: true,
+      submittedAt: true,
+      updatedAt: true,
+      _count: { select: { answers: true } },
+    },
+  });
+
+  const summaryByAnamnesisId = new Map(
+    responses.map((response) => [
+      response.anamnesisId,
+      {
+        status: toResponseStatus(response.submittedAt),
+        answeredCount: response._count.answers,
+        updatedAt: response.updatedAt,
+      },
+    ]),
+  );
+
+  return links.map((link) => ({ ...link, response: summaryByAnamnesisId.get(link.anamnesisId) ?? null }));
+}
+
+/**
  * Get all anamneses linked to the authenticated student.
  *
  * @param {string} userId - Student's user ID
@@ -871,7 +907,7 @@ export async function getMyAnamneses(userId) {
     },
   });
 
-  return links;
+  return attachResponseSummaries(links, userId);
 }
 
 // ─── Versioning ───────────────────────────────────────────────────────────────
@@ -1119,20 +1155,19 @@ export async function copyAnamnesis(userId, anamnesisId) {
 
 // ─── Student responses ────────────────────────────────────────────────────────
 
+const UNIQUE_CONSTRAINT_VIOLATION_CODE = 'P2002';
+
 /**
- * Submit a student's response to an anamnesis.
- * Validates required questions, then upserts the AnamnesisResponse record and
- * replaces all AnamnesisAnswer records atomically.
- * This is an idempotent upsert — repeated calls replace the previous response.
+ * Verify the anamnesis is linked to the student.
+ * Throws 404 ANAMNESIS_NOT_LINKED_TO_STUDENT otherwise.
  *
- * @param {string} userId - Student's user ID
+ * @param {string} studentId
  * @param {string} anamnesisId
- * @param {object} data - { answers: [{ questionId, value }] }
- * @returns {Promise<object>} The response with answers
+ * @param {object} [prismaClient]
  */
-export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) {
-  const link = await prisma.studentAnamnesis.findFirst({
-    where: { studentId: userId, anamnesisId },
+async function assertAnamnesisLinkedToStudent(studentId, anamnesisId, prismaClient = prisma) {
+  const link = await prismaClient.studentAnamnesis.findFirst({
+    where: { studentId, anamnesisId },
   });
 
   if (!link) {
@@ -1143,6 +1178,199 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
       message: 'This anamnesis is not linked to your account',
     });
   }
+}
+
+/**
+ * Add the derived `status` (draft | submitted) to a response row.
+ *
+ * @param {{ submittedAt: Date|null }} response
+ * @returns {object}
+ */
+function withResponseStatus(response) {
+  return { ...response, status: toResponseStatus(response.submittedAt) };
+}
+
+/**
+ * An answer is "empty" (and therefore clears the stored answer on draft save)
+ * when it is null/undefined, a blank string, or an empty array.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+function isEmptyAnswerValue(value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
+function assertNoDuplicateQuestionIds(answers) {
+  const seenQuestionIds = new Set();
+  const duplicatedQuestionIds = new Set();
+
+  for (const { questionId } of answers) {
+    if (seenQuestionIds.has(questionId)) duplicatedQuestionIds.add(questionId);
+    seenQuestionIds.add(questionId);
+  }
+
+  if (duplicatedQuestionIds.size > 0) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: 'validation.failed',
+      message: 'Duplicate questionId in answers',
+      details: [...duplicatedQuestionIds].map((questionId) => ({
+        questionId,
+        message: 'Duplicate questionId in answers',
+      })),
+    });
+  }
+}
+
+/**
+ * Verify every answered question belongs to the anamnesis (non-deleted question
+ * in a non-deleted section). Throws 404 ANAMNESIS_QUESTION_NOT_FOUND otherwise.
+ */
+async function assertQuestionsBelongToAnamnesis(anamnesisId, answers, prismaClient) {
+  const questionIds = answers.map((answer) => answer.questionId);
+
+  const knownQuestions = await prismaClient.anamnesisQuestion.findMany({
+    where: {
+      id: { in: questionIds },
+      deletedAt: null,
+      section: { anamnesisId, deletedAt: null },
+    },
+    select: { id: true },
+  });
+
+  const knownQuestionIds = new Set(knownQuestions.map((question) => question.id));
+  const unknownQuestionId = questionIds.find((questionId) => !knownQuestionIds.has(questionId));
+
+  if (unknownQuestionId) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+      message: `Question not found: ${unknownQuestionId}`,
+    });
+  }
+}
+
+/**
+ * Run `operation` once more when it fails with a unique-constraint violation.
+ * Covers two students' requests racing to create the same response row: the loser
+ * fails with P2002 and, on retry, finds the row created by the winner.
+ */
+async function retryOnceOnUniqueViolation(operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error?.code !== UNIQUE_CONSTRAINT_VIOLATION_CODE) throw error;
+    return operation();
+  }
+}
+
+/**
+ * Apply a partial set of answers to a draft response. Only the questions present
+ * in `answers` are touched: empty values clear the stored answer, the rest are upserted.
+ */
+async function applyDraftAnswers(tx, responseId, answers) {
+  const emptyQuestionIds = answers.filter((a) => isEmptyAnswerValue(a.value)).map((a) => a.questionId);
+  const filledAnswers = answers.filter((a) => !isEmptyAnswerValue(a.value));
+
+  if (emptyQuestionIds.length > 0) {
+    await tx.anamnesisAnswer.deleteMany({
+      where: { responseId, questionId: { in: emptyQuestionIds } },
+    });
+  }
+
+  for (const { questionId, value } of filledAnswers) {
+    await tx.anamnesisAnswer.upsert({
+      where: { responseId_questionId: { responseId, questionId } },
+      create: { responseId, questionId, value },
+      update: { value },
+    });
+  }
+}
+
+/**
+ * Single draft-save transaction: get-or-create the response, lock it, verify it is
+ * still a draft AFTER the lock (a concurrent final POST may have just committed),
+ * apply the answers and bump `updatedAt`.
+ */
+async function saveDraftInTransaction(tx, { anamnesisId, studentId, answers }) {
+  const draftResponse = await tx.anamnesisResponse.upsert({
+    where: { anamnesisId_studentId: { anamnesisId, studentId } },
+    create: { anamnesisId, studentId, submittedAt: null },
+    update: {},
+  });
+
+  await lockAnamnesisResponseForUpdate(tx, draftResponse.id);
+
+  const lockedResponse = await tx.anamnesisResponse.findUnique({
+    where: { id: draftResponse.id },
+    select: { submittedAt: true },
+  });
+
+  if (lockedResponse.submittedAt) {
+    throw new AppError({
+      httpStatus: 409,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+      message: 'This anamnesis has already been submitted',
+    });
+  }
+
+  await applyDraftAnswers(tx, draftResponse.id, answers);
+
+  // The upsert above may not touch the row, so bump updatedAt explicitly ("saved at").
+  return tx.anamnesisResponse.update({
+    where: { id: draftResponse.id },
+    data: { updatedAt: new Date() },
+    include: { answers: true },
+  });
+}
+
+/**
+ * Save a partial (draft) response. No required-question validation and no
+ * hidden-question pruning: the student may still flip a parent answer back, and
+ * the final submit already drops answers of hidden questions.
+ * Answers not present in the payload are never touched.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>} The draft response with all answers and status
+ */
+export async function saveAnamnesisResponseDraft(userId, anamnesisId, { answers }, prismaClient = prisma) {
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId, prismaClient);
+  assertNoDuplicateQuestionIds(answers);
+  await assertQuestionsBelongToAnamnesis(anamnesisId, answers, prismaClient);
+
+  const response = await retryOnceOnUniqueViolation(() =>
+    prismaClient.$transaction((tx) =>
+      saveDraftInTransaction(tx, { anamnesisId, studentId: userId, answers }),
+    ),
+  );
+
+  return withResponseStatus(response);
+}
+
+/**
+ * Submit a student's response to an anamnesis. This is the "finalize" action:
+ * it also converts a previously saved draft into a submitted response.
+ * Validates required questions, then upserts the AnamnesisResponse record and
+ * replaces all AnamnesisAnswer records atomically.
+ * This is an idempotent upsert — repeated calls replace the previous response.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @returns {Promise<object>} The response with answers
+ */
+export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) {
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId);
 
   const anamnesisWithQuestions = await prisma.anamnesis.findUnique({
     where: { id: anamnesisId },
@@ -1233,7 +1461,7 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
     });
   });
 
-  return response;
+  return withResponseStatus(response);
 }
 
 /**
@@ -1244,18 +1472,7 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
  * @returns {Promise<object>}
  */
 export async function getMyAnamnesisResponse(userId, anamnesisId) {
-  const link = await prisma.studentAnamnesis.findFirst({
-    where: { studentId: userId, anamnesisId },
-  });
-
-  if (!link) {
-    throw new AppError({
-      httpStatus: 404,
-      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
-      message: 'This anamnesis is not linked to your account',
-    });
-  }
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId);
 
   const response = await prisma.anamnesisResponse.findUnique({
     where: { anamnesisId_studentId: { anamnesisId, studentId: userId } },
@@ -1271,7 +1488,7 @@ export async function getMyAnamnesisResponse(userId, anamnesisId) {
     });
   }
 
-  return response;
+  return withResponseStatus(response);
 }
 
 /**
@@ -1300,8 +1517,9 @@ export async function getStudentAnamnesisResponse(trainerUserId, studentId, anam
     });
   }
 
-  const response = await prisma.anamnesisResponse.findUnique({
-    where: { anamnesisId_studentId: { anamnesisId, studentId } },
+  // Drafts (submittedAt = null) are private to the student — trainers only see submitted responses.
+  const response = await prisma.anamnesisResponse.findFirst({
+    where: { anamnesisId, studentId, submittedAt: { not: null } },
     include: { answers: true },
   });
 
@@ -1314,5 +1532,5 @@ export async function getStudentAnamnesisResponse(trainerUserId, studentId, anam
     });
   }
 
-  return response;
+  return withResponseStatus(response);
 }

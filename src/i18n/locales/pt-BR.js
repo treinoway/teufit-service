@@ -102,6 +102,10 @@ export default {
       single_choice: 'Escolha única',
       matrix: 'Matriz',
     },
+    anamnesisResponseStatus: {
+      draft: 'Rascunho',
+      submitted: 'Enviada',
+    },
     userStatus: {
       pending: 'Pendente',
       active: 'Ativo',
@@ -239,6 +243,7 @@ export default {
     'anamnesis.alreadyLinked': 'Esta anamnese já está vinculada a este aluno.',
     'anamnesis.hasStudentLinks': 'Esta anamnese está vinculada a alunos. Crie uma nova versão antes de editar.',
     'anamnesis.response.notFound': 'Nenhuma resposta encontrada para esta anamnese.',
+    'anamnesis.response.alreadySubmitted': 'Esta anamnese já foi enviada.',
     'anamnesis.notLinkedToStudent': 'Esta anamnese não está vinculada ao seu perfil.',
     'anamnesis.invalidCondition': 'Condição inválida para o tipo da pergunta pai.',
     'anamnesis.parentNotEligible': 'Apenas perguntas do tipo Sim/Não, Escolha Única ou Múltipla Escolha podem ser perguntas pai.',

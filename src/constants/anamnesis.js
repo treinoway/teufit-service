@@ -36,6 +36,26 @@ export const AnamnesisConditionOperator = Object.freeze({
   INCLUDES_ANY: 'includesAny',
 });
 
+// Lifecycle of a student's anamnesis response. Derived from AnamnesisResponse.submittedAt
+// (null = draft, set = submitted) — never persisted as its own column.
+export const AnamnesisResponseStatus = Object.freeze({
+  DRAFT: 'draft',
+  SUBMITTED: 'submitted',
+});
+
+// Upper bound of answers accepted in one draft save request
+export const ANAMNESIS_DRAFT_MAX_ANSWERS = 300;
+
+/**
+ * Derive the response status from its `submittedAt` timestamp.
+ *
+ * @param {Date|null|undefined} submittedAt
+ * @returns {string} One of AnamnesisResponseStatus
+ */
+export function toResponseStatus(submittedAt) {
+  return submittedAt ? AnamnesisResponseStatus.SUBMITTED : AnamnesisResponseStatus.DRAFT;
+}
+
 // Error codes used in the anamnesis service
 export const AnamnesisErrorCode = Object.freeze({
   ANAMNESIS_NOT_FOUND: 'ANAMNESIS_NOT_FOUND',
@@ -48,6 +68,7 @@ export const AnamnesisErrorCode = Object.freeze({
   ANAMNESIS_HAS_STUDENT_LINKS: 'ANAMNESIS_HAS_STUDENT_LINKS',
   ANAMNESIS_RESPONSE_NOT_FOUND: 'ANAMNESIS_RESPONSE_NOT_FOUND',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
+  ANAMNESIS_RESPONSE_ALREADY_SUBMITTED: 'ANAMNESIS_RESPONSE_ALREADY_SUBMITTED',
   // Conditional questions
   INVALID_CONDITION: 'INVALID_CONDITION',
   PARENT_NOT_ELIGIBLE: 'PARENT_NOT_ELIGIBLE',
@@ -71,6 +92,7 @@ export const AnamnesisMessageCode = Object.freeze({
   ANAMNESIS_HAS_STUDENT_LINKS: 'anamnesis.hasStudentLinks',
   ANAMNESIS_RESPONSE_NOT_FOUND: 'anamnesis.response.notFound',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'anamnesis.notLinkedToStudent',
+  ANAMNESIS_RESPONSE_ALREADY_SUBMITTED: 'anamnesis.response.alreadySubmitted',
   // Conditional questions
   INVALID_CONDITION: 'anamnesis.invalidCondition',
   PARENT_NOT_ELIGIBLE: 'anamnesis.parentNotEligible',
