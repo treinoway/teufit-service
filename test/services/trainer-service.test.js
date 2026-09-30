@@ -60,7 +60,7 @@ vi.mock('../../src/config/email-handler.js', () => ({
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import emailHandler from '../../src/config/email-handler.js';
-import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
+import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, getLinkedStudent, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import { SubscriptionStatus } from '../../src/constants/subscription.js';
@@ -944,6 +944,93 @@ describe('searchStudents', () => {
     });
 
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getLinkedStudent', () => {
+  const LINKED_AT = new Date('2026-09-01T12:00:00.000Z');
+  const makeLink = (studentOverrides = {}) => ({
+    createdAt: LINKED_AT,
+    activeOnPlan: true,
+    student: {
+      id: 'student1',
+      email: 'maria@example.com',
+      firstName: 'Maria',
+      lastName: 'Silva',
+      avatarUrl: 'avatars/maria.png',
+      deletedAt: null,
+      ...studentOverrides,
+    },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer1' });
+    s3BucketHandler.resolveUrl.mockResolvedValue('https://cdn.example.com/avatars/maria.png');
+  });
+
+  it('returns the basic profile of a linked student with a resolved avatar URL', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(makeLink());
+
+    const result = await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    expect(result).toEqual({
+      id: 'student1',
+      email: 'maria@example.com',
+      firstName: 'Maria',
+      lastName: 'Silva',
+      avatarUrl: 'https://cdn.example.com/avatars/maria.png',
+      activeOnPlan: true,
+      linkedAt: LINKED_AT,
+    });
+    expect(s3BucketHandler.resolveUrl).toHaveBeenCalledWith('avatars/maria.png');
+  });
+
+  it('looks up the link by the trainer resolved from the user id', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(makeLink());
+
+    await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    expect(prisma.trainer.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'trainer-user1' },
+      select: { id: true },
+    });
+    expect(prisma.trainerStudent.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
+    }));
+  });
+
+  it('does not expose deletedAt', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(makeLink());
+
+    const result = await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    expect(result).not.toHaveProperty('deletedAt');
+  });
+
+  it('throws 404 student.notLinked when the student is not linked to this trainer', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+
+    await expect(
+      getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' }),
+    ).rejects.toMatchObject({ httpStatus: 404, error: 'NOT_FOUND', messageCode: 'student.notLinked' });
+  });
+
+  it('throws 404 student.notLinked when the student account was deleted', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(makeLink({ deletedAt: new Date() }));
+
+    await expect(
+      getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' }),
+    ).rejects.toMatchObject({ httpStatus: 404, messageCode: 'student.notLinked' });
+  });
+
+  it('throws 409 TRAINER_PROFILE_MISSING when the user has no trainer profile', async () => {
+    prisma.trainer.findUnique.mockResolvedValue(null);
+
+    await expect(
+      getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' }),
+    ).rejects.toMatchObject({ httpStatus: 409, error: 'TRAINER_PROFILE_MISSING', messageCode: 'trainer.profileMissing' });
+    expect(prisma.trainerStudent.findUnique).not.toHaveBeenCalled();
   });
 });
 
