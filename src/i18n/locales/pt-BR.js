@@ -104,7 +104,12 @@ export default {
     },
     anamnesisResponseStatus: {
       draft: 'Rascunho',
+      awaiting_confirmation: 'Aguardando confirmação',
       submitted: 'Enviada',
+    },
+    anamnesisFilledBy: {
+      student: 'Aluno',
+      trainer: 'Professor',
     },
     userStatus: {
       pending: 'Pendente',
@@ -244,6 +249,8 @@ export default {
     'anamnesis.hasStudentLinks': 'Esta anamnese está vinculada a alunos. Crie uma nova versão antes de editar.',
     'anamnesis.response.notFound': 'Nenhuma resposta encontrada para esta anamnese.',
     'anamnesis.response.alreadySubmitted': 'Esta anamnese já foi enviada.',
+    'anamnesis.response.submittedByStudent': 'O aluno já enviou esta anamnese.',
+    'anamnesis.response.notAwaitingConfirmation': 'Esta anamnese não está aguardando confirmação.',
     'anamnesis.notLinkedToStudent': 'Esta anamnese não está vinculada ao seu perfil.',
     'anamnesis.invalidCondition': 'Condição inválida para o tipo da pergunta pai.',
     'anamnesis.parentNotEligible': 'Apenas perguntas do tipo Sim/Não, Escolha Única ou Múltipla Escolha podem ser perguntas pai.',

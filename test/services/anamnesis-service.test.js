@@ -72,18 +72,30 @@ import {
   copyAnamnesis,
   submitAnamnesisResponse,
   saveAnamnesisResponseDraft,
+  confirmAnamnesisResponse,
+  getTrainerFillContext,
+  saveTrainerAnamnesisResponseDraft,
+  submitTrainerAnamnesisResponse,
   getMyAnamnesisResponse,
   getStudentAnamnesisResponse,
 } from '../../src/services/anamnesis-service.js';
 import {
   AnamnesisQuestionType,
   AnamnesisResponseStatus,
+  AnamnesisFilledBy,
+  AnamnesisErrorCode,
+  AnamnesisMessageCode,
   ANAMNESIS_DRAFT_MAX_ANSWERS,
   toResponseStatus,
   validateCondition,
   isQuestionVisible,
 } from '../../src/constants/anamnesis.js';
-import { validateParentLink, normalizeChoiceAnswersForVisibility } from '../../src/services/anamnesis-shared.js';
+import {
+  validateParentLink,
+  normalizeChoiceAnswersForVisibility,
+  fullAnamnesisInclude,
+} from '../../src/services/anamnesis-shared.js';
+import { AppError } from '../../src/errors/app-error.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
@@ -147,6 +159,38 @@ const makeStudentAnamnesisLink = (overrides = {}) => ({
   createdAt: new Date(),
   ...overrides,
 });
+
+/**
+ * Interactive-transaction client for the shared finalize flow (student and trainer submit):
+ * get-or-create upsert -> row lock ($queryRaw) -> re-read (findUnique) -> answers -> update.
+ * `update` echoes the written data over a base row, like the real `include: { answers: true }` result.
+ * Also wires `prisma.$transaction` to run against this tx.
+ */
+const makeFinalizeTx = ({
+  upserted = { id: 'response-1' },
+  locked = { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT },
+} = {}) => {
+  const tx = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    anamnesisResponse: {
+      upsert: vi.fn().mockResolvedValue(upserted),
+      findUnique: vi.fn().mockResolvedValue(locked),
+      update: vi.fn().mockImplementation(async ({ data }) => ({
+        id: 'response-1',
+        anamnesisId: 'anamnesis-1',
+        studentId: 'student-1',
+        answers: [],
+        ...data,
+      })),
+    },
+    anamnesisAnswer: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+  };
+  prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+  return tx;
+};
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -953,6 +997,8 @@ describe('anamnesis-service', () => {
     const makeResponseSummaryRow = (anamnesisId, overrides = {}) => ({
       anamnesisId,
       submittedAt: null,
+      filledByRole: AnamnesisFilledBy.STUDENT,
+      studentConfirmedAt: null,
       updatedAt: new Date('2026-03-10T12:00:00.000Z'),
       _count: { answers: 0 },
       ...overrides,
@@ -1016,6 +1062,8 @@ describe('anamnesis-service', () => {
         select: {
           anamnesisId: true,
           submittedAt: true,
+          filledByRole: true,
+          studentConfirmedAt: true,
           updatedAt: true,
           _count: { select: { answers: true } },
         },
@@ -1056,6 +1104,66 @@ describe('anamnesis-service', () => {
         answeredCount: 7,
         updatedAt,
       });
+    });
+
+    it.each([
+      [
+        'a trainer submission the student has not confirmed',
+        { filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: null },
+        AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+      ],
+      [
+        'a trainer submission the student confirmed',
+        { filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: new Date('2026-03-12T09:00:00.000Z') },
+        AnamnesisResponseStatus.SUBMITTED,
+      ],
+      [
+        'a student submission',
+        { filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: new Date('2026-03-11T08:30:00.000Z') },
+        AnamnesisResponseStatus.SUBMITTED,
+      ],
+      [
+        'a legacy student submission never confirmed',
+        { filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: null },
+        AnamnesisResponseStatus.SUBMITTED,
+      ],
+    ])('maps %s to the derived status', async (_label, authorship, expectedStatus) => {
+      const updatedAt = new Date('2026-03-11T08:30:00.000Z');
+      prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
+      prisma.anamnesisResponse.findMany.mockResolvedValue([
+        makeResponseSummaryRow('anamnesis-1', {
+          submittedAt: new Date('2026-03-11T08:30:00.000Z'),
+          updatedAt,
+          _count: { answers: 3 },
+          ...authorship,
+        }),
+      ]);
+
+      const [result] = await getMyAnamneses('student-1');
+
+      expect(result.response).toEqual({ status: expectedStatus, answeredCount: 3, updatedAt });
+    });
+
+    it('keeps a never-submitted row a draft even when its role is trainer', async () => {
+      prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
+      prisma.anamnesisResponse.findMany.mockResolvedValue([
+        makeResponseSummaryRow('anamnesis-1', { submittedAt: null, filledByRole: AnamnesisFilledBy.TRAINER }),
+      ]);
+
+      const [result] = await getMyAnamneses('student-1');
+
+      expect(result.response.status).toBe(AnamnesisResponseStatus.DRAFT);
+    });
+
+    it('does not leak the authorship columns into the summary', async () => {
+      prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
+      prisma.anamnesisResponse.findMany.mockResolvedValue([
+        makeResponseSummaryRow('anamnesis-1', { submittedAt: new Date(), filledByRole: AnamnesisFilledBy.TRAINER }),
+      ]);
+
+      const [result] = await getMyAnamneses('student-1');
+
+      expect(Object.keys(result.response).sort()).toEqual(['answeredCount', 'status', 'updatedAt']);
     });
 
     it('reports answeredCount 0 for a draft with no stored answers', async () => {
@@ -1572,6 +1680,10 @@ describe('anamnesis-service', () => {
   // ── submitAnamnesisResponse ──────────────────────────────────────────────
 
   describe('submitAnamnesisResponse', () => {
+    const STUDENT_ID = 'student-1';
+    const ANAMNESIS_ID = 'anamnesis-1';
+    const NOW = new Date('2026-09-29T15:00:00.000Z');
+
     const makeAnamnesisWithQuestion = (required = false) => ({
       ...makeAnamnesis(),
       sections: [
@@ -1582,127 +1694,1076 @@ describe('anamnesis-service', () => {
       ],
     });
 
-    const makeAnamnesisResponse = (overrides = {}) => ({
-      id: 'response-1',
-      anamnesisId: 'anamnesis-1',
-      studentId: 'student-1',
-      submittedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: null,
-      answers: [],
-      ...overrides,
+    const validPayload = { answers: [{ questionId: 'question-1', value: 'yes' }] };
+
+    const setupSubmit = ({ locked, required = false } = {}) => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(required));
+      return makeFinalizeTx({ locked });
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
-    it('throws 404 when anamnesis is not linked to student', async () => {
+    describe('validation', () => {
+      it('throws 404 when anamnesis is not linked to student', async () => {
+        prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+        await expect(
+          submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, { answers: [] }),
+        ).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+        });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('throws 400 when a required question is not answered, without opening a transaction', async () => {
+        setupSubmit({ required: true });
+
+        await expect(
+          submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, { answers: [] }),
+        ).rejects.toMatchObject({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('throws 404 for unknown questionId in answers, without opening a transaction', async () => {
+        setupSubmit();
+
+        await expect(
+          submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, {
+            answers: [{ questionId: 'unknown-question-id', value: 'yes' }],
+          }),
+        ).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+        });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('throws 400 VALIDATION_ERROR when a questionId is duplicated, before reading the anamnesis', async () => {
+        prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+
+        await expect(
+          submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, {
+            answers: [
+              { questionId: 'question-1', value: 'yes' },
+              { questionId: 'question-1', value: 'no' },
+            ],
+          }),
+        ).rejects.toMatchObject({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+          details: [{ questionId: 'question-1', message: 'Duplicate questionId in answers' }],
+        });
+        expect(prisma.anamnesis.findUnique).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('finalize transaction', () => {
+      it('upserts the response, locks it, re-reads it and only then replaces the answers', async () => {
+        const tx = setupSubmit();
+
+        const result = await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        const order = (fn) => fn.mock.invocationCallOrder[0];
+        expect(order(tx.anamnesisResponse.upsert)).toBeLessThan(order(tx.$queryRaw));
+        expect(order(tx.$queryRaw)).toBeLessThan(order(tx.anamnesisResponse.findUnique));
+        expect(order(tx.anamnesisResponse.findUnique)).toBeLessThan(order(tx.anamnesisAnswer.deleteMany));
+        expect(order(tx.anamnesisAnswer.deleteMany)).toBeLessThan(order(tx.anamnesisAnswer.createMany));
+        expect(order(tx.anamnesisAnswer.createMany)).toBeLessThan(order(tx.anamnesisResponse.update));
+        expect(tx.$queryRaw).toHaveBeenCalledOnce();
+        expect(result).toMatchObject({ id: 'response-1' });
+      });
+
+      it('creates the missing response row as a draft (no submittedAt) before locking', async () => {
+        const tx = setupSubmit();
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisResponse.upsert).toHaveBeenCalledWith({
+          where: { anamnesisId_studentId: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID } },
+          create: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID, submittedAt: null },
+          update: {},
+        });
+      });
+
+      it('re-reads only submittedAt and filledByRole after the lock', async () => {
+        const tx = setupSubmit();
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisResponse.findUnique).toHaveBeenCalledWith({
+          where: { id: 'response-1' },
+          select: { submittedAt: true, filledByRole: true },
+        });
+      });
+
+      it('replaces the stored answers with the visible submitted ones', async () => {
+        const tx = setupSubmit();
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisAnswer.deleteMany).toHaveBeenCalledWith({ where: { responseId: 'response-1' } });
+        expect(tx.anamnesisAnswer.createMany).toHaveBeenCalledWith({
+          data: [{ responseId: 'response-1', questionId: 'question-1', value: 'yes' }],
+        });
+      });
+
+      it('skips createMany when there are no answers to persist', async () => {
+        const tx = setupSubmit();
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, { answers: [] });
+
+        expect(tx.anamnesisAnswer.deleteMany).toHaveBeenCalledTimes(1);
+        expect(tx.anamnesisAnswer.createMany).not.toHaveBeenCalled();
+      });
+
+      it('accepts an injected prisma client as the fourth parameter', async () => {
+        const tx = makeFinalizeTx();
+        const injectedClient = {
+          studentAnamnesis: { findFirst: vi.fn().mockResolvedValue({ id: 'link-1' }) },
+          anamnesis: { findUnique: vi.fn().mockResolvedValue(makeAnamnesisWithQuestion(false)) },
+          $transaction: vi.fn().mockImplementation(async (fn) => fn(tx)),
+        };
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload, injectedClient);
+
+        expect(injectedClient.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.studentAnamnesis.findFirst).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('authorship', () => {
+      it('finalizes as student-authored and already confirmed, clearing any trainer attestation', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(NOW);
+        const tx = setupSubmit();
+
+        await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith({
+          where: { id: 'response-1' },
+          data: {
+            submittedAt: NOW,
+            filledByRole: AnamnesisFilledBy.STUDENT,
+            filledByUserId: STUDENT_ID,
+            trainerAttestedAt: null,
+            studentConfirmedAt: NOW,
+          },
+          include: { answers: true },
+        });
+      });
+
+      it('returns status submitted and filledBy student on the finalized response', async () => {
+        setupSubmit();
+
+        const result = await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(result).toMatchObject({
+          status: AnamnesisResponseStatus.SUBMITTED,
+          filledBy: AnamnesisFilledBy.STUDENT,
+        });
+      });
+
+      it('marks the response as submitted when converting a previously saved draft', async () => {
+        const tx = setupSubmit({ locked: { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT } });
+
+        const result = await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ submittedAt: expect.any(Date) }) }),
+        );
+        expect(result.status).toBe(AnamnesisResponseStatus.SUBMITTED);
+      });
+
+      it('lets the student correct a trainer-filled response instead of failing with 409', async () => {
+        const tx = setupSubmit({
+          locked: { submittedAt: new Date('2026-09-28T10:00:00.000Z'), filledByRole: AnamnesisFilledBy.TRAINER },
+        });
+
+        const result = await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              filledByRole: AnamnesisFilledBy.STUDENT,
+              filledByUserId: STUDENT_ID,
+              trainerAttestedAt: null,
+              studentConfirmedAt: expect.any(Date),
+            }),
+          }),
+        );
+        expect(result).toMatchObject({
+          status: AnamnesisResponseStatus.SUBMITTED,
+          filledBy: AnamnesisFilledBy.STUDENT,
+        });
+      });
+
+      it('is idempotent: a student re-submitting their own submission succeeds', async () => {
+        setupSubmit({ locked: { submittedAt: new Date(), filledByRole: AnamnesisFilledBy.STUDENT } });
+
+        await expect(submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload)).resolves.toMatchObject({
+          status: AnamnesisResponseStatus.SUBMITTED,
+        });
+      });
+    });
+
+    describe('concurrent first create', () => {
+      const makeUniqueViolation = () => Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+
+      it('retries once when the transaction fails with P2002', async () => {
+        const tx = setupSubmit();
+        prisma.$transaction
+          .mockRejectedValueOnce(makeUniqueViolation())
+          .mockImplementationOnce(async (fn) => fn(tx));
+
+        const result = await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+        expect(result.status).toBe(AnamnesisResponseStatus.SUBMITTED);
+      });
+
+      it('propagates a second consecutive P2002 without a third attempt', async () => {
+        setupSubmit();
+        const secondViolation = makeUniqueViolation();
+        prisma.$transaction
+          .mockReset()
+          .mockRejectedValueOnce(makeUniqueViolation())
+          .mockRejectedValueOnce(secondViolation);
+
+        await expect(submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload)).rejects.toBe(secondViolation);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      });
+
+      it('does not retry errors other than P2002', async () => {
+        setupSubmit();
+        const otherError = Object.assign(new Error('Deadlock detected'), { code: 'P2034' });
+        prisma.$transaction.mockReset().mockRejectedValue(otherError);
+
+        await expect(submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload)).rejects.toBe(otherError);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  // ── confirmAnamnesisResponse ─────────────────────────────────────────────
+
+  describe('confirmAnamnesisResponse', () => {
+    const STUDENT_ID = 'student-1';
+    const ANAMNESIS_ID = 'anamnesis-1';
+    const RESPONSE_ID = 'response-1';
+    const NOW = new Date('2026-09-29T16:00:00.000Z');
+    const SUBMITTED_AT = new Date('2026-09-29T15:00:00.000Z');
+
+    const awaitingRow = {
+      submittedAt: SUBMITTED_AT,
+      filledByRole: AnamnesisFilledBy.TRAINER,
+      studentConfirmedAt: null,
+    };
+
+    const setupConfirm = ({ found = { id: RESPONSE_ID }, locked = awaitingRow } = {}) => {
+      const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        anamnesisResponse: {
+          findUnique: vi.fn().mockResolvedValueOnce(found).mockResolvedValueOnce(locked),
+          update: vi.fn().mockImplementation(async ({ data }) => ({
+            id: RESPONSE_ID,
+            anamnesisId: ANAMNESIS_ID,
+            studentId: STUDENT_ID,
+            ...awaitingRow,
+            ...data,
+            answers: [{ id: 'answer-1', questionId: 'question-1', value: 'yes' }],
+          })),
+        },
+        anamnesisAnswer: { deleteMany: vi.fn(), createMany: vi.fn(), upsert: vi.fn() },
+      };
+      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+      return tx;
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('throws 404 ANAMNESIS_NOT_LINKED_TO_STUDENT when the anamnesis is not linked to the student', async () => {
       prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
 
-      await expect(
-        submitAnamnesisResponse('student-1', 'anamnesis-1', { answers: [] }),
-      ).rejects.toMatchObject({
+      await expect(confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID)).rejects.toMatchObject({
         httpStatus: 404,
-        messageCode: 'anamnesis.notLinkedToStudent',
+        error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+        messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
       });
+      expect(prisma.studentAnamnesis.findFirst).toHaveBeenCalledWith({
+        where: { studentId: STUDENT_ID, anamnesisId: ANAMNESIS_ID },
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('throws 400 when a required question is not answered', async () => {
-      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
-      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(true));
+    it('throws 404 ANAMNESIS_RESPONSE_NOT_FOUND when the student has no response, without locking', async () => {
+      const tx = setupConfirm({ found: null });
 
-      await expect(
-        submitAnamnesisResponse('student-1', 'anamnesis-1', { answers: [] }),
-      ).rejects.toMatchObject({
-        httpStatus: 400,
-        error: 'VALIDATION_ERROR',
-        messageCode: 'validation.failed',
-      });
-    });
-
-    it('throws 404 for unknown questionId in answers', async () => {
-      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
-      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
-
-      await expect(
-        submitAnamnesisResponse('student-1', 'anamnesis-1', {
-          answers: [{ questionId: 'unknown-question-id', value: 'yes' }],
-        }),
-      ).rejects.toMatchObject({
+      await expect(confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID)).rejects.toMatchObject({
         httpStatus: 404,
-        messageCode: 'anamnesis.question.notFound',
+        error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+        messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      });
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+      expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a draft', { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: null }],
+      ['a draft row whose role is trainer', { submittedAt: null, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: null }],
+      ['a student-authored submission', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: SUBMITTED_AT }],
+      ['a legacy submission (student, never confirmed)', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: null }],
+      ['an already confirmed trainer-filled response', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: NOW }],
+    ])('throws 409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION for %s', async (_label, locked) => {
+      const tx = setupConfirm({ locked });
+
+      await expect(confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID)).rejects.toMatchObject({
+        httpStatus: 409,
+        error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+        messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+      });
+      expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+    });
+
+    it('re-checks the status AFTER the row lock (a stale pre-lock read does not decide)', async () => {
+      // Pre-lock read only returns the id; the state that matters is the one read after the lock.
+      const tx = setupConfirm({
+        locked: { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: NOW },
+      });
+
+      await expect(confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID)).rejects.toMatchObject({ httpStatus: 409 });
+
+      const { findUnique } = tx.anamnesisResponse;
+      expect(findUnique).toHaveBeenCalledTimes(2);
+      expect(findUnique.mock.invocationCallOrder[0]).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[0]);
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(findUnique.mock.invocationCallOrder[1]);
+      expect(findUnique).toHaveBeenNthCalledWith(2, {
+        where: { id: RESPONSE_ID },
+        select: { submittedAt: true, filledByRole: true, studentConfirmedAt: true },
       });
     });
 
-    it('upserts response and replaces answers in transaction', async () => {
+    it('sets only studentConfirmedAt and leaves the answers untouched', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const tx = setupConfirm();
+
+      await confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID);
+
+      expect(tx.anamnesisResponse.update).toHaveBeenCalledWith({
+        where: { id: RESPONSE_ID },
+        data: { studentConfirmedAt: NOW },
+        include: { answers: true },
+      });
+      expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+      expect(tx.anamnesisAnswer.createMany).not.toHaveBeenCalled();
+      expect(tx.anamnesisAnswer.upsert).not.toHaveBeenCalled();
+    });
+
+    it('returns the confirmed response as submitted, still trainer-authored', async () => {
+      setupConfirm();
+
+      const result = await confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID);
+
+      expect(result).toMatchObject({
+        id: RESPONSE_ID,
+        status: AnamnesisResponseStatus.SUBMITTED,
+        filledBy: AnamnesisFilledBy.TRAINER,
+        studentConfirmedAt: expect.any(Date),
+      });
+      expect(result.answers).toHaveLength(1);
+    });
+
+    it('accepts an injected prisma client as the third parameter', async () => {
+      const tx = setupConfirm();
+      const injectedClient = {
+        studentAnamnesis: { findFirst: vi.fn().mockResolvedValue({ id: 'link-1' }) },
+        $transaction: vi.fn().mockImplementation(async (fn) => fn(tx)),
+      };
+
+      await confirmAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, injectedClient);
+
+      expect(injectedClient.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Trainer fills on behalf of the student ───────────────────────────────
+
+  describe('trainer fills on behalf of the student', () => {
+    const TRAINER_USER_ID = 'trainer-user-1';
+    const TRAINER_ID = 'trainer-1';
+    const STUDENT_ID = 'student-1';
+    const ANAMNESIS_ID = 'anamnesis-1';
+    const RESPONSE_ID = 'response-1';
+    const NOW = new Date('2026-09-29T15:00:00.000Z');
+    const EARLIER = new Date('2026-09-28T09:00:00.000Z');
+
+    const oneAnswer = { answers: [{ questionId: 'question-1', value: 'yes' }] };
+
+    const makeAnamnesisWithQuestion = (required = false) => ({
+      ...makeAnamnesis(),
+      sections: [
+        {
+          ...makeSection(),
+          questions: [makeQuestion({ id: 'question-1', required })],
+        },
+      ],
+    });
+
+    const setupGuardPasses = () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: TRAINER_ID }));
+      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: TRAINER_ID, studentId: STUDENT_ID });
       prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
-      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
+    };
 
-      const response = makeAnamnesisResponse({ answers: [{ id: 'ans-1', questionId: 'question-1', value: 'yes' }] });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-      prisma.$transaction.mockImplementation(async (fn) => {
+    // Every trainer operation goes through the same guard
+    const guardedOperations = [
+      ['getTrainerFillContext', () => getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID)],
+      [
+        'saveTrainerAnamnesisResponseDraft',
+        () => saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+      ],
+      [
+        'submitTrainerAnamnesisResponse',
+        () => submitTrainerAnamnesisResponse(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+      ],
+    ];
+
+    describe.each(guardedOperations)('%s — access guard', (_name, operation) => {
+      const expectNothingElseTouched = () => {
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.anamnesis.findUnique).not.toHaveBeenCalled();
+        expect(prisma.anamnesisResponse.findUnique).not.toHaveBeenCalled();
+        expect(prisma.anamnesisQuestion.findMany).not.toHaveBeenCalled();
+      };
+
+      it('throws 404 TRAINER_PROFILE_MISSING when the caller has no trainer profile', async () => {
+        prisma.trainer.findUnique.mockResolvedValue(null);
+
+        await expect(operation()).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.TRAINER_PROFILE_MISSING,
+          messageCode: AnamnesisMessageCode.TRAINER_PROFILE_MISSING,
+        });
+        expectNothingElseTouched();
+      });
+
+      it('throws 404 STUDENT_NOT_FOUND (student.notFound) when the student is not linked to the trainer', async () => {
+        prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: TRAINER_ID }));
+        prisma.trainerStudent.findUnique.mockResolvedValue(null);
+
+        await expect(operation()).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.STUDENT_NOT_FOUND,
+          messageCode: AnamnesisMessageCode.STUDENT_NOT_FOUND,
+        });
+        expect(prisma.trainerStudent.findUnique).toHaveBeenCalledWith({
+          where: { trainerId_studentId: { trainerId: TRAINER_ID, studentId: STUDENT_ID } },
+        });
+        expect(assertStudentActiveOnPlan).not.toHaveBeenCalled();
+        expect(prisma.studentAnamnesis.findFirst).not.toHaveBeenCalled();
+        expectNothingElseTouched();
+      });
+
+      it('propagates the plan rejection when the student is blocked on the trainer plan', async () => {
+        setupGuardPasses();
+        const planError = new AppError({
+          httpStatus: 403,
+          error: 'STUDENT_BLOCKED_ON_PLAN',
+          messageCode: 'platformPlan.studentBlocked',
+          message: 'Student is blocked on plan',
+        });
+        assertStudentActiveOnPlan.mockRejectedValue(planError);
+
+        await expect(operation()).rejects.toBe(planError);
+
+        expect(assertStudentActiveOnPlan).toHaveBeenCalledWith(prisma, TRAINER_ID, STUDENT_ID);
+        expect(prisma.studentAnamnesis.findFirst).not.toHaveBeenCalled();
+        expectNothingElseTouched();
+      });
+
+      it('throws 404 ANAMNESIS_NOT_LINKED_TO_STUDENT when THIS trainer did not link the anamnesis to the student', async () => {
+        setupGuardPasses();
+        prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+        await expect(operation()).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+        });
+        expect(prisma.studentAnamnesis.findFirst).toHaveBeenCalledWith({
+          where: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID, trainerId: TRAINER_ID },
+        });
+        expectNothingElseTouched();
+      });
+
+      it('runs the checks in order: trainer link, plan, anamnesis link', async () => {
+        setupGuardPasses();
+        prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+        await expect(operation()).rejects.toThrow();
+
+        expect(prisma.trainerStudent.findUnique.mock.invocationCallOrder[0]).toBeLessThan(
+          assertStudentActiveOnPlan.mock.invocationCallOrder[0],
+        );
+        expect(assertStudentActiveOnPlan.mock.invocationCallOrder[0]).toBeLessThan(
+          prisma.studentAnamnesis.findFirst.mock.invocationCallOrder[0],
+        );
+      });
+    });
+
+    // ── getTrainerFillContext ──────────────────────────────────────────────
+
+    describe('getTrainerFillContext', () => {
+      const makeResponseRow = (overrides = {}) => ({
+        id: RESPONSE_ID,
+        anamnesisId: ANAMNESIS_ID,
+        studentId: STUDENT_ID,
+        submittedAt: null,
+        filledByRole: AnamnesisFilledBy.STUDENT,
+        studentConfirmedAt: null,
+        answers: [],
+        ...overrides,
+      });
+
+      it('returns the anamnesis and a null response when the student has not started', async () => {
+        setupGuardPasses();
+        const anamnesis = makeAnamnesisWithQuestion();
+        prisma.anamnesis.findUnique.mockResolvedValue(anamnesis);
+        prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+        const result = await getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
+
+        expect(result).toEqual({ anamnesis, response: null });
+      });
+
+      it('loads the full anamnesis and the response scoped to this student with its answers', async () => {
+        setupGuardPasses();
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion());
+        prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+        await getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
+
+        expect(prisma.anamnesis.findUnique).toHaveBeenCalledWith({
+          where: { id: ANAMNESIS_ID },
+          include: fullAnamnesisInclude,
+        });
+        expect(prisma.anamnesisResponse.findUnique).toHaveBeenCalledWith({
+          where: { anamnesisId_studentId: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID } },
+          include: { answers: true },
+        });
+      });
+
+      it('returns the student draft (trainer sees the current state) with status draft and filledBy', async () => {
+        setupGuardPasses();
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion());
+        prisma.anamnesisResponse.findUnique.mockResolvedValue(
+          makeResponseRow({ answers: [{ id: 'answer-1', questionId: 'question-1', value: 'yes' }] }),
+        );
+
+        const { response } = await getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
+
+        expect(response).toMatchObject({
+          id: RESPONSE_ID,
+          status: AnamnesisResponseStatus.DRAFT,
+          filledBy: AnamnesisFilledBy.STUDENT,
+        });
+        expect(response.answers).toHaveLength(1);
+      });
+
+      it.each([
+        [
+          AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+          AnamnesisFilledBy.TRAINER,
+          { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: null },
+        ],
+        [
+          AnamnesisResponseStatus.SUBMITTED,
+          AnamnesisFilledBy.TRAINER,
+          { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: NOW },
+        ],
+        [
+          AnamnesisResponseStatus.SUBMITTED,
+          AnamnesisFilledBy.STUDENT,
+          { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: EARLIER },
+        ],
+      ])('derives status %s and filledBy %s for a submitted row', async (status, filledBy, columns) => {
+        setupGuardPasses();
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion());
+        prisma.anamnesisResponse.findUnique.mockResolvedValue(makeResponseRow(columns));
+
+        const { response } = await getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
+
+        expect(response).toMatchObject({ status, filledBy });
+      });
+    });
+
+    // ── saveTrainerAnamnesisResponseDraft ──────────────────────────────────
+
+    describe('saveTrainerAnamnesisResponseDraft', () => {
+      const setupTrainerDraft = ({ lockedRow = { submittedAt: null } } = {}) => {
+        setupGuardPasses();
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
-            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
-            findUnique: vi.fn().mockResolvedValue(response),
+            upsert: vi.fn().mockResolvedValue({ id: RESPONSE_ID }),
+            findUnique: vi.fn().mockResolvedValue(lockedRow),
+            update: vi.fn().mockResolvedValue({
+              id: RESPONSE_ID,
+              submittedAt: null,
+              filledByRole: AnamnesisFilledBy.STUDENT,
+              studentConfirmedAt: null,
+              answers: [],
+            }),
           },
           anamnesisAnswer: {
             deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
-            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+            upsert: vi.fn().mockResolvedValue({}),
           },
         };
-        return fn(tx);
+        prisma.anamnesisQuestion.findMany.mockResolvedValue([{ id: 'question-1' }]);
+        prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+        return tx;
+      };
+
+      it('saves the answers as a draft for the student and returns status draft', async () => {
+        const tx = setupTrainerDraft();
+
+        const result = await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+        expect(tx.anamnesisAnswer.upsert).toHaveBeenCalledWith({
+          where: { responseId_questionId: { responseId: RESPONSE_ID, questionId: 'question-1' } },
+          create: { responseId: RESPONSE_ID, questionId: 'question-1', value: 'yes' },
+          update: { value: 'yes' },
+        });
+        expect(result).toMatchObject({ status: AnamnesisResponseStatus.DRAFT });
       });
 
-      const result = await submitAnamnesisResponse('student-1', 'anamnesis-1', {
-        answers: [{ questionId: 'question-1', value: 'yes' }],
+      it('creates the response row for the STUDENT (not the trainer) without any authorship', async () => {
+        const tx = setupTrainerDraft();
+
+        await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+        expect(tx.anamnesisResponse.upsert).toHaveBeenCalledWith({
+          where: { anamnesisId_studentId: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID } },
+          create: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID, submittedAt: null },
+          update: {},
+        });
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { updatedAt: expect.any(Date) } }),
+        );
       });
 
-      expect(result).toMatchObject({ id: 'response-1' });
-      expect(prisma.$transaction).toHaveBeenCalled();
+      it.each([
+        ['student-authored', AnamnesisFilledBy.STUDENT],
+        ['trainer-authored', AnamnesisFilledBy.TRAINER],
+      ])('throws 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED over a %s submission', async (_label, filledByRole) => {
+        const tx = setupTrainerDraft({ lockedRow: { submittedAt: EARLIER, filledByRole } });
+
+        await expect(
+          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+        ).rejects.toMatchObject({
+          httpStatus: 409,
+          error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+        });
+        expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+        expect(tx.anamnesisAnswer.upsert).not.toHaveBeenCalled();
+        expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+      });
+
+      it('decides the 409 on the state read AFTER the lock', async () => {
+        const tx = setupTrainerDraft({ lockedRow: { submittedAt: EARLIER } });
+
+        await expect(
+          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+        ).rejects.toMatchObject({ httpStatus: 409 });
+
+        expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+          tx.anamnesisResponse.findUnique.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('throws 400 VALIDATION_ERROR for a duplicated questionId without opening a transaction', async () => {
+        setupGuardPasses();
+
+        await expect(
+          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, {
+            answers: [
+              { questionId: 'question-1', value: 'a' },
+              { questionId: 'question-1', value: 'b' },
+            ],
+          }),
+        ).rejects.toMatchObject({ httpStatus: 400, error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('throws 404 ANAMNESIS_QUESTION_NOT_FOUND for a question outside the anamnesis without a transaction', async () => {
+        setupGuardPasses();
+        prisma.anamnesisQuestion.findMany.mockResolvedValue([]);
+
+        await expect(
+          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, {
+            answers: [{ questionId: 'foreign-question', value: 'x' }],
+          }),
+        ).rejects.toMatchObject({
+          httpStatus: 404,
+          error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+        });
+        expect(prisma.anamnesisQuestion.findMany).toHaveBeenCalledWith({
+          where: {
+            id: { in: ['foreign-question'] },
+            deletedAt: null,
+            section: { anamnesisId: ANAMNESIS_ID, deletedAt: null },
+          },
+          select: { id: true },
+        });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('retries once on P2002 (concurrent first create)', async () => {
+        const tx = setupTrainerDraft();
+        prisma.$transaction
+          .mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }))
+          .mockImplementationOnce(async (fn) => fn(tx));
+
+        const result = await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+        expect(result.status).toBe(AnamnesisResponseStatus.DRAFT);
+      });
     });
 
-    it('returns status submitted on the finalized response', async () => {
-      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
-      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          anamnesisResponse: {
-            upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
-            findUnique: vi.fn().mockResolvedValue(makeAnamnesisResponse()),
-          },
-          anamnesisAnswer: { deleteMany: vi.fn(), createMany: vi.fn() },
-        }),
-      );
+    // ── submitTrainerAnamnesisResponse ─────────────────────────────────────
 
-      const result = await submitAnamnesisResponse('student-1', 'anamnesis-1', {
-        answers: [{ questionId: 'question-1', value: 'yes' }],
+    describe('submitTrainerAnamnesisResponse', () => {
+      const setupTrainerSubmit = ({ locked, upserted, required = false } = {}) => {
+        setupGuardPasses();
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(required));
+        return makeFinalizeTx({ locked, upserted });
+      };
+
+      const submit = (payload = oneAnswer) =>
+        submitTrainerAnamnesisResponse(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, payload);
+
+      describe('authorship and status', () => {
+        it('finalizes as trainer-authored with attestation and no student confirmation', async () => {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          vi.setSystemTime(NOW);
+          const tx = setupTrainerSubmit();
+
+          await submit();
+
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledWith({
+            where: { id: RESPONSE_ID },
+            data: {
+              submittedAt: NOW,
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: TRAINER_USER_ID,
+              trainerAttestedAt: NOW,
+              studentConfirmedAt: null,
+            },
+            include: { answers: true },
+          });
+        });
+
+        it('records the trainer USER id (not Trainer.id) as filledByUserId', async () => {
+          const tx = setupTrainerSubmit();
+
+          await submit();
+
+          const { data } = tx.anamnesisResponse.update.mock.calls[0][0];
+          expect(data.filledByUserId).toBe(TRAINER_USER_ID);
+          expect(data.filledByUserId).not.toBe(TRAINER_ID);
+        });
+
+        it('returns status awaiting_confirmation and filledBy trainer', async () => {
+          setupTrainerSubmit();
+
+          const result = await submit();
+
+          expect(result).toMatchObject({
+            id: RESPONSE_ID,
+            status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+            filledBy: AnamnesisFilledBy.TRAINER,
+            studentConfirmedAt: null,
+          });
+        });
+
+        it('writes the response of the STUDENT (upsert keyed by the student, not the trainer)', async () => {
+          const tx = setupTrainerSubmit();
+
+          await submit();
+
+          expect(tx.anamnesisResponse.upsert).toHaveBeenCalledWith({
+            where: { anamnesisId_studentId: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID } },
+            create: { anamnesisId: ANAMNESIS_ID, studentId: STUDENT_ID, submittedAt: null },
+            update: {},
+          });
+        });
+
+        it('replaces the stored answers with the submitted ones', async () => {
+          const tx = setupTrainerSubmit();
+
+          await submit();
+
+          expect(tx.anamnesisAnswer.deleteMany).toHaveBeenCalledWith({ where: { responseId: RESPONSE_ID } });
+          expect(tx.anamnesisAnswer.createMany).toHaveBeenCalledWith({
+            data: [{ responseId: RESPONSE_ID, questionId: 'question-1', value: 'yes' }],
+          });
+        });
       });
 
-      expect(result.status).toBe(AnamnesisResponseStatus.SUBMITTED);
-    });
+      describe('over the current state of the response', () => {
+        it('is allowed when the student only has a draft (no response yet counts the same)', async () => {
+          const tx = setupTrainerSubmit({ locked: { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT } });
 
-    it('marks the response as submitted when converting a previously saved draft', async () => {
-      prisma.studentAnamnesis.findFirst.mockResolvedValue({ id: 'link-1' });
-      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion(false));
-      const upsert = vi.fn().mockResolvedValue({ id: 'response-1' });
-      prisma.$transaction.mockImplementation(async (fn) =>
-        fn({
-          anamnesisResponse: {
-            upsert,
-            findUnique: vi.fn().mockResolvedValue(makeAnamnesisResponse()),
-          },
-          anamnesisAnswer: { deleteMany: vi.fn(), createMany: vi.fn() },
-        }),
-      );
+          await expect(submit()).resolves.toMatchObject({
+            status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+          });
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledTimes(1);
+        });
 
-      await submitAnamnesisResponse('student-1', 'anamnesis-1', {
-        answers: [{ questionId: 'question-1', value: 'yes' }],
+        it('is allowed to re-finalize their own unconfirmed submission, refreshing the attestation', async () => {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          vi.setSystemTime(NOW);
+          const tx = setupTrainerSubmit({
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER },
+          });
+
+          const result = await submit();
+
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({
+                submittedAt: NOW,
+                trainerAttestedAt: NOW,
+                studentConfirmedAt: null,
+              }),
+            }),
+          );
+          expect(result.status).toBe(AnamnesisResponseStatus.AWAITING_CONFIRMATION);
+        });
+
+        it('throws 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT over a student-submitted response, writing nothing', async () => {
+          const tx = setupTrainerSubmit({
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT },
+          });
+
+          await expect(submit()).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+          expect(tx.anamnesisAnswer.createMany).not.toHaveBeenCalled();
+          expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+        });
       });
 
-      expect(upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          update: { submittedAt: expect.any(Date) },
-          create: expect.objectContaining({ submittedAt: expect.any(Date) }),
-        }),
-      );
+      describe('409 decision after the row lock', () => {
+        it('locks the response row before re-reading the state that decides the 409', async () => {
+          const tx = setupTrainerSubmit();
+
+          await submit();
+
+          const order = (fn) => fn.mock.invocationCallOrder[0];
+          expect(order(tx.anamnesisResponse.upsert)).toBeLessThan(order(tx.$queryRaw));
+          expect(order(tx.$queryRaw)).toBeLessThan(order(tx.anamnesisResponse.findUnique));
+          expect(order(tx.anamnesisResponse.findUnique)).toBeLessThan(order(tx.anamnesisAnswer.deleteMany));
+          expect(order(tx.anamnesisAnswer.deleteMany)).toBeLessThan(order(tx.anamnesisResponse.update));
+        });
+
+        it('rejects when the row locked read is student-submitted even if the pre-lock upsert saw a draft', async () => {
+          const tx = setupTrainerSubmit({
+            upserted: { id: RESPONSE_ID, submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT },
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT },
+          });
+
+          await expect(submit()).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+        });
+
+        it('proceeds when the row locked read is no longer student-submitted even if the pre-lock upsert saw it so', async () => {
+          const tx = setupTrainerSubmit({
+            upserted: { id: RESPONSE_ID, submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT },
+            locked: { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT },
+          });
+
+          await expect(submit()).resolves.toMatchObject({ status: AnamnesisResponseStatus.AWAITING_CONFIRMATION });
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      describe('validation (same rules as the student submit)', () => {
+        it('throws 400 when a required visible question is not answered, without opening a transaction', async () => {
+          setupTrainerSubmit({ required: true });
+
+          await expect(submit({ answers: [] })).rejects.toMatchObject({
+            httpStatus: 400,
+            error: 'VALIDATION_ERROR',
+            messageCode: 'validation.failed',
+            details: [{ questionId: 'question-1', message: 'Required question not answered' }],
+          });
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('throws 404 for an unknown question, without opening a transaction', async () => {
+          setupTrainerSubmit();
+
+          await expect(
+            submit({ answers: [{ questionId: 'unknown-question-id', value: 'yes' }] }),
+          ).rejects.toMatchObject({
+            httpStatus: 404,
+            error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+          });
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('throws 400 for a duplicated questionId, without opening a transaction', async () => {
+          setupGuardPasses();
+
+          await expect(
+            submit({
+              answers: [
+                { questionId: 'question-1', value: 'yes' },
+                { questionId: 'question-1', value: 'no' },
+              ],
+            }),
+          ).rejects.toMatchObject({
+            httpStatus: 400,
+            error: 'VALIDATION_ERROR',
+            messageCode: 'validation.failed',
+            details: [{ questionId: 'question-1', message: 'Duplicate questionId in answers' }],
+          });
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('drops answers of questions hidden by conditional logic before persisting', async () => {
+          setupGuardPasses();
+          const parent = makeQuestion({ id: 'parent-q', required: true, type: AnamnesisQuestionType.DICHOTOMOUS });
+          const child = makeQuestion({
+            id: 'child-q',
+            required: true,
+            type: AnamnesisQuestionType.FREE_TEXT,
+            parentQuestionId: 'parent-q',
+            condition: { operator: 'equals', value: 'yes' },
+          });
+          prisma.anamnesis.findUnique.mockResolvedValue({
+            ...makeAnamnesis(),
+            sections: [{ ...makeSection(), questions: [parent, child] }],
+          });
+          const tx = makeFinalizeTx();
+
+          await submit({
+            answers: [
+              { questionId: 'parent-q', value: 'no' },
+              { questionId: 'child-q', value: 'hidden answer' },
+            ],
+          });
+
+          expect(tx.anamnesisAnswer.createMany).toHaveBeenCalledWith({
+            data: [{ responseId: RESPONSE_ID, questionId: 'parent-q', value: 'no' }],
+          });
+        });
+
+        it('does not require a hidden child question', async () => {
+          setupGuardPasses();
+          const parent = makeQuestion({ id: 'parent-q', required: true, type: AnamnesisQuestionType.DICHOTOMOUS });
+          const child = makeQuestion({
+            id: 'child-q',
+            required: true,
+            type: AnamnesisQuestionType.FREE_TEXT,
+            parentQuestionId: 'parent-q',
+            condition: { operator: 'equals', value: 'yes' },
+          });
+          prisma.anamnesis.findUnique.mockResolvedValue({
+            ...makeAnamnesis(),
+            sections: [{ ...makeSection(), questions: [parent, child] }],
+          });
+          makeFinalizeTx();
+
+          await expect(submit({ answers: [{ questionId: 'parent-q', value: 'no' }] })).resolves.toMatchObject({
+            status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+          });
+        });
+      });
+
+      describe('concurrent first create', () => {
+        const makeUniqueViolation = () => Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+
+        it('retries the transaction once on P2002 and returns the retried result', async () => {
+          const tx = setupTrainerSubmit();
+          prisma.$transaction
+            .mockRejectedValueOnce(makeUniqueViolation())
+            .mockImplementationOnce(async (fn) => fn(tx));
+
+          const result = await submit();
+
+          expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+          expect(result.status).toBe(AnamnesisResponseStatus.AWAITING_CONFIRMATION);
+        });
+
+        it('validates the guard and the payload only once when the transaction is retried', async () => {
+          const tx = setupTrainerSubmit();
+          prisma.$transaction
+            .mockRejectedValueOnce(makeUniqueViolation())
+            .mockImplementationOnce(async (fn) => fn(tx));
+
+          await submit();
+
+          expect(prisma.studentAnamnesis.findFirst).toHaveBeenCalledTimes(1);
+          expect(prisma.anamnesis.findUnique).toHaveBeenCalledTimes(1);
+        });
+
+        it('propagates a second consecutive P2002 without a third attempt', async () => {
+          setupTrainerSubmit();
+          const secondViolation = makeUniqueViolation();
+          prisma.$transaction
+            .mockReset()
+            .mockRejectedValueOnce(makeUniqueViolation())
+            .mockRejectedValueOnce(secondViolation);
+
+          await expect(submit()).rejects.toBe(secondViolation);
+
+          expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not retry a 409 raised inside the transaction', async () => {
+          setupTrainerSubmit({ locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT } });
+
+          await expect(submit()).rejects.toMatchObject({ httpStatus: 409 });
+
+          expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        });
+      });
     });
   });
 
@@ -2447,19 +3508,41 @@ describe('anamnesis-service', () => {
   // ── toResponseStatus (pure, from constants) ──────────────────────────────
 
   describe('toResponseStatus', () => {
-    it('returns submitted when submittedAt is a Date', () => {
-      expect(toResponseStatus(new Date('2026-03-05T10:00:00.000Z'))).toBe(AnamnesisResponseStatus.SUBMITTED);
-    });
+    const SUBMITTED_AT = new Date('2026-03-05T10:00:00.000Z');
+    const CONFIRMED_AT = new Date('2026-03-06T10:00:00.000Z');
 
     it.each([
-      ['null', null],
-      ['undefined', undefined],
-    ])('returns draft when submittedAt is %s', (_label, submittedAt) => {
-      expect(toResponseStatus(submittedAt)).toBe(AnamnesisResponseStatus.DRAFT);
+      ['no submittedAt (null), role student', { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: null }, AnamnesisResponseStatus.DRAFT],
+      ['no submittedAt (undefined)', { submittedAt: undefined }, AnamnesisResponseStatus.DRAFT],
+      ['no submittedAt even if role trainer', { submittedAt: null, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: null }, AnamnesisResponseStatus.DRAFT],
+      ['no submittedAt even if role trainer and confirmed', { submittedAt: null, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: CONFIRMED_AT }, AnamnesisResponseStatus.DRAFT],
+      ['student role, confirmed', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: SUBMITTED_AT }, AnamnesisResponseStatus.SUBMITTED],
+      ['legacy row: student role, studentConfirmedAt null', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.STUDENT, studentConfirmedAt: null }, AnamnesisResponseStatus.SUBMITTED],
+      ['legacy row: only submittedAt (role and confirmation absent)', { submittedAt: SUBMITTED_AT }, AnamnesisResponseStatus.SUBMITTED],
+      ['trainer role, confirmed by the student', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: CONFIRMED_AT }, AnamnesisResponseStatus.SUBMITTED],
+      ['trainer role, not confirmed (null)', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.TRAINER, studentConfirmedAt: null }, AnamnesisResponseStatus.AWAITING_CONFIRMATION],
+      ['trainer role, not confirmed (undefined)', { submittedAt: SUBMITTED_AT, filledByRole: AnamnesisFilledBy.TRAINER }, AnamnesisResponseStatus.AWAITING_CONFIRMATION],
+    ])('returns the right status for %s', (_label, response, expected) => {
+      expect(toResponseStatus(response)).toBe(expected);
     });
 
     it('exposes the stable status values used by clients', () => {
-      expect(AnamnesisResponseStatus).toEqual({ DRAFT: 'draft', SUBMITTED: 'submitted' });
+      expect(AnamnesisResponseStatus).toEqual({
+        DRAFT: 'draft',
+        AWAITING_CONFIRMATION: 'awaiting_confirmation',
+        SUBMITTED: 'submitted',
+      });
+    });
+
+    it('exposes the stable filledBy values persisted in filledByRole', () => {
+      expect(AnamnesisFilledBy).toEqual({ STUDENT: 'student', TRAINER: 'trainer' });
+    });
+
+    it('exposes stable error codes and messageCodes for the trainer-fill conflicts', () => {
+      expect(AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT).toBe('ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT');
+      expect(AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT).toBe('anamnesis.response.submittedByStudent');
+      expect(AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION).toBe('ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION');
+      expect(AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION).toBe('anamnesis.response.notAwaitingConfirmation');
     });
 
     it('caps a draft save at 300 answers', () => {
@@ -3077,8 +4160,16 @@ describe('anamnesis-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',
@@ -3126,8 +4217,16 @@ describe('anamnesis-service', () => {
       let capturedCreateManyData;
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',
@@ -3360,8 +4459,16 @@ describe('anamnesis-service', () => {
       let capturedCreateManyData;
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',
@@ -3403,8 +4510,16 @@ describe('anamnesis-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',
@@ -3490,8 +4605,16 @@ describe('anamnesis-service', () => {
 
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',
@@ -3523,8 +4646,16 @@ describe('anamnesis-service', () => {
       let capturedCreateManyData;
       prisma.$transaction.mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           anamnesisResponse: {
             upsert: vi.fn().mockResolvedValue({ id: 'response-1' }),
+            update: vi.fn().mockImplementation(async ({ data }) => ({
+              id: 'response-1',
+              anamnesisId: 'anamnesis-1',
+              studentId: 'student-1',
+              answers: [],
+              ...data,
+            })),
             findUnique: vi.fn().mockResolvedValue({
               id: 'response-1',
               anamnesisId: 'anamnesis-1',

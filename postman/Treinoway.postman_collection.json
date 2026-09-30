@@ -4948,9 +4948,784 @@
                 }
               ]
             },
-            "description": "Get a student's submitted response to a specific anamnesis (includes status \"submitted\"). Trainer must own the trainer-student relationship and have linked the anamnesis to the student. Drafts are not visible to trainers: returns 404 ANAMNESIS_RESPONSE_NOT_FOUND if the student has not submitted a response yet (including when only a draft exists)."
+            "description": "Get a student's submitted response to a specific anamnesis (status \"submitted\", or \"awaiting_confirmation\" when the trainer filled it on the student's behalf and the student has not confirmed yet; check filledBy, trainerAttestedAt and studentConfirmedAt). Trainer must own the trainer-student relationship and have linked the anamnesis to the student. Drafts are not visible to trainers: returns 404 ANAMNESIS_RESPONSE_NOT_FOUND if the student has not submitted a response yet (including when only a draft exists)."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Get Student Anamnesis Response (Trainer) - 200 OK (awaiting_confirmation)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"status\": \"awaiting_confirmation\",\n  \"statusLabel\": \"Aguardando confirmação\",\n  \"filledBy\": \"trainer\",\n  \"filledByLabel\": \"Professor\",\n  \"trainerAttestedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Anamnesis - Trainer Fill",
+      "item": [
+        {
+          "name": "Get Anamnesis to Fill for Student",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses",
+                ":anamnesisId",
+                "fill"
+              ],
+              "query": [
+                {
+                  "key": "studentPresent",
+                  "value": "true",
+                  "description": "Trainer attestation that the student is present and authorized. Must be true."
+                }
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Load the anamnesis (full sections/questions/options) and the current response to fill it with the student present. Returns { anamnesis, response } where response is the current response regardless of its author (including the student's draft) or null when nothing was saved yet. studentPresent=true is the trainer's attestation that the student is present and authorized; missing or false returns 400 VALIDATION_ERROR. The student must be linked to the trainer and active on the plan, and this trainer must have linked this anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND otherwise)."
+          },
+          "response": [
+            {
+              "name": "Get Trainer Anamnesis Fill - 200 OK (no response yet)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "fill"
+                  ],
+                  "query": [
+                    {
+                      "key": "studentPresent",
+                      "value": "true",
+                      "description": "Trainer attestation that the student is present and authorized. Must be true."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"anamnesis\": {\n    \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"title\": \"Anamnese Geral\",\n    \"description\": null,\n    \"isGeneral\": true,\n    \"version\": 1,\n    \"parentId\": null,\n    \"sections\": [\n      {\n        \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n        \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n        \"title\": \"Histórico de saúde\",\n        \"description\": null,\n        \"order\": 1,\n        \"questions\": [\n          {\n            \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n            \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n            \"text\": \"Você pratica atividade física regularmente?\",\n            \"type\": \"dichotomous\",\n            \"typeLabel\": \"Dicotômica\",\n            \"required\": true,\n            \"order\": 1,\n            \"config\": null,\n            \"parentQuestionId\": null,\n            \"condition\": null,\n            \"options\": [],\n            \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n            \"updatedAt\": null\n          }\n        ],\n        \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n        \"updatedAt\": null\n      }\n    ],\n    \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n    \"updatedAt\": null\n  },\n  \"response\": null\n}"
+            },
+            {
+              "name": "Get Trainer Anamnesis Fill - 200 OK (draft)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "fill"
+                  ],
+                  "query": [
+                    {
+                      "key": "studentPresent",
+                      "value": "true",
+                      "description": "Trainer attestation that the student is present and authorized. Must be true."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"anamnesis\": {\n    \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"title\": \"Anamnese Geral\",\n    \"description\": null,\n    \"isGeneral\": true,\n    \"version\": 1,\n    \"parentId\": null,\n    \"sections\": [\n      {\n        \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n        \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n        \"title\": \"Histórico de saúde\",\n        \"description\": null,\n        \"order\": 1,\n        \"questions\": [\n          {\n            \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n            \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n            \"text\": \"Você pratica atividade física regularmente?\",\n            \"type\": \"dichotomous\",\n            \"typeLabel\": \"Dicotômica\",\n            \"required\": true,\n            \"order\": 1,\n            \"config\": null,\n            \"parentQuestionId\": null,\n            \"condition\": null,\n            \"options\": [],\n            \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n            \"updatedAt\": null\n          }\n        ],\n        \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n        \"updatedAt\": null\n      }\n    ],\n    \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n    \"updatedAt\": null\n  },\n  \"response\": {\n    \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"submittedAt\": null,\n    \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n    \"updatedAt\": \"2026-09-29T10:20:00.000Z\",\n    \"status\": \"draft\",\n    \"statusLabel\": \"Rascunho\",\n    \"filledBy\": \"student\",\n    \"filledByLabel\": \"Aluno\",\n    \"trainerAttestedAt\": null,\n    \"studentConfirmedAt\": null,\n    \"answers\": [\n      {\n        \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n        \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n        \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n        \"value\": \"yes\",\n        \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n        \"updatedAt\": null\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "Get Trainer Anamnesis Fill - 400 VALIDATION_ERROR (studentPresent missing)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "fill"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Dados inválidos. Verifique os campos e tente novamente.\",\n  \"details\": [\n    {\n      \"field\": \"studentPresent\",\n      \"validations\": [\n        \"required\"\n      ],\n      \"messageCode\": \"validation.studentPresent.required\",\n      \"message\": \"O campo studentPresent é obrigatório.\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Trainer Anamnesis Fill - 404 ANAMNESIS_NOT_LINKED_TO_STUDENT",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "fill"
+                  ],
+                  "query": [
+                    {
+                      "key": "studentPresent",
+                      "value": "true",
+                      "description": "Trainer attestation that the student is present and authorized. Must be true."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_NOT_LINKED_TO_STUDENT\",\n  \"messageCode\": \"anamnesis.notLinkedToStudent\",\n  \"message\": \"Esta anamnese não está vinculada ao seu perfil.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Get Trainer Anamnesis Fill - 404 STUDENT_NOT_FOUND",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "fill"
+                  ],
+                  "query": [
+                    {
+                      "key": "studentPresent",
+                      "value": "true",
+                      "description": "Trainer attestation that the student is present and authorized. Must be true."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_NOT_FOUND\",\n  \"messageCode\": \"student.notFound\",\n  \"message\": \"Nenhum usuário encontrado com este e-mail.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Trainer Anamnesis Response Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses",
+                ":anamnesisId",
+                "response",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Save a partial (draft) response on the student's behalf. Same semantics as PATCH /my/anamneses/:anamnesisId/response/draft: upserts only the answers present (1 to 300 items, no duplicate questionId), an empty value (null, blank string or empty array) clears that question's answer, required questions are NOT validated. Authorship is not changed by a draft. Errors: 400 VALIDATION_ERROR, 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response was submitted (by either party). The student must be linked to the trainer and active on the plan, and this trainer must have linked this anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND otherwise)."
+          },
+          "response": [
+            {
+              "name": "Save Trainer Anamnesis Response Draft - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-29T10:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"filledBy\": \"student\",\n  \"filledByLabel\": \"Aluno\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            },
+            {
+              "name": "Save Trainer Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_ALREADY_SUBMITTED\",\n  \"messageCode\": \"anamnesis.response.alreadySubmitted\",\n  \"message\": \"Esta anamnese já foi enviada.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Submit Anamnesis Response for Student (Trainer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "anamneses",
+                ":anamnesisId",
+                "response"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "Student user UUID"
+                },
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ],\n  \"attestation\": {\n    \"studentPresent\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Finalize the anamnesis on the student's behalf. Same validation as the student submit (required visible questions, answers of hidden questions dropped, unknown question 404). attestation.studentPresent must be true (400 VALIDATION_ERROR otherwise). The response is stored with filledBy \"trainer\", trainerAttestedAt = now and studentConfirmedAt = null, so its status is \"awaiting_confirmation\" until the student calls POST /my/anamneses/:anamnesisId/response/confirm. The trainer may re-finalize their own submission (this resets the confirmation) but never overwrites a response submitted by the student: 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT. The student must be linked to the trainer and active on the plan, and this trainer must have linked this anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND otherwise)."
+          },
+          "response": [
+            {
+              "name": "Submit Anamnesis Response for Student - 200 OK (awaiting_confirmation)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ],\n  \"attestation\": {\n    \"studentPresent\": true\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"status\": \"awaiting_confirmation\",\n  \"statusLabel\": \"Aguardando confirmação\",\n  \"filledBy\": \"trainer\",\n  \"filledByLabel\": \"Professor\",\n  \"trainerAttestedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            },
+            {
+              "name": "Submit Anamnesis Response for Student - 400 VALIDATION_ERROR (attestation missing)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Dados inválidos. Verifique os campos e tente novamente.\",\n  \"details\": [\n    {\n      \"field\": \"attestation\",\n      \"validations\": [\n        \"required\"\n      ],\n      \"messageCode\": \"validation.attestation.required\",\n      \"message\": \"O campo attestation é obrigatório.\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Submit Anamnesis Response for Student - 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\"\n    }\n  ],\n  \"attestation\": {\n    \"studentPresent\": true\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT\",\n  \"messageCode\": \"anamnesis.response.submittedByStudent\",\n  \"message\": \"O aluno já enviou esta anamnese.\",\n  \"details\": {}\n}"
+            }
+          ]
         }
       ]
     },
@@ -4977,7 +5752,7 @@
                 "anamneses"
               ]
             },
-            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info. Each item also carries a `response` summary ({ status, statusLabel, answeredCount, updatedAt }) describing the student's saved response: status is \"draft\" (partial answers saved via PATCH .../response/draft) or \"submitted\" (finalized via POST .../response); `response` is null when nothing was saved yet."
+            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info. Each item also carries a `response` summary ({ status, statusLabel, answeredCount, updatedAt }) describing the student's saved response: status is \"draft\" (partial answers saved via PATCH .../response/draft), \"awaiting_confirmation\" (finalized by the trainer on the student's behalf, pending POST .../response/confirm) or \"submitted\" (finalized by the student, or confirmed after the trainer filled it); `response` is null when nothing was saved yet."
           },
           "response": [
             {
@@ -5055,7 +5830,7 @@
                 }
               }
             },
-            "description": "Finalize (submit) the response to an anamnesis. All required visible questions must be answered. The payload fully replaces all previously stored answers and the response is marked as submitted (status \"submitted\"). If a draft was saved earlier via PATCH /my/anamneses/:anamnesisId/response/draft, it is converted into the submitted response. Re-submitting is allowed (idempotent upsert, always 200). The anamnesis must be linked to the student's account."
+            "description": "Finalize (submit) the response to an anamnesis. All required visible questions must be answered. The payload fully replaces all previously stored answers and the response is marked as submitted (status \"submitted\"). If a draft was saved earlier via PATCH /my/anamneses/:anamnesisId/response/draft, it is converted into the submitted response. Re-submitting is allowed (idempotent upsert, always 200). The anamnesis must be linked to the student's account. The response becomes student-authored (filledBy \"student\", studentConfirmedAt set), also when it corrects a response the trainer filled on the student's behalf."
           },
           "response": [
             {
@@ -5109,7 +5884,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"status\": \"submitted\",\n  \"statusLabel\": \"Enviada\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"status\": \"submitted\",\n  \"statusLabel\": \"Enviada\",\n  \"filledBy\": \"student\",\n  \"filledByLabel\": \"Aluno\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": \"2026-09-28T14:30:00.000Z\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
             }
           ]
         },
@@ -5156,7 +5931,7 @@
                 }
               }
             },
-            "description": "Save a partial (draft) response to an anamnesis. Upserts only the answers present in the payload (1 to 300 items, no duplicate questionId); other stored answers are untouched. An empty value (null, blank string or empty array) clears that question's stored answer. Required questions are NOT validated and answers of currently hidden conditional questions are kept. Drafts are invisible to trainers until the response is finalized with POST /my/anamneses/:anamnesisId/response. Errors: 400 VALIDATION_ERROR (invalid body or duplicate questionId), 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response was finalized."
+            "description": "Save a partial (draft) response to an anamnesis. Upserts only the answers present in the payload (1 to 300 items, no duplicate questionId); other stored answers are untouched. An empty value (null, blank string or empty array) clears that question's stored answer. Required questions are NOT validated and answers of currently hidden conditional questions are kept. Drafts are invisible in the trainer dossier (GET /trainer/students/:studentId/anamneses/:anamnesisId/response) until the response is finalized with POST /my/anamneses/:anamnesisId/response; the trainer only sees a student draft through the fill flow after attesting the student is present. Errors: 400 VALIDATION_ERROR (invalid body or duplicate questionId), 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response was finalized."
           },
           "response": [
             {
@@ -5211,7 +5986,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"filledBy\": \"student\",\n  \"filledByLabel\": \"Aluno\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
             },
             {
               "name": "Save Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED",
@@ -5378,6 +6153,164 @@
           ]
         },
         {
+          "name": "Confirm Anamnesis Response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "anamneses",
+                ":anamnesisId",
+                "response",
+                "confirm"
+              ],
+              "variable": [
+                {
+                  "key": "anamnesisId",
+                  "value": "",
+                  "description": "Anamnesis UUID"
+                }
+              ]
+            },
+            "description": "Confirm a response the trainer filled on the student's behalf (no body). Only valid while the response status is \"awaiting_confirmation\": sets studentConfirmedAt, leaves the answers untouched and the status becomes \"submitted\". Errors: 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / ANAMNESIS_RESPONSE_NOT_FOUND, 409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION for any other status. To correct the answers instead, use POST /my/anamneses/:anamnesisId/response."
+          },
+          "response": [
+            {
+              "name": "Confirm Anamnesis Response - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/confirm",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "confirm"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-29T11:00:00.000Z\",\n  \"status\": \"submitted\",\n  \"statusLabel\": \"Enviada\",\n  \"filledBy\": \"trainer\",\n  \"filledByLabel\": \"Professor\",\n  \"trainerAttestedAt\": \"2026-09-29T10:30:00.000Z\",\n  \"studentConfirmedAt\": \"2026-09-29T11:00:00.000Z\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            },
+            {
+              "name": "Confirm Anamnesis Response - 404 ANAMNESIS_RESPONSE_NOT_FOUND",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/confirm",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "confirm"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_NOT_FOUND\",\n  \"messageCode\": \"anamnesis.response.notFound\",\n  \"message\": \"Nenhuma resposta encontrada para esta anamnese.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Confirm Anamnesis Response - 409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses/:anamnesisId/response/confirm",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "confirm"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION\",\n  \"messageCode\": \"anamnesis.response.notAwaitingConfirmation\",\n  \"message\": \"Esta anamnese não está aguardando confirmação.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
           "name": "Get My Anamnesis Response",
           "request": {
             "method": "GET",
@@ -5406,7 +6339,7 @@
                 }
               ]
             },
-            "description": "Get the authenticated student's response to an anamnesis, including all answers. Works for both a draft (status \"draft\", submittedAt null) and a submitted response (status \"submitted\"). Returns 404 if the anamnesis is not linked or no response (draft or submitted) exists."
+            "description": "Get the authenticated student's response to an anamnesis, including all answers. Works for both a draft (status \"draft\", submittedAt null) a response awaiting the student's confirmation (status \"awaiting_confirmation\", filled by the trainer) and a submitted response (status \"submitted\"). Returns 404 if the anamnesis is not linked or no response (draft or submitted) exists."
           },
           "response": [
             {
@@ -5447,7 +6380,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n  \"updatedAt\": \"2026-09-28T14:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"filledBy\": \"student\",\n  \"filledByLabel\": \"Aluno\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556662\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": \"Dor lombar ocasional\",\n      \"createdAt\": \"2026-09-28T14:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
             }
           ]
         }

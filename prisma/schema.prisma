@@ -43,7 +43,8 @@ model User {
   trainers               TrainerStudent[]
   workoutSessions        WorkoutSession[]
   studentAnamneses       StudentAnamnesis[]
-  anamnesisResponses     AnamnesisResponse[]
+  anamnesisResponses     AnamnesisResponse[]    @relation("AnamnesisResponseStudent")
+  anamnesisResponsesFilled AnamnesisResponse[]  @relation("AnamnesisResponseFiller")
   aiConversations        AiConversation[]
   challengeParticipants  ChallengeParticipant[]
   pointTransactions      PointTransaction[]
@@ -684,16 +685,23 @@ model StudentAnamnesis {
 }
 
 model AnamnesisResponse {
-  id          String    @id @default(uuid()) @db.Uuid
-  anamnesisId String    @map("anamnesis_id") @db.Uuid
-  studentId   String    @map("student_id") @db.Uuid
-  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(6)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String    @id @default(uuid()) @db.Uuid
+  anamnesisId        String    @map("anamnesis_id") @db.Uuid
+  studentId          String    @map("student_id") @db.Uuid
+  submittedAt        DateTime? @map("submitted_at") @db.Timestamptz(6)
+  // Authorship: 'student' | 'trainer' (AnamnesisFilledBy). The role is stored on its own
+  // because filledByUserId becomes NULL when the filler's user is deleted (SetNull).
+  filledByRole       String    @default("student") @map("filled_by_role")
+  filledByUserId     String?   @map("filled_by_user_id") @db.Uuid
+  trainerAttestedAt  DateTime? @map("trainer_attested_at") @db.Timestamptz(6)
+  studentConfirmedAt DateTime? @map("student_confirmed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  anamnesis Anamnesis         @relation(fields: [anamnesisId], references: [id], onDelete: Restrict)
-  student   User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  answers   AnamnesisAnswer[]
+  anamnesis    Anamnesis         @relation(fields: [anamnesisId], references: [id], onDelete: Restrict)
+  student      User              @relation("AnamnesisResponseStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  filledByUser User?             @relation("AnamnesisResponseFiller", fields: [filledByUserId], references: [id], onDelete: SetNull)
+  answers      AnamnesisAnswer[]
 
   @@unique([anamnesisId, studentId])
   @@map("anamnesis_responses")

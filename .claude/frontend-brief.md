@@ -1,107 +1,145 @@
-# Frontend Brief — Anamnesis Response Draft (autosave and resume)
+# Frontend Brief — Trainer fills the anamnesis with the student (web)
 
-**Backend branch**: feat/anamnesis-response-draft · **Generated**: 2026-09-28
+**Backend branch**: feat/anamnesis-trainer-fill · **Generated**: 2026-09-29
 
 ## Elevator pitch
-A student can answer an anamnesis in several sittings: answers are saved as they go (draft), can be resumed later, and only reach the trainer once the student explicitly finishes and sends the form. Until now the wizard was all-or-nothing, so closing the app lost everything.
+A trainer can fill in a student's anamnesis on the student's behalf (for example in person, at the gym), after attesting the student is present and authorized. The result is stored as "awaiting confirmation" until the student confirms it in the mobile app, and the dossier always shows who filled it and whether the student confirmed.
 
 ## User story
-As a student, I want my partial answers to be saved automatically so that I can leave the anamnesis and come back later without losing progress, and my trainer only sees it when I decide to send it.
+As a trainer, I want to fill the anamnesis together with a student who is next to me so that the student's record is complete without them having to do it alone on their phone, while the student still gets to confirm what was written in their name.
 
 ## User flows
-1. **Entry point**: "My anamneses" list (cards) and the existing wizard at `/my/anamneses/:anamnesisId/answer`.
+1. **Entry points** (web, trainer area):
+   - The anamnesis card on the student profile.
+   - The student's anamnesis list (each linked anamnesis row).
+   Both show a "Preencher com o aluno" action, available only when the anamnesis is linked to that student by this trainer and the student is active on the plan.
 2. **Happy path**:
-   1. Student opens a pending anamnesis card. The card shows "Rascunho" (draft) with progress hint if a draft exists, or the usual "pending" state if nothing was saved (`response` is `null`).
-   2. Wizard opens. If a draft exists, the app loads it (`GET .../response`) and pre-fills the answers, then resumes at the first step with unanswered questions.
-   3. As the student changes step (and/or after a short debounce while typing), the app sends only the answers that changed (`PATCH .../response/draft`). A subtle "Saved at HH:mm" indicator uses `updatedAt` from the response.
-   4. On the last step the student taps "Send". The app calls the existing `POST .../response` with ALL answers. Required-question validation happens only here.
-   5. The card now shows "Enviada" (submitted); the trainer can now see the answers.
-3. **Branches**:
-   - Student clears an answer (empty text, empty selection): send the question with an empty value (`null`, `""` or `[]`) and the saved answer is removed.
-   - Student changes a parent answer and children become hidden: draft keeps the hidden children's answers (student may flip back). The final POST discards the hidden ones, so always send the final payload from the wizard state.
-   - Student closes the app mid-way: nothing is sent to the trainer; the draft stays.
-   - A `409` on save (already submitted, for example from another device or tab): stop autosaving, reload the response and show the submitted state.
-   - Resubmitting an already submitted anamnesis through POST keeps working as before (unchanged).
+   1. Trainer clicks "Preencher com o aluno".
+   2. **Presence attestation gate** (modal/step, before anything is loaded): "Confirmo que o aluno está presente e autorizou o preenchimento." with a required checkbox and a "Continuar" button. Nothing is requested from the backend until the box is checked; the request then carries `studentPresent=true`.
+   3. The app loads the anamnesis and the current response (`GET .../fill?studentPresent=true`). If a response exists (for example the student's own draft, or a previous trainer draft), the wizard pre-fills its answers and resumes at the first step with unanswered questions.
+   4. The trainer goes through the existing wizard (reuse the components of `src/pages/my/AnamnesisWizard.jsx`: step navigation, question renderers, conditional visibility, required-question validation). While going through the steps the app autosaves only the changed answers (`PATCH .../response/draft`, same behavior as the student draft, "Saved at HH:mm" from `updatedAt`).
+   5. On the last step the trainer taps "Finalizar" and the app sends ALL answers plus `attestation: { studentPresent: true }` (`POST .../response`).
+   6. Success screen: "Anamnese preenchida. O aluno precisa confirmar no aplicativo." The dossier now shows the response with the badge "Preenchida pelo professor · Aguardando confirmação".
+3. **Dossier badges** (trainer view of a submitted response, from `status`, `filledBy`, `studentConfirmedAt`):
+   - `status = awaiting_confirmation` (`filledBy = trainer`): "Preenchida pelo professor · Aguardando confirmação".
+   - `status = submitted` and `filledBy = trainer`: "Confirmada pelo aluno em <studentConfirmedAt>" (keep a hint that the professor filled it).
+   - `status = submitted` and `filledBy = student`: current behavior, "Enviada pelo aluno".
+4. **Branches**:
+   - Trainer leaves mid-way: the draft stays saved and is resumed next time (the attestation gate is shown again every time the flow is opened).
+   - Trainer re-opens a response they finalized while it is still awaiting confirmation: the wizard is pre-filled and they can finalize again. This resets the confirmation (the student has to confirm again).
+   - The student already submitted the anamnesis by themselves (before or while the trainer was filling): the trainer can never overwrite it. The app receives a 409 `anamnesis.response.submittedByStudent`; stop editing, reload the response and show the student's submission read-only.
+   - A 409 `anamnesis.response.alreadySubmitted` on autosave (someone finalized in the meantime): stop autosaving, reload and show the current state.
+   - Student later submits the form in the mobile app on top of a trainer-filled one: the response becomes student-authored and confirmed ("Enviada pelo aluno"). The dossier reflects that on next load.
+
+## Mobile confirmation contract (for the mobile team, same backend)
+- `GET /my/anamneses` returns `response.status = "awaiting_confirmation"` (label "Aguardando confirmação") for the card. The card should offer "Revisar e confirmar".
+- The student opens the response (`GET /my/anamneses/:anamnesisId/response`, contains `filledBy = "trainer"` and `trainerAttestedAt`), reviews the answers, then taps "Confirmar" (`POST /my/anamneses/:anamnesisId/response/confirm`, no body). The status becomes `submitted`.
+- The student can also correct the answers and send the form again (`POST .../response`), which becomes a student-authored, confirmed submission.
+- Known limitation to design around: the confirm call has no version check. If the trainer re-finalizes right after the student opened the review screen, the student's confirmation applies to the new content. The mobile screen should reload the response right before showing the "Confirmar" button.
 
 ## UI states to cover
-- Loading: fetching the draft when the wizard opens; saving indicator (non-blocking) during autosave.
-- Empty: no draft (`GET .../response` returns 404 `anamnesis.response.notFound`, or `response: null` in the list) — start the wizard blank.
-- Error: autosave failure (network / 5xx) must not block the student: keep answers in local state, show a discreet "Could not save, retrying" and retry on next change; the final Send is the source of truth.
-- Success: "Saved at HH:mm" after a save; submitted confirmation after POST.
-- Null/absent data: `response` on the list is `null` when nothing was saved; `updatedAt` inside `response` can be `null` only for legacy rows.
-- Permissions: routes require login only. `404 anamnesis.notLinkedToStudent` when the anamnesis is not linked to the student.
-- Trainer view: a student who only has a draft appears as "no response yet" to the trainer (404 `anamnesis.response.notFound`) — the trainer UI must not show anything about drafts.
-- Progress hint: `answeredCount` counts stored answers, including answers of currently hidden conditional questions, and there is no total from the backend. Compute progress from the wizard's own visible-question list, do not rely on `answeredCount` for a percentage.
+- Loading: gate accepted, fetching anamnesis + response; non-blocking indicator during autosave; disabled "Finalizar" while sending.
+- Empty: `response` is `null` in the fill payload: start the wizard blank.
+- Error: autosave failure (network / 5xx) must not block the trainer: keep answers in local state, show a discreet "Não foi possível salvar, tentando novamente"; the final "Finalizar" is the source of truth. Required questions unanswered on finalize: `400 validation.failed` with `details: [{ questionId, message }]`, highlight those questions.
+- Success: "Saved at HH:mm" after autosave; success screen after finalize.
+- Null/absent data: `trainerAttestedAt` and `studentConfirmedAt` can be `null`; `filledBy` is always present but is only meaningful when `status` is not `draft`.
+- Permissions: the action must be hidden for students; a student calling these routes gets 403. The student must be active on the plan, otherwise the backend answers 403 (show the existing "student blocked on plan" message). 404 `student.notFound` when the student is not linked to the trainer; 404 `anamnesis.notLinkedToStudent` when this trainer did not link this anamnesis to the student (link it first).
 
 ## API contract
-### PATCH /my/anamneses/:anamnesisId/response/draft
-- **Auth**: Bearer token (any authenticated user; the anamnesis must be linked to them)
-- **Request** (1 to 300 answers; only the listed questions are changed, the rest is preserved; no duplicated `questionId`):
-  ```json
-  { "answers": [ { "questionId": "uuid", "value": "string | number | boolean | array | object | null" } ] }
-  ```
-  An empty value (`null`, blank string, empty array) clears that question's saved answer.
+### GET /trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true
+- **Auth**: Bearer token, role TRAINER
+- **Request**: query `studentPresent=true` is required. Missing or `false` returns 400. Send it only after the trainer ticks the attestation checkbox.
 - **Success** (200):
   ```json
   {
-    "id": "uuid", "anamnesisId": "uuid", "studentId": "uuid",
-    "submittedAt": null,
-    "createdAt": "2026-09-28T12:00:00.000Z", "updatedAt": "2026-09-28T12:05:00.000Z",
-    "status": "draft", "statusLabel": "Rascunho",
-    "answers": [ { "id": "uuid", "responseId": "uuid", "questionId": "uuid", "value": "yes", "createdAt": "...", "updatedAt": "..." } ]
+    "anamnesis": { "id": "uuid", "title": "Anamnese geral", "sections": [ { "id": "uuid", "title": "Saúde", "questions": [ { "id": "uuid", "text": "...", "type": "single_choice", "typeLabel": "Escolha única", "required": true, "options": [], "parentQuestionId": null, "condition": null } ] } ] },
+    "response": {
+      "id": "uuid", "status": "draft", "statusLabel": "Rascunho",
+      "filledBy": "student", "filledByLabel": "Aluno",
+      "submittedAt": null, "updatedAt": "2026-09-29T12:05:00.000Z",
+      "trainerAttestedAt": null, "studentConfirmedAt": null,
+      "answers": [ { "questionId": "uuid", "value": "yes" } ]
+    }
   }
   ```
-  `answers` contains all saved answers, not just the ones sent. Choice answers are stored as option text, exactly as before.
+  `response` is `null` when nothing was saved yet. The anamnesis has the same shape as `GET /trainer/anamneses/:anamnesisId`. Choice answers are stored and returned as the option text.
 - **Errors** (status · error · messageCode · when):
-  - `400` · `VALIDATION_ERROR` · `validation.failed` · malformed body, 0 or more than 300 answers, or duplicated `questionId` (`details: [{ questionId, message }]`)
-  - `401` · `UNAUTHORIZED` · `auth.unauthorized` · no or invalid token
-  - `404` · `ANAMNESIS_NOT_LINKED_TO_STUDENT` · `anamnesis.notLinkedToStudent` · anamnesis not linked to the student
-  - `404` · `ANAMNESIS_QUESTION_NOT_FOUND` · `anamnesis.question.notFound` · a `questionId` does not belong to this anamnesis (or was deleted)
-  - `409` · `ANAMNESIS_RESPONSE_ALREADY_SUBMITTED` · `anamnesis.response.alreadySubmitted` · the response was already sent; drafts can no longer be edited
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · `studentPresent` missing or not `true`
+  - `403` · role is not TRAINER, or the student is blocked on the plan
+  - `404` · `STUDENT_NOT_FOUND` · `student.notFound` · student not linked to this trainer
+  - `404` · `ANAMNESIS_NOT_LINKED_TO_STUDENT` · `anamnesis.notLinkedToStudent` · this trainer did not link this anamnesis to this student
 
-### GET /my/anamneses/:anamnesisId/response (changed)
-- Now also returns `status` (`"draft"` or `"submitted"`) and `statusLabel`. `submittedAt` is `null` while draft. 404 `anamnesis.response.notFound` when nothing has been saved.
-
-### POST /my/anamneses/:anamnesisId/response (behavior unchanged, now the "Send" action)
-- Same request and validation as today (required visible questions, hidden answers dropped). Response now also includes `status: "submitted"` and `statusLabel`.
-
-### GET /my/anamneses (changed)
-- Each item gains:
+### PATCH /trainer/students/:studentId/anamneses/:anamnesisId/response/draft
+- **Auth**: Bearer token, role TRAINER
+- **Request** (1 to 300 answers; only the listed questions change; no duplicated `questionId`; an empty value `null`, `""` or `[]` clears that answer):
   ```json
-  { "response": { "status": "draft", "statusLabel": "Rascunho", "answeredCount": 4, "updatedAt": "2026-09-28T12:05:00.000Z" } }
+  { "answers": [ { "questionId": "uuid", "value": "string | number | boolean | array | object | null" } ] }
   ```
-  `response` is `null` when the student has not saved anything. `statusLabel` follows the `app-language` header (`pt-BR` default, `en-US`).
+- **Success** (200): the full response object (same shape as above, all saved answers, `status: "draft"`).
+- **Errors**:
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · malformed body or duplicated `questionId`
+  - `403` · role / plan blocked · `404` · `STUDENT_NOT_FOUND` / `ANAMNESIS_NOT_LINKED_TO_STUDENT` (as above) · `404` · `ANAMNESIS_QUESTION_NOT_FOUND` · `anamnesis.question.notFound`
+  - `409` · `ANAMNESIS_RESPONSE_ALREADY_SUBMITTED` · `anamnesis.response.alreadySubmitted` · the response was already finalized by either party
 
-### GET /trainer/students/:studentId/anamneses/:anamnesisId/response (changed)
-- **Auth**: TRAINER
-- Returns only submitted responses (now including `status: "submitted"`). Returns `404` · `ANAMNESIS_RESPONSE_NOT_FOUND` · `anamnesis.response.notFound` when the student only has a draft.
+### POST /trainer/students/:studentId/anamneses/:anamnesisId/response
+- **Auth**: Bearer token, role TRAINER
+- **Request** (all answers; `attestation` is required and `studentPresent` must be `true`):
+  ```json
+  { "answers": [ { "questionId": "uuid", "value": "..." } ], "attestation": { "studentPresent": true } }
+  ```
+- **Success** (200):
+  ```json
+  {
+    "id": "uuid", "status": "awaiting_confirmation", "statusLabel": "Aguardando confirmação",
+    "filledBy": "trainer", "filledByLabel": "Professor",
+    "submittedAt": "2026-09-29T12:10:00.000Z", "trainerAttestedAt": "2026-09-29T12:10:00.000Z", "studentConfirmedAt": null,
+    "answers": [ { "questionId": "uuid", "value": "..." } ]
+  }
+  ```
+  Answers of questions hidden by conditional logic are dropped by the backend; always send the final wizard state.
+- **Errors**:
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · attestation missing or false, required visible question unanswered (`details: [{ questionId, message }]`), duplicated `questionId`
+  - `403` · role / plan blocked · `404` · `STUDENT_NOT_FOUND` / `ANAMNESIS_NOT_LINKED_TO_STUDENT` / `ANAMNESIS_QUESTION_NOT_FOUND`
+  - `409` · `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` · `anamnesis.response.submittedByStudent` · the student already submitted this anamnesis themselves
+
+### GET /trainer/students/:studentId/anamneses/:anamnesisId/response (existing, extended)
+- Now also returns responses that are `awaiting_confirmation`, and every response carries `status`, `statusLabel`, `filledBy`, `filledByLabel`, `trainerAttestedAt`, `studentConfirmedAt`. Drafts are still never returned here (404 `anamnesis.response.notFound`).
+
+### POST /my/anamneses/:anamnesisId/response/confirm (mobile student)
+- **Auth**: Bearer token (student). No body.
+- **Success** (200): the full response with `status: "submitted"`, `filledBy: "trainer"`, `studentConfirmedAt` set.
+- **Errors**:
+  - `404` · `ANAMNESIS_NOT_LINKED_TO_STUDENT` · `anamnesis.notLinkedToStudent`; `404` · `ANAMNESIS_RESPONSE_NOT_FOUND` · `anamnesis.response.notFound`
+  - `409` · `ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION` · `anamnesis.response.notAwaitingConfirmation` · status is not `awaiting_confirmation` (draft, student-submitted, or already confirmed)
 
 ## i18n keys required
-The backend already returns translated `statusLabel` and error `message`; add client copy only if the app maps messageCodes itself:
+Backend returns translated `message`, `statusLabel` and `filledByLabel` (honors the `app-language` header, default pt-BR). The web app still needs its own copy for the attestation gate, buttons and badges. Stable messageCodes to handle in the UI:
+- `anamnesis.response.submittedByStudent` → suggested copy: "O aluno já enviou esta anamnese."
+- `anamnesis.response.notAwaitingConfirmation` → suggested copy: "Esta anamnese não está aguardando confirmação."
 - `anamnesis.response.alreadySubmitted` → suggested copy: "Esta anamnese já foi enviada."
-- `anamnesis.response.notFound` → existing key, now also returned to trainers for draft-only students: "Nenhuma resposta encontrada para esta anamnese."
-- New UI-only copy the designer must define: "Salvo às HH:mm", "Não foi possível salvar. Tentaremos novamente.", "Continuar de onde parou".
+- `anamnesis.notLinkedToStudent` → suggested copy: "Esta anamnese não está vinculada a este aluno."
+- `student.notFound` → suggested copy: "Aluno não encontrado ou não vinculado a você."
+- `validation.failed` → suggested copy: "Responda as perguntas obrigatórias para finalizar."
+- Categorical values: status `draft` "Rascunho", `awaiting_confirmation` "Aguardando confirmação", `submitted` "Enviada"; `filledBy` `student` "Aluno", `trainer` "Professor".
 
 ## Acceptance criteria
-- [ ] A student who leaves the wizard halfway and returns finds previous answers pre-filled and resumes at the first unanswered step.
-- [ ] Changing steps or pausing typing saves the draft without blocking the UI, and shows when it was last saved.
-- [ ] The My anamneses card shows Draft or Submitted from `response.status`, and the blank pending state when `response` is `null`.
-- [ ] Required questions are only enforced when tapping Send, not while saving progress.
-- [ ] Clearing an answer and returning later shows it still cleared.
-- [ ] If saving returns 409, the app stops autosaving and shows the submitted state.
-- [ ] The trainer never sees a draft-only response.
-- [ ] Sending an anamnesis makes it visible to the trainer as before.
+- [ ] "Preencher com o aluno" appears on the student profile anamnesis card and on the student's anamnesis list, only for anamneses this trainer linked and only for students active on the plan.
+- [ ] Nothing about the response is loaded before the trainer ticks the presence attestation; unticking or cancelling never calls the backend.
+- [ ] The wizard is the same one students use (same question types, conditional visibility, required validation), pre-filled with any existing draft.
+- [ ] Answers are autosaved while going through steps and survive closing the page.
+- [ ] Finalizing sends the attestation and shows a success state saying the student must confirm in the app.
+- [ ] The dossier shows "Preenchida pelo professor · Aguardando confirmação" until the student confirms, then "Confirmada pelo aluno em <date>".
+- [ ] When the student already submitted, the trainer sees a clear message and the student's answers read-only; there is no way to overwrite them.
+- [ ] Re-finalizing a trainer-filled response that is still awaiting confirmation is possible and the badge stays "Aguardando confirmação".
 
 ## Out of scope
-- Discarding or deleting a draft ("start over") — no endpoint exists.
-- Editing an anamnesis after it was submitted.
-- Notifying the trainer about drafts.
-- Server-side progress percentage or per-question totals.
-- Offline queueing of draft saves beyond in-memory retry.
+- Changing the anamnesis list endpoint or its badges (`GET /trainer/students/:studentId/anamneses`); a later change will add the response status there.
+- Any trainer-side "confirm on behalf of the student"; only the student confirms.
+- Notifications/push to the student about a pending confirmation.
+- Editing a response the student submitted themselves.
 
 ## Open design questions
-- Where and how the "Saved at" indicator appears in the wizard, and how discreet the failed-save state is.
-- Debounce interval and whether to also save on step change and on app backgrounding.
-- Draft card design: badge only, or badge plus a local progress bar computed from visible questions.
-- Copy for the resume affordance ("Continuar" versus "Responder").
-- Whether re-answering an already submitted anamnesis (POST still allowed) should remain reachable from the UI at all.
+- Where exactly the "Preencher com o aluno" action sits on the profile card and the list row (primary button vs overflow menu), and its icon.
+- Attestation gate as a modal or as a dedicated first wizard step; final wording of the attestation text (legal/product should approve it).
+- Should the dossier keep showing the previous student draft/answers in some form after the trainer finalizes? (Today the trainer's finalize replaces all answers.)
+- How prominent the "Aguardando confirmação" badge should be in the student list and whether trainers need a filter for pending confirmations.

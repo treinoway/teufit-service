@@ -226,6 +226,22 @@ Auth: Bearer token, TRAINER role required
 }
 ```
 
+### Trainer-Filled Responses (Trainer Fill + Student Confirmation)
+
+The trainer can fill the anamnesis on behalf of a student who is present, then the student confirms it in the app.
+
+| Endpoint | Auth | Notes |
+|----------|------|-------|
+| `GET /trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true` | TRAINER | Returns `{ anamnesis, response \| null }`; `studentPresent=true` is the presence attestation (400 otherwise) |
+| `PATCH /trainer/students/:studentId/anamneses/:anamnesisId/response/draft` | TRAINER | Same body/semantics as the student draft; does not change authorship |
+| `POST /trainer/students/:studentId/anamneses/:anamnesisId/response` | TRAINER | Body `{ answers, attestation: { studentPresent: true } }`; stores `filledBy: "trainer"` and status `awaiting_confirmation` |
+| `POST /my/anamneses/:anamnesisId/response/confirm` | Bearer | No body; `awaiting_confirmation` -> `submitted` (sets `studentConfirmedAt`) |
+
+All response objects now also carry `filledBy` / `filledByLabel` (`student` \| `trainer`), `trainerAttestedAt` and `studentConfirmedAt`.
+`status` is `draft` \| `awaiting_confirmation` \| `submitted`. `POST /my/anamneses/:anamnesisId/response` always produces a
+student-authored, confirmed response (also when correcting a trainer-filled one). The trainer can re-finalize their own
+submission but never overwrites one submitted by the student.
+
 ---
 
 ## New Error Codes Summary
@@ -235,6 +251,8 @@ Auth: Bearer token, TRAINER role required
 | `ANAMNESIS_HAS_STUDENT_LINKS` | `anamnesis.hasStudentLinks` | 409 | Anamnesis is linked to students; must fork before editing |
 | `ANAMNESIS_RESPONSE_NOT_FOUND` | `anamnesis.response.notFound` | 404 | Student has not submitted a response |
 | `ANAMNESIS_NOT_LINKED_TO_STUDENT` | `anamnesis.notLinkedToStudent` | 404 | Anamnesis is not linked to this student |
+| `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` | `anamnesis.response.submittedByStudent` | 409 | Trainer tried to finalize a response the student already submitted |
+| `ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION` | `anamnesis.response.notAwaitingConfirmation` | 409 | Student confirm called while the response is not `awaiting_confirmation` |
 
 ---
 
