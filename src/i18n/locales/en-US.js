@@ -100,7 +100,12 @@ export default {
     },
     anamnesisResponseStatus: {
       draft: 'Draft',
+      awaiting_confirmation: 'Awaiting confirmation',
       submitted: 'Submitted',
+    },
+    anamnesisFilledBy: {
+      student: 'Student',
+      trainer: 'Trainer',
     },
     userStatus: {
       pending: 'Pending',
@@ -240,6 +245,9 @@ export default {
     'anamnesis.hasStudentLinks': 'This anamnesis is linked to students. Please create a new version before editing.',
     'anamnesis.response.notFound': 'No response found for this anamnesis.',
     'anamnesis.response.alreadySubmitted': 'This anamnesis has already been submitted.',
+    'anamnesis.response.submittedByStudent': 'The student has already submitted this anamnesis.',
+    'anamnesis.response.filledByAnotherTrainer': 'This anamnesis was filled in by another trainer.',
+    'anamnesis.response.notAwaitingConfirmation': 'This anamnesis is not awaiting confirmation.',
     'anamnesis.notLinkedToStudent': 'This anamnesis is not linked to your profile.',
     'anamnesis.invalidCondition': 'Invalid condition for the parent question type.',
     'anamnesis.parentNotEligible': 'Only dichotomous, single choice, or multiple choice questions can be parent questions.',

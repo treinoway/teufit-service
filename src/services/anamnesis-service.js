@@ -8,6 +8,8 @@ import {
   questionTypesWithOptions,
   isQuestionVisible,
   toResponseStatus,
+  AnamnesisFilledBy,
+  AnamnesisResponseStatus,
 } from '../constants/anamnesis.js';
 import {
   fullAnamnesisInclude,
@@ -55,8 +57,8 @@ function remapConditionOptionIds(condition, optionIdMap) {
 /**
  * Load the Trainer record for the given userId or throw 404.
  */
-async function findTrainerOrThrow(userId) {
-  const trainer = await prisma.trainer.findUnique({
+async function findTrainerOrThrow(userId, prismaClient = prisma) {
+  const trainer = await prismaClient.trainer.findUnique({
     where: { userId },
     select: { id: true },
   });
@@ -138,10 +140,10 @@ function verifyAnamnesisOwnership(anamnesis, trainerId) {
  * Verify the trainer-student link exists.
  * Returns the Trainer record.
  */
-async function verifyTrainerStudentLink(trainerUserId, studentId) {
-  const trainer = await findTrainerOrThrow(trainerUserId);
+async function verifyTrainerStudentLink(trainerUserId, studentId, prismaClient = prisma) {
+  const trainer = await findTrainerOrThrow(trainerUserId, prismaClient);
 
-  const link = await prisma.trainerStudent.findUnique({
+  const link = await prismaClient.trainerStudent.findUnique({
     where: { trainerId_studentId: { trainerId: trainer.id, studentId } },
   });
 
@@ -847,6 +849,8 @@ async function attachResponseSummaries(links, studentId) {
     select: {
       anamnesisId: true,
       submittedAt: true,
+      filledByRole: true,
+      studentConfirmedAt: true,
       updatedAt: true,
       _count: { select: { answers: true } },
     },
@@ -856,7 +860,7 @@ async function attachResponseSummaries(links, studentId) {
     responses.map((response) => [
       response.anamnesisId,
       {
-        status: toResponseStatus(response.submittedAt),
+        status: toResponseStatus(response),
         answeredCount: response._count.answers,
         updatedAt: response.updatedAt,
       },
@@ -1181,13 +1185,13 @@ async function assertAnamnesisLinkedToStudent(studentId, anamnesisId, prismaClie
 }
 
 /**
- * Add the derived `status` (draft | submitted) to a response row.
+ * Add the derived `status` and the public `filledBy` (author role) to a response row.
  *
- * @param {{ submittedAt: Date|null }} response
+ * @param {{ submittedAt: Date|null, filledByRole: string, studentConfirmedAt: Date|null }} response
  * @returns {object}
  */
 function withResponseStatus(response) {
-  return { ...response, status: toResponseStatus(response.submittedAt) };
+  return { ...response, status: toResponseStatus(response), filledBy: response.filledByRole };
 }
 
 /**
@@ -1332,47 +1336,19 @@ async function saveDraftInTransaction(tx, { anamnesisId, studentId, answers }) {
 }
 
 /**
- * Save a partial (draft) response. No required-question validation and no
- * hidden-question pruning: the student may still flip a parent answer back, and
- * the final submit already drops answers of hidden questions.
- * Answers not present in the payload are never touched.
+ * Validate the payload of a final submit (student or trainer) against the anamnesis
+ * structure and return the answers that must be persisted:
+ *  - duplicated questionIds are rejected (400);
+ *  - answers of questions hidden by conditional logic are dropped (fail closed);
+ *  - every required, visible question must be answered (400);
+ *  - answers for unknown questions are rejected (404).
  *
- * @param {string} userId - Student's user ID
- * @param {string} anamnesisId
- * @param {object} data - { answers: [{ questionId, value }] }
- * @param {object} [prismaClient]
- * @returns {Promise<object>} The draft response with all answers and status
+ * @returns {Promise<Array<{ questionId: string, value: * }>>} The visible answers
  */
-export async function saveAnamnesisResponseDraft(userId, anamnesisId, { answers }, prismaClient = prisma) {
-  await assertAnamnesisLinkedToStudent(userId, anamnesisId, prismaClient);
+async function resolveFinalAnswers(anamnesisId, answers, prismaClient) {
   assertNoDuplicateQuestionIds(answers);
-  await assertQuestionsBelongToAnamnesis(anamnesisId, answers, prismaClient);
 
-  const response = await retryOnceOnUniqueViolation(() =>
-    prismaClient.$transaction((tx) =>
-      saveDraftInTransaction(tx, { anamnesisId, studentId: userId, answers }),
-    ),
-  );
-
-  return withResponseStatus(response);
-}
-
-/**
- * Submit a student's response to an anamnesis. This is the "finalize" action:
- * it also converts a previously saved draft into a submitted response.
- * Validates required questions, then upserts the AnamnesisResponse record and
- * replaces all AnamnesisAnswer records atomically.
- * This is an idempotent upsert — repeated calls replace the previous response.
- *
- * @param {string} userId - Student's user ID
- * @param {string} anamnesisId
- * @param {object} data - { answers: [{ questionId, value }] }
- * @returns {Promise<object>} The response with answers
- */
-export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) {
-  await assertAnamnesisLinkedToStudent(userId, anamnesisId);
-
-  const anamnesisWithQuestions = await prisma.anamnesis.findUnique({
+  const anamnesisWithQuestions = await prismaClient.anamnesis.findUnique({
     where: { id: anamnesisId },
     include: {
       sections: {
@@ -1436,32 +1412,366 @@ export async function submitAnamnesisResponse(userId, anamnesisId, { answers }) 
     });
   }
 
-  const response = await prisma.$transaction(async (tx) => {
-    const upsertedResponse = await tx.anamnesisResponse.upsert({
-      where: { anamnesisId_studentId: { anamnesisId, studentId: userId } },
-      create: { anamnesisId, studentId: userId, submittedAt: new Date() },
-      update: { submittedAt: new Date() },
-    });
+  return visibleAnswers;
+}
 
-    await tx.anamnesisAnswer.deleteMany({ where: { responseId: upsertedResponse.id } });
+/**
+ * A trainer never overwrites a response the student submitted themselves.
+ * Must run AFTER the row lock, on freshly re-read state.
+ */
+/**
+ * Why this trainer may not finalize the response, or null when they may.
+ * A submitted response belongs to whoever filled it: the student's submission is never
+ * replaced, and another trainer's submission is only replaceable by that trainer. When
+ * the filler's user was deleted (filledByUserId SET NULL) nobody owns it anymore, so a
+ * trainer who still has access may take it over.
+ *
+ * @param {{ submittedAt: Date|null, filledByRole: string, filledByUserId: string|null }|null} response
+ * @param {string} trainerUserId
+ * @returns {string|null} AnamnesisErrorCode
+ */
+function getTrainerFinalizeBlock(response, trainerUserId) {
+  if (!response?.submittedAt) return null;
+  if (response.filledByRole === AnamnesisFilledBy.STUDENT) {
+    return AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT;
+  }
+  if (response.filledByUserId && response.filledByUserId !== trainerUserId) {
+    return AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER;
+  }
+  return null;
+}
 
-    if (visibleAnswers.length > 0) {
-      await tx.anamnesisAnswer.createMany({
-        data: visibleAnswers.map((a) => ({
-          responseId: upsertedResponse.id,
-          questionId: a.questionId,
-          value: a.value,
-        })),
-      });
-    }
+const TRAINER_FINALIZE_BLOCK_MESSAGES = Object.freeze({
+  [AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT]: 'The student has already submitted this anamnesis',
+  [AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER]: 'This anamnesis was filled in by another trainer',
+});
 
-    return tx.anamnesisResponse.findUnique({
-      where: { id: upsertedResponse.id },
-      include: { answers: true },
-    });
+function assertTrainerMayFinalize(lockedResponse, trainerUserId) {
+  const blockCode = getTrainerFinalizeBlock(lockedResponse, trainerUserId);
+  if (!blockCode) return;
+
+  throw new AppError({
+    httpStatus: 409,
+    error: blockCode,
+    messageCode: AnamnesisMessageCode[blockCode],
+    message: TRAINER_FINALIZE_BLOCK_MESSAGES[blockCode],
+  });
+}
+
+/**
+ * Columns written when a response is finalized. A trainer submission waits for the
+ * student's confirmation; a student submission is confirmed by definition and drops any
+ * previous trainer attestation (that trainer submission has just been replaced).
+ */
+function buildFinalizeData({ filledByRole, filledByUserId }, submittedAt) {
+  const filledByTrainer = filledByRole === AnamnesisFilledBy.TRAINER;
+
+  return {
+    submittedAt,
+    filledByRole,
+    filledByUserId,
+    trainerAttestedAt: filledByTrainer ? submittedAt : null,
+    studentConfirmedAt: filledByTrainer ? null : submittedAt,
+  };
+}
+
+/**
+ * Single finalize transaction shared by the student and the trainer submit:
+ * get-or-create the response row, lock it, re-read its state AFTER the lock (a concurrent
+ * request may have just committed), decide, then replace the answers and stamp authorship.
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {object} params
+ * @param {string} params.anamnesisId
+ * @param {string} params.studentId - Owner of the response (the student)
+ * @param {Array<{ questionId: string, value: * }>} params.answers - Already validated, visible answers
+ * @param {{ filledByRole: string, filledByUserId: string }} params.authorship
+ */
+async function finalizeResponseInTransaction(tx, { anamnesisId, studentId, answers, authorship }) {
+  const responseRow = await tx.anamnesisResponse.upsert({
+    where: { anamnesisId_studentId: { anamnesisId, studentId } },
+    create: { anamnesisId, studentId, submittedAt: null },
+    update: {},
   });
 
+  await lockAnamnesisResponseForUpdate(tx, responseRow.id);
+
+  const lockedResponse = await tx.anamnesisResponse.findUnique({
+    where: { id: responseRow.id },
+    select: { submittedAt: true, filledByRole: true, filledByUserId: true },
+  });
+
+  if (authorship.filledByRole === AnamnesisFilledBy.TRAINER) {
+    assertTrainerMayFinalize(lockedResponse, authorship.filledByUserId);
+  }
+
+  await tx.anamnesisAnswer.deleteMany({ where: { responseId: responseRow.id } });
+
+  if (answers.length > 0) {
+    await tx.anamnesisAnswer.createMany({
+      data: answers.map((a) => ({
+        responseId: responseRow.id,
+        questionId: a.questionId,
+        value: a.value,
+      })),
+    });
+  }
+
+  return tx.anamnesisResponse.update({
+    where: { id: responseRow.id },
+    data: buildFinalizeData(authorship, new Date()),
+    include: { answers: true },
+  });
+}
+
+/**
+ * Validate and finalize a response on behalf of `authorship`. Shared by both submit flows.
+ */
+async function finalizeResponse({ anamnesisId, studentId, answers, authorship }, prismaClient) {
+  const visibleAnswers = await resolveFinalAnswers(anamnesisId, answers, prismaClient);
+
+  const response = await retryOnceOnUniqueViolation(() =>
+    prismaClient.$transaction((tx) =>
+      finalizeResponseInTransaction(tx, { anamnesisId, studentId, answers: visibleAnswers, authorship }),
+    ),
+  );
+
   return withResponseStatus(response);
+}
+
+/**
+ * Save a partial (draft) response for a student. Shared by the student and trainer flows.
+ * No required-question validation and no hidden-question pruning: the student may still
+ * flip a parent answer back, and the final submit already drops answers of hidden questions.
+ * Answers not present in the payload are never touched.
+ */
+async function saveDraftForStudent({ anamnesisId, studentId, answers }, prismaClient) {
+  assertNoDuplicateQuestionIds(answers);
+  await assertQuestionsBelongToAnamnesis(anamnesisId, answers, prismaClient);
+
+  const response = await retryOnceOnUniqueViolation(() =>
+    prismaClient.$transaction((tx) =>
+      saveDraftInTransaction(tx, { anamnesisId, studentId, answers }),
+    ),
+  );
+
+  return withResponseStatus(response);
+}
+
+/**
+ * Save a partial (draft) response (student flow).
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>} The draft response with all answers and status
+ */
+export async function saveAnamnesisResponseDraft(userId, anamnesisId, { answers }, prismaClient = prisma) {
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId, prismaClient);
+
+  return saveDraftForStudent({ anamnesisId, studentId: userId, answers }, prismaClient);
+}
+
+/**
+ * Submit a student's response to an anamnesis. This is the "finalize" action:
+ * it also converts a previously saved draft into a submitted response.
+ * Validates required questions, then upserts the AnamnesisResponse record and
+ * replaces all AnamnesisAnswer records atomically.
+ * The response becomes student-authored and confirmed, also when it corrects a
+ * response the trainer filled on the student's behalf.
+ * This is an idempotent upsert — repeated calls replace the previous response.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>} The response with answers
+ */
+export async function submitAnamnesisResponse(userId, anamnesisId, { answers }, prismaClient = prisma) {
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId, prismaClient);
+
+  return finalizeResponse({
+    anamnesisId,
+    studentId: userId,
+    answers,
+    authorship: { filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: userId },
+  }, prismaClient);
+}
+
+/**
+ * Confirm, in the student's name, a response the trainer finalized on their behalf.
+ * Only valid while the status is `awaiting_confirmation`; answers are left untouched.
+ * The status is re-checked after the row lock so a concurrent trainer/student submit
+ * cannot be silently overtaken.
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>} The confirmed response with answers and status
+ */
+export async function confirmAnamnesisResponse(userId, anamnesisId, prismaClient = prisma) {
+  await assertAnamnesisLinkedToStudent(userId, anamnesisId, prismaClient);
+
+  const response = await prismaClient.$transaction((tx) =>
+    confirmResponseInTransaction(tx, { anamnesisId, studentId: userId }),
+  );
+
+  return withResponseStatus(response);
+}
+
+async function confirmResponseInTransaction(tx, { anamnesisId, studentId }) {
+  const responseRow = await tx.anamnesisResponse.findUnique({
+    where: { anamnesisId_studentId: { anamnesisId, studentId } },
+    select: { id: true },
+  });
+
+  if (!responseRow) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+      message: 'No response found for this anamnesis',
+    });
+  }
+
+  await lockAnamnesisResponseForUpdate(tx, responseRow.id);
+
+  const lockedResponse = await tx.anamnesisResponse.findUnique({
+    where: { id: responseRow.id },
+    select: { submittedAt: true, filledByRole: true, studentConfirmedAt: true },
+  });
+
+  if (toResponseStatus(lockedResponse) !== AnamnesisResponseStatus.AWAITING_CONFIRMATION) {
+    throw new AppError({
+      httpStatus: 409,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+      message: 'This anamnesis is not awaiting confirmation',
+    });
+  }
+
+  return tx.anamnesisResponse.update({
+    where: { id: responseRow.id },
+    data: { studentConfirmedAt: new Date() },
+    include: { answers: true },
+  });
+}
+
+// ─── Trainer fills on behalf of the student ───────────────────────────────────
+
+/**
+ * Assert this trainer linked the anamnesis to this student.
+ * Throws 404 ANAMNESIS_NOT_LINKED_TO_STUDENT otherwise (also when another trainer did).
+ */
+async function assertAnamnesisLinkedByTrainer(trainerId, studentId, anamnesisId, prismaClient) {
+  const link = await prismaClient.studentAnamnesis.findFirst({
+    where: { anamnesisId, studentId, trainerId },
+  });
+
+  if (!link) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      message: 'This anamnesis is not linked to this student',
+    });
+  }
+}
+
+/**
+ * Access guard shared by every "trainer fills for the student" operation: the student is
+ * linked to the trainer AND active on the plan, and this trainer linked this anamnesis to
+ * this student. Returns the Trainer record.
+ */
+async function assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient) {
+  const trainer = await verifyTrainerStudentLink(trainerUserId, studentId, prismaClient);
+  await assertStudentActiveOnPlan(prismaClient, trainer.id, studentId);
+  await assertAnamnesisLinkedByTrainer(trainer.id, studentId, anamnesisId, prismaClient);
+
+  return trainer;
+}
+
+/**
+ * Load what the trainer needs to fill the anamnesis with the student: the full anamnesis
+ * and the current response (draft or submitted, whoever wrote it), or null.
+ * The UI only calls this after the presence attestation (enforced by the route schema).
+ *
+ * @param {string} trainerUserId
+ * @param {string} studentId
+ * @param {string} anamnesisId
+ * @param {object} [prismaClient]
+ * @returns {Promise<{ anamnesis: object, response: object|null, canFinalize: boolean }>}
+ */
+export async function getTrainerFillContext(trainerUserId, studentId, anamnesisId, prismaClient = prisma) {
+  await assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient);
+
+  const [anamnesis, response] = await Promise.all([
+    prismaClient.anamnesis.findUnique({ where: { id: anamnesisId }, include: fullAnamnesisInclude }),
+    prismaClient.anamnesisResponse.findUnique({
+      where: { anamnesisId_studentId: { anamnesisId, studentId } },
+      include: { answers: true },
+    }),
+  ]);
+
+  return {
+    anamnesis,
+    response: response ? withResponseStatus(response) : null,
+    canFinalize: getTrainerFinalizeBlock(response, trainerUserId) === null,
+  };
+}
+
+/**
+ * Save a partial (draft) response on behalf of the student. Same semantics as the
+ * student draft: 409 once the response has been submitted.
+ *
+ * @param {string} trainerUserId
+ * @param {string} studentId
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>}
+ */
+export async function saveTrainerAnamnesisResponseDraft(
+  trainerUserId,
+  studentId,
+  anamnesisId,
+  { answers },
+  prismaClient = prisma,
+) {
+  await assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient);
+
+  return saveDraftForStudent({ anamnesisId, studentId, answers }, prismaClient);
+}
+
+/**
+ * Finalize the response on behalf of the student. The response becomes `awaiting_confirmation`
+ * until the student confirms it in the app. The trainer may re-finalize their own submission
+ * (which resets the confirmation) but never overwrites one the student submitted (409).
+ * The route schema guarantees the presence attestation (`attestation.studentPresent: true`).
+ *
+ * @param {string} trainerUserId
+ * @param {string} studentId
+ * @param {string} anamnesisId
+ * @param {object} data - { answers: [{ questionId, value }] }
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>}
+ */
+export async function submitTrainerAnamnesisResponse(
+  trainerUserId,
+  studentId,
+  anamnesisId,
+  { answers },
+  prismaClient = prisma,
+) {
+  await assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient);
+
+  return finalizeResponse({
+    anamnesisId,
+    studentId,
+    answers,
+    authorship: { filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: trainerUserId },
+  }, prismaClient);
 }
 
 /**
@@ -1504,18 +1814,7 @@ export async function getMyAnamnesisResponse(userId, anamnesisId) {
 export async function getStudentAnamnesisResponse(trainerUserId, studentId, anamnesisId) {
   const trainer = await verifyTrainerStudentLink(trainerUserId, studentId);
 
-  const studentAnamnesisLink = await prisma.studentAnamnesis.findFirst({
-    where: { anamnesisId, studentId, trainerId: trainer.id },
-  });
-
-  if (!studentAnamnesisLink) {
-    throw new AppError({
-      httpStatus: 404,
-      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
-      message: 'This anamnesis is not linked to this student',
-    });
-  }
+  await assertAnamnesisLinkedByTrainer(trainer.id, studentId, anamnesisId, prisma);
 
   // Drafts (submittedAt = null) are private to the student — trainers only see submitted responses.
   const response = await prisma.anamnesisResponse.findFirst({
