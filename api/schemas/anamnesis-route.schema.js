@@ -492,7 +492,8 @@ const myAnamnesisItemSchema = {
     response: {
       type: 'object',
       nullable: true,
-      description: 'Summary of the student response (draft or submitted); null when nothing was saved yet',
+      description:
+        'Summary of the student response (draft, awaiting_confirmation or submitted); null when nothing was saved yet',
       properties: {
         ...i18nField('status', 'anamnesisResponseStatus'),
         answeredCount: { type: 'integer' },
@@ -588,6 +589,10 @@ const anamnesisResponseSchema = {
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
     ...i18nField('status', 'anamnesisResponseStatus'),
+    // Who wrote the response. Only meaningful once status is not "draft".
+    ...i18nField('filledBy', 'anamnesisFilledBy'),
+    trainerAttestedAt: { type: 'string', format: 'date-time', nullable: true },
+    studentConfirmedAt: { type: 'string', format: 'date-time', nullable: true },
     answers: { type: 'array', items: anamnesisAnswerSchema },
   },
 };
@@ -607,13 +612,29 @@ const answerBodySchema = {
   additionalProperties: false,
 };
 
+const draftBodySchema = {
+  type: 'object',
+  required: ['answers'],
+  properties: {
+    answers: {
+      type: 'array',
+      items: answerBodySchema,
+      minItems: 1,
+      maxItems: ANAMNESIS_DRAFT_MAX_ANSWERS,
+    },
+  },
+  additionalProperties: false,
+};
+
 export const submitAnamnesisResponseSchema = {
   tags: ['Anamnesis - My'],
   summary: 'Submit (finalize) a response to an anamnesis — idempotent upsert, always returns 200',
   description:
     'Finalizes the response: validates required visible questions, replaces all stored answers with the ' +
     'payload and marks the response as submitted (status "submitted"). If a draft was saved earlier via ' +
-    'PATCH /my/anamneses/{anamnesisId}/response/draft, it is converted into the submitted response.',
+    'PATCH /my/anamneses/{anamnesisId}/response/draft, it is converted into the submitted response. ' +
+    'The response becomes student-authored (filledBy "student") and confirmed (studentConfirmedAt set), ' +
+    'also when it corrects a response the trainer filled on the student\'s behalf.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -647,8 +668,10 @@ export const saveAnamnesisResponseDraftSchema = {
   description:
     'Upserts only the answers present in the payload; other stored answers are untouched. An empty value ' +
     '(null, blank string or empty array) clears that question\'s stored answer. Required questions are NOT ' +
-    'validated and answers of currently hidden conditional questions are kept. Drafts are invisible to ' +
-    'trainers until the response is finalized with POST /my/anamneses/{anamnesisId}/response. ' +
+    'validated and answers of currently hidden conditional questions are kept. Drafts are invisible in the ' +
+    'trainer dossier (GET /trainer/students/{studentId}/anamneses/{anamnesisId}/response) until the response ' +
+    'is finalized with POST /my/anamneses/{anamnesisId}/response; the trainer only sees a student draft ' +
+    'through the fill flow (GET .../fill), after attesting the student is present. ' +
     'Returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response has been submitted.',
   security: [{ bearerAuth: [] }],
   params: {
@@ -656,19 +679,7 @@ export const saveAnamnesisResponseDraftSchema = {
     required: ['anamnesisId'],
     properties: { anamnesisId: { type: 'string', format: 'uuid' } },
   },
-  body: {
-    type: 'object',
-    required: ['answers'],
-    properties: {
-      answers: {
-        type: 'array',
-        items: answerBodySchema,
-        minItems: 1,
-        maxItems: ANAMNESIS_DRAFT_MAX_ANSWERS,
-      },
-    },
-    additionalProperties: false,
-  },
+  body: draftBodySchema,
   response: {
     200: anamnesisResponseSchema,
     400: badRequestErrorResponseSchema,
@@ -701,6 +712,9 @@ export const getMyAnamnesisResponseSchema = {
 export const getStudentAnamnesisResponseSchema = {
   tags: ['Anamnesis - Student Linking'],
   summary: "Get a student's submitted response to an anamnesis (trainer view) — drafts are not visible (404)",
+  description:
+    'Returns responses that have been finalized, by the student or by the trainer on the student\'s behalf. ' +
+    'Check status ("awaiting_confirmation" | "submitted"), filledBy and studentConfirmedAt to tell them apart.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -717,5 +731,155 @@ export const getStudentAnamnesisResponseSchema = {
     404: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
+  },
+};
+
+export const confirmAnamnesisResponseSchema = {
+  tags: ['Anamnesis - My'],
+  summary: 'Confirm a response the trainer filled on my behalf',
+  description:
+    'Only valid while the response status is "awaiting_confirmation" (finalized by the trainer, not yet ' +
+    'confirmed). Sets studentConfirmedAt; answers are left untouched and the status becomes "submitted". ' +
+    'Returns 409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION for any other status, and 404 when the ' +
+    'anamnesis is not linked to the student or there is no response yet.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+// ─── Trainer fills on behalf of the student ───────────────────────────────────
+
+const trainerFillParamsSchema = {
+  type: 'object',
+  required: ['studentId', 'anamnesisId'],
+  properties: {
+    studentId: { type: 'string', format: 'uuid' },
+    anamnesisId: { type: 'string', format: 'uuid' },
+  },
+};
+
+const trainerFillErrorResponses = {
+  400: badRequestErrorResponseSchema,
+  401: errorResponseSchema,
+  403: errorResponseSchema,
+  404: errorResponseSchema,
+  429: errorResponseSchema,
+  500: errorResponseSchema,
+};
+
+const trainerFillAccessDescription =
+  'The student must be linked to the trainer and active on the plan, and this trainer must have linked this ' +
+  'anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT otherwise).';
+
+export const getTrainerAnamnesisFillSchema = {
+  tags: ['Anamnesis - Trainer Fill'],
+  summary: 'Load the anamnesis and the current response to fill it with the student (trainer)',
+  description:
+    'Returns the full anamnesis plus the current response regardless of its author (including the student\'s ' +
+    'draft), or null when nothing was saved yet. The client must send studentPresent=true, which is the ' +
+    'trainer\'s attestation that the student is present and authorized (400 VALIDATION_ERROR otherwise). ' +
+    trainerFillAccessDescription,
+  security: [{ bearerAuth: [] }],
+  params: trainerFillParamsSchema,
+  querystring: {
+    type: 'object',
+    required: ['studentPresent'],
+    properties: {
+      studentPresent: {
+        type: 'boolean',
+        const: true,
+        description: 'Trainer attestation that the student is present and authorized. Must be true.',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        anamnesis: anamnesisSchema,
+        response: { ...anamnesisResponseSchema, nullable: true },
+        canFinalize: {
+          type: 'boolean',
+          description:
+            'Whether this trainer may finalize the response: false when the student already submitted it ' +
+            'or when another trainer filled it in.',
+        },
+      },
+    },
+    ...trainerFillErrorResponses,
+  },
+};
+
+export const saveTrainerAnamnesisResponseDraftSchema = {
+  tags: ['Anamnesis - Trainer Fill'],
+  summary: "Save a partial (draft) response on the student's behalf (trainer)",
+  description:
+    'Same semantics as PATCH /my/anamneses/{anamnesisId}/response/draft: only the answers present are ' +
+    'upserted, empty values clear the stored answer, required questions are not validated. Authorship is not ' +
+    'changed by a draft. Returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response has been ' +
+    'submitted (by either party). ' + trainerFillAccessDescription,
+  security: [{ bearerAuth: [] }],
+  params: trainerFillParamsSchema,
+  body: draftBodySchema,
+  response: {
+    200: anamnesisResponseSchema,
+    ...trainerFillErrorResponses,
+    409: errorResponseSchema,
+  },
+};
+
+export const submitTrainerAnamnesisResponseSchema = {
+  tags: ['Anamnesis - Trainer Fill'],
+  summary: "Finalize the response on the student's behalf (trainer) — awaits the student's confirmation",
+  description:
+    'Same validation as the student submit (required visible questions, answers of hidden questions dropped, ' +
+    'unknown question 404). The body must carry attestation.studentPresent=true. The response is stored with ' +
+    'filledBy "trainer", trainerAttestedAt=now, studentConfirmedAt=null, so its status is ' +
+    '"awaiting_confirmation" until the student calls POST /my/anamneses/{anamnesisId}/response/confirm. ' +
+    'The trainer may re-finalize their own submission (this resets the confirmation) but never overwrites ' +
+    'a response submitted by the student (409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT) nor one filled in by ' +
+    'another trainer (409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER; allowed when that trainer\'s user was ' +
+    'deleted). ' +
+    trainerFillAccessDescription,
+  security: [{ bearerAuth: [] }],
+  params: trainerFillParamsSchema,
+  body: {
+    type: 'object',
+    required: ['answers', 'attestation'],
+    properties: {
+      answers: {
+        type: 'array',
+        items: answerBodySchema,
+      },
+      attestation: {
+        type: 'object',
+        required: ['studentPresent'],
+        properties: {
+          studentPresent: {
+            type: 'boolean',
+            const: true,
+            description: 'Trainer attestation that the student is present and authorized. Must be true.',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: anamnesisResponseSchema,
+    ...trainerFillErrorResponses,
+    409: errorResponseSchema,
   },
 };

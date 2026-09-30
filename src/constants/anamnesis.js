@@ -36,24 +36,40 @@ export const AnamnesisConditionOperator = Object.freeze({
   INCLUDES_ANY: 'includesAny',
 });
 
-// Lifecycle of a student's anamnesis response. Derived from AnamnesisResponse.submittedAt
-// (null = draft, set = submitted) — never persisted as its own column.
+// Lifecycle of an anamnesis response. Derived from AnamnesisResponse columns
+// (see toResponseStatus) — never persisted as its own column.
 export const AnamnesisResponseStatus = Object.freeze({
   DRAFT: 'draft',
+  AWAITING_CONFIRMATION: 'awaiting_confirmation',
   SUBMITTED: 'submitted',
+});
+
+// Who wrote (finalized) the response. Persisted in AnamnesisResponse.filledByRole.
+export const AnamnesisFilledBy = Object.freeze({
+  STUDENT: 'student',
+  TRAINER: 'trainer',
 });
 
 // Upper bound of answers accepted in one draft save request
 export const ANAMNESIS_DRAFT_MAX_ANSWERS = 300;
 
 /**
- * Derive the response status from its `submittedAt` timestamp.
+ * Derive the response status from its persisted columns.
+ *  - no `submittedAt`                                            -> draft
+ *  - submitted by the trainer and not yet confirmed by student   -> awaiting_confirmation
+ *  - anything else (incl. legacy rows: role student, no confirm) -> submitted
  *
- * @param {Date|null|undefined} submittedAt
+ * @param {{ submittedAt?: Date|null, filledByRole?: string, studentConfirmedAt?: Date|null }} response
  * @returns {string} One of AnamnesisResponseStatus
  */
-export function toResponseStatus(submittedAt) {
-  return submittedAt ? AnamnesisResponseStatus.SUBMITTED : AnamnesisResponseStatus.DRAFT;
+export function toResponseStatus({ submittedAt, filledByRole, studentConfirmedAt }) {
+  if (!submittedAt) return AnamnesisResponseStatus.DRAFT;
+
+  if (filledByRole === AnamnesisFilledBy.TRAINER && !studentConfirmedAt) {
+    return AnamnesisResponseStatus.AWAITING_CONFIRMATION;
+  }
+
+  return AnamnesisResponseStatus.SUBMITTED;
 }
 
 // Error codes used in the anamnesis service
@@ -69,6 +85,9 @@ export const AnamnesisErrorCode = Object.freeze({
   ANAMNESIS_RESPONSE_NOT_FOUND: 'ANAMNESIS_RESPONSE_NOT_FOUND',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'ANAMNESIS_NOT_LINKED_TO_STUDENT',
   ANAMNESIS_RESPONSE_ALREADY_SUBMITTED: 'ANAMNESIS_RESPONSE_ALREADY_SUBMITTED',
+  ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT: 'ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT',
+  ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER: 'ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER',
+  ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION: 'ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION',
   // Conditional questions
   INVALID_CONDITION: 'INVALID_CONDITION',
   PARENT_NOT_ELIGIBLE: 'PARENT_NOT_ELIGIBLE',
@@ -93,6 +112,9 @@ export const AnamnesisMessageCode = Object.freeze({
   ANAMNESIS_RESPONSE_NOT_FOUND: 'anamnesis.response.notFound',
   ANAMNESIS_NOT_LINKED_TO_STUDENT: 'anamnesis.notLinkedToStudent',
   ANAMNESIS_RESPONSE_ALREADY_SUBMITTED: 'anamnesis.response.alreadySubmitted',
+  ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT: 'anamnesis.response.submittedByStudent',
+  ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER: 'anamnesis.response.filledByAnotherTrainer',
+  ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION: 'anamnesis.response.notAwaitingConfirmation',
   // Conditional questions
   INVALID_CONDITION: 'anamnesis.invalidCondition',
   PARENT_NOT_ELIGIBLE: 'anamnesis.parentNotEligible',

@@ -321,6 +321,63 @@ export async function anamnesisRoutes(fastify) {
   );
 
   // ═══════════════════════════════════════════════════════════
+  // TRAINER ROUTES — Fill the anamnesis on behalf of the student
+  // ═══════════════════════════════════════════════════════════
+
+  // GET /trainer/students/:studentId/anamneses/:anamnesisId/fill?studentPresent=true
+  fastify.get(
+    '/trainer/students/:studentId/anamneses/:anamnesisId/fill',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.getTrainerAnamnesisFillSchema,
+    },
+    async (request, reply) => {
+      const result = await service.getTrainerFillContext(
+        request.user.id,
+        request.params.studentId,
+        request.params.anamnesisId,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // PATCH /trainer/students/:studentId/anamneses/:anamnesisId/response/draft — Save a draft for the student
+  fastify.patch(
+    '/trainer/students/:studentId/anamneses/:anamnesisId/response/draft',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.saveTrainerAnamnesisResponseDraftSchema,
+    },
+    async (request, reply) => {
+      const result = await service.saveTrainerAnamnesisResponseDraft(
+        request.user.id,
+        request.params.studentId,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // POST /trainer/students/:studentId/anamneses/:anamnesisId/response — Finalize for the student
+  fastify.post(
+    '/trainer/students/:studentId/anamneses/:anamnesisId/response',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.submitTrainerAnamnesisResponseSchema,
+    },
+    async (request, reply) => {
+      const result = await service.submitTrainerAnamnesisResponse(
+        request.user.id,
+        request.params.studentId,
+        request.params.anamnesisId,
+        request.body,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════
   // STUDENT ROUTES — /my/
   // ═══════════════════════════════════════════════════════════
 
@@ -366,6 +423,22 @@ export async function anamnesisRoutes(fastify) {
         request.user.id,
         request.params.anamnesisId,
         request.body,
+      );
+      return reply.send(result);
+    },
+  );
+
+  // POST /my/anamneses/:anamnesisId/response/confirm — Confirm a response the trainer filled for me
+  fastify.post(
+    '/my/anamneses/:anamnesisId/response/confirm',
+    {
+      preHandler: [authenticate],
+      schema: schema.confirmAnamnesisResponseSchema,
+    },
+    async (request, reply) => {
+      const result = await service.confirmAnamnesisResponse(
+        request.user.id,
+        request.params.anamnesisId,
       );
       return reply.send(result);
     },
