@@ -128,6 +128,49 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
     return { trainer, student, ...anamnesis };
   }
 
+  /**
+   * A general (public) anamnesis linked directly by two trainers to the same student:
+   * both links point to the same anamnesis id, so both trainers reach the same response row.
+   */
+  async function setupSharedScenario() {
+    const trainerA = await createTrainer('trainer-a');
+    const trainerB = await createTrainer('trainer-b');
+    const student = await createStudent();
+    await linkStudent(trainerA, student);
+    await linkStudent(trainerB, student);
+
+    const general = await prisma.anamnesis.create({
+      data: {
+        title: 'General Health Form',
+        isGeneral: true,
+        sections: {
+          create: [{
+            title: 'Section A',
+            order: 0,
+            questions: {
+              create: [
+                { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true, order: 0 },
+                { text: 'Any notes?', type: AnamnesisQuestionType.FREE_TEXT, order: 1 },
+              ],
+            },
+          }],
+        },
+      },
+      include: { sections: { include: { questions: { orderBy: { order: 'asc' } } } } },
+    });
+    const [requiredQuestion, optionalQuestion] = general.sections[0].questions;
+    await linkAnamnesis(trainerA, student.userId, general.id);
+    await linkAnamnesis(trainerB, student.userId, general.id);
+
+    const shared = {
+      student,
+      anamnesisId: general.id,
+      requiredQuestionId: requiredQuestion.id,
+      optionalQuestionId: optionalQuestion.id,
+    };
+    return { asA: { ...shared, trainer: trainerA }, asB: { ...shared, trainer: trainerB } };
+  }
+
   const trainerUrl = (studentId, anamnesisId, suffix = '') =>
     `/trainer/students/${studentId}/anamneses/${anamnesisId}${suffix}`;
 
@@ -195,6 +238,18 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
       url: '/my/anamneses',
       headers: bearer(scenario.student.accessToken, headers),
     });
+
+  const trainerList = (trainer, studentId, { headers } = {}) =>
+    app.inject({
+      method: 'GET',
+      url: `/trainer/students/${studentId}/anamneses`,
+      headers: bearer(trainer.accessToken, headers),
+    });
+
+  const listItemFor = (response, anamnesisId) => {
+    expect(response.statusCode).toBe(200);
+    return response.json().find((item) => item.anamnesisId === anamnesisId);
+  };
 
   const answersFor = (scenario, requiredValue = 'yes', notes) => {
     const answers = [{ questionId: scenario.requiredQuestionId, value: requiredValue }];
@@ -864,49 +919,6 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
   // ─── Two trainers sharing a general anamnesis ─────────────────────────────
 
   describe('two trainers sharing a general anamnesis with the same student', () => {
-    /**
-     * A general (public) anamnesis linked directly by two trainers to the same student:
-     * both links point to the same anamnesis id, so both trainers reach the same response row.
-     */
-    async function setupSharedScenario() {
-      const trainerA = await createTrainer('trainer-a');
-      const trainerB = await createTrainer('trainer-b');
-      const student = await createStudent();
-      await linkStudent(trainerA, student);
-      await linkStudent(trainerB, student);
-
-      const general = await prisma.anamnesis.create({
-        data: {
-          title: 'General Health Form',
-          isGeneral: true,
-          sections: {
-            create: [{
-              title: 'Section A',
-              order: 0,
-              questions: {
-                create: [
-                  { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true, order: 0 },
-                  { text: 'Any notes?', type: AnamnesisQuestionType.FREE_TEXT, order: 1 },
-                ],
-              },
-            }],
-          },
-        },
-        include: { sections: { include: { questions: { orderBy: { order: 'asc' } } } } },
-      });
-      const [requiredQuestion, optionalQuestion] = general.sections[0].questions;
-      await linkAnamnesis(trainerA, student.userId, general.id);
-      await linkAnamnesis(trainerB, student.userId, general.id);
-
-      const shared = {
-        student,
-        anamnesisId: general.id,
-        requiredQuestionId: requiredQuestion.id,
-        optionalQuestionId: optionalQuestion.id,
-      };
-      return { asA: { ...shared, trainer: trainerA }, asB: { ...shared, trainer: trainerB } };
-    }
-
     it('blocks trainer B from finalizing over trainer A\'s submission (409) and keeps A\'s answers', async () => {
       const { asA, asB } = await setupSharedScenario();
       expect((await trainerSubmit(asA, answersFor(asA, 'yes'))).statusCode).toBe(200);
@@ -969,6 +981,344 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
       const response = await trainerSubmit(asB, answersFor(asB, 'no'));
 
       expect(response.json().message).toBe('Esta anamnese foi preenchida por outro professor.');
+    });
+  });
+
+  // ─── GET /trainer/students/:studentId/anamneses (response summary + canFill) ───
+
+  describe('GET /trainer/students/:studentId/anamneses', () => {
+    it('returns response null and canFill true when nothing was saved', async () => {
+      const scenario = await setupScenario();
+
+      const response = await trainerList(scenario.trainer, scenario.student.userId);
+
+      const item = listItemFor(response, scenario.anamnesisId);
+      expect(item.response).toBeNull();
+      expect(item.canFill).toBe(true);
+    });
+
+    it('reports a student draft with its answeredCount and canFill true', async () => {
+      const scenario = await setupScenario();
+      await studentSaveDraft(scenario, answersFor(scenario, 'no', 'some notes'));
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.DRAFT,
+        statusLabel: 'Rascunho',
+        filledBy: AnamnesisFilledBy.STUDENT,
+        submittedAt: null,
+        answeredCount: 2,
+        updatedAt: expect.any(String),
+      });
+      expect(item.canFill).toBe(true);
+    });
+
+    it('reports a trainer draft as draft with canFill true', async () => {
+      const scenario = await setupScenario();
+      await trainerSaveDraft(scenario, answersFor(scenario, 'yes'));
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.DRAFT,
+        submittedAt: null,
+        answeredCount: 1,
+      });
+      expect(item.canFill).toBe(true);
+    });
+
+    it('reports awaiting_confirmation authored by the trainer with submittedAt and canFill true after the trainer submits', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario, 'yes', 'trainer note'));
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      const row = await findResponseRow(scenario);
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+        filledBy: AnamnesisFilledBy.TRAINER,
+        submittedAt: row.submittedAt.toISOString(),
+        answeredCount: 2,
+      });
+      expect(item.canFill).toBe(true);
+    });
+
+    it('reports submitted authored by the trainer after the student confirms, keeping canFill true for the same trainer', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario));
+      await studentConfirm(scenario);
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.SUBMITTED,
+        filledBy: AnamnesisFilledBy.TRAINER,
+        submittedAt: expect.any(String),
+      });
+      expect(item.canFill).toBe(true);
+    });
+
+    it('reports submitted authored by the student and canFill false after the student submits', async () => {
+      const scenario = await setupScenario();
+      await studentSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.SUBMITTED,
+        filledBy: AnamnesisFilledBy.STUDENT,
+        submittedAt: expect.any(String),
+      });
+      expect(item.canFill).toBe(false);
+    });
+
+    it('agrees with the fill guard: canFill false matches the 409 and canFill true matches a successful submit', async () => {
+      const blocked = await setupScenario();
+      await studentSubmit(blocked, answersFor(blocked));
+      const allowed = await setupScenario();
+
+      const blockedItem = listItemFor(await trainerList(blocked.trainer, blocked.student.userId), blocked.anamnesisId);
+      const allowedItem = listItemFor(await trainerList(allowed.trainer, allowed.student.userId), allowed.anamnesisId);
+
+      expect(blockedItem.canFill).toBe(false);
+      expect((await trainerSubmit(blocked, answersFor(blocked))).statusCode).toBe(409);
+      expect(allowedItem.canFill).toBe(true);
+      expect((await trainerSubmit(allowed, answersFor(allowed))).statusCode).toBe(200);
+    });
+
+    it('never leaks answers or the filler user id in the payload', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario, 'yes', 'private-note-value'));
+
+      const response = await trainerList(scenario.trainer, scenario.student.userId);
+
+      expect(response.statusCode).toBe(200);
+      const item = listItemFor(response, scenario.anamnesisId);
+      expect(item.response).not.toHaveProperty('answers');
+      expect(item.response).not.toHaveProperty('filledByUserId');
+      expect(item).not.toHaveProperty('filledByUserId');
+      expect(response.payload).not.toContain('private-note-value');
+      expect(response.payload).not.toContain('filledByUserId');
+      expect(response.payload).not.toContain(scenario.trainer.userId);
+    });
+
+    it('does not expose a student draft answers even though the summary counts them', async () => {
+      const scenario = await setupScenario();
+      await studentSaveDraft(scenario, answersFor(scenario, 'no', 'student-draft-secret'));
+
+      const response = await trainerList(scenario.trainer, scenario.student.userId);
+
+      expect(response.payload).not.toContain('student-draft-secret');
+    });
+
+    it('returns pt-BR nested labels by default', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({ statusLabel: 'Aguardando confirmação', filledByLabel: 'Professor' });
+    });
+
+    it('returns English nested labels with app-language en-US', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(
+        await trainerList(scenario.trainer, scenario.student.userId, { headers: { [LANG_HEADER]: EN_US } }),
+        scenario.anamnesisId,
+      );
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+        statusLabel: 'Awaiting confirmation',
+        filledBy: AnamnesisFilledBy.TRAINER,
+        filledByLabel: 'Trainer',
+      });
+    });
+
+    it('labels a student-authored submission as Student in en-US', async () => {
+      const scenario = await setupScenario();
+      await studentSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(
+        await trainerList(scenario.trainer, scenario.student.userId, { headers: { [LANG_HEADER]: EN_US } }),
+        scenario.anamnesisId,
+      );
+
+      expect(item.response).toMatchObject({ statusLabel: 'Submitted', filledByLabel: 'Student' });
+    });
+
+    it('serializes a null response without label siblings', async () => {
+      const scenario = await setupScenario();
+
+      const response = await trainerList(scenario.trainer, scenario.student.userId, {
+        headers: { [LANG_HEADER]: EN_US },
+      });
+
+      expect(listItemFor(response, scenario.anamnesisId)).toMatchObject({ response: null, canFill: true });
+    });
+
+    it('returns each linked anamnesis with its own summary and canFill', async () => {
+      const scenario = await setupScenario();
+      const second = await createAnamnesis(scenario.trainer);
+      await linkAnamnesis(scenario.trainer, scenario.student.userId, second.anamnesisId);
+      await studentSubmit(scenario, answersFor(scenario));
+
+      const response = await trainerList(scenario.trainer, scenario.student.userId);
+
+      expect(response.statusCode).toBe(200);
+      const first = listItemFor(response, scenario.anamnesisId);
+      const other = listItemFor(response, second.anamnesisId);
+      expect([first.response.status, first.canFill]).toEqual([AnamnesisResponseStatus.SUBMITTED, false]);
+      expect([other.response, other.canFill]).toEqual([null, true]);
+    });
+
+    it('returns 401 without authentication', async () => {
+      const scenario = await setupScenario();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${scenario.student.userId}/anamneses`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 student.notFound when the student is not linked to the trainer', async () => {
+      const trainer = await createTrainer('unlinked');
+      const student = await createStudent('unlinked');
+
+      const response = await trainerList(trainer, student.userId);
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ messageCode: 'student.notFound', message: expect.any(String) });
+    });
+
+    describe('with a general anamnesis linked by two trainers', () => {
+      it('gives trainer B canFill false and trainer A canFill true after A submits', async () => {
+        const { asA, asB } = await setupSharedScenario();
+        await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+        const itemA = listItemFor(await trainerList(asA.trainer, asA.student.userId), asA.anamnesisId);
+        const itemB = listItemFor(await trainerList(asB.trainer, asB.student.userId), asB.anamnesisId);
+
+        expect(itemA.canFill).toBe(true);
+        expect(itemB.canFill).toBe(false);
+      });
+
+      it('shows both trainers the same response summary', async () => {
+        const { asA, asB } = await setupSharedScenario();
+        await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+        const itemA = listItemFor(await trainerList(asA.trainer, asA.student.userId), asA.anamnesisId);
+        const itemB = listItemFor(await trainerList(asB.trainer, asB.student.userId), asB.anamnesisId);
+
+        expect(itemB.response).toEqual(itemA.response);
+      });
+
+      it('keeps both trainers at canFill true while only a draft exists', async () => {
+        const { asA, asB } = await setupSharedScenario();
+        await trainerSaveDraft(asA, answersFor(asA, 'yes'));
+
+        const itemA = listItemFor(await trainerList(asA.trainer, asA.student.userId), asA.anamnesisId);
+        const itemB = listItemFor(await trainerList(asB.trainer, asB.student.userId), asB.anamnesisId);
+
+        expect([itemA.canFill, itemB.canFill]).toEqual([true, true]);
+      });
+
+      it('gives trainer B canFill true when trainer A user was deleted (filledByUserId null)', async () => {
+        const { asA, asB } = await setupSharedScenario();
+        await trainerSubmit(asA, answersFor(asA, 'yes'));
+        await prisma.anamnesisResponse.update({
+          where: { anamnesisId_studentId: { anamnesisId: asA.anamnesisId, studentId: asA.student.userId } },
+          data: { filledByUserId: null },
+        });
+
+        const itemB = listItemFor(await trainerList(asB.trainer, asB.student.userId), asB.anamnesisId);
+
+        expect(itemB.canFill).toBe(true);
+        expect(itemB.response.filledBy).toBe(AnamnesisFilledBy.TRAINER);
+      });
+
+      it('gives both trainers canFill false when the student submitted', async () => {
+        const { asA, asB } = await setupSharedScenario();
+        await studentSubmit(asA, answersFor(asA, 'yes'));
+
+        const itemA = listItemFor(await trainerList(asA.trainer, asA.student.userId), asA.anamnesisId);
+        const itemB = listItemFor(await trainerList(asB.trainer, asB.student.userId), asB.anamnesisId);
+
+        expect([itemA.canFill, itemB.canFill]).toEqual([false, false]);
+      });
+    });
+  });
+
+  // ─── GET /my/anamneses (student summary authorship) ───────────────────────
+
+  describe('GET /my/anamneses', () => {
+    it('returns response null when the student has not saved anything', async () => {
+      const scenario = await setupScenario();
+
+      const item = listItemFor(await studentList(scenario), scenario.anamnesisId);
+
+      expect(item.response).toBeNull();
+    });
+
+    it('returns filledBy student with a null submittedAt for a draft', async () => {
+      const scenario = await setupScenario();
+      await studentSaveDraft(scenario, answersFor(scenario));
+
+      const item = listItemFor(await studentList(scenario), scenario.anamnesisId);
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.DRAFT,
+        filledBy: AnamnesisFilledBy.STUDENT,
+        filledByLabel: 'Aluno',
+        submittedAt: null,
+      });
+    });
+
+    it('returns the submittedAt date after the student submits', async () => {
+      const scenario = await setupScenario();
+      await studentSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(await studentList(scenario), scenario.anamnesisId);
+
+      const row = await findResponseRow(scenario);
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.SUBMITTED,
+        filledBy: AnamnesisFilledBy.STUDENT,
+        submittedAt: row.submittedAt.toISOString(),
+      });
+    });
+
+    it('returns filledBy trainer, its label and submittedAt for a trainer submission awaiting confirmation', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario));
+
+      const item = listItemFor(
+        await studentList(scenario, { headers: { [LANG_HEADER]: EN_US } }),
+        scenario.anamnesisId,
+      );
+
+      expect(item.response).toMatchObject({
+        status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+        filledBy: AnamnesisFilledBy.TRAINER,
+        filledByLabel: 'Trainer',
+        submittedAt: expect.any(String),
+      });
+    });
+
+    it('does not expose canFill or the filler user id to the student', async () => {
+      const scenario = await setupScenario();
+      await trainerSubmit(scenario, answersFor(scenario));
+
+      const response = await studentList(scenario);
+
+      expect(listItemFor(response, scenario.anamnesisId)).not.toHaveProperty('canFill');
+      expect(response.payload).not.toContain('filledByUserId');
+      expect(response.payload).not.toContain(scenario.trainer.userId);
     });
   });
 

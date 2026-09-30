@@ -754,16 +754,18 @@ export async function linkAnamnesisToStudent(userId, studentId, data) {
 }
 
 /**
- * List all anamneses linked to a student by this trainer.
+ * List all anamneses linked to a student by this trainer, each with a summary of the
+ * student's response (never its answers) and whether this trainer may still finalize it.
  *
  * @param {string} userId - Trainer's user ID
  * @param {string} studentId
+ * @param {object} [prismaClient]
  * @returns {Promise<object[]>}
  */
-export async function listStudentAnamneses(userId, studentId) {
-  const trainer = await verifyTrainerStudentLink(userId, studentId);
+export async function listStudentAnamneses(userId, studentId, prismaClient = prisma) {
+  const trainer = await verifyTrainerStudentLink(userId, studentId, prismaClient);
 
-  const links = await prisma.studentAnamnesis.findMany({
+  const links = await prismaClient.studentAnamnesis.findMany({
     where: { studentId, trainerId: trainer.id },
     orderBy: { createdAt: 'desc' },
     include: {
@@ -784,7 +786,7 @@ export async function listStudentAnamneses(userId, studentId) {
     },
   });
 
-  return links;
+  return attachResponseSummaries(links, studentId, prismaClient, { trainerUserId: userId });
 }
 
 /**
@@ -834,40 +836,61 @@ export async function unlinkAnamnesisFromStudent(userId, studentId, anamnesisId)
 // ─── Student view ─────────────────────────────────────────────────────────────
 
 /**
+ * Compact, list-friendly view of a response. Never carries answers or the filler's user id.
+ *
+ * @param {{ submittedAt: Date|null, filledByRole: string, studentConfirmedAt: Date|null,
+ *   updatedAt: Date|null, _count: { answers: number } }} response
+ * @returns {object}
+ */
+function toResponseSummary(response) {
+  return {
+    status: toResponseStatus(response),
+    filledBy: response.filledByRole,
+    submittedAt: response.submittedAt,
+    answeredCount: response._count.answers,
+    updatedAt: response.updatedAt,
+  };
+}
+
+/**
  * Attach a compact `response` summary (or null) to each student-anamnesis link.
  * Uses a single query for all links — no N+1.
  *
+ * When `trainerUserId` is given (trainer view) each link also gets `canFill`, computed in
+ * memory from the same rows with the exact rule of the fill guard (getTrainerFinalizeBlock).
+ *
  * @param {object[]} links - StudentAnamnesis rows
  * @param {string} studentId
+ * @param {object} [prismaClient]
+ * @param {{ trainerUserId?: string }} [options] - `trainerUserId` is the trainer's USER id
  * @returns {Promise<object[]>}
  */
-async function attachResponseSummaries(links, studentId) {
+async function attachResponseSummaries(links, studentId, prismaClient = prisma, { trainerUserId } = {}) {
   if (links.length === 0) return links;
 
-  const responses = await prisma.anamnesisResponse.findMany({
+  const responses = await prismaClient.anamnesisResponse.findMany({
     where: { studentId, anamnesisId: { in: links.map((link) => link.anamnesisId) } },
     select: {
       anamnesisId: true,
       submittedAt: true,
       filledByRole: true,
+      filledByUserId: true,
       studentConfirmedAt: true,
       updatedAt: true,
       _count: { select: { answers: true } },
     },
   });
 
-  const summaryByAnamnesisId = new Map(
-    responses.map((response) => [
-      response.anamnesisId,
-      {
-        status: toResponseStatus(response),
-        answeredCount: response._count.answers,
-        updatedAt: response.updatedAt,
-      },
-    ]),
-  );
+  const responseByAnamnesisId = new Map(responses.map((response) => [response.anamnesisId, response]));
 
-  return links.map((link) => ({ ...link, response: summaryByAnamnesisId.get(link.anamnesisId) ?? null }));
+  return links.map((link) => {
+    const response = responseByAnamnesisId.get(link.anamnesisId) ?? null;
+    const linkWithSummary = { ...link, response: response ? toResponseSummary(response) : null };
+
+    if (trainerUserId === undefined) return linkWithSummary;
+
+    return { ...linkWithSummary, canFill: getTrainerFinalizeBlock(response, trainerUserId) === null };
+  });
 }
 
 /**

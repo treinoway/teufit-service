@@ -160,6 +160,18 @@ const makeStudentAnamnesisLink = (overrides = {}) => ({
   ...overrides,
 });
 
+// Row shape returned by the response-summary query of the anamnesis lists
+const makeResponseSummaryRow = (anamnesisId, overrides = {}) => ({
+  anamnesisId,
+  submittedAt: null,
+  filledByRole: AnamnesisFilledBy.STUDENT,
+  filledByUserId: null,
+  studentConfirmedAt: null,
+  updatedAt: new Date('2026-03-10T12:00:00.000Z'),
+  _count: { answers: 0 },
+  ...overrides,
+});
+
 /**
  * Interactive-transaction client for the shared finalize flow (student and trainer submit):
  * get-or-create upsert -> row lock ($queryRaw) -> re-read (findUnique) -> answers -> update.
@@ -927,20 +939,318 @@ describe('anamnesis-service', () => {
       });
     });
 
-    it('returns linked anamneses for the student', async () => {
-      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
-      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: 'trainer-1', studentId: 'student-1' });
-      const links = [makeStudentAnamnesisLink()];
-      prisma.studentAnamnesis.findMany.mockResolvedValue(links);
+    describe('with a linked student', () => {
+      const trainerUserId = 'trainer-user-1';
+      const trainerRowId = 'trainer-1';
 
-      const result = await listStudentAnamneses('user-1', 'student-1');
+      const setupLinks = (...anamnesisIds) => {
+        prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: trainerRowId }));
+        prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: trainerRowId, studentId: 'student-1' });
+        prisma.studentAnamnesis.findMany.mockResolvedValue(
+          anamnesisIds.map((anamnesisId) => makeStudentAnamnesisLink({ id: `link-${anamnesisId}`, anamnesisId })),
+        );
+      };
 
-      expect(result).toEqual(links);
-      expect(prisma.studentAnamnesis.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { studentId: 'student-1', trainerId: 'trainer-1' },
-        }),
-      );
+      const listSingle = async (responseRow) => {
+        setupLinks('anamnesis-1');
+        prisma.anamnesisResponse.findMany.mockResolvedValue(responseRow ? [responseRow] : []);
+        const [item] = await listStudentAnamneses(trainerUserId, 'student-1');
+        return item;
+      };
+
+      it('queries the links scoped to the student and the trainer profile id', async () => {
+        setupLinks('anamnesis-1');
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        await listStudentAnamneses(trainerUserId, 'student-1');
+
+        expect(prisma.studentAnamnesis.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { studentId: 'student-1', trainerId: trainerRowId } }),
+        );
+      });
+
+      it('preserves the original link fields alongside the response summary', async () => {
+        setupLinks('anamnesis-1');
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        const [item] = await listStudentAnamneses(trainerUserId, 'student-1');
+
+        expect(item).toMatchObject({ id: 'link-anamnesis-1', anamnesisId: 'anamnesis-1', studentId: 'student-1' });
+      });
+
+      it('returns an empty list and skips the response query when there are no links', async () => {
+        setupLinks();
+
+        const result = await listStudentAnamneses(trainerUserId, 'student-1');
+
+        expect(result).toEqual([]);
+        expect(prisma.anamnesisResponse.findMany).not.toHaveBeenCalled();
+      });
+
+      it('issues a single response query for all links (no N+1)', async () => {
+        setupLinks('anamnesis-1', 'anamnesis-2', 'anamnesis-3');
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        await listStudentAnamneses(trainerUserId, 'student-1');
+
+        expect(prisma.anamnesisResponse.findMany).toHaveBeenCalledTimes(1);
+      });
+
+      it('scopes the response query to the student, the linked anamnesis ids and a minimal select', async () => {
+        setupLinks('anamnesis-1', 'anamnesis-2');
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        await listStudentAnamneses(trainerUserId, 'student-1');
+
+        expect(prisma.anamnesisResponse.findMany).toHaveBeenCalledWith({
+          where: { studentId: 'student-1', anamnesisId: { in: ['anamnesis-1', 'anamnesis-2'] } },
+          select: {
+            anamnesisId: true,
+            submittedAt: true,
+            filledByRole: true,
+            filledByUserId: true,
+            studentConfirmedAt: true,
+            updatedAt: true,
+            _count: { select: { answers: true } },
+          },
+        });
+      });
+
+      it('never selects the answers themselves', async () => {
+        setupLinks('anamnesis-1');
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        await listStudentAnamneses(trainerUserId, 'student-1');
+
+        const { select } = prisma.anamnesisResponse.findMany.mock.calls[0][0];
+        expect(select.answers).toBeUndefined();
+        expect(select._count).toEqual({ select: { answers: true } });
+      });
+
+      describe('response summary', () => {
+        it('returns response null when nothing was saved', async () => {
+          const item = await listSingle(null);
+
+          expect(item.response).toBeNull();
+        });
+
+        it('maps a never-submitted row to status draft with answeredCount and null submittedAt', async () => {
+          const updatedAt = new Date('2026-03-10T12:00:00.000Z');
+
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', { updatedAt, _count: { answers: 4 } }),
+          );
+
+          expect(item.response).toEqual({
+            status: AnamnesisResponseStatus.DRAFT,
+            filledBy: AnamnesisFilledBy.STUDENT,
+            submittedAt: null,
+            answeredCount: 4,
+            updatedAt,
+          });
+        });
+
+        it('maps an unconfirmed trainer submission to awaiting_confirmation', async () => {
+          const submittedAt = new Date('2026-03-12T09:00:00.000Z');
+
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt,
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: trainerUserId,
+              _count: { answers: 6 },
+            }),
+          );
+
+          expect(item.response).toMatchObject({
+            status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+            filledBy: AnamnesisFilledBy.TRAINER,
+            submittedAt,
+            answeredCount: 6,
+          });
+        });
+
+        it('maps a confirmed trainer submission to submitted', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date('2026-03-12T09:00:00.000Z'),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: trainerUserId,
+              studentConfirmedAt: new Date('2026-03-13T09:00:00.000Z'),
+            }),
+          );
+
+          expect(item.response).toMatchObject({
+            status: AnamnesisResponseStatus.SUBMITTED,
+            filledBy: AnamnesisFilledBy.TRAINER,
+          });
+        });
+
+        it('maps a student submission to submitted with filledBy student', async () => {
+          const submittedAt = new Date('2026-03-11T08:30:00.000Z');
+
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', { submittedAt, filledByRole: AnamnesisFilledBy.STUDENT }),
+          );
+
+          expect(item.response).toMatchObject({
+            status: AnamnesisResponseStatus.SUBMITTED,
+            filledBy: AnamnesisFilledBy.STUDENT,
+            submittedAt,
+          });
+        });
+
+        it('exposes only the summary keys, never the filler user id or the answers', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: 'someone-else',
+              studentConfirmedAt: new Date(),
+            }),
+          );
+
+          expect(Object.keys(item.response).sort()).toEqual([
+            'answeredCount',
+            'filledBy',
+            'status',
+            'submittedAt',
+            'updatedAt',
+          ]);
+          expect(item).not.toHaveProperty('answers');
+        });
+
+        it('matches each response to its own link regardless of row order', async () => {
+          setupLinks('anamnesis-1', 'anamnesis-2', 'anamnesis-3');
+          prisma.anamnesisResponse.findMany.mockResolvedValue([
+            makeResponseSummaryRow('anamnesis-3', { submittedAt: new Date(), _count: { answers: 2 } }),
+            makeResponseSummaryRow('anamnesis-1', { _count: { answers: 5 } }),
+          ]);
+
+          const result = await listStudentAnamneses(trainerUserId, 'student-1');
+
+          expect(result.map((item) => [item.anamnesisId, item.response?.status ?? null])).toEqual([
+            ['anamnesis-1', AnamnesisResponseStatus.DRAFT],
+            ['anamnesis-2', null],
+            ['anamnesis-3', AnamnesisResponseStatus.SUBMITTED],
+          ]);
+        });
+      });
+
+      describe('canFill', () => {
+        it('is true when nothing was saved', async () => {
+          const item = await listSingle(null);
+
+          expect(item.canFill).toBe(true);
+        });
+
+        it('is true for a draft', async () => {
+          const item = await listSingle(makeResponseSummaryRow('anamnesis-1'));
+
+          expect(item.canFill).toBe(true);
+        });
+
+        it('is true for a draft even when a stale filler user id from another user is present', async () => {
+          const item = await listSingle(makeResponseSummaryRow('anamnesis-1', { filledByUserId: 'someone-else' }));
+
+          expect(item.canFill).toBe(true);
+        });
+
+        it('is true for a submission made by this same trainer', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: trainerUserId,
+            }),
+          );
+
+          expect(item.canFill).toBe(true);
+        });
+
+        it('is true when the trainer filler account was deleted (filledByUserId null)', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: null,
+            }),
+          );
+
+          expect(item.canFill).toBe(true);
+        });
+
+        it('is false when the student submitted the response', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.STUDENT,
+              filledByUserId: 'student-user-1',
+            }),
+          );
+
+          expect(item.canFill).toBe(false);
+        });
+
+        it('is false for a legacy student submission without a filler user id', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.STUDENT,
+              filledByUserId: null,
+            }),
+          );
+
+          expect(item.canFill).toBe(false);
+        });
+
+        it('is false when another trainer finalized the response', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: 'other-trainer-user',
+            }),
+          );
+
+          expect(item.canFill).toBe(false);
+        });
+
+        it('compares against the trainer USER id, not the Trainer profile id', async () => {
+          const item = await listSingle(
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: trainerRowId,
+            }),
+          );
+
+          expect(item.canFill).toBe(false);
+        });
+
+        it('is evaluated per link', async () => {
+          setupLinks('anamnesis-1', 'anamnesis-2', 'anamnesis-3');
+          prisma.anamnesisResponse.findMany.mockResolvedValue([
+            makeResponseSummaryRow('anamnesis-1', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: trainerUserId,
+            }),
+            makeResponseSummaryRow('anamnesis-2', {
+              submittedAt: new Date(),
+              filledByRole: AnamnesisFilledBy.STUDENT,
+            }),
+          ]);
+
+          const result = await listStudentAnamneses(trainerUserId, 'student-1');
+
+          expect(result.map((item) => [item.anamnesisId, item.canFill])).toEqual([
+            ['anamnesis-1', true],
+            ['anamnesis-2', false],
+            ['anamnesis-3', true],
+          ]);
+        });
+      });
     });
   });
 
@@ -991,16 +1301,6 @@ describe('anamnesis-service', () => {
       ...makeStudentAnamnesisLink({ id: `link-${anamnesisId}`, anamnesisId }),
       anamnesis: { id: anamnesisId, title: 'Health Questionnaire', sections: [] },
       trainer: { id: 'trainer-1', user: { firstName: 'John', lastName: 'Doe', avatarUrl: null } },
-      ...overrides,
-    });
-
-    const makeResponseSummaryRow = (anamnesisId, overrides = {}) => ({
-      anamnesisId,
-      submittedAt: null,
-      filledByRole: AnamnesisFilledBy.STUDENT,
-      studentConfirmedAt: null,
-      updatedAt: new Date('2026-03-10T12:00:00.000Z'),
-      _count: { answers: 0 },
       ...overrides,
     });
 
@@ -1063,6 +1363,7 @@ describe('anamnesis-service', () => {
           anamnesisId: true,
           submittedAt: true,
           filledByRole: true,
+          filledByUserId: true,
           studentConfirmedAt: true,
           updatedAt: true,
           _count: { select: { answers: true } },
@@ -1081,6 +1382,8 @@ describe('anamnesis-service', () => {
 
       expect(result.response).toEqual({
         status: AnamnesisResponseStatus.DRAFT,
+        filledBy: AnamnesisFilledBy.STUDENT,
+        submittedAt: null,
         answeredCount: 4,
         updatedAt,
       });
@@ -1088,19 +1391,18 @@ describe('anamnesis-service', () => {
 
     it('maps a response with submittedAt to status submitted', async () => {
       const updatedAt = new Date('2026-03-11T08:30:00.000Z');
+      const submittedAt = new Date('2026-03-11T08:30:00.000Z');
       prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
       prisma.anamnesisResponse.findMany.mockResolvedValue([
-        makeResponseSummaryRow('anamnesis-1', {
-          submittedAt: new Date('2026-03-11T08:30:00.000Z'),
-          updatedAt,
-          _count: { answers: 7 },
-        }),
+        makeResponseSummaryRow('anamnesis-1', { submittedAt, updatedAt, _count: { answers: 7 } }),
       ]);
 
       const [result] = await getMyAnamneses('student-1');
 
       expect(result.response).toEqual({
         status: AnamnesisResponseStatus.SUBMITTED,
+        filledBy: AnamnesisFilledBy.STUDENT,
+        submittedAt,
         answeredCount: 7,
         updatedAt,
       });
@@ -1129,19 +1431,21 @@ describe('anamnesis-service', () => {
       ],
     ])('maps %s to the derived status', async (_label, authorship, expectedStatus) => {
       const updatedAt = new Date('2026-03-11T08:30:00.000Z');
+      const submittedAt = new Date('2026-03-11T08:30:00.000Z');
       prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
       prisma.anamnesisResponse.findMany.mockResolvedValue([
-        makeResponseSummaryRow('anamnesis-1', {
-          submittedAt: new Date('2026-03-11T08:30:00.000Z'),
-          updatedAt,
-          _count: { answers: 3 },
-          ...authorship,
-        }),
+        makeResponseSummaryRow('anamnesis-1', { submittedAt, updatedAt, _count: { answers: 3 }, ...authorship }),
       ]);
 
       const [result] = await getMyAnamneses('student-1');
 
-      expect(result.response).toEqual({ status: expectedStatus, answeredCount: 3, updatedAt });
+      expect(result.response).toEqual({
+        status: expectedStatus,
+        filledBy: authorship.filledByRole,
+        submittedAt,
+        answeredCount: 3,
+        updatedAt,
+      });
     });
 
     it('keeps a never-submitted row a draft even when its role is trainer', async () => {
@@ -1155,15 +1459,55 @@ describe('anamnesis-service', () => {
       expect(result.response.status).toBe(AnamnesisResponseStatus.DRAFT);
     });
 
-    it('does not leak the authorship columns into the summary', async () => {
+    it('exposes only the summary keys, never the filler user id or the confirmation timestamp', async () => {
       prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
       prisma.anamnesisResponse.findMany.mockResolvedValue([
-        makeResponseSummaryRow('anamnesis-1', { submittedAt: new Date(), filledByRole: AnamnesisFilledBy.TRAINER }),
+        makeResponseSummaryRow('anamnesis-1', {
+          submittedAt: new Date(),
+          filledByRole: AnamnesisFilledBy.TRAINER,
+          filledByUserId: 'trainer-user-1',
+          studentConfirmedAt: new Date(),
+        }),
       ]);
 
       const [result] = await getMyAnamneses('student-1');
 
-      expect(Object.keys(result.response).sort()).toEqual(['answeredCount', 'status', 'updatedAt']);
+      expect(Object.keys(result.response).sort()).toEqual([
+        'answeredCount',
+        'filledBy',
+        'status',
+        'submittedAt',
+        'updatedAt',
+      ]);
+    });
+
+    it('exposes filledBy trainer and submittedAt for a trainer submission awaiting confirmation', async () => {
+      const submittedAt = new Date('2026-03-12T09:00:00.000Z');
+      prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
+      prisma.anamnesisResponse.findMany.mockResolvedValue([
+        makeResponseSummaryRow('anamnesis-1', {
+          submittedAt,
+          filledByRole: AnamnesisFilledBy.TRAINER,
+          filledByUserId: 'trainer-user-1',
+        }),
+      ]);
+
+      const [result] = await getMyAnamneses('student-1');
+
+      expect(result.response).toMatchObject({
+        status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+        filledBy: AnamnesisFilledBy.TRAINER,
+        submittedAt,
+      });
+    });
+
+    it('does not compute canFill on the student view', async () => {
+      prisma.studentAnamnesis.findMany.mockResolvedValue([makeLinkWithAnamnesis('anamnesis-1')]);
+      prisma.anamnesisResponse.findMany.mockResolvedValue([makeResponseSummaryRow('anamnesis-1')]);
+
+      const [result] = await getMyAnamneses('student-1');
+
+      expect(result).not.toHaveProperty('canFill');
     });
 
     it('reports answeredCount 0 for a draft with no stored answers', async () => {
