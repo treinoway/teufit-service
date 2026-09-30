@@ -1511,6 +1511,104 @@
           "response": []
         },
         {
+          "name": "Get Linked Student",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "",
+                  "description": "UUID of the student to unlink"
+                }
+              ]
+            },
+            "description": "Returns the basic profile of one student linked to the authenticated trainer: id, email, firstName, lastName, avatarUrl (resolved URL), activeOnPlan and linkedAt. 404 (messageCode student.notLinked) when the student is not linked to this trainer or the account was deleted; 409 TRAINER_PROFILE_MISSING when the user has no trainer profile."
+          },
+          "response": [
+            {
+              "name": "Get Linked Student - 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "UUID of the student to unlink"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"b3c1f2a4-0000-4000-8000-000000000001\",\n  \"email\": \"maria@example.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Silva\",\n  \"avatarUrl\": null,\n  \"activeOnPlan\": true,\n  \"linkedAt\": \"2026-09-01T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "Get Linked Student - 404 student.notLinked",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "UUID of the student to unlink"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"student.notLinked\",\n  \"message\": \"Este aluno não está vinculado à sua conta.\"\n}"
+            }
+          ]
+        },
+        {
           "name": "Unlink Student",
           "request": {
             "method": "DELETE",

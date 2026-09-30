@@ -1,5 +1,5 @@
 import { Roles } from '../../src/constants/roles.js';
-import { patch, getOneByUserId, linkStudentByEmail, listStudents, searchStudents, unlinkStudent, listTrainers } from '../../src/services/trainer-service.js';
+import { patch, getOneByUserId, linkStudentByEmail, listStudents, searchStudents, getLinkedStudent, unlinkStudent, listTrainers } from '../../src/services/trainer-service.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import {
   getTrainerSchema,
@@ -8,6 +8,7 @@ import {
   listStudentsSchema,
   listTrainersSchema,
   searchStudentsSchema,
+  getLinkedStudentSchema,
   unlinkStudentSchema,
 } from '../schemas/trainer-route.schema.js';
 import { prisma } from '../../src/db.js';
@@ -167,6 +168,21 @@ export async function trainerRoutes(fastify) {
       });
 
       return reply.status(201).send(student);
+    },
+  );
+
+  fastify.get(
+    '/trainer/students/:studentId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: getLinkedStudentSchema,
+    },
+    async (request, reply) => {
+      const student = await getLinkedStudent({
+        trainerUserId: request.user.id,
+        studentId: request.params.studentId,
+      });
+      return reply.send(student);
     },
   );
 

@@ -873,6 +873,87 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     });
   });
 
+  describe('GET /trainer/students/:studentId', () => {
+    const getStudent = (token, studentId) =>
+      app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+    it('returns the basic profile of a linked student', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+      await prisma.user.update({ where: { id: studentId }, data: { firstName: 'Maria', lastName: 'Silva' } });
+
+      const res = await getStudent(trainerToken, studentId);
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toMatchObject({
+        id: studentId,
+        email: studentEmail,
+        firstName: 'Maria',
+        lastName: 'Silva',
+        avatarUrl: null,
+        activeOnPlan: true,
+      });
+      expect(Number.isNaN(Date.parse(body.linkedAt))).toBe(false);
+      expect(Object.keys(body).sort()).toEqual(
+        ['activeOnPlan', 'avatarUrl', 'email', 'firstName', 'id', 'lastName', 'linkedAt'],
+      );
+    });
+
+    it('returns 404 student.notLinked for a student linked only to another trainer', async () => {
+      const { accessToken: ownerToken } = await createTrainerWithToken();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const { accessToken: otherToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(ownerToken, studentEmail);
+
+      const res = await getStudent(otherToken, studentId);
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'NOT_FOUND', messageCode: 'student.notLinked' });
+    });
+
+    it('returns 404 student.notLinked when the student account was deleted', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+      await prisma.user.update({ where: { id: studentId }, data: { deletedAt: new Date() } });
+
+      const res = await getStudent(trainerToken, studentId);
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ messageCode: 'student.notLinked' });
+    });
+
+    it('returns 403 for a user without the trainer role', async () => {
+      const { accessToken: studentToken, userId: studentId } = await createStudent();
+
+      const res = await getStudent(studentToken, studentId);
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('returns 401 without a token', async () => {
+      const res = await app.inject({ method: 'GET', url: '/trainer/students/00000000-0000-0000-0000-000000000000' });
+
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 400 for a non-uuid studentId', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+
+      const res = await getStudent(trainerToken, 'not-a-uuid');
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
+    });
+  });
+
   describe('DELETE /trainer/students/:studentId', () => {
     it('unlinks a student and returns 204, verifying the link is removed from the DB', async () => {
       const { accessToken: trainerToken, userId: trainerUserId } = await createTrainerWithToken();

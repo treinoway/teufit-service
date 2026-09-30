@@ -336,6 +336,57 @@ export const searchStudentsSchema = {
   },
 };
 
+export const getLinkedStudentSchema = {
+  tags: ['trainer'],
+  summary: 'Get the basic profile of one student linked to the authenticated trainer',
+  description:
+    'Returns 404 (messageCode student.notLinked) when the student is not linked to this trainer ' +
+    'or the student account was deleted.',
+  security: [{ bearerAuth: [] }],
+  headers: {
+    type: 'object',
+    required: ['authorization'],
+    properties: {
+      authorization: {
+        type: 'string',
+        description: 'Bearer access token (e.g., "Bearer <token>")',
+      },
+    },
+  },
+  params: {
+    type: 'object',
+    required: ['studentId'],
+    properties: {
+      studentId: {
+        type: 'string',
+        format: 'uuid',
+        description: 'UUID (User.id) of the student',
+      },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        email: { type: 'string', format: 'email' },
+        firstName: { type: 'string', nullable: true },
+        lastName: { type: 'string', nullable: true },
+        avatarUrl: { type: 'string', nullable: true },
+        activeOnPlan: { type: 'boolean' },
+        linkedAt: { type: 'string', format: 'date-time' },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const unlinkStudentSchema = {
   tags: ['trainer'],
   summary: 'Unlink a student from the authenticated trainer',

@@ -625,6 +625,60 @@ export async function searchStudents({ trainerId, query, limit = 10 }) {
 }
 
 /**
+ * Get the basic profile of one student linked to the authenticated trainer.
+ *
+ * Contract:
+ * - Input: trainerUserId (User.id of the trainer), studentId (User.id of the student)
+ * - Throws ConflictAppError TRAINER_PROFILE_MISSING (409) if the user has no trainer profile
+ * - Throws NotFoundAppError student.notLinked (404) if the student is not linked to this
+ *   trainer or the student's account was deleted
+ * - Output: { id, email, firstName, lastName, avatarUrl, activeOnPlan, linkedAt }
+ */
+export async function getLinkedStudent({ trainerUserId, studentId }, prismaClient = prisma) {
+  const trainer = await prismaClient.trainer.findUnique({
+    where: { userId: trainerUserId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw new ConflictAppError({
+      error: 'TRAINER_PROFILE_MISSING',
+      messageCode: 'trainer.profileMissing',
+      message: 'Trainer profile not found',
+    });
+  }
+
+  const link = await prismaClient.trainerStudent.findUnique({
+    where: { trainerId_studentId: { trainerId: trainer.id, studentId } },
+    select: {
+      createdAt: true,
+      activeOnPlan: true,
+      student: {
+        select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true, deletedAt: true },
+      },
+    },
+  });
+
+  if (!link || link.student.deletedAt) {
+    throw new NotFoundAppError({
+      message: 'No link found between this trainer and student',
+      messageCode: 'student.notLinked',
+    });
+  }
+
+  const { student } = link;
+  return {
+    id: student.id,
+    email: student.email,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    avatarUrl: await s3BucketHandler.resolveUrl(student.avatarUrl),
+    activeOnPlan: link.activeOnPlan,
+    linkedAt: link.createdAt,
+  };
+}
+
+/**
  * Unlink a student from the authenticated trainer.
  *
  * Contract:
