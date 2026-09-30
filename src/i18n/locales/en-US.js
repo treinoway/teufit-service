@@ -98,6 +98,10 @@ export default {
       single_choice: 'Single choice',
       matrix: 'Matrix',
     },
+    anamnesisResponseStatus: {
+      draft: 'Draft',
+      submitted: 'Submitted',
+    },
     userStatus: {
       pending: 'Pending',
       active: 'Active',
@@ -235,6 +239,7 @@ export default {
     'anamnesis.alreadyLinked': 'This anamnesis is already linked to this student.',
     'anamnesis.hasStudentLinks': 'This anamnesis is linked to students. Please create a new version before editing.',
     'anamnesis.response.notFound': 'No response found for this anamnesis.',
+    'anamnesis.response.alreadySubmitted': 'This anamnesis has already been submitted.',
     'anamnesis.notLinkedToStudent': 'This anamnesis is not linked to your profile.',
     'anamnesis.invalidCondition': 'Invalid condition for the parent question type.',
     'anamnesis.parentNotEligible': 'Only dichotomous, single choice, or multiple choice questions can be parent questions.',

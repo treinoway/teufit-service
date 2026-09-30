@@ -220,10 +220,12 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
       { name: 'Off-day Training', category: 'strength', weekDay: notToday, order: 0 },
     ]);
 
+    // notTodayWeekday() is computed in UTC, so the server must resolve "today" in UTC
+    // too; the default America/Sao_Paulo is a day behind UTC from 21:00 to 23:59 local.
     const res = await app.inject({
       method: 'GET',
       url: getUrl(),
-      headers: { authorization: `Bearer ${studentToken}` },
+      headers: { authorization: `Bearer ${studentToken}`, 'app-timezone': 'UTC' },
     });
 
     expect(res.statusCode).toBe(200);

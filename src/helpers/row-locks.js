@@ -44,3 +44,16 @@ export async function lockWorkoutSessionForUpdate(tx, id) {
 export async function lockAnamnesisForUpdate(tx, id) {
   await tx.$queryRaw`SELECT id FROM anamneses WHERE id = ${id}::uuid FOR UPDATE`;
 }
+
+/**
+ * Acquire an exclusive row-level lock on the `anamnesis_responses` table row.
+ * Call FIRST (after resolving the row id) inside any transaction that mutates the
+ * answers of this response, then re-read any state that guards the write
+ * (e.g. `submittedAt`) AFTER the lock is held.
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {string} id - AnamnesisResponse UUID
+ */
+export async function lockAnamnesisResponseForUpdate(tx, id) {
+  await tx.$queryRaw`SELECT id FROM anamnesis_responses WHERE id = ${id}::uuid FOR UPDATE`;
+}
