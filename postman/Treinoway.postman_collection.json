@@ -4967,9 +4967,50 @@
                 }
               ]
             },
-            "description": "List all anamneses linked to a student by this trainer."
+            "description": "List all anamneses linked to a student by this trainer. Each item carries `response` (summary of the student's saved response, never its answers) and `canFill`. `response` = { status, statusLabel, filledBy, filledByLabel, submittedAt, answeredCount, updatedAt }, or null when nothing was saved yet; status is \"draft\", \"awaiting_confirmation\" (a trainer filled it, pending the student's confirmation) or \"submitted\"; `filledBy` is \"student\" | \"trainer\" (only meaningful once status is not \"draft\"). `canFill` (boolean) tells whether this trainer may still finalize the response: false when the student already submitted it or another trainer filled it in (finalizing would return 409); true when nothing was saved, it is still a draft, or this same trainer filled it."
           },
-          "response": []
+          "response": [
+            {
+              "name": "List Student Anamneses - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667773\",\n    \"anamnesisId\": \"c2d3e4f5-5555-4666-8777-888899990001\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"c2d3e4f5-5555-4666-8777-888899990001\",\n      \"title\": \"Avaliação de Lesões\",\n      \"description\": \"Histórico de lesões\",\n      \"isGeneral\": false,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"title\": \"Histórico de saúde\",\n          \"order\": 1\n        }\n      ]\n    },\n    \"response\": null,\n    \"canFill\": true,\n    \"createdAt\": \"2026-09-03T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667772\",\n    \"anamnesisId\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n      \"title\": \"Anamnese Nutricional\",\n      \"description\": null,\n      \"isGeneral\": false,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"title\": \"Histórico de saúde\",\n          \"order\": 1\n        }\n      ]\n    },\n    \"response\": {\n      \"status\": \"awaiting_confirmation\",\n      \"statusLabel\": \"Aguardando confirmação\",\n      \"filledBy\": \"trainer\",\n      \"filledByLabel\": \"Professor\",\n      \"submittedAt\": \"2026-09-29T10:05:00.000Z\",\n      \"answeredCount\": 12,\n      \"updatedAt\": \"2026-09-29T10:05:00.000Z\"\n    },\n    \"canFill\": true,\n    \"createdAt\": \"2026-09-02T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667771\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n      \"title\": \"Anamnese Geral\",\n      \"description\": null,\n      \"isGeneral\": true,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"title\": \"Histórico de saúde\",\n          \"order\": 1\n        }\n      ]\n    },\n    \"response\": {\n      \"status\": \"submitted\",\n      \"statusLabel\": \"Enviada\",\n      \"filledBy\": \"student\",\n      \"filledByLabel\": \"Aluno\",\n      \"submittedAt\": \"2026-09-28T14:30:00.000Z\",\n      \"answeredCount\": 18,\n      \"updatedAt\": \"2026-09-28T14:30:00.000Z\"\n    },\n    \"canFill\": false,\n    \"createdAt\": \"2026-09-01T09:00:00.000Z\"\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Unlink Anamnesis from Student",
@@ -5850,7 +5891,7 @@
                 "anamneses"
               ]
             },
-            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info. Each item also carries a `response` summary ({ status, statusLabel, answeredCount, updatedAt }) describing the student's saved response: status is \"draft\" (partial answers saved via PATCH .../response/draft), \"awaiting_confirmation\" (finalized by the trainer on the student's behalf, pending POST .../response/confirm) or \"submitted\" (finalized by the student, or confirmed after the trainer filled it); `response` is null when nothing was saved yet."
+            "description": "Get all anamneses linked to the authenticated student. Returns full nested detail including sections, questions, options, and trainer info. Each item also carries a `response` summary ({ status, statusLabel, filledBy, filledByLabel, submittedAt, answeredCount, updatedAt }) describing the student's saved response: status is \"draft\" (partial answers saved via PATCH .../response/draft), \"awaiting_confirmation\" (finalized by the trainer on the student's behalf, pending POST .../response/confirm) or \"submitted\" (finalized by the student, or confirmed after the trainer filled it). `filledBy` (\"student\" | \"trainer\", with localized `filledByLabel`) tells who wrote the response and is only meaningful once status is not \"draft\" (drafts always report \"student\"). `submittedAt` is the ISO timestamp of the finalization (null while draft). `response` is null when nothing was saved yet."
           },
           "response": [
             {
@@ -5882,7 +5923,38 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667771\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n      \"title\": \"Anamnese Geral\",\n      \"description\": null,\n      \"isGeneral\": true,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n          \"title\": \"Histórico de saúde\",\n          \"description\": null,\n          \"order\": 1,\n          \"questions\": [\n            {\n              \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n              \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n              \"text\": \"Você pratica atividade física regularmente?\",\n              \"type\": \"dichotomous\",\n              \"typeLabel\": \"Dicotômica\",\n              \"required\": true,\n              \"order\": 1,\n              \"config\": null,\n              \"parentQuestionId\": null,\n              \"condition\": null,\n              \"options\": [],\n              \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n              \"updatedAt\": null\n            }\n          ],\n          \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n          \"updatedAt\": null\n        }\n      ]\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": {\n      \"status\": \"draft\",\n      \"statusLabel\": \"Rascunho\",\n      \"answeredCount\": 1,\n      \"updatedAt\": \"2026-09-28T14:20:00.000Z\"\n    },\n    \"createdAt\": \"2026-09-01T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667772\",\n    \"anamnesisId\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n      \"title\": \"Avaliação de Lesões\",\n      \"description\": \"Histórico de lesões\",\n      \"isGeneral\": false,\n      \"createdAt\": \"2026-08-10T12:00:00.000Z\",\n      \"sections\": []\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": null,\n    \"createdAt\": \"2026-09-02T09:00:00.000Z\"\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667771\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n      \"title\": \"Anamnese Geral\",\n      \"description\": null,\n      \"isGeneral\": true,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n          \"title\": \"Histórico de saúde\",\n          \"description\": null,\n          \"order\": 1,\n          \"questions\": [\n            {\n              \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n              \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n              \"text\": \"Você pratica atividade física regularmente?\",\n              \"type\": \"dichotomous\",\n              \"typeLabel\": \"Dicotômica\",\n              \"required\": true,\n              \"order\": 1,\n              \"config\": null,\n              \"parentQuestionId\": null,\n              \"condition\": null,\n              \"options\": [],\n              \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n              \"updatedAt\": null\n            }\n          ],\n          \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n          \"updatedAt\": null\n        }\n      ]\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": {\n      \"status\": \"draft\",\n      \"statusLabel\": \"Rascunho\",\n      \"filledBy\": \"student\",\n      \"filledByLabel\": \"Aluno\",\n      \"submittedAt\": null,\n      \"answeredCount\": 1,\n      \"updatedAt\": \"2026-09-28T14:20:00.000Z\"\n    },\n    \"createdAt\": \"2026-09-01T09:00:00.000Z\"\n  },\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667772\",\n    \"anamnesisId\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"a0b1c2d3-4444-4555-8666-777788889990\",\n      \"title\": \"Avaliação de Lesões\",\n      \"description\": \"Histórico de lesões\",\n      \"isGeneral\": false,\n      \"createdAt\": \"2026-08-10T12:00:00.000Z\",\n      \"sections\": []\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": null,\n    \"createdAt\": \"2026-09-02T09:00:00.000Z\"\n  }\n]"
+            },
+            {
+              "name": "Get My Anamneses - 200 OK (filled by trainer, awaiting confirmation)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/anamneses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "anamneses"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"e5f6a7b8-2222-4333-9444-555566667771\",\n    \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n    \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n    \"trainerId\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n    \"anamnesis\": {\n      \"id\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n      \"title\": \"Anamnese Geral\",\n      \"description\": null,\n      \"isGeneral\": true,\n      \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n      \"sections\": [\n        {\n          \"id\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n          \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n          \"title\": \"Histórico de saúde\",\n          \"description\": null,\n          \"order\": 1,\n          \"questions\": [\n            {\n              \"id\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n              \"sectionId\": \"5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\",\n              \"text\": \"Você pratica atividade física regularmente?\",\n              \"type\": \"dichotomous\",\n              \"typeLabel\": \"Dicotômica\",\n              \"required\": true,\n              \"order\": 1,\n              \"config\": null,\n              \"parentQuestionId\": null,\n              \"condition\": null,\n              \"options\": [],\n              \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n              \"updatedAt\": null\n            }\n          ],\n          \"createdAt\": \"2026-08-01T12:00:00.000Z\",\n          \"updatedAt\": null\n        }\n      ]\n    },\n    \"trainer\": {\n      \"id\": \"7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d\",\n      \"user\": {\n        \"firstName\": \"Marcos\",\n        \"lastName\": \"Oliveira\",\n        \"avatarUrl\": null\n      }\n    },\n    \"response\": {\n      \"status\": \"awaiting_confirmation\",\n      \"statusLabel\": \"Aguardando confirmação\",\n      \"filledBy\": \"trainer\",\n      \"filledByLabel\": \"Professor\",\n      \"submittedAt\": \"2026-09-29T10:05:00.000Z\",\n      \"answeredCount\": 12,\n      \"updatedAt\": \"2026-09-29T10:05:00.000Z\"\n    },\n    \"createdAt\": \"2026-09-01T09:00:00.000Z\"\n  }\n]"
             }
           ]
         },

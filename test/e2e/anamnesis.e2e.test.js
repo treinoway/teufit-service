@@ -2721,6 +2721,9 @@ e2eDescribe('e2e: anamnesis', () => {
         expect(response.json()[0].response).toEqual({
           status: 'draft',
           statusLabel: 'Rascunho',
+          filledBy: 'student',
+          filledByLabel: 'Aluno',
+          submittedAt: null,
           answeredCount: 2,
           updatedAt: saved.json().updatedAt,
         });

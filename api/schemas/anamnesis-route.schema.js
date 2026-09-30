@@ -350,6 +350,25 @@ const studentAnamnesisLinkSchema = {
   },
 };
 
+// Compact summary of the student's response embedded in the anamnesis lists (trainer and
+// student). Never carries answers. `nullable` object (not anyOf) so the i18n label walker
+// can reach the nested categorical fields.
+const responseSummarySchema = {
+  type: 'object',
+  nullable: true,
+  description:
+    'Summary of the student response (draft, awaiting_confirmation or submitted); null when nothing was saved yet. ' +
+    'answeredCount counts stored answers, including hidden conditional answers kept in drafts.',
+  properties: {
+    ...i18nField('status', 'anamnesisResponseStatus'),
+    // Who wrote the response. Only meaningful once status is not "draft".
+    ...i18nField('filledBy', 'anamnesisFilledBy'),
+    submittedAt: { type: 'string', format: 'date-time', nullable: true },
+    answeredCount: { type: 'integer' },
+    updatedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
 const studentAnamnesisListItemSchema = {
   type: 'object',
   properties: {
@@ -377,6 +396,13 @@ const studentAnamnesisListItemSchema = {
           },
         },
       },
+    },
+    response: responseSummarySchema,
+    canFill: {
+      type: 'boolean',
+      description:
+        'Whether this trainer may still finalize the response: false when the student already submitted it ' +
+        'or another trainer filled it in',
     },
     createdAt: { type: 'string', format: 'date-time' },
   },
@@ -489,17 +515,7 @@ const myAnamnesisItemSchema = {
         },
       },
     },
-    response: {
-      type: 'object',
-      nullable: true,
-      description:
-        'Summary of the student response (draft, awaiting_confirmation or submitted); null when nothing was saved yet',
-      properties: {
-        ...i18nField('status', 'anamnesisResponseStatus'),
-        answeredCount: { type: 'integer' },
-        updatedAt: { type: 'string', format: 'date-time', nullable: true },
-      },
-    },
+    response: responseSummarySchema,
     createdAt: { type: 'string', format: 'date-time' },
   },
 };
