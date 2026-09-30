@@ -27,6 +27,7 @@ As a trainer, I want to fill the anamnesis together with a student who is next t
 4. **Branches**:
    - Trainer leaves mid-way: the draft stays saved and is resumed next time (the attestation gate is shown again every time the flow is opened).
    - Trainer re-opens a response they finalized while it is still awaiting confirmation: the wizard is pre-filled and they can finalize again. This resets the confirmation (the student has to confirm again).
+   - Another trainer of the same student filled in this anamnesis (it happens with a general anamnesis linked directly by two trainers): only that trainer can re-finalize it. `GET .../fill` returns `canFinalize: false`; block the flow at the gate with a read-only view. A submit that races past it gets 409 `anamnesis.response.filledByAnotherTrainer` ("Esta anamnese foi preenchida por outro professor.").
    - The student already submitted the anamnesis by themselves (before or while the trainer was filling): the trainer can never overwrite it. The app receives a 409 `anamnesis.response.submittedByStudent`; stop editing, reload the response and show the student's submission read-only.
    - A 409 `anamnesis.response.alreadySubmitted` on autosave (someone finalized in the meantime): stop autosaving, reload and show the current state.
    - Student later submits the form in the mobile app on top of a trainer-filled one: the response becomes student-authored and confirmed ("Enviada pelo aluno"). The dossier reflects that on next load.
@@ -59,10 +60,11 @@ As a trainer, I want to fill the anamnesis together with a student who is next t
       "submittedAt": null, "updatedAt": "2026-09-29T12:05:00.000Z",
       "trainerAttestedAt": null, "studentConfirmedAt": null,
       "answers": [ { "questionId": "uuid", "value": "yes" } ]
-    }
+    },
+    "canFinalize": true
   }
   ```
-  `response` is `null` when nothing was saved yet. The anamnesis has the same shape as `GET /trainer/anamneses/:anamnesisId`. Choice answers are stored and returned as the option text.
+  `response` is `null` when nothing was saved yet. `canFinalize` is `false` when the student already submitted the anamnesis or another trainer filled it in: show the answers read-only and do not offer "Salvar respostas". The anamnesis has the same shape as `GET /trainer/anamneses/:anamnesisId`. Choice answers are stored and returned as the option text.
 - **Errors** (status · error · messageCode · when):
   - `400` · `VALIDATION_ERROR` · `validation.failed` · `studentPresent` missing or not `true`
   - `403` · role is not TRAINER, or the student is blocked on the plan
@@ -101,6 +103,7 @@ As a trainer, I want to fill the anamnesis together with a student who is next t
   - `400` · `VALIDATION_ERROR` · `validation.failed` · attestation missing or false, required visible question unanswered (`details: [{ questionId, message }]`), duplicated `questionId`
   - `403` · role / plan blocked · `404` · `STUDENT_NOT_FOUND` / `ANAMNESIS_NOT_LINKED_TO_STUDENT` / `ANAMNESIS_QUESTION_NOT_FOUND`
   - `409` · `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` · `anamnesis.response.submittedByStudent` · the student already submitted this anamnesis themselves
+  - `409` · `ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER` · `anamnesis.response.filledByAnotherTrainer` · another trainer filled in this anamnesis
 
 ### GET /trainer/students/:studentId/anamneses/:anamnesisId/response (existing, extended)
 - Now also returns responses that are `awaiting_confirmation`, and every response carries `status`, `statusLabel`, `filledBy`, `filledByLabel`, `trainerAttestedAt`, `studentConfirmedAt`. Drafts are still never returned here (404 `anamnesis.response.notFound`).

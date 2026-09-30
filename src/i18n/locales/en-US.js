@@ -246,6 +246,7 @@ export default {
     'anamnesis.response.notFound': 'No response found for this anamnesis.',
     'anamnesis.response.alreadySubmitted': 'This anamnesis has already been submitted.',
     'anamnesis.response.submittedByStudent': 'The student has already submitted this anamnesis.',
+    'anamnesis.response.filledByAnotherTrainer': 'This anamnesis was filled in by another trainer.',
     'anamnesis.response.notAwaitingConfirmation': 'This anamnesis is not awaiting confirmation.',
     'anamnesis.notLinkedToStudent': 'This anamnesis is not linked to your profile.',
     'anamnesis.invalidCondition': 'Invalid condition for the parent question type.',

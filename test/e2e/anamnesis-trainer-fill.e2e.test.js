@@ -861,6 +861,117 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
     });
   });
 
+  // ─── Two trainers sharing a general anamnesis ─────────────────────────────
+
+  describe('two trainers sharing a general anamnesis with the same student', () => {
+    /**
+     * A general (public) anamnesis linked directly by two trainers to the same student:
+     * both links point to the same anamnesis id, so both trainers reach the same response row.
+     */
+    async function setupSharedScenario() {
+      const trainerA = await createTrainer('trainer-a');
+      const trainerB = await createTrainer('trainer-b');
+      const student = await createStudent();
+      await linkStudent(trainerA, student);
+      await linkStudent(trainerB, student);
+
+      const general = await prisma.anamnesis.create({
+        data: {
+          title: 'General Health Form',
+          isGeneral: true,
+          sections: {
+            create: [{
+              title: 'Section A',
+              order: 0,
+              questions: {
+                create: [
+                  { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true, order: 0 },
+                  { text: 'Any notes?', type: AnamnesisQuestionType.FREE_TEXT, order: 1 },
+                ],
+              },
+            }],
+          },
+        },
+        include: { sections: { include: { questions: { orderBy: { order: 'asc' } } } } },
+      });
+      const [requiredQuestion, optionalQuestion] = general.sections[0].questions;
+      await linkAnamnesis(trainerA, student.userId, general.id);
+      await linkAnamnesis(trainerB, student.userId, general.id);
+
+      const shared = {
+        student,
+        anamnesisId: general.id,
+        requiredQuestionId: requiredQuestion.id,
+        optionalQuestionId: optionalQuestion.id,
+      };
+      return { asA: { ...shared, trainer: trainerA }, asB: { ...shared, trainer: trainerB } };
+    }
+
+    it('blocks trainer B from finalizing over trainer A\'s submission (409) and keeps A\'s answers', async () => {
+      const { asA, asB } = await setupSharedScenario();
+      expect((await trainerSubmit(asA, answersFor(asA, 'yes'))).statusCode).toBe(200);
+
+      const response = await trainerSubmit(asB, answersFor(asB, 'no'));
+
+      expectErrorContract(response, {
+        statusCode: 409,
+        error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+        messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+      });
+      const row = await findResponseRow(asA);
+      expect(row.filledByUserId).toBe(asA.trainer.userId);
+      expect(row.answers.map((answer) => answer.value)).toEqual(['yes']);
+    });
+
+    it('reports canFinalize false to trainer B and true to trainer A', async () => {
+      const { asA, asB } = await setupSharedScenario();
+      await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+      const fillA = await trainerGetFill(asA);
+      const fillB = await trainerGetFill(asB);
+
+      expect(fillA.statusCode).toBe(200);
+      expect(fillA.json().canFinalize).toBe(true);
+      expect(fillB.statusCode).toBe(200);
+      expect(fillB.json().canFinalize).toBe(false);
+    });
+
+    it('lets trainer A re-finalize their own submission', async () => {
+      const { asA } = await setupSharedScenario();
+      await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+      const response = await trainerSubmit(asA, answersFor(asA, 'no'));
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe(AnamnesisResponseStatus.AWAITING_CONFIRMATION);
+    });
+
+    it('lets trainer B take over when trainer A\'s user no longer exists (filledByUserId SET NULL)', async () => {
+      const { asA, asB } = await setupSharedScenario();
+      await trainerSubmit(asA, answersFor(asA, 'yes'));
+      await prisma.anamnesisResponse.update({
+        where: { anamnesisId_studentId: { anamnesisId: asA.anamnesisId, studentId: asA.student.userId } },
+        data: { filledByUserId: null },
+      });
+
+      const fillB = await trainerGetFill(asB);
+      const response = await trainerSubmit(asB, answersFor(asB, 'no'));
+
+      expect(fillB.json().canFinalize).toBe(true);
+      expect(response.statusCode).toBe(200);
+      expect((await findResponseRow(asB)).filledByUserId).toBe(asB.trainer.userId);
+    });
+
+    it('returns the pt-BR message for the 409 by default', async () => {
+      const { asA, asB } = await setupSharedScenario();
+      await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+      const response = await trainerSubmit(asB, answersFor(asB, 'no'));
+
+      expect(response.json().message).toBe('Esta anamnese foi preenchida por outro professor.');
+    });
+  });
+
   // ─── i18n ──────────────────────────────────────────────────────────────────
 
   describe('i18n', () => {

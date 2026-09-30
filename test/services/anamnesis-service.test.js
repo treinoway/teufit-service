@@ -1797,14 +1797,14 @@ describe('anamnesis-service', () => {
         });
       });
 
-      it('re-reads only submittedAt and filledByRole after the lock', async () => {
+      it('re-reads only the authorship state after the lock', async () => {
         const tx = setupSubmit();
 
         await submitAnamnesisResponse(STUDENT_ID, ANAMNESIS_ID, validPayload);
 
         expect(tx.anamnesisResponse.findUnique).toHaveBeenCalledWith({
           where: { id: 'response-1' },
-          select: { submittedAt: true, filledByRole: true },
+          select: { submittedAt: true, filledByRole: true, filledByUserId: true },
         });
       });
 
@@ -2256,7 +2256,57 @@ describe('anamnesis-service', () => {
 
         const result = await getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
 
-        expect(result).toEqual({ anamnesis, response: null });
+        expect(result).toEqual({ anamnesis, response: null, canFinalize: true });
+      });
+
+      describe('canFinalize', () => {
+        const fillContextFor = async (responseRow) => {
+          setupGuardPasses();
+          prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesisWithQuestion());
+          prisma.anamnesisResponse.findUnique.mockResolvedValue(responseRow);
+          return getTrainerFillContext(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID);
+        };
+
+        it('is true while the response is a draft', async () => {
+          const { canFinalize } = await fillContextFor(makeResponseRow());
+          expect(canFinalize).toBe(true);
+        });
+
+        it('is true for a response this trainer filled in', async () => {
+          const { canFinalize } = await fillContextFor(makeResponseRow({
+            submittedAt: EARLIER,
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: TRAINER_USER_ID,
+          }));
+          expect(canFinalize).toBe(true);
+        });
+
+        it('is false for a response the student submitted', async () => {
+          const { canFinalize } = await fillContextFor(makeResponseRow({
+            submittedAt: EARLIER,
+            filledByRole: AnamnesisFilledBy.STUDENT,
+            filledByUserId: STUDENT_ID,
+          }));
+          expect(canFinalize).toBe(false);
+        });
+
+        it('is false for a response another trainer filled in', async () => {
+          const { canFinalize } = await fillContextFor(makeResponseRow({
+            submittedAt: EARLIER,
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: 'other-trainer-user',
+          }));
+          expect(canFinalize).toBe(false);
+        });
+
+        it('is true when the trainer who filled it in was deleted (filledByUserId null)', async () => {
+          const { canFinalize } = await fillContextFor(makeResponseRow({
+            submittedAt: EARLIER,
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: null,
+          }));
+          expect(canFinalize).toBe(true);
+        });
       });
 
       it('loads the full anamnesis and the response scoped to this student with its answers', async () => {
@@ -2551,7 +2601,7 @@ describe('anamnesis-service', () => {
           vi.useFakeTimers({ toFake: ['Date'] });
           vi.setSystemTime(NOW);
           const tx = setupTrainerSubmit({
-            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER },
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID },
           });
 
           const result = await submit();
@@ -2581,6 +2631,29 @@ describe('anamnesis-service', () => {
           expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
           expect(tx.anamnesisAnswer.createMany).not.toHaveBeenCalled();
           expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+        });
+
+        it('throws 409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER over another trainer\'s submission, writing nothing', async () => {
+          const tx = setupTrainerSubmit({
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: 'other-trainer-user' },
+          });
+
+          await expect(submit()).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+          });
+          expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+          expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+        });
+
+        it('lets a trainer take over a submission whose filler was deleted (filledByUserId null)', async () => {
+          const tx = setupTrainerSubmit({
+            locked: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: null },
+          });
+
+          await expect(submit()).resolves.toMatchObject({ status: AnamnesisResponseStatus.AWAITING_CONFIRMATION });
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledTimes(1);
         });
       });
 
@@ -3541,6 +3614,8 @@ describe('anamnesis-service', () => {
     it('exposes stable error codes and messageCodes for the trainer-fill conflicts', () => {
       expect(AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT).toBe('ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT');
       expect(AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT).toBe('anamnesis.response.submittedByStudent');
+      expect(AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER).toBe('ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER');
+      expect(AnamnesisMessageCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER).toBe('anamnesis.response.filledByAnotherTrainer');
       expect(AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION).toBe('ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION');
       expect(AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION).toBe('anamnesis.response.notAwaitingConfirmation');
     });

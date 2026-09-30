@@ -252,6 +252,7 @@ submission but never overwrites one submitted by the student.
 | `ANAMNESIS_RESPONSE_NOT_FOUND` | `anamnesis.response.notFound` | 404 | Student has not submitted a response |
 | `ANAMNESIS_NOT_LINKED_TO_STUDENT` | `anamnesis.notLinkedToStudent` | 404 | Anamnesis is not linked to this student |
 | `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` | `anamnesis.response.submittedByStudent` | 409 | Trainer tried to finalize a response the student already submitted |
+| `ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER` | `anamnesis.response.filledByAnotherTrainer` | 409 | Trainer tried to finalize a response another trainer filled in |
 | `ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION` | `anamnesis.response.notAwaitingConfirmation` | 409 | Student confirm called while the response is not `awaiting_confirmation` |
 
 ---

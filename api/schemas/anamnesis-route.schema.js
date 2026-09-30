@@ -809,6 +809,12 @@ export const getTrainerAnamnesisFillSchema = {
       properties: {
         anamnesis: anamnesisSchema,
         response: { ...anamnesisResponseSchema, nullable: true },
+        canFinalize: {
+          type: 'boolean',
+          description:
+            'Whether this trainer may finalize the response: false when the student already submitted it ' +
+            'or when another trainer filled it in.',
+        },
       },
     },
     ...trainerFillErrorResponses,
@@ -842,7 +848,9 @@ export const submitTrainerAnamnesisResponseSchema = {
     'filledBy "trainer", trainerAttestedAt=now, studentConfirmedAt=null, so its status is ' +
     '"awaiting_confirmation" until the student calls POST /my/anamneses/{anamnesisId}/response/confirm. ' +
     'The trainer may re-finalize their own submission (this resets the confirmation) but never overwrites ' +
-    'a response submitted by the student: 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT. ' +
+    'a response submitted by the student (409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT) nor one filled in by ' +
+    'another trainer (409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER; allowed when that trainer\'s user was ' +
+    'deleted). ' +
     trainerFillAccessDescription,
   security: [{ bearerAuth: [] }],
   params: trainerFillParamsSchema,

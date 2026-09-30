@@ -250,6 +250,7 @@ export default {
     'anamnesis.response.notFound': 'Nenhuma resposta encontrada para esta anamnese.',
     'anamnesis.response.alreadySubmitted': 'Esta anamnese já foi enviada.',
     'anamnesis.response.submittedByStudent': 'O aluno já enviou esta anamnese.',
+    'anamnesis.response.filledByAnotherTrainer': 'Esta anamnese foi preenchida por outro professor.',
     'anamnesis.response.notAwaitingConfirmation': 'Esta anamnese não está aguardando confirmação.',
     'anamnesis.notLinkedToStudent': 'Esta anamnese não está vinculada ao seu perfil.',
     'anamnesis.invalidCondition': 'Condição inválida para o tipo da pergunta pai.',

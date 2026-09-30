@@ -1419,15 +1419,43 @@ async function resolveFinalAnswers(anamnesisId, answers, prismaClient) {
  * A trainer never overwrites a response the student submitted themselves.
  * Must run AFTER the row lock, on freshly re-read state.
  */
-function assertNotSubmittedByStudent(lockedResponse) {
-  if (lockedResponse.submittedAt && lockedResponse.filledByRole === AnamnesisFilledBy.STUDENT) {
-    throw new AppError({
-      httpStatus: 409,
-      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
-      message: 'The student has already submitted this anamnesis',
-    });
+/**
+ * Why this trainer may not finalize the response, or null when they may.
+ * A submitted response belongs to whoever filled it: the student's submission is never
+ * replaced, and another trainer's submission is only replaceable by that trainer. When
+ * the filler's user was deleted (filledByUserId SET NULL) nobody owns it anymore, so a
+ * trainer who still has access may take it over.
+ *
+ * @param {{ submittedAt: Date|null, filledByRole: string, filledByUserId: string|null }|null} response
+ * @param {string} trainerUserId
+ * @returns {string|null} AnamnesisErrorCode
+ */
+function getTrainerFinalizeBlock(response, trainerUserId) {
+  if (!response?.submittedAt) return null;
+  if (response.filledByRole === AnamnesisFilledBy.STUDENT) {
+    return AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT;
   }
+  if (response.filledByUserId && response.filledByUserId !== trainerUserId) {
+    return AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER;
+  }
+  return null;
+}
+
+const TRAINER_FINALIZE_BLOCK_MESSAGES = Object.freeze({
+  [AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT]: 'The student has already submitted this anamnesis',
+  [AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER]: 'This anamnesis was filled in by another trainer',
+});
+
+function assertTrainerMayFinalize(lockedResponse, trainerUserId) {
+  const blockCode = getTrainerFinalizeBlock(lockedResponse, trainerUserId);
+  if (!blockCode) return;
+
+  throw new AppError({
+    httpStatus: 409,
+    error: blockCode,
+    messageCode: AnamnesisMessageCode[blockCode],
+    message: TRAINER_FINALIZE_BLOCK_MESSAGES[blockCode],
+  });
 }
 
 /**
@@ -1470,11 +1498,11 @@ async function finalizeResponseInTransaction(tx, { anamnesisId, studentId, answe
 
   const lockedResponse = await tx.anamnesisResponse.findUnique({
     where: { id: responseRow.id },
-    select: { submittedAt: true, filledByRole: true },
+    select: { submittedAt: true, filledByRole: true, filledByUserId: true },
   });
 
   if (authorship.filledByRole === AnamnesisFilledBy.TRAINER) {
-    assertNotSubmittedByStudent(lockedResponse);
+    assertTrainerMayFinalize(lockedResponse, authorship.filledByUserId);
   }
 
   await tx.anamnesisAnswer.deleteMany({ where: { responseId: responseRow.id } });
@@ -1673,7 +1701,7 @@ async function assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesis
  * @param {string} studentId
  * @param {string} anamnesisId
  * @param {object} [prismaClient]
- * @returns {Promise<{ anamnesis: object, response: object|null }>}
+ * @returns {Promise<{ anamnesis: object, response: object|null, canFinalize: boolean }>}
  */
 export async function getTrainerFillContext(trainerUserId, studentId, anamnesisId, prismaClient = prisma) {
   await assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient);
@@ -1686,7 +1714,11 @@ export async function getTrainerFillContext(trainerUserId, studentId, anamnesisI
     }),
   ]);
 
-  return { anamnesis, response: response ? withResponseStatus(response) : null };
+  return {
+    anamnesis,
+    response: response ? withResponseStatus(response) : null,
+    canFinalize: getTrainerFinalizeBlock(response, trainerUserId) === null,
+  };
 }
 
 /**
