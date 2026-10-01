@@ -253,7 +253,7 @@ export default {
     'anamnesis.question.notFound': 'Pergunta não encontrada.',
     'anamnesis.forbidden.notOwner': 'Você não tem acesso a esta anamnese.',
     'anamnesis.forbidden.general': 'Anamneses gerais não podem ser editadas.',
-    'anamnesis.invalidQuestionType': 'Tipo de pergunta inválido.',
+    'anamnesis.invalidQuestionType': 'Tipo de pergunta inválido ou não suportado.',
     'anamnesis.alreadyLinked': 'Esta anamnese já está vinculada a este aluno.',
     'anamnesis.hasStudentLinks': 'Esta anamnese está vinculada a alunos. Crie uma nova versão antes de editar.',
     'anamnesis.response.notFound': 'Nenhuma resposta encontrada para esta anamnese.',

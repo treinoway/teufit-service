@@ -3,7 +3,11 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
-import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
+import {
+  AnamnesisQuestionType,
+  AnamnesisErrorCode,
+  AnamnesisMessageCode,
+} from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
 
@@ -536,6 +540,281 @@ e2eDescribe('e2e: admin anamnesis', () => {
       const publicAnamnesis = body.find((a) => a.isGeneral === true);
       expect(publicAnamnesis).toBeDefined();
       expect(publicAnamnesis.title).toBe('Trainer Visible Questionnaire');
+    });
+  });
+
+  // ─── Retired `matrix` question type ─────────────────────────────────────────
+
+  describe('retired matrix question type', () => {
+    const LANG_HEADER = 'app-language';
+    const MATRIX_ROWS = ['Row A', 'Row B', 'Row C'];
+    const matrixQuestionPayload = {
+      text: 'Rate each item',
+      type: AnamnesisQuestionType.MATRIX,
+      options: MATRIX_ROWS.map((text) => ({ text })),
+    };
+
+    const bearerAuth = (token, extra = {}) => ({ authorization: `Bearer ${token}`, ...extra });
+
+    const expectInvalidQuestionType = (response) => {
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body).toMatchObject({
+        error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
+        messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+        message: expect.any(String),
+      });
+      expect(Object.keys(body).every((key) => ['error', 'messageCode', 'message', 'details'].includes(key))).toBe(
+        true,
+      );
+    };
+
+    async function createPublicAnamnesisWithSection(adminToken) {
+      const created = await createPublicAnamnesis(adminToken, { sections: [{ title: 'Section 1' }] });
+      expect(created.statusCode).toBe(201);
+      const body = created.json();
+      return { anamnesisId: body.id, sectionId: body.sections[0].id };
+    }
+
+    /** Inserts a legacy matrix question (with option rows) straight into the database, bypassing the API. */
+    const insertLegacyMatrixQuestion = (sectionId) =>
+      prisma.anamnesisQuestion.create({
+        data: {
+          sectionId,
+          text: 'Legacy matrix question',
+          type: AnamnesisQuestionType.MATRIX,
+          order: 0,
+          options: { create: MATRIX_ROWS.map((text, order) => ({ text, order })) },
+        },
+        include: { options: { orderBy: { order: 'asc' } } },
+      });
+
+    const questionUrl = (anamnesisId, sectionId, questionId = '') =>
+      `/admin/anamneses/${anamnesisId}/sections/${sectionId}/questions${questionId ? `/${questionId}` : ''}`;
+
+    describe('creating content', () => {
+      it('POST question with type matrix returns 400 INVALID_QUESTION_TYPE and creates nothing', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: questionUrl(anamnesisId, sectionId),
+          headers: bearerAuth(adminToken),
+          payload: matrixQuestionPayload,
+        });
+
+        expectInvalidQuestionType(response);
+        expect(await prisma.anamnesisQuestion.count({ where: { sectionId } })).toBe(0);
+      });
+
+      it('POST question with an unknown type is still a schema VALIDATION_ERROR', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: questionUrl(anamnesisId, sectionId),
+          headers: bearerAuth(adminToken),
+          payload: { text: 'Q?', type: 'foo' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+          details: expect.any(Array),
+        });
+      });
+
+      it('POST anamnesis with a nested matrix question returns 400 INVALID_QUESTION_TYPE and creates nothing', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+
+        const response = await createPublicAnamnesis(adminToken, {
+          sections: [
+            {
+              title: 'Section',
+              questions: [{ text: 'Smoke?', type: AnamnesisQuestionType.DICHOTOMOUS }, matrixQuestionPayload],
+            },
+          ],
+        });
+
+        expectInvalidQuestionType(response);
+        expect(await prisma.anamnesis.count()).toBe(0);
+        expect(await prisma.anamnesisSection.count()).toBe(0);
+        expect(await prisma.anamnesisQuestion.count()).toBe(0);
+      });
+
+      it('POST section with a nested matrix question returns 400 INVALID_QUESTION_TYPE and creates nothing', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId } = await createPublicAnamnesisWithSection(adminToken);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/admin/anamneses/${anamnesisId}/sections`,
+          headers: bearerAuth(adminToken),
+          payload: { title: 'Second section', questions: [matrixQuestionPayload] },
+        });
+
+        expectInvalidQuestionType(response);
+        expect(await prisma.anamnesisSection.count({ where: { anamnesisId } })).toBe(1);
+        expect(await prisma.anamnesisQuestion.count()).toBe(0);
+      });
+
+      it('returns the pt-BR message by default and the en-US message with app-language en-US', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        const send = (headers = {}) =>
+          app.inject({
+            method: 'POST',
+            url: questionUrl(anamnesisId, sectionId),
+            headers: bearerAuth(adminToken, headers),
+            payload: matrixQuestionPayload,
+          });
+
+        const ptBr = await send();
+        const enUs = await send({ [LANG_HEADER]: 'en-US' });
+
+        expect(ptBr.json()).toMatchObject({
+          messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+          message: 'Tipo de pergunta inválido ou não suportado.',
+        });
+        expect(enUs.json()).toMatchObject({
+          messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+          message: 'Invalid or unsupported question type.',
+        });
+      });
+
+      it.each([
+        AnamnesisQuestionType.FREE_TEXT,
+        AnamnesisQuestionType.DICHOTOMOUS,
+        AnamnesisQuestionType.NUMERIC,
+        AnamnesisQuestionType.SINGLE_CHOICE,
+        AnamnesisQuestionType.MULTIPLE_CHOICE,
+      ])('POST question still creates a %s question', async (type) => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: questionUrl(anamnesisId, sectionId),
+          headers: bearerAuth(adminToken),
+          payload: { text: 'Creatable?', type, options: [{ text: 'A' }, { text: 'B' }] },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json().type).toBe(type);
+      });
+    });
+
+    describe('updating a question', () => {
+      async function setupSingleChoiceQuestion(adminToken) {
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        const created = await app.inject({
+          method: 'POST',
+          url: questionUrl(anamnesisId, sectionId),
+          headers: bearerAuth(adminToken),
+          payload: { text: 'Pick one', type: AnamnesisQuestionType.SINGLE_CHOICE, options: [{ text: 'A' }] },
+        });
+        expect(created.statusCode).toBe(201);
+        return { anamnesisId, sectionId, questionId: created.json().id };
+      }
+
+      it('PATCH question TO matrix returns 400 INVALID_QUESTION_TYPE and keeps the type', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId, questionId } = await setupSingleChoiceQuestion(adminToken);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: questionUrl(anamnesisId, sectionId, questionId),
+          headers: bearerAuth(adminToken),
+          payload: { type: AnamnesisQuestionType.MATRIX, text: 'Should not be saved' },
+        });
+
+        expectInvalidQuestionType(response);
+        const row = await prisma.anamnesisQuestion.findUnique({ where: { id: questionId } });
+        expect(row).toMatchObject({ type: AnamnesisQuestionType.SINGLE_CHOICE, text: 'Pick one' });
+      });
+
+      it('PATCH legacy matrix question with its type unchanged returns 200 and keeps type matrix', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        const legacy = await insertLegacyMatrixQuestion(sectionId);
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: questionUrl(anamnesisId, sectionId, legacy.id),
+          headers: bearerAuth(adminToken),
+          payload: { text: 'Renamed matrix', type: AnamnesisQuestionType.MATRIX },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          id: legacy.id,
+          text: 'Renamed matrix',
+          type: AnamnesisQuestionType.MATRIX,
+        });
+        expect(response.json().options.map((option) => option.text)).toEqual(MATRIX_ROWS);
+      });
+
+      it('PATCH legacy matrix question to a creatable type returns 200, and it cannot go back to matrix', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        const legacy = await insertLegacyMatrixQuestion(sectionId);
+        const patch = (type) =>
+          app.inject({
+            method: 'PATCH',
+            url: questionUrl(anamnesisId, sectionId, legacy.id),
+            headers: bearerAuth(adminToken),
+            payload: { type },
+          });
+
+        const migrated = await patch(AnamnesisQuestionType.SINGLE_CHOICE);
+        const backToMatrix = await patch(AnamnesisQuestionType.MATRIX);
+
+        expect(migrated.statusCode).toBe(200);
+        expect(migrated.json().type).toBe(AnamnesisQuestionType.SINGLE_CHOICE);
+        expectInvalidQuestionType(backToMatrix);
+      });
+    });
+
+    describe('legacy matrix questions on read', () => {
+      it('GET /admin/anamneses/:id returns the legacy matrix question with type matrix and its typeLabel', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        await insertLegacyMatrixQuestion(sectionId);
+        const get = (headers = {}) =>
+          app.inject({
+            method: 'GET',
+            url: `/admin/anamneses/${anamnesisId}`,
+            headers: bearerAuth(adminToken, headers),
+          });
+
+        const ptBr = await get();
+        const enUs = await get({ [LANG_HEADER]: 'en-US' });
+
+        expect(ptBr.statusCode).toBe(200);
+        const [question] = ptBr.json().sections[0].questions;
+        expect(question).toMatchObject({ type: AnamnesisQuestionType.MATRIX, typeLabel: 'Matriz' });
+        expect(question.options.map((option) => option.text)).toEqual(MATRIX_ROWS);
+        expect(enUs.json().sections[0].questions[0].typeLabel).toBe('Matrix');
+      });
+
+      it('lets a trainer read the public anamnesis that holds a legacy matrix question', async () => {
+        const { accessToken: adminToken } = await createAdminWithToken();
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { anamnesisId, sectionId } = await createPublicAnamnesisWithSection(adminToken);
+        await insertLegacyMatrixQuestion(sectionId);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/trainer/anamneses/${anamnesisId}`,
+          headers: bearerAuth(trainerToken),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().sections[0].questions[0]).toMatchObject({ type: AnamnesisQuestionType.MATRIX });
+      });
     });
   });
 });
