@@ -18,8 +18,9 @@
 |---|---|---|
 | Health | / | none |
 | Auth | /auth/* | none (per-request noauth) |
-| User | /me, /become-trainer | bearer |
+| User | /me, /become-trainer, /invite/preview (public), /invite/redeem | bearer (except /invite/preview) |
 | Trainer | /trainer (profile, students, dashboard) | bearer + TRAINER role |
+| Trainer Invites - Admin | /admin/trainer-invites | bearer + ADMIN |
 | Address | /postal-code | none |
 | Training Protocols - Trainer | /trainer/protocols | bearer + TRAINER |
 | Training Protocols - My | /my/protocols | bearer |
@@ -60,7 +61,8 @@
 - `"Diet Protocols - My"` — patient-facing protocol routes
 - `"Diet Meals"` — meal CRUD within a protocol
 - `"Diet Food Items"` — food item CRUD within a meal
-- Swagger tags do NOT always match Postman folder names exactly (Diet folders are consolidated differently).
+- Swagger tags do NOT always match Postman folder names exactly (Diet folders are consolidated differently). Another confirmed case: `previewInviteSchema` and `redeemInviteSchema` both use `tags: ['Trainer Invites']`, but in Postman they live in the **`User`** folder (not a "Trainer Invites" folder — that name is reserved for the separate `Trainer Invites - Admin` folder, which covers the admin CRUD routes tagged `Trainer Invites - Admin`). When placing a new request, trust the physical location of its nearest sibling route (by URL prefix), not the Swagger tag name.
+- Public (noauth) GET requests with a querystring — confirmed via `GET /invite/preview` (added 2026-09-28, `User` folder, positioned right before `Redeem Trainer Invite`): request-level `"auth": {"type": "noauth"}`, `"header": []` (no Content-Type, since GET has no body), `url.query[]` array with `key`/`value`/`description` per param. `originalRequest` in each response example omits the `auth` field entirely (confirmed against existing noauth examples like `Auth` → `Login`).
 
 ## i18n Array Field Example Convention (Postman)
 

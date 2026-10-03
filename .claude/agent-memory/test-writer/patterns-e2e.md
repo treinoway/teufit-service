@@ -148,3 +148,36 @@ Practical rule for writing "returns 403 when wrong role" tests: always send a sc
 ## Nutritionist/trainer "link by X" endpoints use email, not internal ID
 
 `POST /nutritionist/patients` and `POST /trainer/students` both link by the **patient/student's email** in the request body (`{ email }`, not `{ patientId }` / `{ studentId }`) — confirmed in `src/services/nutritionist-patient-service.js` (`linkPatient(db, nutritionistUserId, email, data)`) and `src/services/trainer-service.js` (`linkStudentByEmail`). The internal user ID is only used in URL path params for unlink/list-item/metabolic-profile operations, never in the link-creation body. If an E2E test for one of these link endpoints sends `{ patientId }`/`{ studentId }` in the body, that's a stale test, not a source bug — fix the test to look up `email` from the helper that creates the patient/student user (most of these helpers already return `email` alongside `userId`).
+
+## Seeding a row with a hashed secret field (e.g. TrainerInvite.codeHash) directly via Prisma
+
+When a service hashes a user-supplied secret internally (e.g. `hashInviteCode()` in `trainer-invite-service.js`, sha256 of a normalized code) and the hashing helper is NOT exported, an E2E test that needs to seed a row in a specific state the API can't produce directly (e.g. an already-expired-but-still-pending invite) must reimplement the exact same normalize+hash logic locally in the test file so the seeded `codeHash` matches what the route will compute from the plaintext code it's given:
+
+```js
+function hashInviteCodeForSeed(code) {
+  const normalized = code.trim().toUpperCase().replace(/^TF-?/, '').replace(/[^A-Z0-9]/g, '');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+```
+
+Keep this in sync with the real (private) implementation if it ever changes — grep the service file's normalize/hash functions rather than assuming this snippet is still accurate.
+
+## Public/unauthenticated read-only preview endpoints — read-only guarantee test pattern
+
+For an endpoint like `GET /invite/preview` that shares a "load and validate" helper with a mutating endpoint (`POST /invite/redeem`) but must never mutate state (e.g. must NOT flip an expired invite to `expired` status), the critical regression test is: seed the row directly via Prisma, hit the endpoint, assert the error response, THEN re-fetch the same row via Prisma and assert its `status` (or other mutable field) is unchanged. A statusCode-only assertion would not catch a future accidental reuse of the mutating `onExpiredPending` hook on the read-only path.
+
+## E2E harness is now Testcontainers-based — the old shared-dev-Postgres workaround is OBSOLETE (confirmed 2026-09-28)
+
+As of `vitest.e2e.config.js` + `test/e2e/global-setup.js`, `npm run test:e2e` (`scripts/test-e2e.sh`) spins up an **ephemeral** Postgres via Testcontainers — it does NOT touch the shared dev container on port 5433 and does NOT run `docker compose down -v`. The earlier warning in [[known-failures]] about never running `npm run test:e2e` against a shared container, and the workaround of exporting `DATABASE_URL`/`DISABLE_EMAIL`/etc and running plain `npx vitest run test/e2e/<file>.test.js`, is **stale** — that plain invocation now fails with "No test files found" because the default `vitest.config.js` excludes `test/e2e/**`.
+
+**Correct way to run a subset of E2E files** (no env vars needed — `vitest.e2e.config.js` sets `DISABLE_EMAIL`, `DISABLE_S3_UPLOAD`, `DISABLE_POSTAL_CODE_VALIDATION`, `NODE_ENV` itself, and `global-setup.js` provisions its own ephemeral `DATABASE_URL`):
+
+```bash
+npx vitest run --config vitest.e2e.config.js test/e2e/<file1>.test.js test/e2e/<file2>.test.js
+```
+
+This is safe to run directly against a machine that also happens to have the shared dev `treinoway_postgres` container running on 5433 — the ephemeral container is separate and on its own port. Still avoid running the **entire** `test/e2e/` directory in one shot for a large multi-file change; picking every file that actually imports/exercises the changed code (`grep -rl` for the changed function/service names across `test/e2e/*.test.js`, plus any route-level test file that exercises the same service without importing it directly, e.g. account-deletion is only reachable via `DELETE /me` in `user.e2e.test.js`) is faster and gives an equally reliable signal.
+
+## RTK shell wrapper can truncate/garble long-running command stdout
+
+This project's Bash tool is proxied through an `rtk` (Rust Token Killer) hook that filters/summarizes command output for token savings. For `npx vitest run` (which prints a long migration list + test results), this proxy has been observed to return a garbled/empty-looking summary (`PASS (0) FAIL (0)`) even when the command actually ran fine, and to aggressively truncate multi-thousand-character output to ~2000 chars with a pointer to a log file. **Always redirect vitest (and other verbose) commands to a file (`> /tmp/foo.log 2>&1; echo EXIT:$?`) and then `tail`/`grep` that file directly** rather than trusting the inline tool-call stdout — it is the only reliable way to confirm the real pass/fail counts.
