@@ -19,6 +19,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }))
 
 import Anthropic from '@anthropic-ai/sdk'
+import { signupVerified } from '../helpers/signup-user.js';
 
 /**
  * Build a mock Anthropic stream object that yields text_delta events
@@ -72,7 +73,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
   // ---------------------------------------------------------------------------
   async function createTrainerWithToken() {
     const email = `trainer-${Date.now()}@test.com`
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'Test1234!' },
@@ -99,7 +100,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
   // Helper: create a student account and return a valid Bearer token
   // ---------------------------------------------------------------------------
   async function createStudentWithToken() {
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: {
@@ -704,7 +705,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
   describe('get_student_performance tool execution', () => {
     async function createLinkedStudentForTrainer(trainerToken) {
       const email = `ai-student-${Date.now()}@test.com`
-      const signupRes = await app.inject({
+      const signupRes = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password: 'Test1234!' },
@@ -827,7 +828,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
   describe('POST /trainer/ai/chat/stream — get_student_performance second LLM stream', () => {
     async function createLinkedStudentForTrainer(trainerToken) {
       const email = `ai-stream-student-${Date.now()}@test.com`
-      const signupRes = await app.inject({
+      const signupRes = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password: 'Test1234!' },

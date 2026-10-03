@@ -14,6 +14,13 @@ export default {
   auth: {
     accessTokenTtlSeconds: 60 * 15, // 15 minutes
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
+    // Returning the reset code in the forgot-password body defeats the email
+    // proof. Only development and test turn this on; never staging/production.
+    exposeResetTokenInResponse: false,
+    // Per-email silent throttle on issuing reset codes (a throttled request
+    // still gets the uniform 200, it just sends nothing).
+    passwordResetCooldownMs: 60 * 1000,
+    passwordResetMaxPerHour: 5,
   },
   sentry: {
     // Optional — all Sentry calls are no-ops when DSN is absent.
@@ -34,6 +41,12 @@ export default {
   web: {
     // Used to build the trainer-invite magic link: `${baseUrl}/invite?code=...`
     baseUrl: process.env.WEB_BASE_URL || 'https://teufit.com.br',
+  },
+  stores: {
+    // Store listing links embedded in student emails. Placeholder defaults
+    // (mocks) until the apps are published — override via env in each environment.
+    appStoreUrl: process.env.APP_STORE_URL || 'https://apps.apple.com/br/app/teufit/id0000000000',
+    playStoreUrl: process.env.PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=br.com.teufit.app',
   },
   betaInviteGate: {
     // Emergency kill-switch for the /become-trainer beta gate — set
@@ -74,6 +87,40 @@ export default {
       resetPassword: {
         max: 10,
         timeWindow: '1 minute',
+      },
+      verifyEmail: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+      resendEmailVerification: {
+        max: 5,
+        timeWindow: '1 hour',
+      },
+      // Public signup endpoints, IP-keyed. Kept loose enough for carrier-grade
+      // NAT (many mobile users behind one IP); the real per-email bounds are the
+      // DB-backed code cooldown / daily cap / attempts (src/constants/email-verification.js).
+      signup: {
+        max: 20,
+        timeWindow: '1 hour',
+      },
+      signupVerify: {
+        max: 30,
+        timeWindow: '15 minutes',
+      },
+      // Keyed by the (normalized) email in the body, on top of signupVerify.
+      signupVerifyPerEmail: {
+        max: 10,
+        timeWindow: '15 minutes',
+      },
+      signupResend: {
+        max: 10,
+        timeWindow: '1 hour',
+      },
+      // POST /auth/signup/invite: public, the TF- code (~50 bits) is the only
+      // gate, so this stays tighter than signupVerify but loose enough for CGNAT.
+      signupInvite: {
+        max: 20,
+        timeWindow: '15 minutes',
       },
     },
     postalCode: {
@@ -121,6 +168,14 @@ export default {
     trainer: {
       searchStudents: {
         max: 60,
+        timeWindow: '1 minute',
+      },
+      inviteStudent: {
+        max: 20,
+        timeWindow: '1 minute',
+      },
+      resendStudentInvite: {
+        max: 10,
         timeWindow: '1 minute',
       },
     },

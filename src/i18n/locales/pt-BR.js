@@ -210,6 +210,7 @@ export default {
     'auth.apple.firstLoginRequiresEmail': 'O primeiro login com a Apple precisa de e-mail. Faça login novamente.',
     'auth.apple.invalidToken': 'Token da Apple inválido.',
     'auth.apple.failed': 'Falha na autenticação. Tente novamente.',
+    'auth.oauthEmailNotVerified': 'Este provedor não confirmou o seu e-mail. Verifique o e-mail na sua conta ou entre com e-mail e senha.',
     'auth.user.deleted': 'Esta conta foi excluída.',
     'account.deletion.professionalUnsupported': 'A exclusão de conta ainda não está disponível para contas de treinador ou nutricionista. Entre em contato com o suporte para encerrar uma conta profissional.',
     'resource.notFound': 'Recurso não encontrado.',
@@ -383,6 +384,34 @@ export default {
     'invite.emailMismatch': 'Este convite está vinculado a outro e-mail.',
     'invite.required': 'É necessário um convite de treinador para acessar esta funcionalidade durante o teste fechado.',
     'invite.alreadyActiveForEmail': 'Este e-mail já possui um convite ativo.',
+    'trainerInvite.accountExists': 'Já existe uma conta para este e-mail. Entre na sua conta e resgate o convite.',
+
+    // Student invite (trainer -> prospective student)
+    'studentInvite.notFound': 'Convite não encontrado.',
+    'studentInvite.notPending': 'Este convite não está mais pendente.',
+    'studentInvite.resendCooldown': 'Aguarde um pouco antes de reenviar este convite.',
+    'studentInvite.resendLimit': 'Você atingiu o limite de reenvios deste convite.',
+    'studentInvite.alreadyPending': 'Já existe um convite pendente para este e-mail.',
+    'studentInvite.dailyLimit': 'Você atingiu o limite diário de convites. Tente novamente mais tarde.',
+    'studentInvite.emailSendFailed': 'Não foi possível enviar o e-mail do convite. Tente novamente.',
+    'student.accountDeactivated': 'A conta deste aluno está desativada.',
+
+    // Email verification
+    'emailVerification.invalidCode': 'Código de verificação inválido.',
+    'emailVerification.codeExpired': 'O código de verificação expirou. Solicite um novo.',
+    'emailVerification.tooManyAttempts': 'Muitas tentativas incorretas. Solicite um novo código.',
+    'emailVerification.alreadyVerified': 'Seu e-mail já foi verificado.',
+    'emailVerification.resendCooldown': 'Aguarde um momento antes de solicitar um novo código.',
+    'emailVerification.userNotFound': 'Usuário não encontrado.',
+    'emailVerification.dailyLimit': 'Você solicitou códigos demais hoje. Tente novamente mais tarde.',
+    'emailVerification.sendFailed': 'Não foi possível enviar o e-mail de verificação. Tente novamente.',
+
+    // Password reset
+    'auth.email.required': 'O e-mail é obrigatório.',
+    'passwordReset.invalidCode': 'Código inválido ou expirado. Solicite um novo.',
+    'passwordReset.codeRequired': 'O código de redefinição é obrigatório.',
+    'passwordReset.weakPassword': 'A senha deve ter pelo menos 8 caracteres.',
+    'passwordReset.passwordMismatch': 'As senhas não coincidem.',
   },
 
   notes: {

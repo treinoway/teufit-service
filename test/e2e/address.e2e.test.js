@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const VIACEP_FIXTURES = {
 	'01310100': {
@@ -61,7 +62,7 @@ describe('e2e: address flows', () => {
 		const email = `test-address-${Date.now()}@example.com`;
 		const password = 'TestPassword123!';
 		
-		const signupResponse = await app.inject({
+		const signupResponse = await signupVerified(app, {
 			method: 'POST',
 			url: '/auth/signup',
 			payload: { email, password },

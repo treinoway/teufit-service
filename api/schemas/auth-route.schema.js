@@ -27,23 +27,101 @@ export const authSuccessResponseSchema = {
   },
 };
 
+const signupEmailProperty = { type: 'string', format: 'email', maxLength: 254 };
+const signupPasswordProperty = { type: 'string', minLength: 8 };
+
 export const signupSchema = {
   tags: authTags,
-  summary: 'Sign up with email/password',
+  summary: 'Start an email/password signup (always 202, no account enumeration)',
+  description:
+    'Does NOT create the account. Always answers 202 { status: "pending_verification" } for a well-formed body, '
+    + 'whether or not the email already has an account. In the background: no account → a 6-digit code is emailed '
+    + '(60s cooldown, max 5 codes/24h, both silent); existing account → a "you already have an account" email '
+    + '(max 1 per 15 min); deleted account → nothing. Finish with POST /auth/signup/verify. '
+    + 'The password is validated here but NOT stored: send it again to /auth/signup/verify.',
   body: {
     type: 'object',
     required: ['email', 'password'],
     additionalProperties: false,
     properties: {
-      email: { type: 'string', format: 'email' },
-      password: { type: 'string', minLength: 8 },
+      email: signupEmailProperty,
+      password: signupPasswordProperty,
     },
   },
   response: {
-    201: authSuccessResponseSchema,
+    202: {
+      type: 'object',
+      required: ['status'],
+      properties: {
+        status: { type: 'string', enum: ['pending_verification'] },
+      },
+    },
     400: badRequestErrorResponseSchema,
-    403: errorResponseSchema,
-    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const signupVerifySchema = {
+  tags: authTags,
+  summary: 'Confirm a pending signup with the emailed code and create the account',
+  description:
+    'Creates the user (email already verified), accepts pending trainer invites for the email and returns tokens. '
+    + 'The password sent here becomes the account password. 400 emailVerification.invalidCode covers wrong code, '
+    + 'no pending signup and email already registered (indistinguishable). 400 emailVerification.codeExpired, '
+    + '429 emailVerification.tooManyAttempts (5 per code) → request a new code via /auth/signup/resend. '
+    + 'Rate limited per IP and per email (429 request.rateLimitExceeded).',
+  body: {
+    type: 'object',
+    required: ['email', 'code', 'password'],
+    additionalProperties: false,
+    properties: {
+      email: signupEmailProperty,
+      code: { type: 'string', pattern: '^[0-9]{6}$', description: '6-digit numeric code sent by email' },
+      password: signupPasswordProperty,
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      required: ['user', 'token', 'refreshToken', 'linkedTrainers'],
+      properties: {
+        user: userIdResponseSchema,
+        token: tokenResponseSchema,
+        refreshToken: { type: 'string' },
+        linkedTrainers: { type: 'integer', minimum: 0, description: 'Number of trainer invites accepted for this email' },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const signupResendSchema = {
+  tags: authTags,
+  summary: 'Re-send the signup code (always 202)',
+  description:
+    'Always 202 { sent: true } for a well-formed email. Cooldown (60s), daily cap (5 codes/24h) and delivery '
+    + 'failures are applied silently; an email with an existing account gets the "you already have an account" '
+    + 'email instead. Clients should run the 60s countdown locally.',
+  body: {
+    type: 'object',
+    required: ['email'],
+    additionalProperties: false,
+    properties: {
+      email: signupEmailProperty,
+    },
+  },
+  response: {
+    202: {
+      type: 'object',
+      required: ['sent'],
+      properties: {
+        sent: { type: 'boolean', enum: [true] },
+      },
+    },
+    400: badRequestErrorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -66,7 +144,6 @@ export const loginSchema = {
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
-    409: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -90,7 +167,7 @@ export const forgotPasswordSchema = {
         message: { type: 'string' },
         resetToken: {
           type: 'string',
-          description: '6-digit reset code (returned only in non-production environments)',
+          description: '6-digit reset code. Returned ONLY when config.auth.exposeResetTokenInResponse is on (development and test); never in staging or production.',
           minLength: 6,
           maxLength: 6,
           pattern: '^[0-9]{6}$',
@@ -105,18 +182,21 @@ export const forgotPasswordSchema = {
 
 export const resetPasswordSchema = {
   tags: authTags,
-  summary: 'Reset password using a one-time token',
+  summary: 'Reset password using the emailed code',
+  description:
+    'The code is bound to the email it was sent to. Unknown email, deleted account, missing/used/expired code, wrong code and too many attempts (5 per code) all return the same 400 `PASSWORD_RESET_INVALID_CODE` / `passwordReset.invalidCode`. The legacy `token` field is not used (no alias; it is stripped, so a body without `code` fails validation).',
   body: {
     type: 'object',
-    required: ['token', 'password', 'passwordConfirmation'],
+    required: ['email', 'code', 'password', 'passwordConfirmation'],
     additionalProperties: false,
     properties: {
-      token: {
+      email: { type: 'string', format: 'email', description: 'Email the reset code was requested for' },
+      code: {
         type: 'string',
         minLength: 6,
         maxLength: 6,
         pattern: '^[0-9]{6}$',
-        description: '6-digit reset code sent via email (valid for 15 minutes)',
+        description: '6-digit reset code sent via email (valid for 15 minutes, 5 attempts)',
       },
       password: { type: 'string', minLength: 8 },
       passwordConfirmation: {
@@ -129,7 +209,6 @@ export const resetPasswordSchema = {
   response: {
     200: authSuccessResponseSchema,
     400: badRequestErrorResponseSchema,
-    403: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -348,3 +427,98 @@ export const changePasswordSchema = {
   },
 };
 
+
+export const verifyEmailSchema = {
+  tags: authTags,
+  summary: 'Verify the authenticated user\'s email with the 6-digit code',
+  description: 'Marks the email account verified and auto-accepts pending trainer invites for the email. Max 5 attempts per code; code expires in 30 minutes.',
+  security: [{ bearerAuth: [] }],
+  body: {
+    type: 'object',
+    required: ['code'],
+    additionalProperties: false,
+    properties: {
+      code: { type: 'string', pattern: '^[0-9]{6}$', description: '6-digit numeric code sent by email' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object',
+      required: ['verified', 'linkedTrainers'],
+      properties: {
+        verified: { type: 'boolean' },
+        linkedTrainers: { type: 'integer', minimum: 0, description: 'Number of trainer invites accepted as a result of verifying' },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const resendEmailVerificationSchema = {
+  tags: authTags,
+  summary: 'Resend the email verification code (60s cooldown, max 5 codes per 24h)',
+  description: 'Rate limited per user. 429 emailVerification.resendCooldown or emailVerification.dailyLimit (both with details.retryAfterSeconds). 502 emailVerification.sendFailed when the email provider rejects the send.',
+  security: [{ bearerAuth: [] }],
+  response: {
+    200: {
+      type: 'object',
+      required: ['sent'],
+      properties: {
+        sent: { type: 'boolean' },
+      },
+    },
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+    502: errorResponseSchema,
+  },
+};
+
+export const signupInviteSchema = {
+  tags: authTags,
+  summary: 'Sign up through a trainer invite code (no 6-digit email code)',
+  description:
+    'Closed-beta signup for an invited trainer. The TF- invite code proves inbox ownership, so the account is created '
+    + 'with a verified email, the trainer role and the invite is accepted, all in one transaction. The email comes from '
+    + 'the invite (see GET /invite/preview). Password rules are the same as /auth/signup/verify. '
+    + 'Errors: 404 invite.notFound, 403 invite.revoked / invite.expired, 409 invite.alreadyAccepted, '
+    + '409 trainerInvite.accountExists (the email already has an account, including a deleted one: sign in and redeem '
+    + 'via POST /invite/redeem), 400 validation.failed (e.g. password shorter than 8). Rate limited per IP '
+    + '(429 request.rateLimitExceeded).',
+  body: {
+    type: 'object',
+    required: ['code', 'password'],
+    additionalProperties: false,
+    properties: {
+      code: { type: 'string', minLength: 1, maxLength: 32, description: 'Invite code, e.g. TF-XXXX-XXXX-XX. Dashes/prefix are optional and case-insensitive.' },
+      password: signupPasswordProperty,
+    },
+  },
+  response: {
+    201: {
+      type: 'object',
+      required: ['user', 'token', 'refreshToken', 'linkedTrainers', 'betaAccess', 'activeProfile'],
+      properties: {
+        user: userIdResponseSchema,
+        token: tokenResponseSchema,
+        refreshToken: { type: 'string' },
+        linkedTrainers: { type: 'integer', minimum: 0, description: 'Number of student invites accepted for this email' },
+        betaAccess: { type: 'boolean', description: 'Same as POST /invite/redeem; always true here.' },
+        activeProfile: { type: 'string', description: 'Always "trainer" here.' },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    403: { description: 'Forbidden: invite.revoked or invite.expired', ...errorResponseSchema },
+    404: { description: 'Not found: invite.notFound', ...errorResponseSchema },
+    409: { description: 'Conflict: invite.alreadyAccepted or trainerInvite.accountExists', ...errorResponseSchema },
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};

@@ -4,6 +4,7 @@ import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { WorkoutsTodayMessageCode } from '../../src/constants/training.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -49,7 +50,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     const email = `e2e+trainer-wotd-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -77,7 +78,7 @@ e2eDescribe('e2e: GET /my/workouts/today', () => {
     const email = `e2e+student-wotd-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },

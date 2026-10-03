@@ -3,6 +3,7 @@ import 'dotenv/config';
 import config from '../../config/index.js';
 import {
   findOrCreateUserFromOAuth,
+  assertOAuthEmailVerified,
   findAccountByProvider,
   findUserByEmailInsensitive,
 } from '../../src/helpers/auth.js';
@@ -12,8 +13,7 @@ import {
   changePassword,
   loginWithEmailPasswordStateless,
   requestPasswordReset,
-  resetPasswordWithToken,
-  signupWithEmailPasswordStateless,
+  resetPasswordWithCode,
 } from '../../src/services/auth-service.js';
 import { verifyGoogleIdToken } from '../../src/services/google-id-token-service.js';
 import { verifyAppleIdToken } from '../../src/services/apple-id-token-service.js';
@@ -25,8 +25,10 @@ import {
   rotateRefreshToken
 } from '../../src/services/token-service.js';
 import emailHandler from '../../src/config/email-handler.js';
+import { AppError } from '../../src/errors/app-error.js';
 import {
   signupSchema,
+  signupInviteSchema,
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -39,7 +41,54 @@ import {
   logoutSchema,
   waitlistSchema,
   changePasswordSchema,
+  verifyEmailSchema,
+  resendEmailVerificationSchema,
+  signupVerifySchema,
+  signupResendSchema,
 } from '../schemas/auth-route.schema.js';
+import { prisma } from '../../src/db.js';
+import { verifyEmailCode, resendVerificationCode } from '../../src/services/email-verification-service.js';
+import { userRateLimitKey } from '../../src/helpers/rate-limit-key.js';
+import {
+  processSignupRequest,
+  processSignupResendRequest,
+  purgeStalePendingSignups,
+  verifySignupCode,
+} from '../../src/services/signup-verification-service.js';
+import { signupWithInvite } from '../../src/services/trainer-invite-service.js';
+import { acceptPendingInvitesForUser } from '../../src/services/student-invite-service.js';
+import { hasBetaAccess } from '../../src/helpers/beta-access.js';
+import { runAfterResponse } from '../../src/helpers/run-after-response.js';
+import { SignupStatus } from '../../src/constants/signup-verification.js';
+
+/**
+ * Per-email limiter for POST /auth/signup/verify (on top of the per-IP one), so
+ * rotating IPs does not multiply guesses against one address. Built with
+ * `createRateLimit` because a second route-level limiter would be skipped (the
+ * plugin runs once per request), and run as a preHandler because the key comes
+ * from the validated body. The plugin is not registered in the test env.
+ */
+function signupVerifyPerEmailLimiter(fastify) {
+  if (!fastify.hasDecorator('createRateLimit')) return [];
+  const checkLimit = fastify.createRateLimit({
+    ...config.rateLimit.auth.signupVerifyPerEmail,
+    keyGenerator: (request) => `signup-verify-email:${String(request.body?.email ?? '').trim().toLowerCase()}`,
+  });
+  return [
+    async (request, reply) => {
+      const limit = await checkLimit(request);
+      if (!limit.isExceeded) return;
+      reply.header('retry-after', limit.ttlInSeconds);
+      throw new AppError({
+        httpStatus: 429,
+        error: 'TOO_MANY_REQUESTS',
+        messageCode: 'request.rateLimitExceeded',
+        message: 'Too many requests. Try again later.',
+        details: { retryAfterSeconds: limit.ttlInSeconds },
+      });
+    },
+  ];
+}
 
 export async function authRoutes(fastify) {
   // Configure Google OAuth2 plugin.
@@ -57,47 +106,96 @@ export async function authRoutes(fastify) {
     scope: ['profile', 'email'],
   });
 
-  // Email/password signup (stateless)
+  // Email/password signup. Answers the same 202 whether or not the email has an
+  // account (no enumeration); the branch-specific work (pending signup + code,
+  // "you already have an account" email, or nothing) runs after the response so
+  // latency is uniform too. The account is only created by /auth/signup/verify.
   fastify.post(
     '/auth/signup',
     {
+      config: { rateLimit: config.rateLimit.auth.signup },
       schema: signupSchema,
     },
     async (request, reply) => {
-      try {
-        const body = request.body ?? {};
-        const email = body.email;
-        const password = body.password;
+      const { email } = request.body;
+      runAfterResponse(
+        reply,
+        async () => {
+          await processSignupRequest(prisma, { email });
+          await purgeStalePendingSignups(prisma);
+        },
+        request.log,
+        'signup',
+      );
+      return reply.status(202).send({ status: SignupStatus.PENDING_VERIFICATION });
+    },
+  );
 
-        const { userId, accessToken, refreshToken } = await signupWithEmailPasswordStateless({
-          fastify,
-          email,
-          password,
-          roles: [],
-        });
+  // Confirms a pending signup with the emailed code and creates the account.
+  fastify.post(
+    '/auth/signup/verify',
+    {
+      config: { rateLimit: config.rateLimit.auth.signupVerify },
+      schema: signupVerifySchema,
+      preHandler: signupVerifyPerEmailLimiter(fastify),
+    },
+    async (request, reply) => {
+      const { email, code, password } = request.body;
+      const { user, linkedTrainers } = await verifySignupCode(prisma, { email, code, password });
 
-        return reply.status(201).send({
-          user: { id: userId },
-          token: { accessToken },
-          refreshToken,
-        });
-      } catch (error) {
-        if (error?.code === 'EMAIL_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_ROLE') {
-          return reply.status(400).send({ error: error.code, message: error.message });
-        }
-        if (error?.code === 'EMAIL_IN_USE') {
-          return reply.status(409).send({ error: 'EMAIL_IN_USE' });
-        }
-        if (error?.code === 'USER_DELETED') {
-          return reply.status(403).send({ error: 'Account deactivated' });
-        }
-        if (error?.code === 'JWT_NOT_CONFIGURED') {
-          return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
-        }
+      const access = issueAccessToken({ fastify, user });
+      const refresh = await issueRefreshToken({ user });
 
-        fastify.log.error(error);
-        return reply.status(500).send({ error: 'Signup failed' });
-      }
+      return reply.status(201).send({
+        user: { id: user.id },
+        token: { accessToken: access.accessToken },
+        refreshToken: refresh.refreshToken,
+        linkedTrainers,
+      });
+    },
+  );
+
+  // Invited-trainer signup: the TF- code replaces the 6-digit email code (it
+  // proves inbox ownership). Creates the verified trainer account, accepts the
+  // invite and returns tokens; the access token already carries the trainer role.
+  fastify.post(
+    '/auth/signup/invite',
+    {
+      config: { rateLimit: config.rateLimit.auth.signupInvite },
+      schema: signupInviteSchema,
+    },
+    async (request, reply) => {
+      const { code, password } = request.body;
+      const { user, preferences } = await signupWithInvite({ code, password });
+      const linkedTrainers = await acceptPendingInvitesForUser(prisma, user);
+
+      const access = issueAccessToken({ fastify, user });
+      const refresh = await issueRefreshToken({ user });
+
+      return reply.status(201).send({
+        user: { id: user.id },
+        token: { accessToken: access.accessToken },
+        refreshToken: refresh.refreshToken,
+        linkedTrainers,
+        betaAccess: await hasBetaAccess(user),
+        activeProfile: preferences.activeProfile,
+      });
+    },
+  );
+
+  // Re-sends the signup code. Always 202: cooldown, daily cap and delivery
+  // failures are applied silently (any distinct answer would reveal whether a
+  // pending signup or an account exists for the email).
+  fastify.post(
+    '/auth/signup/resend',
+    {
+      config: { rateLimit: config.rateLimit.auth.signupResend },
+      schema: signupResendSchema,
+    },
+    async (request, reply) => {
+      const { email } = request.body;
+      runAfterResponse(reply, () => processSignupResendRequest(prisma, { email }), request.log, 'signup-resend');
+      return reply.status(202).send({ sent: true });
     },
   );
 
@@ -168,9 +266,6 @@ export async function authRoutes(fastify) {
             details: {},
           });
         }
-        if (error?.code === 'PASSWORD_NOT_SET') {
-          return reply.status(409).send({ error: 'PASSWORD_NOT_SET' });
-        }
         if (error?.code === 'JWT_NOT_CONFIGURED') {
           return reply.status(500).send({ error: 'JWT_NOT_CONFIGURED', message: error.message });
         }
@@ -199,8 +294,8 @@ export async function authRoutes(fastify) {
           message: 'If an account exists for this email, a reset link has been sent.',
         };
 
-        // In non-production, expose the token to simplify manual testing.
-        if (process.env.NODE_ENV !== 'production' && resetToken) {
+        // Only development/test expose the code (config flag, off elsewhere).
+        if (config.auth.exposeResetTokenInResponse && resetToken) {
           payload.resetToken = resetToken;
         }
 
@@ -208,22 +303,21 @@ export async function authRoutes(fastify) {
           return reply.send(payload);
         }
 
-        try {
-          await emailHandler.sendResetPasswordEmail({ to: deliveryEmail, passwordToken: resetToken });
-        } catch (emailErr) {
-          fastify.log.error(`Failed to send password reset email to ${deliveryEmail}: ${emailErr.message}`);
-        }
+        // Sent after the response: awaiting the email provider only on this
+        // branch made the latency reveal whether the email has an account.
+        runAfterResponse(
+          reply,
+          async () => {
+            const response = await emailHandler.sendResetPasswordEmail({ to: deliveryEmail, passwordToken: resetToken });
+            if (response?.error) throw new Error(`Email provider rejected the reset email: ${response.error?.name}`);
+          },
+          request.log,
+          'forgot-password-email',
+        );
 
         return reply.send(payload);
       } catch (error) {
-        if (error?.code === 'EMAIL_REQUIRED') {
-          return reply.status(400).send({
-            error: error.code,
-            messageCode: 'auth.email.required',
-            message: error.message,
-            details: {},
-          });
-        }
+        if (error instanceof AppError) throw error;
 
         fastify.log.error(error);
         return reply.status(500).send({
@@ -246,11 +340,9 @@ export async function authRoutes(fastify) {
     async (request, reply) => {
       try {
         const body = request.body ?? {};
-        const token = body.token;
-        const password = body.password;
-        const passwordConfirmation = body.passwordConfirmation;
+        const { email, code, password, passwordConfirmation } = body;
 
-        const user = await resetPasswordWithToken({ token, password, passwordConfirmation });
+        const user = await resetPasswordWithCode({ email, code, password, passwordConfirmation });
 
         const access = issueAccessToken({ fastify, user });
         const refresh = await issueRefreshToken({ user });
@@ -261,22 +353,7 @@ export async function authRoutes(fastify) {
           refreshToken: refresh.refreshToken,
         });
       } catch (error) {
-        if (error?.code === 'RESET_TOKEN_REQUIRED' || error?.code === 'WEAK_PASSWORD' || error?.code === 'INVALID_RESET_TOKEN' || error?.code === 'RESET_TOKEN_EXPIRED' || error?.code === 'PASSWORD_MISMATCH') {
-          return reply.status(400).send({
-            error: error.code,
-            messageCode: `legacy.${error.code}`,
-            message: error.message,
-            details: {},
-          });
-        }
-        if (error?.code === 'USER_DELETED') {
-          return reply.status(403).send({
-            error: 'USER_DELETED',
-            messageCode: 'auth.user.deleted',
-            message: 'Account deactivated',
-            details: {},
-          });
-        }
+        if (error instanceof AppError) throw error;
         if (error?.code === 'JWT_NOT_CONFIGURED') {
           return reply.status(500).send({
             error: 'JWT_NOT_CONFIGURED',
@@ -327,6 +404,7 @@ export async function authRoutes(fastify) {
 
         return reply.redirect(frontendRedirectUrl);
       } catch (error) {
+        if (error instanceof AppError) throw error; // contract-shaped (e.g. auth.oauthEmailNotVerified)
         if (error?.code === 'USER_DELETED') {
           return reply.status(403).send({ error: 'Account deactivated' });
         }
@@ -377,6 +455,7 @@ export async function authRoutes(fastify) {
           refreshToken: null,
           expiresAt: null,
           roles,
+          emailVerified: google.emailVerified,
         });
 
         const token = issueAccessToken({ fastify, user });
@@ -388,6 +467,7 @@ export async function authRoutes(fastify) {
           refreshToken: refreshTokenData.refreshToken,
         });
       } catch (error) {
+        if (error instanceof AppError) throw error; // contract-shaped (e.g. auth.oauthEmailNotVerified)
         if (error?.code === 'USER_DELETED') {
           return reply.status(403).send({
             error: 'USER_DELETED',
@@ -441,6 +521,9 @@ export async function authRoutes(fastify) {
           nonce: body.nonce,
         });
 
+        // Reject unverified tokens before any account/email lookup (no oracle).
+        assertOAuthEmailVerified({ provider: 'apple', email: apple.email, emailVerified: apple.emailVerified });
+
         // Determine login vs first-time sign-up BEFORE creating anything, so we
         // can both reject email-less first logins and answer 201 on create.
         const account = await findAccountByProvider('apple', apple.subject);
@@ -471,6 +554,7 @@ export async function authRoutes(fastify) {
           refreshToken: null,
           expiresAt: null,
           roles: [],
+          emailVerified: apple.emailVerified,
         });
 
         const token = issueAccessToken({ fastify, user });
@@ -482,6 +566,7 @@ export async function authRoutes(fastify) {
           refreshToken: refreshTokenData.refreshToken,
         });
       } catch (error) {
+        if (error instanceof AppError) throw error; // contract-shaped (e.g. auth.oauthEmailNotVerified)
         if (error?.code === 'USER_DELETED') {
           return reply.status(403).send({
             error: 'USER_DELETED',
@@ -573,6 +658,7 @@ export async function authRoutes(fastify) {
           refreshToken: null,
           expiresAt: null,
           roles: [],
+          emailVerified: firebase.emailVerified,
         });
 
         const token = issueAccessToken({ fastify, user });
@@ -584,6 +670,7 @@ export async function authRoutes(fastify) {
           refreshToken: refreshTokenData.refreshToken,
         });
       } catch (error) {
+        if (error instanceof AppError) throw error; // contract-shaped (e.g. auth.oauthEmailNotVerified)
         if (error?.code === 'USER_DELETED') {
           return reply.status(403).send({ error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: 'Account deactivated' });
         }
@@ -742,6 +829,32 @@ export async function authRoutes(fastify) {
         fastify.log.error(error);
         return reply.status(500).send({ error: 'CHANGE_PASSWORD_FAILED', message: 'Failed to change password' });
       }
+    },
+  );
+
+  fastify.post(
+    '/auth/verify-email',
+    {
+      config: { rateLimit: { ...config.rateLimit.auth.verifyEmail, keyGenerator: userRateLimitKey('verify-email') } },
+      schema: verifyEmailSchema,
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      const result = await verifyEmailCode(prisma, { userId: request.user.id, code: request.body.code });
+      return reply.send(result);
+    },
+  );
+
+  fastify.post(
+    '/auth/verify-email/resend',
+    {
+      config: { rateLimit: { ...config.rateLimit.auth.resendEmailVerification, keyGenerator: userRateLimitKey('verify-email-resend') } },
+      schema: resendEmailVerificationSchema,
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      const result = await resendVerificationCode(prisma, { userId: request.user.id });
+      return reply.send(result);
     },
   );
 }

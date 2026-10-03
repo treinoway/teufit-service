@@ -5,6 +5,20 @@ import { Roles } from '../constants/roles.js';
 import crypto from 'node:crypto';
 import { issueAccessToken, issueRefreshToken, revokeAllUserRefreshTokens } from './token-service.js';
 import emailHandler from '../config/email-handler.js';
+import { markEmailVerifiedFromInboxProof } from './email-verification-service.js';
+import config from '../../config/index.js';
+import { AppError, ValidationAppError } from '../errors/app-error.js';
+import {
+  NIL_UUID,
+  PASSWORD_RESET_CODE_LENGTH,
+  PASSWORD_RESET_ISSUE_WINDOW_MS,
+  PASSWORD_RESET_MAX_ATTEMPTS,
+  PASSWORD_RESET_MIN_PASSWORD_LENGTH,
+  PASSWORD_RESET_TTL_MS,
+  PasswordResetErrorCode,
+  PasswordResetMessageCode,
+} from '../constants/password-reset.js';
+import { hashPassword, verifyPassword, verifyAgainstDummyHash } from '../helpers/password.js';
 
 export async function getCurrentUserWithAccounts(userId) {
   return prisma.user.findUnique({
@@ -63,6 +77,7 @@ export async function authenticateWithGoogle({ fastify, request }) {
     refreshToken: token.refresh_token,
     expiresAt: token,
     roles,
+    emailVerified: googleUser.verified_email === true,
   });
 
   return { user, token, googleUser };
@@ -71,12 +86,14 @@ export async function authenticateWithGoogle({ fastify, request }) {
 /**
  * Ensure a user has an associated profile row.
  * NOTE: This does not attempt to "decide" which one; it's driven by the caller.
+ * Pass `tx` to run inside a caller's interactive transaction.
  */
-export async function ensureProfileForUser({ userId, role }) {
+export async function ensureProfileForUser({ userId, role, tx }) {
+  const db = tx ?? prisma;
   if (role === Roles.TRAINER) {
-    const existing = await prisma.trainer.findFirst({ where: { userId } });
+    const existing = await db.trainer.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
-    await prisma.trainer.create({
+    await db.trainer.create({
       data: {
         userId,
       },
@@ -85,9 +102,9 @@ export async function ensureProfileForUser({ userId, role }) {
   }
 
   if (role === Roles.NUTRITIONIST) {
-    const existing = await prisma.nutritionist.findFirst({ where: { userId } });
+    const existing = await db.nutritionist.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
-    await prisma.nutritionist.create({ data: { userId } });
+    await db.nutritionist.create({ data: { userId } });
     return { created: true, role };
   }
 
@@ -97,64 +114,9 @@ export async function ensureProfileForUser({ userId, role }) {
   throw err;
 }
 
-export async function createGoogleUser({ email, password }) {
-    return signupWithEmailPassword({ email, password, roles: [] });
-}
-
 function normalizeEmail(email) {
   if (typeof email !== 'string') return '';
   return email.trim().toLowerCase();
-}
-
-function hashPassword(password) {
-  // scrypt params tuned for web auth (can be revisited later)
-  const salt = crypto.randomBytes(16);
-  const keylen = 64;
-  const N = 16384;
-  const r = 8;
-  const p = 1;
-
-  const derivedKey = crypto.scryptSync(password, salt, keylen, { N, r, p });
-  // Compact, self-contained format
-  return `scrypt$N=${N},r=${r},p=${p}$${salt.toString('base64')}$${derivedKey.toString('base64')}`;
-}
-
-function verifyPassword(password, stored) {
-  if (typeof stored !== 'string' || !stored.startsWith('scrypt$')) return false;
-
-  // Format: scrypt$N=...,r=...,p=...$<saltB64>$<hashB64>
-  const parts = stored.split('$');
-  if (parts.length !== 4) return false;
-
-  const paramsPart = parts[1];
-  const saltB64 = parts[2];
-  const hashB64 = parts[3];
-
-  const params = Object.fromEntries(
-    paramsPart
-      .split(',')
-      .map((kv) => kv.split('='))
-      .filter((kv) => kv.length === 2)
-      .map(([k, v]) => [k, Number(v)]),
-  );
-
-  const N = params.N;
-  const r = params.r;
-  const p = params.p;
-
-  if (![N, r, p].every((n) => Number.isFinite(n) && n > 0)) return false;
-
-  let salt;
-  let expected;
-  try {
-    salt = Buffer.from(saltB64, 'base64');
-    expected = Buffer.from(hashB64, 'base64');
-  } catch {
-    return false;
-  }
-
-  const derived = crypto.scryptSync(password, salt, expected.length, { N, r, p });
-  return crypto.timingSafeEqual(derived, expected);
 }
 
 function hashToken(token) {
@@ -168,91 +130,12 @@ function safeUser(user) {
 }
 
 /**
- * Email/password signup.
- * Contract:
- * - Creates a new user with passwordHash
- * - Creates an Account row with provider 'email' for consistency with OAuth flow
- * - Sets default roles [] unless provided
- * - Returns user without the password hash
- */
-export async function signupWithEmailPassword({ email, password, roles }) {
-  const normalizedEmail = normalizeEmail(email);
-
-  if (!normalizedEmail) {
-    const err = new Error('Email is required');
-    err.code = 'EMAIL_REQUIRED';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  if (typeof password !== 'string' || password.length < 8) {
-    const err = new Error('Password must be at least 8 characters');
-    err.code = 'WEAK_PASSWORD';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  // Normalize roles to array, default to []
-  const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
-
-  // Prevent signup with unsupported roles (only TRAINER is assignable; empty is allowed)
-  if (!rolesArray.every(r => [Roles.TRAINER].includes(r))) {
-    const err = new Error('Invalid role');
-    err.code = 'INVALID_ROLE';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
-  const existing = existingUserId ? await prisma.user.findUnique({ where: { id: existingUserId } }) : null;
-  if (existing && !existing.deletedAt) {
-    const err = new Error('Email already in use');
-    err.code = 'EMAIL_IN_USE';
-    err.statusCode = 409;
-    throw err;
-  }
-
-  if (existing?.deletedAt) {
-    const err = new Error('User account is deactivated');
-    err.code = 'USER_DELETED';
-    err.statusCode = 403;
-    throw err;
-  }
-
-  const passwordHash = hashPassword(password);
-
-  // Create user and account in a transaction
-  const created = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: normalizedEmail,
-        passwordHash,
-        roles: rolesArray,
-        status: 'pending',
-      },
-    });
-
-    // Create account record to track authentication method
-    await tx.account.create({
-      data: {
-        userId: user.id,
-        provider: 'email',
-        providerId: normalizedEmail,
-      },
-    });
-
-    return user;
-  });
-
-  return safeUser(created);
-}
-
-/**
  * Email/password login.
  * Contract:
  * - Validates email+password
- * - Requires the user to have a passwordHash (not OAuth-only)
- * - Rejects soft-deleted users
+ * - Unknown email, OAuth-only account (no passwordHash) and wrong password are
+ *   all INVALID_CREDENTIALS, with the same scrypt cost
+ * - Rejects soft-deleted users (only after the password matched)
  * - Returns user without passwordHash
  */
 export async function loginWithEmailPassword({ email, password }) {
@@ -274,7 +157,14 @@ export async function loginWithEmailPassword({ email, password }) {
 
   const userId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
-  if (!user) {
+
+  // Every rejection below costs one scrypt and answers the same 401, so neither
+  // latency nor status tells an unknown email from an OAuth-only account or a
+  // wrong password. USER_DELETED is only revealed to whoever knows the password.
+  const passwordMatches = user?.passwordHash
+    ? verifyPassword(password, user.passwordHash)
+    : verifyAgainstDummyHash(password);
+  if (!passwordMatches) {
     const err = new Error('Invalid credentials');
     err.code = 'INVALID_CREDENTIALS';
     err.statusCode = 401;
@@ -288,22 +178,40 @@ export async function loginWithEmailPassword({ email, password }) {
     throw err;
   }
 
-  if (!user.passwordHash) {
-    const err = new Error('Password login not available for this account');
-    err.code = 'PASSWORD_NOT_SET';
-    err.statusCode = 409;
-    throw err;
-  }
-
-  const ok = verifyPassword(password, user.passwordHash);
-  if (!ok) {
-    const err = new Error('Invalid credentials');
-    err.code = 'INVALID_CREDENTIALS';
-    err.statusCode = 401;
-    throw err;
-  }
-
   return safeUser(user);
+}
+
+function throwPasswordResetValidation({ field, error, messageCode, message }) {
+  throw new ValidationAppError({ message, messageCode, details: [{ field, reason: error }] });
+}
+
+function throwInvalidResetCode() {
+  throw new AppError({
+    httpStatus: 400,
+    error: PasswordResetErrorCode.INVALID_CODE,
+    messageCode: PasswordResetMessageCode.INVALID_CODE,
+    message: 'Invalid or expired code. Request a new one.',
+  });
+}
+
+/**
+ * Whether a new code may be issued for this user right now. Enforces the
+ * per-email cooldown and hourly cap. Evaluated silently: the caller still
+ * answers the uniform 200, so a throttle never reveals the account exists.
+ * Each issue resets the attempts counter, so the cap bounds total guesses.
+ */
+async function isPasswordResetIssueAllowed(userId) {
+  const { passwordResetCooldownMs, passwordResetMaxPerHour } = config.auth;
+  const recentTokens = await prisma.passwordResetToken.findMany({
+    where: { userId, createdAt: { gte: new Date(Date.now() - PASSWORD_RESET_ISSUE_WINDOW_MS) } },
+    orderBy: { createdAt: 'desc' },
+    take: passwordResetMaxPerHour,
+    select: { createdAt: true },
+  });
+
+  if (recentTokens.length >= passwordResetMaxPerHour) return false;
+  const latest = recentTokens[0];
+  return !latest || Date.now() - latest.createdAt.getTime() >= passwordResetCooldownMs;
 }
 
 /**
@@ -311,17 +219,21 @@ export async function loginWithEmailPassword({ email, password }) {
  *
  * Contract:
  * - Always succeeds (to avoid email enumeration) if email format is valid.
- * - Creates a PasswordResetToken row when a matching user exists and is not deleted.
- * - Returns the plain resetToken (for local/dev usage only).
+ * - Creates a PasswordResetToken row when a matching user exists, is not
+ *   deleted and is not throttled (cooldown / hourly cap, silent).
+ * - Returns the plain resetToken; the route only exposes it in the response
+ *   when config.auth.exposeResetTokenInResponse is on (development/test).
  */
 export async function requestPasswordReset({ email }) {
   const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
-    const err = new Error('Email is required');
-    err.code = 'EMAIL_REQUIRED';
-    err.statusCode = 400;
-    throw err;
+    throwPasswordResetValidation({
+      field: 'email',
+      error: PasswordResetErrorCode.EMAIL_REQUIRED,
+      messageCode: PasswordResetMessageCode.EMAIL_REQUIRED,
+      message: 'Email is required',
+    });
   }
 
   const userId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
@@ -332,24 +244,28 @@ export async function requestPasswordReset({ email }) {
     return { resetToken: null, deliveryEmail: null };
   }
 
-  // Generate a 6-digit numeric reset code
-  const token = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
-  const tokenHash = hashToken(token);
-  // Token expires in 15 minutes
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  if (!(await isPasswordResetIssueAllowed(user.id))) {
+    return { resetToken: null, deliveryEmail: null };
+  }
 
-  // Invalidate any prior unused reset tokens for this user before issuing a new one.
-  // Prevents stacking active tokens — only the latest request is valid.
+  const token = crypto.randomInt(0, 10 ** PASSWORD_RESET_CODE_LENGTH).toString().padStart(PASSWORD_RESET_CODE_LENGTH, '0');
+  const now = Date.now();
+
+  // Only the latest request is valid: close prior unused codes, and purge rows
+  // older than the throttle window (long expired) so the table does not grow.
   await prisma.$transaction([
+    prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id, createdAt: { lt: new Date(now - PASSWORD_RESET_ISSUE_WINDOW_MS) } },
+    }),
     prisma.passwordResetToken.updateMany({
       where: { userId: user.id, used: false },
       data: { used: true },
     }),
     prisma.passwordResetToken.create({
       data: {
-        tokenHash,
+        tokenHash: hashToken(token),
         userId: user.id,
-        expiresAt,
+        expiresAt: new Date(now + PASSWORD_RESET_TTL_MS),
       },
     }),
   ]);
@@ -357,101 +273,127 @@ export async function requestPasswordReset({ email }) {
   return { resetToken: token, deliveryEmail: user.email };
 }
 
-/**
- * Reset password using a one-time token.
- *
- * Contract:
- * - Validates token and expiry
- * - Updates user's passwordHash
- * - Marks the reset token as used
- * - Returns the safe user (without passwordHash)
- */
-export async function resetPasswordWithToken({ token, password, passwordConfirmation }) {
-  if (typeof token !== 'string' || token.trim() === '') {
-    const err = new Error('Reset token is required');
-    err.code = 'RESET_TOKEN_REQUIRED';
-    err.statusCode = 400;
-    throw err;
+function assertResetInputValid({ email, code, password, passwordConfirmation }) {
+  if (!normalizeEmail(email)) {
+    throwPasswordResetValidation({
+      field: 'email',
+      error: PasswordResetErrorCode.EMAIL_REQUIRED,
+      messageCode: PasswordResetMessageCode.EMAIL_REQUIRED,
+      message: 'Email is required',
+    });
   }
 
-  if (typeof password !== 'string' || password.length < 8) {
-    const err = new Error('Password must be at least 8 characters');
-    err.code = 'WEAK_PASSWORD';
-    err.statusCode = 400;
-    throw err;
+  if (typeof code !== 'string' || code.trim() === '') {
+    throwPasswordResetValidation({
+      field: 'code',
+      error: PasswordResetErrorCode.CODE_REQUIRED,
+      messageCode: PasswordResetMessageCode.CODE_REQUIRED,
+      message: 'Reset code is required',
+    });
+  }
+
+  if (typeof password !== 'string' || password.length < PASSWORD_RESET_MIN_PASSWORD_LENGTH) {
+    throwPasswordResetValidation({
+      field: 'password',
+      error: PasswordResetErrorCode.WEAK_PASSWORD,
+      messageCode: PasswordResetMessageCode.WEAK_PASSWORD,
+      message: `Password must be at least ${PASSWORD_RESET_MIN_PASSWORD_LENGTH} characters`,
+    });
   }
 
   if (typeof passwordConfirmation !== 'string' || password !== passwordConfirmation) {
-    const err = new Error('Passwords do not match');
-    err.code = 'PASSWORD_MISMATCH';
-    err.statusCode = 400;
-    throw err;
+    throwPasswordResetValidation({
+      field: 'passwordConfirmation',
+      error: PasswordResetErrorCode.PASSWORD_MISMATCH,
+      messageCode: PasswordResetMessageCode.PASSWORD_MISMATCH,
+      message: 'Passwords do not match',
+    });
   }
-
-  const tokenHash = hashToken(token);
-  const resetToken = await prisma.passwordResetToken.findUnique({
-    where: { tokenHash },
-    include: { user: true },
-  });
-
-  if (!resetToken || resetToken.used) {
-    const err = new Error('Invalid or used reset token');
-    err.code = 'INVALID_RESET_TOKEN';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  if (resetToken.expiresAt < new Date()) {
-    const err = new Error('Reset token expired');
-    err.code = 'RESET_TOKEN_EXPIRED';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  if (!resetToken.user || resetToken.user.deletedAt) {
-    const err = new Error('User account is deactivated');
-    err.code = 'USER_DELETED';
-    err.statusCode = 403;
-    throw err;
-  }
-
-  const passwordHash = hashPassword(password);
-
-  const [updatedUser] = await prisma.$transaction([
-    prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash },
-    }),
-    prisma.passwordResetToken.update({
-      where: { tokenHash },
-      data: { used: true },
-    }),
-  ]);
-
-  return safeUser(updatedUser);
 }
 
 /**
- * Stateless email/password signup: creates user, ensures profile, issues tokens.
- * Returns minimal payload so routes can stay thin.
+ * Runs the same queries whether or not the email has an account (a nil user
+ * id yields no token), so every failure path costs the same.
  */
-export async function signupWithEmailPasswordStateless({ fastify, email, password, roles }) {
-  const user = await signupWithEmailPassword({ email, password, roles });
+async function findActiveResetToken(userId) {
+  return prisma.passwordResetToken.findFirst({
+    where: { userId: userId ?? NIL_UUID, used: false, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
 
-  // Create the profile record (e.g. Trainer) for the primary role
-  const primaryRole = Array.isArray(roles) ? roles[0] : roles;
-  if (primaryRole) {
-    await ensureProfileForUser({ userId: user.id, role: primaryRole });
-  }
+/**
+ * Atomically consumes one attempt (conditional increment, so the cap holds under
+ * concurrent guesses). Returns false when the token is dead or absent.
+ */
+async function consumeResetAttempt(token) {
+  const { count } = await prisma.passwordResetToken.updateMany({
+    where: {
+      id: token?.id ?? NIL_UUID,
+      used: false,
+      attempts: { lt: PASSWORD_RESET_MAX_ATTEMPTS },
+      expiresAt: { gt: new Date() },
+    },
+    data: { attempts: { increment: 1 } },
+  });
+  return count > 0;
+}
 
-  const access = issueAccessToken({ fastify, user });
-  const refresh = await issueRefreshToken({ user });
+function resetCodeMatches(code, token) {
+  const candidate = Buffer.from(hashToken(code.trim()));
+  const stored = Buffer.from(token?.tokenHash ?? hashToken(NIL_UUID));
+  return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored) && Boolean(token);
+}
 
-  return {
-    userId: user.id,
-    accessToken: access.accessToken,
-    refreshToken: refresh.refreshToken,
-  };
+/**
+ * Reset password using the emailed code, bound to the email it was sent to.
+ *
+ * Contract:
+ * - Validates input (400 VALIDATION_ERROR), then the code for that email.
+ * - Unknown email, deleted user, no/used/expired token, wrong code and too many
+ *   attempts (cap 5 per token) all throw the SAME AppError (passwordReset.invalidCode).
+ * - No scrypt work happens before the code is proven correct.
+ * - Updates passwordHash, consumes the token, revokes every refresh token and
+ *   marks the email verified (the code proves inbox ownership).
+ * - Returns the safe user (without passwordHash)
+ */
+export async function resetPasswordWithCode({ email, code, password, passwordConfirmation }) {
+  assertResetInputValid({ email, code, password, passwordConfirmation });
+
+  const userId = await findUserIdByEmailCaseInsensitive(prisma, normalizeEmail(email));
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletedAt: true } }) : null;
+  const token = await findActiveResetToken(user?.id);
+  const attemptConsumed = await consumeResetAttempt(token);
+  const codeMatches = resetCodeMatches(code, token);
+
+  if (!user || user.deletedAt || !token || !attemptConsumed || !codeMatches) throwInvalidResetCode();
+
+  const passwordHash = hashPassword(password);
+
+  // Revoking every session is what makes the reset a recovery: a legacy
+  // account pre-registered by someone else with this email (unverified) would
+  // otherwise keep the squatter's refresh tokens alive, and the reset below
+  // marks the email verified, so the OAuth-time neutralization never runs.
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    // Guards two concurrent requests with the same correct code.
+    const { count } = await tx.passwordResetToken.updateMany({
+      where: { id: token.id, used: false },
+      data: { used: true },
+    });
+    if (count === 0) throwInvalidResetCode();
+
+    await tx.refreshToken.updateMany({
+      where: { userId: user.id, revoked: false },
+      data: { revoked: true, revokedAt: new Date() },
+    });
+    return tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+  });
+
+  // The reset code was delivered to the inbox: it proves email ownership.
+  // Not a gate on the reset itself; never throws.
+  await markEmailVerifiedFromInboxProof(prisma, updatedUser);
+
+  return safeUser(updatedUser);
 }
 
 /**
@@ -594,7 +536,7 @@ export async function changePassword({ userId, currentPassword, newPassword, new
     throw err;
   }
 
-  // Use the same hashPassword function used in signupWithEmailPassword and resetPasswordWithToken
+  // Same scrypt hashing as reset-password and signup verification
   const newPasswordHash = hashPassword(newPassword);
 
   // Update password and revoke all existing refresh tokens for security

@@ -231,7 +231,11 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
       select: { firstName: true, lastName: true },
     });
     const trainerName = `${trainerUser?.firstName ?? ''} ${trainerUser?.lastName ?? ''}`.trim();
-    await emailHandler.sendStudentLinkedEmail({ to: student.email, trainerName });
+    // The Resend SDK returns { data, error } instead of throwing.
+    const emailResponse = await emailHandler.sendStudentLinkedEmail({ to: student.email, trainerName });
+    if (emailResponse?.error) {
+      console.error('Failed to send student-linked email', emailResponse.error);
+    }
   } catch (emailError) {
     console.error('Failed to send student-linked email', emailError);
   }

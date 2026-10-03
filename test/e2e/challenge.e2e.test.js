@@ -5,6 +5,7 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 import { ChallengeParticipantMode, ChallengeStatus, ChallengeErrorCode } from '../../src/constants/challenge.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -36,7 +37,7 @@ e2eDescribe('e2e: challenges', () => {
     const email = `trainer+challenge+${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -70,7 +71,7 @@ e2eDescribe('e2e: challenges', () => {
     const email = `student+challenge+${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },

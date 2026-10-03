@@ -3,6 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vites
 import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 // Mock Asaas client at module boundary — no real HTTP calls in E2E tests
 vi.mock('../../src/billing/asaas-client.js', () => ({
@@ -46,7 +47,7 @@ e2eDescribe('e2e: platform plan routes', () => {
     const email = `trainer+platplan+${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -72,7 +73,7 @@ e2eDescribe('e2e: platform plan routes', () => {
 
   async function createStudentWithToken() {
     const email = `student+platplan+${Date.now()}@example.com`;
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },

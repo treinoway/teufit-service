@@ -6,6 +6,7 @@ import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
 import { getDateOnlyAsMidnightUtc, addDaysMs } from '../../src/helpers/date-helpers.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -31,7 +32,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     const email = `e2e+trainer-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -59,7 +60,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     const email = `e2e+student-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },

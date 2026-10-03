@@ -7,6 +7,7 @@ import {
   SubscriptionErrorCode,
   PaymentStatus,
 } from '../../src/constants/subscription.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -31,7 +32,7 @@ e2eDescribe('e2e: subscription payments', () => {
   async function createTrainerWithToken() {
     const email = `trainer+subpay+${Date.now()}@example.com`;
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },
@@ -57,7 +58,7 @@ e2eDescribe('e2e: subscription payments', () => {
 
   async function createStudentWithToken() {
     const email = `student+subpay+${Date.now()}@example.com`;
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },

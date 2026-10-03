@@ -4,6 +4,7 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { WorkoutSessionStatus, DashboardMessageCode, WeekDays } from '../../src/constants/training.js';
 import { countWeekdayOccurrences, WEEKDAY_TO_INT } from '../../src/helpers/adherence-helpers.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -31,7 +32,7 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
     const email = `e2e+dashboard-trainer-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -54,7 +55,7 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
     const email = `e2e+dashboard-student-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
