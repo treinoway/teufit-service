@@ -8,3 +8,7 @@
 - [Concurrency write-path checklist](feedback_concurrency_write_paths.md) — deadlock/lock-ordering fixes in exercise-service miss reorderSubstitutes/reorderSupersetMembers/dissolveSuperset; Promise.all reorders reintroduce lock cycles
 - [Config-flag short-circuits make assertions vacuous](feedback_config_flag_test_vacuity.md) — test env defaults flags to the short-circuit value; same-polarity assertions silently stop verifying anything
 - [Helper-extraction refactors land partially](feedback_partial_helper_migration.md) — grep the old inline pattern repo-wide; the stated exclusion list is always incomplete (and check `.env.example` / `PROD_ENV_SETUP.md`)
+- [Prisma insensitive equals = ILIKE](feedback_prisma_insensitive_ilike.md) — unescaped `_`/`%` wildcards + seq scan on users; flag every new insensitive email lookup
+- [Verification state transitions](feedback_verification_state_transitions.md) — verified-gated side effects must fire on all unverified->verified paths; resend resets attempts; stale pending vs partial unique
+- [Enumeration via follow-up state](feedback_enumeration_state_oracles.md) — uniform entry endpoint, but verify/resend/latency of later public calls leak account existence
+- [Tx "mirror" helpers drift](feedback_tx_mirroring_helpers.md) — prefer optional `{ tx }` on the original helper over copying its steps into a tx-local function
