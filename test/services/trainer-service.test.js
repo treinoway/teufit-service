@@ -406,6 +406,33 @@ describe('linkStudentByEmail', () => {
     consoleSpy.mockRestore();
   });
 
+  it('logs but does not throw when Resend returns an error instead of throwing', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-student',
+        email: 'student@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        avatarUrl: null,
+      })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+    const resendError = { message: 'invalid recipient' };
+    emailHandler.sendStudentLinkedEmail.mockResolvedValueOnce({ data: null, error: resendError });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+    });
+
+    expect(result).toMatchObject({ id: 'user-student' });
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to send student-linked email', resendError);
+    consoleSpy.mockRestore();
+  });
+
   it('does not send an email when the link fails validation', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 

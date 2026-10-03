@@ -37,6 +37,10 @@ vi.mock('../../src/services/user-service.js', () => {
   };
 });
 
+vi.mock('../../src/services/email-verification-service.js', () => ({
+  markEmailVerifiedFromInboxProof: vi.fn(),
+}));
+
 vi.mock('../../src/config/email-handler.js', () => {
   return {
     default: {
@@ -48,6 +52,7 @@ vi.mock('../../src/config/email-handler.js', () => {
 import { prisma } from '../../src/db.js';
 import { setActiveProfileToTrainer } from '../../src/services/user-service.js';
 import emailHandler from '../../src/config/email-handler.js';
+import { markEmailVerifiedFromInboxProof } from '../../src/services/email-verification-service.js';
 import { Roles } from '../../src/constants/roles.js';
 import { InviteStatus, InviteErrorCode, InviteMessageCode } from '../../src/constants/trainer-invite.js';
 import {
@@ -243,14 +248,16 @@ describe('revokeInvite', () => {
     vi.clearAllMocks();
   });
 
-  it('revokes a pending invite', async () => {
-    prisma.trainerInvite.findUnique.mockResolvedValue(baseInvite({ status: InviteStatus.PENDING }));
-    prisma.trainerInvite.update.mockResolvedValue(baseInvite({ status: InviteStatus.REVOKED, revokedAt: new Date() }));
+  it('revokes a pending invite with a conditional updateMany and returns the re-read invite', async () => {
+    prisma.trainerInvite.findUnique
+      .mockResolvedValueOnce(baseInvite({ status: InviteStatus.PENDING }))
+      .mockResolvedValueOnce(baseInvite({ status: InviteStatus.REVOKED, revokedAt: new Date() }));
+    prisma.trainerInvite.updateMany.mockResolvedValue({ count: 1 });
 
     const { invite } = await revokeInvite({ inviteId: INVITE_ID });
 
-    expect(prisma.trainerInvite.update).toHaveBeenCalledWith({
-      where: { id: INVITE_ID },
+    expect(prisma.trainerInvite.updateMany).toHaveBeenCalledWith({
+      where: { id: INVITE_ID, status: InviteStatus.PENDING },
       data: { status: InviteStatus.REVOKED, revokedAt: expect.any(Date) },
     });
     expect(invite.status).toBe(InviteStatus.REVOKED);
@@ -264,7 +271,7 @@ describe('revokeInvite', () => {
       error: InviteErrorCode.INVITE_NOT_FOUND,
       messageCode: InviteMessageCode.NOT_FOUND,
     });
-    expect(prisma.trainerInvite.update).not.toHaveBeenCalled();
+    expect(prisma.trainerInvite.updateMany).not.toHaveBeenCalled();
   });
 
   it('throws ConflictAppError when the invite is not pending', async () => {
@@ -273,8 +280,22 @@ describe('revokeInvite', () => {
     await expect(revokeInvite({ inviteId: INVITE_ID })).rejects.toMatchObject({
       httpStatus: 409,
       messageCode: 'resource.conflict',
+      message: 'Only pending invites can be revoked.',
     });
-    expect(prisma.trainerInvite.update).not.toHaveBeenCalled();
+    expect(prisma.trainerInvite.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('throws the same ConflictAppError when a concurrent claim wins between the read and the conditional update', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(baseInvite({ status: InviteStatus.PENDING }));
+    prisma.trainerInvite.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(revokeInvite({ inviteId: INVITE_ID })).rejects.toMatchObject({
+      httpStatus: 409,
+      messageCode: 'resource.conflict',
+      message: 'Only pending invites can be revoked.',
+    });
+    // No re-read of the (now accepted) invite as a success payload.
+    expect(prisma.trainerInvite.findUnique).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -284,6 +305,7 @@ describe('redeemInvite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setActiveProfileToTrainer.mockResolvedValue({ userId: USER_ID, activeProfile: 'trainer' });
+    markEmailVerifiedFromInboxProof.mockResolvedValue(true);
   });
 
   it('throws ValidationAppError when code is missing', async () => {
@@ -386,7 +408,7 @@ describe('redeemInvite', () => {
     const { invite, preferences } = await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' });
 
     expect(prisma.trainerInvite.updateMany).toHaveBeenCalledWith({
-      where: { id: INVITE_ID, status: InviteStatus.PENDING },
+      where: { id: INVITE_ID, status: InviteStatus.PENDING, expiresAt: { gt: expect.any(Date) } },
       data: { status: InviteStatus.ACCEPTED, userId: USER_ID, acceptedAt: expect.any(Date) },
     });
     expect(setActiveProfileToTrainer).toHaveBeenCalledWith(USER_ID);
@@ -394,19 +416,127 @@ describe('redeemInvite', () => {
     expect(preferences).toEqual({ userId: USER_ID, activeProfile: 'trainer' });
   });
 
-  it('rejects with ConflictAppError (409) — not an idempotent success — when it loses the concurrent-redeem race', async () => {
-    const pendingInvite = baseInvite({ status: InviteStatus.PENDING, email: 'invitee@example.com' });
-    prisma.trainerInvite.findUnique.mockResolvedValue(pendingInvite);
-    // Simulates another concurrent request winning the race: this request's
-    // conditional updateMany matches zero rows because status is no longer 'pending'.
+  it('marks the email verified from inbox proof after a successful claim', async () => {
+    prisma.trainerInvite.findUnique
+      .mockResolvedValueOnce(baseInvite({ status: InviteStatus.PENDING, email: 'invitee@example.com' }))
+      .mockResolvedValueOnce(baseInvite({ status: InviteStatus.ACCEPTED, userId: USER_ID }));
+    prisma.trainerInvite.updateMany.mockResolvedValue({ count: 1 });
+
+    await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' });
+
+    expect(markEmailVerifiedFromInboxProof).toHaveBeenCalledTimes(1);
+    expect(markEmailVerifiedFromInboxProof).toHaveBeenCalledWith(prisma, user);
+  });
+
+  it.each([
+    ['the invite email mismatches', () => baseInvite({ status: InviteStatus.PENDING, email: 'other@example.com' }), 0],
+    ['the claim race is lost', () => baseInvite({ status: InviteStatus.PENDING, email: 'invitee@example.com' }), 0],
+  ])('does not mark the email verified when %s', async (_label, makeInvite) => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(makeInvite());
     prisma.trainerInvite.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
-      httpStatus: 409,
-      error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
-      messageCode: InviteMessageCode.ALREADY_ACCEPTED,
+    await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toBeDefined();
+    expect(markEmailVerifiedFromInboxProof).not.toHaveBeenCalled();
+  });
+
+  it('does not mark the email verified on the idempotent already-accepted path', async () => {
+    prisma.trainerInvite.findUnique.mockResolvedValue(baseInvite({ status: InviteStatus.ACCEPTED, userId: USER_ID }));
+
+    await redeemInvite({ user, code: 'TF-ABCD-EFGH-12' });
+
+    expect(markEmailVerifiedFromInboxProof).not.toHaveBeenCalled();
+  });
+
+  describe('when the conditional claim updates 0 rows', () => {
+    const pendingInvite = () => baseInvite({ status: InviteStatus.PENDING, email: 'invitee@example.com' });
+
+    function mockLostClaim(currentState) {
+      prisma.trainerInvite.findUnique
+        .mockResolvedValueOnce(pendingInvite()) // initial lookup by codeHash
+        .mockResolvedValueOnce(currentState); // resolveLostClaimError re-read
+      prisma.trainerInvite.updateMany.mockResolvedValueOnce({ count: 0 });
+    }
+
+    it('re-reads the invite selecting status and expiresAt', async () => {
+      mockLostClaim({ status: InviteStatus.ACCEPTED, expiresAt: new Date(NOW + 1000) });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toBeDefined();
+
+      expect(prisma.trainerInvite.findUnique).toHaveBeenLastCalledWith({
+        where: { id: INVITE_ID },
+        select: { status: true, expiresAt: true },
+      });
     });
-    expect(setActiveProfileToTrainer).not.toHaveBeenCalled();
+
+    it('throws 409 invite.alreadyAccepted when the winner accepted the invite', async () => {
+      mockLostClaim({ status: InviteStatus.ACCEPTED, expiresAt: new Date(NOW + 1000) });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 409,
+        error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
+        messageCode: InviteMessageCode.ALREADY_ACCEPTED,
+      });
+      expect(setActiveProfileToTrainer).not.toHaveBeenCalled();
+    });
+
+    it('throws 403 invite.revoked when the invite was revoked meanwhile', async () => {
+      mockLostClaim({ status: InviteStatus.REVOKED, expiresAt: new Date(NOW + 1000) });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 403,
+        error: InviteErrorCode.INVITE_REVOKED,
+        messageCode: InviteMessageCode.REVOKED,
+      });
+      expect(setActiveProfileToTrainer).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 invite.notFound when the invite was deleted meanwhile', async () => {
+      mockLostClaim(null);
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 404,
+        error: InviteErrorCode.INVITE_NOT_FOUND,
+        messageCode: InviteMessageCode.NOT_FOUND,
+      });
+    });
+
+    it('throws 403 invite.expired and flips the row to expired when still pending but past expiresAt', async () => {
+      mockLostClaim({ status: InviteStatus.PENDING, expiresAt: new Date(Date.now() - 1000) });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 403,
+        error: InviteErrorCode.INVITE_EXPIRED,
+        messageCode: InviteMessageCode.EXPIRED,
+      });
+
+      expect(prisma.trainerInvite.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.trainerInvite.updateMany).toHaveBeenLastCalledWith({
+        where: { id: INVITE_ID, status: InviteStatus.PENDING },
+        data: { status: InviteStatus.EXPIRED },
+      });
+      expect(setActiveProfileToTrainer).not.toHaveBeenCalled();
+    });
+
+    it('throws 403 invite.expired when the row is already expired, still running the conditional flip', async () => {
+      mockLostClaim({ status: InviteStatus.EXPIRED, expiresAt: new Date(Date.now() - 1000) });
+      prisma.trainerInvite.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 403,
+        messageCode: InviteMessageCode.EXPIRED,
+      });
+    });
+
+    it('falls back to 409 invite.alreadyAccepted without flipping when pending and not expired', async () => {
+      mockLostClaim({ status: InviteStatus.PENDING, expiresAt: new Date(NOW + 1000 * 60 * 60) });
+
+      await expect(redeemInvite({ user, code: 'TF-ABCD-EFGH-12' })).rejects.toMatchObject({
+        httpStatus: 409,
+        error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
+        messageCode: InviteMessageCode.ALREADY_ACCEPTED,
+      });
+      expect(prisma.trainerInvite.updateMany).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('normalizes the code (prefix/dashes/case) so equivalent inputs hash identically', async () => {

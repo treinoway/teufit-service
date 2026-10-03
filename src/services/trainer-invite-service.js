@@ -12,11 +12,14 @@ import {
   INVITE_LIST_PAGE_SIZE_MAX,
   inviteStatusValues,
 } from '../constants/trainer-invite.js';
-import { ValidationAppError, ForbiddenAppError, NotFoundAppError, ConflictAppError } from '../errors/app-error.js';
+import { AppError, ValidationAppError, ForbiddenAppError, NotFoundAppError, ConflictAppError } from '../errors/app-error.js';
 import { setActiveProfileToTrainer } from './user-service.js';
+import { markEmailVerifiedFromInboxProof } from './email-verification-service.js';
 import emailHandler from '../config/email-handler.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
 import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
+import { hashPassword } from '../helpers/password.js';
+import { EMAIL_PROVIDER } from '../constants/email-verification.js';
 
 function normalizeEmail(email) {
   if (typeof email !== 'string') return '';
@@ -184,6 +187,72 @@ export async function listInvites({ status, email, page, pageSize } = {}) {
   return { items, total, page: currentPage, pageSize: currentPageSize };
 }
 
+function createInviteNotFoundError() {
+  return new NotFoundAppError({
+    error: InviteErrorCode.INVITE_NOT_FOUND,
+    messageCode: InviteMessageCode.NOT_FOUND,
+    message: 'Invite not found.',
+  });
+}
+
+function createInviteRevokedError() {
+  return new ForbiddenAppError({
+    error: InviteErrorCode.INVITE_REVOKED,
+    messageCode: InviteMessageCode.REVOKED,
+    message: 'This invite has been revoked.',
+  });
+}
+
+function createInviteExpiredError() {
+  return new ForbiddenAppError({
+    error: InviteErrorCode.INVITE_EXPIRED,
+    messageCode: InviteMessageCode.EXPIRED,
+    message: 'This invite has expired.',
+  });
+}
+
+function createAlreadyAcceptedError() {
+  return new ConflictAppError({
+    error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
+    messageCode: InviteMessageCode.ALREADY_ACCEPTED,
+    message: 'This invite has already been redeemed.',
+  });
+}
+
+function createOnlyPendingRevocableError() {
+  return new ConflictAppError({
+    message: 'Only pending invites can be revoked.',
+  });
+}
+
+/**
+ * After a conditional claim updated 0 rows, re-reads the invite and returns
+ * the precise error for its current state. Pending-but-past-expiry (the
+ * invite expired between the load and the claim) and already-expired rows
+ * both map to expired. The caller decides whether to flip a stale pending row
+ * (it cannot happen inside a transaction that is about to roll back).
+ */
+async function resolveLostClaimError(client, inviteId) {
+  const current = await client.trainerInvite.findUnique({
+    where: { id: inviteId },
+    select: { status: true, expiresAt: true },
+  });
+  if (!current) return createInviteNotFoundError();
+  if (current.status === InviteStatus.REVOKED) return createInviteRevokedError();
+  if (current.status === InviteStatus.ACCEPTED) return createAlreadyAcceptedError();
+  if (current.status === InviteStatus.EXPIRED || current.expiresAt <= new Date()) {
+    return createInviteExpiredError();
+  }
+  return createAlreadyAcceptedError();
+}
+
+function expirePendingInvite(inviteId) {
+  return prisma.trainerInvite.updateMany({
+    where: { id: inviteId, status: InviteStatus.PENDING },
+    data: { status: InviteStatus.EXPIRED },
+  });
+}
+
 export async function revokeInvite({ inviteId }) {
   const invite = await prisma.trainerInvite.findUnique({ where: { id: inviteId } });
   if (!invite) {
@@ -195,15 +264,18 @@ export async function revokeInvite({ inviteId }) {
   }
 
   if (invite.status !== InviteStatus.PENDING) {
-    throw new ConflictAppError({
-      message: 'Only pending invites can be revoked.',
-    });
+    throw createOnlyPendingRevocableError();
   }
 
-  const updated = await prisma.trainerInvite.update({
-    where: { id: inviteId },
+  // Conditional claim: a signup/redeem that committed since the read above
+  // must not be overwritten with revoked.
+  const { count } = await prisma.trainerInvite.updateMany({
+    where: { id: inviteId, status: InviteStatus.PENDING },
     data: { status: InviteStatus.REVOKED, revokedAt: new Date() },
   });
+  if (count === 0) throw createOnlyPendingRevocableError();
+
+  const updated = await prisma.trainerInvite.findUnique({ where: { id: inviteId } });
 
   return { invite: updated };
 }
@@ -252,30 +324,18 @@ async function loadInviteAndAssertActionable(
   });
 
   if (!invite) {
-    throw new NotFoundAppError({
-      error: InviteErrorCode.INVITE_NOT_FOUND,
-      messageCode: InviteMessageCode.NOT_FOUND,
-      message: 'Invite not found.',
-    });
+    throw createInviteNotFoundError();
   }
 
   if (invite.status === InviteStatus.REVOKED) {
-    throw new ForbiddenAppError({
-      error: InviteErrorCode.INVITE_REVOKED,
-      messageCode: InviteMessageCode.REVOKED,
-      message: 'This invite has been revoked.',
-    });
+    throw createInviteRevokedError();
   }
 
   if (invite.status === InviteStatus.ACCEPTED) {
     if (isAlreadyAcceptedException?.(invite)) {
       return invite;
     }
-    throw new ConflictAppError({
-      error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
-      messageCode: InviteMessageCode.ALREADY_ACCEPTED,
-      message: 'This invite has already been redeemed.',
-    });
+    throw createAlreadyAcceptedError();
   }
 
   // Only PENDING (possibly stale) invites reach this point: REVOKED and
@@ -287,11 +347,7 @@ async function loadInviteAndAssertActionable(
     if (onExpiredPending) {
       await onExpiredPending(invite);
     }
-    throw new ForbiddenAppError({
-      error: InviteErrorCode.INVITE_EXPIRED,
-      messageCode: InviteMessageCode.EXPIRED,
-      message: 'This invite has expired.',
-    });
+    throw createInviteExpiredError();
   }
 
   return invite;
@@ -311,11 +367,7 @@ async function loadInviteAndAssertActionable(
 export async function redeemInvite({ user, code }) {
   const invite = await loadInviteAndAssertActionable(code, {
     isAlreadyAcceptedException: (candidate) => candidate.userId === user.id,
-    onExpiredPending: (candidate) =>
-      prisma.trainerInvite.updateMany({
-        where: { id: candidate.id, status: InviteStatus.PENDING },
-        data: { status: InviteStatus.EXPIRED },
-      }),
+    onExpiredPending: (candidate) => expirePendingInvite(candidate.id),
   });
 
   if (invite.status === InviteStatus.ACCEPTED) {
@@ -336,17 +388,19 @@ export async function redeemInvite({ user, code }) {
   }
 
   const { count } = await prisma.trainerInvite.updateMany({
-    where: { id: invite.id, status: InviteStatus.PENDING },
+    where: { id: invite.id, status: InviteStatus.PENDING, expiresAt: { gt: new Date() } },
     data: { status: InviteStatus.ACCEPTED, userId: user.id, acceptedAt: new Date() },
   });
 
   if (count === 0) {
-    throw new ConflictAppError({
-      error: InviteErrorCode.INVITE_ALREADY_ACCEPTED,
-      messageCode: InviteMessageCode.ALREADY_ACCEPTED,
-      message: 'This invite has already been redeemed.',
-    });
+    const lostClaimError = await resolveLostClaimError(prisma, invite.id);
+    if (lostClaimError.messageCode === InviteMessageCode.EXPIRED) await expirePendingInvite(invite.id);
+    throw lostClaimError;
   }
+
+  // The TF- code is email-bound and was delivered to that inbox: redeeming it
+  // proves ownership. Never throws, response unchanged.
+  await markEmailVerifiedFromInboxProof(prisma, user);
 
   const preferences = await setActiveProfileToTrainer(user.id);
   const updatedInvite = await prisma.trainerInvite.findUnique({ where: { id: invite.id } });
@@ -385,6 +439,93 @@ export async function getInvitePreview({ code }) {
     expiresAt: invite.expiresAt,
     accountExists: Boolean(existingUserId),
   };
+}
+
+const UNIQUE_VIOLATION_CODE = 'P2002';
+const NEW_USER_STATUS = 'pending';
+
+function createAccountExistsError() {
+  return new ConflictAppError({
+    error: InviteErrorCode.INVITE_ACCOUNT_EXISTS,
+    messageCode: InviteMessageCode.ACCOUNT_EXISTS,
+    message: 'An account already exists for this email. Sign in and redeem the invite.',
+  });
+}
+
+async function createTrainerAccountFromInvite(invite, passwordHash) {
+  const normalizedEmail = normalizeEmail(invite.email);
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { email: normalizedEmail, passwordHash, roles: [Roles.TRAINER], status: NEW_USER_STATUS },
+    });
+    await tx.account.create({
+      data: { userId: user.id, provider: EMAIL_PROVIDER, providerId: normalizedEmail, verifiedAt: new Date() },
+    });
+
+    // Race-safe claim, same conditional update as redeemInvite.
+    const { count } = await tx.trainerInvite.updateMany({
+      where: { id: invite.id, status: InviteStatus.PENDING, expiresAt: { gt: new Date() } },
+      data: { status: InviteStatus.ACCEPTED, userId: user.id, acceptedAt: new Date() },
+    });
+    if (count === 0) throw await resolveLostClaimError(tx, invite.id);
+
+    // Same grant as /become-trainer and redeemInvite, on the tx client: the
+    // global client cannot see the uncommitted user.
+    const preferences = await setActiveProfileToTrainer(user.id, { tx });
+    // The signup code flow is superseded by the invite proof for this inbox.
+    await tx.pendingSignup.deleteMany({ where: { email: normalizedEmail } });
+    return { user, preferences };
+  });
+}
+
+/**
+ * Lost the user-create race: either a concurrent submit of the same code
+ * (the winner already accepted the invite -> alreadyAccepted) or an account
+ * created for the email by another path (-> accountExists).
+ */
+async function resolveUniqueViolation(invite) {
+  const current = await prisma.trainerInvite.findUnique({ where: { id: invite.id }, select: { status: true } });
+  if (current && current.status !== InviteStatus.PENDING) return createAlreadyAcceptedError();
+  return createAccountExistsError();
+}
+
+/**
+ * Public signup through a trainer invite: the TF- code proves inbox ownership
+ * (email-bound, single-use, expiring), so the account is created with a
+ * verified email and no 6-digit signup code.
+ *
+ * Invite semantics = redeemInvite's (an expired pending invite is flipped to
+ * `expired` before the error), because this call is a mutating redemption.
+ * The invite is validated, and the email checked for an existing account
+ * (including soft-deleted users), BEFORE the scrypt hash so rejected calls
+ * stay cheap. User + email Account + invite claim + Trainer row + preferences
+ * + PendingSignup cleanup commit atomically: any failure leaves nothing behind
+ * and the invite stays pending, so the user can retry.
+ *
+ * Callers must run acceptPendingInvitesForUser afterwards (never throws).
+ *
+ * @returns {Promise<{ user: object, preferences: object }>}
+ */
+export async function signupWithInvite({ code, password }) {
+  const invite = await loadInviteAndAssertActionable(code, {
+    onExpiredPending: (candidate) => expirePendingInvite(candidate.id),
+  });
+
+  if (await findUserIdByEmailCaseInsensitive(prisma, invite.email)) throw createAccountExistsError();
+
+  const passwordHash = hashPassword(password);
+  try {
+    return await createTrainerAccountFromInvite(invite, passwordHash);
+  } catch (error) {
+    if (error instanceof AppError) {
+      // The claim ran inside the rolled-back transaction, so flip a stale
+      // pending row here, outside it (same side effect as redeemInvite).
+      if (error.messageCode === InviteMessageCode.EXPIRED) await expirePendingInvite(invite.id);
+      throw error;
+    }
+    if (error?.code !== UNIQUE_VIOLATION_CODE) throw error;
+    throw await resolveUniqueViolation(invite);
+  }
 }
 
 export { hasBetaAccess };

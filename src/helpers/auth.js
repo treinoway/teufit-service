@@ -5,6 +5,84 @@
 import { prisma } from '../../src/db.js';
 import { roleValues } from '../constants/roles.js';
 import { findUserIdByEmailCaseInsensitive } from './email-lookup.js';
+import { acceptPendingInvitesForUser } from '../services/student-invite-service.js';
+import { AppError } from '../errors/app-error.js';
+import { EMAIL_PROVIDER } from '../constants/email-verification.js';
+import { OAuthErrorCode, OAuthMessageCode, SecurityEvent } from '../constants/oauth-security.js';
+
+/** Structured security log line. Never pass secrets (tokens, codes, hashes). */
+function logSecurityEvent(event, fields) {
+  console.warn('[security]', { event, ...fields });
+}
+
+function throwOAuthEmailNotVerified() {
+  throw new AppError({
+    httpStatus: 403,
+    error: OAuthErrorCode.EMAIL_NOT_VERIFIED,
+    messageCode: OAuthMessageCode.EMAIL_NOT_VERIFIED,
+    message: 'The email of this sign-in provider is not verified.',
+  });
+}
+
+/**
+ * Rejects any OAuth sign-in whose provider does not attest the email.
+ *
+ * Runs BEFORE any user/account lookup so the response is identical (same
+ * status, code and DB work) whether or not an account exists for the email:
+ * a differing answer would be an account-enumeration oracle.
+ *
+ * `emailVerified` must be the boolean `true` (Apple's boolean-or-string
+ * `email_verified` is normalized upstream by `asBool`).
+ *
+ * Carve-out: a token that carries NO email claim at all (Apple omits the email
+ * on returning sign-ins) asserts nothing about an address, so it cannot probe
+ * one. It may only authenticate an already-linked Account; the caller enforces
+ * that (no linked account + no email is rejected the same way).
+ */
+export function assertOAuthEmailVerified({ provider, email, emailVerified }) {
+  if (emailVerified === true) return;
+  if (!email) return;
+  logSecurityEvent(SecurityEvent.UNVERIFIED_EMAIL_REJECTED, { provider });
+  throwOAuthEmailNotVerified();
+}
+
+/**
+ * Pre-account-hijack defence. A password set while the email Account was still
+ * unverified may belong to whoever typed the address at signup (not the
+ * owner). When a verified OAuth identity proves ownership, that credential is
+ * treated as attacker-controlled: the password is cleared, every refresh token
+ * is revoked and unused reset/verification codes are closed, atomically.
+ *
+ * The unverified email Account row is intentionally KEPT: it records "email
+ * credential never proven", and forgot-password does not depend on it (it only
+ * needs the User row), so the real owner can still set a password later; the
+ * reset flow then marks this row verified.
+ *
+ * @returns {Promise<boolean>} true when the credential was neutralized
+ */
+async function neutralizeUnverifiedPasswordCredential(user, provider) {
+  if (!user.passwordHash) return false;
+
+  const unverifiedEmailAccount = await prisma.account.findFirst({
+    where: { userId: user.id, provider: EMAIL_PROVIDER, verifiedAt: null },
+    select: { id: true },
+  });
+  if (!unverifiedEmailAccount) return false;
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: null } }),
+    prisma.refreshToken.updateMany({
+      where: { userId: user.id, revoked: false },
+      data: { revoked: true, revokedAt: now },
+    }),
+    prisma.passwordResetToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } }),
+    prisma.emailVerificationToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } }),
+  ]);
+
+  logSecurityEvent(SecurityEvent.PRE_ACCOUNT_TAKEOVER_MITIGATED, { userId: user.id, provider });
+  return true;
+}
 
 /**
  * Find or create a user from OAuth provider data
@@ -17,6 +95,7 @@ import { findUserIdByEmailCaseInsensitive } from './email-lookup.js';
  * @param {string} providerData.accessToken - OAuth access token
  * @param {string} [providerData.refreshToken] - OAuth refresh token
  * @param {number} [providerData.expiresAt] - Token expiration timestamp
+ * @param {boolean} [providerData.emailVerified] - Provider attests the email is verified (ID token email_verified)
  * @returns {Promise<Object>} User object
  */
 export async function findOrCreateUserFromOAuth(providerData) {
@@ -30,7 +109,11 @@ export async function findOrCreateUserFromOAuth(providerData) {
     refreshToken = null,
     expiresAt = null,
     roles,
+    emailVerified = false,
   } = providerData;
+
+  // First thing, before any lookup: unverified tokens are rejected uniformly.
+  assertOAuthEmailVerified({ provider, email, emailVerified });
 
   // Normalize roles to array (empty array is allowed for new users)
   const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
@@ -116,6 +199,12 @@ export async function findOrCreateUserFromOAuth(providerData) {
   });
 
   let user;
+  // Only reachable verified (assertOAuthEmailVerified), except the email-less
+  // token carve-out, which never reaches the create/attach branch below.
+  const verifiedAt = emailVerified === true ? new Date() : null;
+  // True when this call is the one that proves the user owns the email (new
+  // verified account, or an existing account that just became verified).
+  let becameVerified = false;
 
   if (account) {
     // User already exists, update tokens
@@ -134,9 +223,17 @@ export async function findOrCreateUserFromOAuth(providerData) {
         accessToken,
         refreshToken,
         expiresAt: expiresAtDate,
+        ...(verifiedAt && !account.verifiedAt ? { verifiedAt } : {}),
       },
     });
+    becameVerified = Boolean(verifiedAt && !account.verifiedAt);
   } else {
+    if (!normalizedEmail) {
+      // No linked account and no email to prove: same rejection as unverified.
+      logSecurityEvent(SecurityEvent.UNVERIFIED_EMAIL_REJECTED, { provider });
+      throwOAuthEmailNotVerified();
+    }
+
     // Case-insensitive lookup: legacy users may have mixed-case email saved.
     const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
     user = existingUserId ? await prisma.user.findUnique({ where: { id: existingUserId } }) : null;
@@ -147,7 +244,9 @@ export async function findOrCreateUserFromOAuth(providerData) {
       throw err;
     }
 
-    if (!user) {
+    if (user) {
+      await neutralizeUnverifiedPasswordCredential(user, provider);
+    } else {
       // Create new user with personal data populated from OAuth profile
       const rawName = typeof name === 'string' ? name.trim() : '';
       const parts = rawName ? rawName.split(/\s+/).filter(Boolean) : [];
@@ -176,8 +275,19 @@ export async function findOrCreateUserFromOAuth(providerData) {
         accessToken,
         refreshToken,
         expiresAt: expiresAtDate,
+        verifiedAt,
       },
     });
+    becameVerified = Boolean(verifiedAt);
+  }
+
+  // Invites are bound to a verified email: accept them whenever this login
+  // proves ownership — including an existing (e.g. unverified email/password)
+  // user who now signs in with a verifying provider. Otherwise their pending
+  // invites would be stranded: /auth/verify-email then returns alreadyVerified.
+  // Never throws.
+  if (becameVerified) {
+    await acceptPendingInvitesForUser(prisma, user);
   }
 
   return user;

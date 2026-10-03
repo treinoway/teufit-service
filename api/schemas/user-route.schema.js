@@ -11,6 +11,11 @@ export const betaAccessFieldSchema = {
   description: 'True if the user may use the web app during the closed beta (admin, trainer, tester allowlist, or accepted trainer invite). Always true for every authenticated user when the BETA_INVITE_GATE_ENABLED kill-switch is administratively disabled.',
 };
 
+export const emailVerifiedFieldSchema = {
+  type: 'boolean',
+  description: 'True if any of the user\'s login accounts has a verified email (OAuth ID token attests it, or the email code was confirmed). Login is not gated on this; clients use it to prompt verification.',
+};
+
 const platformPlanShape = {
   type: 'object',
   nullable: true,
@@ -114,6 +119,7 @@ export const getMeSchema = {
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
         betaAccess: betaAccessFieldSchema,
+        emailVerified: emailVerifiedFieldSchema,
         address: {
           type: 'object',
           nullable: true,
@@ -313,6 +319,7 @@ export const updateProfileSchema = {
         avatarUrl: { type: 'string', nullable: true },
         hasActiveTrainer: { type: 'boolean', description: 'True if user has at least one TrainerStudent link as student' },
         betaAccess: betaAccessFieldSchema,
+        emailVerified: emailVerifiedFieldSchema,
         address: { type: 'object', nullable: true, additionalProperties: true },
         socials: { type: 'object', nullable: true, additionalProperties: true },
         preferences: { type: 'object', nullable: true, additionalProperties: true },

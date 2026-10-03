@@ -21,6 +21,9 @@ vi.mock('../../src/db.js', () => {
       trainerInvite: {
         findFirst: vi.fn(),
       },
+      account: {
+        findFirst: vi.fn(),
+      },
     },
   };
 });
@@ -54,6 +57,8 @@ describe('userService', () => {
     prisma.trainerInvite.findFirst.mockResolvedValue(null);
     // Default: no trainer profile (student-only user)
     prisma.trainer.findUnique.mockResolvedValue(null);
+    // Default: no verified account — emailVerified is false
+    prisma.account.findFirst.mockResolvedValue(null);
   });
 
   it('throws USER_ID_REQUIRED when userId is missing', async () => {
@@ -142,6 +147,7 @@ describe('userService', () => {
     avatarUrl: null,
     hasActiveTrainer: false,
     betaAccess: false,
+    emailVerified: false,
     address: {
       id: 'a1',
       line1: null,
@@ -258,6 +264,31 @@ describe('userService', () => {
     await setActiveProfileToTrainer('u3');
 
     expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u3' });
+  });
+
+  it('setActiveProfileToTrainer runs every step on the given transaction client, never the global one', async () => {
+    const tx = {
+      user: { findUnique: vi.fn().mockResolvedValue({ roles: [] }), update: vi.fn().mockResolvedValue({}) },
+      trainer: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 't-tx' }) },
+      userPreferences: { upsert: vi.fn().mockResolvedValue({ userId: 'u-tx', activeProfile: 'trainer' }) },
+    };
+
+    const result = await setActiveProfileToTrainer('u-tx', { tx });
+
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u-tx' }, data: { roles: { set: ['trainer'] } } });
+    expect(tx.trainer.create).toHaveBeenCalledWith({ data: { userId: 'u-tx' } });
+    expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u-tx', tx });
+    expect(tx.userPreferences.upsert).toHaveBeenCalledWith({
+      where: { userId: 'u-tx' },
+      create: { userId: 'u-tx', activeProfile: 'trainer' },
+      update: { activeProfile: 'trainer' },
+    });
+    expect(result).toEqual({ userId: 'u-tx', activeProfile: 'trainer' });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.trainer.findFirst).not.toHaveBeenCalled();
+    expect(prisma.trainer.create).not.toHaveBeenCalled();
+    expect(prisma.userPreferences.upsert).not.toHaveBeenCalled();
   });
 
   describe('updateUserProfile', () => {
@@ -705,6 +736,7 @@ describe('userService', () => {
         avatarUrl: 'https://example.com/avatar.jpg',
         hasActiveTrainer: false,
         betaAccess: false,
+        emailVerified: false,
       });
       expect(result).not.toHaveProperty('address');
       expect(result).not.toHaveProperty('socials');
@@ -1006,6 +1038,40 @@ describe('userService', () => {
           where: { studentId: 'u1' },
           select: { id: true },
         });
+      });
+    });
+
+    describe('emailVerified flag', () => {
+      it('returns emailVerified: true from getUserProfileById when an account has verifiedAt', async () => {
+        prisma.user.findUnique.mockResolvedValue(baseUser);
+        prisma.account.findFirst.mockResolvedValue({ id: 'acc1' });
+
+        const result = await getUserProfileById('u1', []);
+
+        expect(result.emailVerified).toBe(true);
+        expect(prisma.account.findFirst).toHaveBeenCalledWith({
+          where: { userId: 'u1', verifiedAt: { not: null } },
+          select: { id: true },
+        });
+      });
+
+      it('returns emailVerified: false from getUserProfileById when no account is verified', async () => {
+        prisma.user.findUnique.mockResolvedValue(baseUser);
+        prisma.account.findFirst.mockResolvedValue(null);
+
+        const result = await getUserProfileById('u1', []);
+
+        expect(result.emailVerified).toBe(false);
+      });
+
+      it('returns emailVerified: true from updateUserProfile when an account has verifiedAt', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+        prisma.user.update.mockResolvedValue({ ...baseUser, address: null, socials: null, preferences: null });
+        prisma.account.findFirst.mockResolvedValue({ id: 'acc1' });
+
+        const result = await updateUserProfile('u1', { firstName: 'John' });
+
+        expect(result.emailVerified).toBe(true);
       });
     });
 

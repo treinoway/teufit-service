@@ -127,3 +127,17 @@ describe('translateTemplate', () => {
     expect(result).toBe('O campo idade deve ser no máximo 120.');
   });
 });
+
+describe('invite and email verification limit messages', () => {
+  it.each([
+    'studentInvite.dailyLimit',
+    'studentInvite.emailSendFailed',
+    'emailVerification.dailyLimit',
+    'emailVerification.sendFailed',
+  ])('should translate %s in both locales (not fall back to the key)', (key) => {
+    for (const language of ['pt-BR', 'en-US']) {
+      expect(translate('errors', key, language)).not.toBe(key);
+    }
+    expect(translate('errors', key, 'pt-BR')).not.toBe(translate('errors', key, 'en-US'));
+  });
+});

@@ -1,11 +1,13 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import config from '../../config/index.js';
 import { Roles } from '../../src/constants/roles.js';
+import { InviteStatus, InviteMessageCode } from '../../src/constants/trainer-invite.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 // Mirrors normalizeInviteCode()/hashInviteCode() in
 // src/services/trainer-invite-service.js (not exported) — needed to seed a
@@ -38,7 +40,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
   });
 
   async function signup(email, password = PASSWORD) {
-    const res = await app.inject({ method: 'POST', url: '/auth/signup', payload: { email, password } });
+    const res = await signupVerified(app, { method: 'POST', url: '/auth/signup', payload: { email, password } });
     expect(res.statusCode).toBe(201);
     return { userId: res.json().user.id, accessToken: res.json().token.accessToken };
   }
@@ -607,6 +609,158 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
       expect(response.json()).toMatchObject({
         error: 'INVITE_EXPIRED',
         messageCode: 'invite.expired',
+      });
+    });
+  });
+
+  describe('claim race hardening', () => {
+    const RACE_ITERATIONS = 5;
+    const HOUR_MS = 60 * 60 * 1000;
+    let restoreDelegate;
+
+    afterEach(() => {
+      restoreDelegate?.();
+      restoreDelegate = undefined;
+    });
+
+    // Prisma model delegates are lazy proxies that vi.spyOn cannot wrap (and the
+    // suite auto-resets spies), so temporarily shadow the delegate with a
+    // pass-through proxy whose first findUnique returns a canned (stale) row.
+    // Undone by the afterEach below.
+    function serveStaleFirstInviteRead(staleRow) {
+      const realDelegate = prisma.trainerInvite;
+      let served = false;
+      const proxied = new Proxy(realDelegate, {
+        get(target, prop) {
+          if (prop === 'findUnique') {
+            return (args) => {
+              if (!served) {
+                served = true;
+                return Promise.resolve(staleRow);
+              }
+              return target.findUnique(args);
+            };
+          }
+          const value = target[prop];
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      Object.defineProperty(prisma, 'trainerInvite', { configurable: true, enumerable: true, get: () => proxied });
+      restoreDelegate = () => {
+        Object.defineProperty(prisma, 'trainerInvite', {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: realDelegate,
+        });
+      };
+    }
+
+    function revokeInvite(adminToken, inviteId) {
+      return app.inject({
+        method: 'POST',
+        url: `/admin/trainer-invites/${inviteId}/revoke`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+    }
+
+    function signupWithInvite(code) {
+      return app.inject({ method: 'POST', url: '/auth/signup/invite', payload: { code, password: PASSWORD } });
+    }
+
+    it('lets exactly one of a concurrent signup-with-invite and admin revoke win, never leaving a revoked invite with a userId', async () => {
+      const adminToken = await makeAdmin();
+
+      for (let i = 0; i < RACE_ITERATIONS; i += 1) {
+        const email = `race-${i}-${Date.now()}@example.com`;
+        const { invite, code } = (await createInvite(adminToken, email)).json();
+
+        const [signupRes, revokeRes] = await Promise.all([signupWithInvite(code), revokeInvite(adminToken, invite.id)]);
+
+        const persisted = await prisma.trainerInvite.findUnique({ where: { id: invite.id } });
+        const createdUser = await prisma.user.findUnique({ where: { email } });
+
+        // Invariant: revoked never coexists with a claimed userId.
+        expect(persisted.status === InviteStatus.REVOKED && persisted.userId !== null).toBe(false);
+
+        if (signupRes.statusCode === 201) {
+          expect(revokeRes.statusCode).toBe(409);
+          expect(persisted.status).toBe(InviteStatus.ACCEPTED);
+          expect(persisted.userId).toBe(createdUser.id);
+        } else {
+          expect(signupRes.statusCode).toBe(403);
+          expect(signupRes.json().messageCode).toBe(InviteMessageCode.REVOKED);
+          expect(revokeRes.statusCode).toBe(200);
+          expect(persisted.status).toBe(InviteStatus.REVOKED);
+          expect(persisted.userId).toBeNull();
+          // The rolled-back signup must leave no account behind.
+          expect(createdUser).toBeNull();
+        }
+      }
+    });
+
+    it('returns 403 invite.revoked and creates no account when signup-with-invite meets an already revoked invite at claim time', async () => {
+      const adminToken = await makeAdmin();
+      const email = 'claim-revoked@example.com';
+      const { invite, code } = (await createInvite(adminToken, email)).json();
+      const staleRead = await prisma.trainerInvite.findUnique({ where: { id: invite.id } });
+      await revokeInvite(adminToken, invite.id);
+      // The first (load) read sees the stale pending row; the claim then loses to the revoke.
+      serveStaleFirstInviteRead(staleRead);
+
+      const res = await signupWithInvite(code);
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().messageCode).toBe(InviteMessageCode.REVOKED);
+      expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+    });
+
+    describe('invite expiring between the load and the claim', () => {
+      async function seedExpiredRowSeenAsPending(code, email) {
+        const admin = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+        const row = await prisma.trainerInvite.create({
+          data: {
+            email,
+            codeHash: hashInviteCodeForSeed(code),
+            invitedByUserId: admin.id,
+            expiresAt: new Date(Date.now() - 60 * 1000),
+          },
+        });
+        // The load read still sees an unexpired pending invite (as if it expired
+        // right after it); only the DB-side conditional claim notices.
+        const staleRead = { ...row, expiresAt: new Date(Date.now() + HOUR_MS) };
+        serveStaleFirstInviteRead(staleRead);
+        return row;
+      }
+
+      it('POST /auth/signup/invite returns 403 invite.expired, flips the invite to expired and creates no account', async () => {
+        await makeAdmin();
+        const email = 'expire-signup@example.com';
+        const row = await seedExpiredRowSeenAsPending('TF-EXPS-IGNU-01', email);
+
+        const res = await signupWithInvite('TF-EXPS-IGNU-01');
+
+        expect(res.statusCode).toBe(403);
+        expect(res.json().messageCode).toBe(InviteMessageCode.EXPIRED);
+        const persisted = await prisma.trainerInvite.findUnique({ where: { id: row.id } });
+        expect(persisted.status).toBe(InviteStatus.EXPIRED);
+        expect(persisted.userId).toBeNull();
+        expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+      });
+
+      it('POST /invite/redeem returns 403 invite.expired and flips the invite to expired', async () => {
+        await makeAdmin();
+        const email = 'expire-redeem@example.com';
+        const { accessToken } = await signup(email);
+        const row = await seedExpiredRowSeenAsPending('TF-EXPR-EDEM-02', email);
+
+        const res = await redeemInvite(accessToken, 'TF-EXPR-EDEM-02');
+
+        expect(res.statusCode).toBe(403);
+        expect(res.json().messageCode).toBe(InviteMessageCode.EXPIRED);
+        const persisted = await prisma.trainerInvite.findUnique({ where: { id: row.id } });
+        expect(persisted.status).toBe(InviteStatus.EXPIRED);
+        expect(persisted.userId).toBeNull();
       });
     });
   });

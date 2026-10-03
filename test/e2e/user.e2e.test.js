@@ -7,6 +7,7 @@ import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
 import { ChallengeParticipantMode } from '../../src/constants/challenge.js';
 import { InviteStatus } from '../../src/constants/trainer-invite.js';
 import crypto from 'node:crypto';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -43,7 +44,7 @@ e2eDescribe('e2e: user profile flows', () => {
     const email = `e2e+trainer-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -86,7 +87,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-update-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -140,7 +141,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-address-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -190,7 +191,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-socials-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -245,7 +246,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-empty-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -272,7 +273,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-invalid-gender-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -298,7 +299,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `profile-invalid-date-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -330,7 +331,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `e2e+lazyload-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -559,7 +560,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `e2e+has-trainer-${suffix}-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupRes = await app.inject({
+      const signupRes = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -651,7 +652,7 @@ e2eDescribe('e2e: user profile flows', () => {
   describe('platformPlan in GET /me', () => {
     async function createAndAuthStudent(suffix) {
       const email = `e2e+platform-student-${suffix}-${Date.now()}@example.com`;
-      const signupRes = await app.inject({
+      const signupRes = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password: 'StrongPassw0rd!' },
@@ -663,7 +664,7 @@ e2eDescribe('e2e: user profile flows', () => {
 
     async function createAndAuthTrainer(suffix) {
       const email = `e2e+platform-trainer-${suffix}-${Date.now()}@example.com`;
-      const signupRes = await app.inject({
+      const signupRes = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password: 'StrongPassw0rd!' },
@@ -766,7 +767,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const email = `e2e+delete-${suffix}-${Date.now()}@example.com`;
       const password = 'StrongPassw0rd!';
 
-      const signupResponse = await app.inject({
+      const signupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password },
@@ -1026,7 +1027,7 @@ e2eDescribe('e2e: user profile flows', () => {
       expect(deletedUser.birthDate).toBeNull();
       expect(deletedUser.avatarUrl).toBeNull();
 
-      const resignupResponse = await app.inject({
+      const resignupResponse = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email, password: 'AnotherStrongPassw0rd!' },
@@ -1299,7 +1300,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const emailA = `joao.silva.${suffix}@gmail.com`;
       const emailB = `joao_silva.${suffix}@gmail.com`;
 
-      const signupA = await app.inject({
+      const signupA = await signupVerified(app, {
         method: 'POST',
         url: '/auth/signup',
         payload: { email: emailA, password: 'StrongPassw0rd!' },

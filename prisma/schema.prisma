@@ -58,6 +58,8 @@ model User {
   aiInteractionLogsAsStudent AiInteractionLog[]    @relation("aiInteractionLogStudent")
   invitesSent                TrainerInvite[]       @relation("InvitesSent")
   invitesRedeemed            TrainerInvite[]       @relation("InvitesRedeemed")
+  emailVerificationTokens    EmailVerificationToken[]
+  studentInvitesAccepted     StudentInvite[]
 
   @@map("users")
 }
@@ -117,6 +119,7 @@ model Trainer {
   trainingTemplates         TrainingTemplate[]
   exerciseTemplates         ExerciseTemplate[]
   students                  TrainerStudent[]
+  studentInvites            StudentInvite[]
   anamneses                 Anamnesis[]
   studentAnamneses          StudentAnamnesis[]
   branding                  TrainerBranding?
@@ -200,6 +203,10 @@ model Account {
   accessToken  String?   @map("access_token") @db.Text
   refreshToken String?   @map("refresh_token") @db.Text
   expiresAt    DateTime? @map("expires_at") @db.Timestamptz(6)
+  // Set when the provider identity is proven to own the email: OAuth accounts
+  // at creation (ID token email_verified), email accounts via the verify-email
+  // flow. A user's email counts as verified when ANY account has this set.
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -228,9 +235,12 @@ model RefreshToken {
 
 model PasswordResetToken {
   id        String   @id @default(uuid()) @db.Uuid
-  tokenHash String   @unique @map("token_hash") @db.Text
+  // Not unique: a 6-digit code can legitimately collide with an old used row.
+  // Lookups are always scoped by userId.
+  tokenHash String   @map("token_hash") @db.Text
   userId    String   @map("user_id") @db.Uuid
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -238,6 +248,70 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @map("token_hash") @db.Text // sha256(6-digit code)
+  userId    String   @map("user_id") @db.Uuid
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Set when the email carrying this code could not be delivered. The row is
+  // also closed (used = true); it is ignored by the resend cooldown and daily cap.
+  sendFailedAt DateTime? @map("send_failed_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, used])
+  @@map("email_verification_tokens")
+}
+
+// Email/password signup awaiting inbox proof. No User row exists until the
+// code is confirmed (POST /auth/signup/verify), so an unverified signup can
+// neither squat an email nor touch an existing account. The password is NOT
+// stored here: it is sent again with the code, so whoever proves the inbox
+// also chooses the password (a stored hash could be overwritten by anyone
+// re-submitting the signup form for that email).
+model PendingSignup {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.Text // trimmed + lowercased
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Touched on every signup / resend; rows idle for 24h are purged opportunistically.
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  codes PendingSignupCode[]
+
+  @@index([updatedAt])
+  @@map("pending_signups")
+}
+
+// Same lifecycle as EmailVerificationToken (see email-verification-service),
+// owned by a PendingSignup instead of a User.
+model PendingSignupCode {
+  id              String    @id @default(uuid()) @db.Uuid
+  pendingSignupId String    @map("pending_signup_id") @db.Uuid
+  tokenHash       String    @map("token_hash") @db.Text // sha256(6-digit code)
+  used            Boolean   @default(false)
+  attempts        Int       @default(0)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sendFailedAt    DateTime? @map("send_failed_at") @db.Timestamptz(6)
+
+  pendingSignup PendingSignup @relation(fields: [pendingSignupId], references: [id], onDelete: Cascade)
+
+  @@index([pendingSignupId, used])
+  @@map("pending_signup_codes")
+}
+
+// Throttle for the "you already have an account" email sent when someone
+// signs up (or asks for a signup code) with an email that already has a User.
+model ExistingAccountNotice {
+  email      String   @id @db.Text // trimmed + lowercased
+  lastSentAt DateTime @map("last_sent_at") @db.Timestamptz(6)
+
+  @@map("existing_account_notices")
 }
 
 model Nutritionist {
@@ -1348,6 +1422,34 @@ model TrainerInvite {
   @@index([invitedByUserId])
   @@index([userId])
   @@map("trainer_invites")
+}
+
+// Trainer -> prospective student invite (email-bound, no code/link). Accepted
+// automatically once a user with a VERIFIED email matching `email` exists.
+// A partial unique index (trainer_id, email) WHERE status = 'pending' is
+// created by hand in the migration SQL (Prisma cannot express it) — do not
+// drop it when regenerating migrations.
+model StudentInvite {
+  id         String    @id @default(uuid()) @db.Uuid
+  trainerId  String    @map("trainer_id") @db.Uuid
+  email      String    @db.Text // normalized lowercase
+  status     String    @default("pending") @db.Text // pending|accepted|revoked|expired
+  studentId  String?   @map("student_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastSentAt DateTime  @default(now()) @map("last_sent_at") @db.Timestamptz(6)
+  sendCount  Int       @default(1) @map("send_count")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([trainerId, status, createdAt])
+  @@index([email, status])
+  @@index([studentId])
+  @@map("student_invites")
 }
 
 // High-fidelity interaction log for closed-beta diagnostics.

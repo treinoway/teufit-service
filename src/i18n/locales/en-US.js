@@ -206,6 +206,7 @@ export default {
     'auth.apple.firstLoginRequiresEmail': 'First Apple login requires an email. Please sign in again.',
     'auth.apple.invalidToken': 'Invalid Apple token.',
     'auth.apple.failed': 'Authentication failed. Please try again.',
+    'auth.oauthEmailNotVerified': 'This provider has not verified your email. Verify the email on your account or sign in with email and password.',
     'auth.user.deleted': 'This account has been deleted.',
     'account.deletion.professionalUnsupported': 'Account deletion is not yet available for trainer or nutritionist accounts. Please contact support to close a professional account.',
     'resource.notFound': 'Resource not found.',
@@ -379,6 +380,34 @@ export default {
     'invite.emailMismatch': 'This invite is bound to a different email address.',
     'invite.required': 'A trainer invite is required to access this feature during the closed beta.',
     'invite.alreadyActiveForEmail': 'This email already has an active invite.',
+    'trainerInvite.accountExists': 'An account already exists for this email. Sign in and redeem the invite.',
+
+    // Student invite (trainer -> prospective student)
+    'studentInvite.notFound': 'Invite not found.',
+    'studentInvite.notPending': 'This invite is no longer pending.',
+    'studentInvite.resendCooldown': 'Please wait a bit before resending this invite.',
+    'studentInvite.resendLimit': 'You have reached the resend limit for this invite.',
+    'studentInvite.alreadyPending': 'There is already a pending invite for this email.',
+    'studentInvite.dailyLimit': 'You have reached the daily invite limit. Please try again later.',
+    'studentInvite.emailSendFailed': 'We could not send the invite email. Please try again.',
+    'student.accountDeactivated': 'This student account is deactivated.',
+
+    // Email verification
+    'emailVerification.invalidCode': 'Invalid verification code.',
+    'emailVerification.codeExpired': 'The verification code has expired. Request a new one.',
+    'emailVerification.tooManyAttempts': 'Too many incorrect attempts. Request a new code.',
+    'emailVerification.alreadyVerified': 'Your email is already verified.',
+    'emailVerification.resendCooldown': 'Please wait a moment before requesting a new code.',
+    'emailVerification.userNotFound': 'User not found.',
+    'emailVerification.dailyLimit': 'You have requested too many codes today. Please try again later.',
+    'emailVerification.sendFailed': 'We could not send the verification email. Please try again.',
+
+    // Password reset
+    'auth.email.required': 'Email is required.',
+    'passwordReset.invalidCode': 'Invalid or expired code. Request a new one.',
+    'passwordReset.codeRequired': 'The reset code is required.',
+    'passwordReset.weakPassword': 'Password must be at least 8 characters.',
+    'passwordReset.passwordMismatch': 'Passwords do not match.',
   },
 
   notes: {
