@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -29,7 +30,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     const email = `e2e+user-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const res = await app.inject({
+    const res = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },

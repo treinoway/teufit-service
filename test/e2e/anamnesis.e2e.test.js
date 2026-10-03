@@ -5,6 +5,7 @@ import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import { AnamnesisQuestionType, ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -32,7 +33,7 @@ e2eDescribe('e2e: anamnesis', () => {
     const email = `e2e+trainer-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -55,7 +56,7 @@ e2eDescribe('e2e: anamnesis', () => {
     const email = `e2e+student-${Date.now()}@example.com`;
     const password = 'StrongPassw0rd!';
 
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password },
@@ -1251,7 +1252,7 @@ e2eDescribe('e2e: anamnesis', () => {
 
   async function createAdminToken() {
     const email = `e2e+admin-${Date.now()}@example.com`;
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },

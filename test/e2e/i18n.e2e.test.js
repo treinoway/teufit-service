@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -175,7 +176,7 @@ e2eDescribe('e2e: i18n infrastructure', () => {
 
   it('GET /me includes statusLabel and rolesLabel in en-US', async () => {
     const email = `e2e+i18n-${Date.now()}@example.com`;
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },
@@ -208,7 +209,7 @@ e2eDescribe('e2e: i18n infrastructure', () => {
 
   it('GET /me returns pt-BR statusLabel when app-language is pt-BR', async () => {
     const email = `e2e+i18n-ptbr-${Date.now()}@example.com`;
-    const signupResponse = await app.inject({
+    const signupResponse = await signupVerified(app, {
       method: 'POST',
       url: '/auth/signup',
       payload: { email, password: 'StrongPassw0rd!' },

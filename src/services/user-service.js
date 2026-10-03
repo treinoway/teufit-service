@@ -9,6 +9,7 @@ import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
 import { buildPlatformPlanForMe } from './platform-plan-service.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
 import { parseBool } from '../helpers/env.js';
+import { isUserEmailVerified } from './email-verification-service.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -18,7 +19,7 @@ async function computeHasActiveTrainer(userId) {
 	return Boolean(link);
 }
 
-async function toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess } = {}) {
+async function toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess, emailVerified } = {}) {
 	if (!user) return null;
 
 	const avatarUrl = await s3BucketHandler.resolveUrl(user.avatarUrl);
@@ -35,6 +36,7 @@ async function toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess 
 		avatarUrl,
 		hasActiveTrainer: hasActiveTrainer === true,
 		betaAccess: betaAccess === true,
+		emailVerified: emailVerified === true,
 	};
 
 	// Only include relations that were loaded (not undefined)
@@ -129,9 +131,10 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		select.trainer = { select: { id: true } };
 	}
 
-	const [user, hasActiveTrainer] = await Promise.all([
+	const [user, hasActiveTrainer, emailVerified] = await Promise.all([
 		prisma.user.findUnique({ where: { id: userId }, select }),
 		computeHasActiveTrainer(userId),
+		isUserEmailVerified(prisma, userId),
 	]);
 
 	if (!user) {
@@ -162,10 +165,16 @@ export async function getUserProfileById(userId, includeRelations = []) {
 	// roles:[] user triggers the accepted-invite lookup inside hasBetaAccess.
 	const betaAccess = await hasBetaAccess(user);
 
-	return toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess });
+	return toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess, emailVerified });
 }
 
-export async function setActiveProfileToTrainer(userId) {
+/**
+ * Grants the trainer role + Trainer row and makes trainer the active profile.
+ * Idempotent. Pass `tx` to run inside a caller's interactive transaction (e.g.
+ * signup via trainer invite, where the user row is not committed yet).
+ */
+export async function setActiveProfileToTrainer(userId, { tx } = {}) {
+	const db = tx ?? prisma;
 	if (!userId) {
 		const err = new Error('userId is required');
 		err.code = 'USER_ID_REQUIRED';
@@ -174,7 +183,7 @@ export async function setActiveProfileToTrainer(userId) {
 	}
 
 	// Ensure the user has the TRAINER role in addition to any existing roles.
-	const user = await prisma.user.findUnique({
+	const user = await db.user.findUnique({
 		where: { id: userId },
 		select: { roles: true },
 	});
@@ -188,7 +197,7 @@ export async function setActiveProfileToTrainer(userId) {
 
 	const currentRoles = Array.isArray(user.roles) ? user.roles : [];
 	if (!currentRoles.includes(Roles.TRAINER)) {
-		await prisma.user.update({
+		await db.user.update({
 			where: { id: userId },
 			data: {
 				roles: {
@@ -199,14 +208,14 @@ export async function setActiveProfileToTrainer(userId) {
 	}
 
 	// Ensure the Trainer record exists in the database
-	await ensureProfileForUser({ userId, role: Roles.TRAINER });
+	await ensureProfileForUser({ userId, role: Roles.TRAINER, tx });
 
 	// If the user already had all required profile fields filled before becoming a trainer,
 	// mark the profile milestone immediately — it would otherwise stay null until the
 	// next profile PATCH, which is incorrect.
-	await maybeMarkProfileComplete({ userId });
+	await maybeMarkProfileComplete({ userId, tx });
 
-	const preferences = await prisma.userPreferences.upsert({
+	const preferences = await db.userPreferences.upsert({
 		where: { userId },
 		create: { userId, activeProfile: 'trainer' },
 		update: { activeProfile: 'trainer' },
@@ -421,12 +430,13 @@ if (!userId) {
 		await maybeMarkProfileComplete({ userId });
 	}
 
-	const [hasActiveTrainer, betaAccess] = await Promise.all([
+	const [hasActiveTrainer, betaAccess, emailVerified] = await Promise.all([
 		computeHasActiveTrainer(userId),
 		hasBetaAccess(updatedUser),
+		isUserEmailVerified(prisma, userId),
 	]);
 
-	return toUserProfile(updatedUser, { hasActiveTrainer, betaAccess });
+	return toUserProfile(updatedUser, { hasActiveTrainer, betaAccess, emailVerified });
 	}catch (err) {
 		console.error('Error in updateUserProfile:', err);
 		throw err;

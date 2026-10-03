@@ -15,6 +15,7 @@ export const InviteErrorCode = Object.freeze({
   INVITE_EMAIL_MISMATCH: 'INVITE_EMAIL_MISMATCH',
   INVITE_REQUIRED: 'INVITE_REQUIRED',
   INVITE_ALREADY_ACTIVE_FOR_EMAIL: 'INVITE_ALREADY_ACTIVE_FOR_EMAIL',
+  INVITE_ACCOUNT_EXISTS: 'INVITE_ACCOUNT_EXISTS',
 });
 
 export const InviteMessageCode = Object.freeze({
@@ -25,6 +26,7 @@ export const InviteMessageCode = Object.freeze({
   EMAIL_MISMATCH: 'invite.emailMismatch',
   REQUIRED: 'invite.required',
   ALREADY_ACTIVE_FOR_EMAIL: 'invite.alreadyActiveForEmail',
+  ACCOUNT_EXISTS: 'trainerInvite.accountExists',
 });
 
 // Invites live for 7 days — long enough for the invited trainer to see the

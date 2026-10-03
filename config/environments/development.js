@@ -1,6 +1,12 @@
 import { parseBool } from '../../src/helpers/env.js';
 
 export default {
+    auth: {
+      exposeResetTokenInResponse: true,
+      // Manual testing re-requests codes freely.
+      passwordResetCooldownMs: 0,
+      passwordResetMaxPerHour: 1000,
+    },
     // Sentry desligado em dev mesmo com SENTRY_DSN presente no .env: erros de
     // desenvolvimento (import quebrado, watcher reiniciando) viram issue no
     // projeto de verdade, e o Sentry.init() carrega auto-instrumentação OTel
@@ -20,6 +26,13 @@ export default {
           changePassword: { max: 1000, timeWindow: '1 minute' },
           forgotPassword: { max: 1000, timeWindow: '1 minute' },
           resetPassword: { max: 1000, timeWindow: '1 minute' },
+          verifyEmail: { max: 1000, timeWindow: '1 minute' },
+          resendEmailVerification: { max: 1000, timeWindow: '1 minute' },
+          signup: { max: 1000, timeWindow: '1 minute' },
+          signupVerify: { max: 1000, timeWindow: '1 minute' },
+          signupVerifyPerEmail: { max: 1000, timeWindow: '1 minute' },
+          signupResend: { max: 1000, timeWindow: '1 minute' },
+          signupInvite: { max: 1000, timeWindow: '1 minute' },
         },
         postalCode: {
           max: 1000,
@@ -59,6 +72,8 @@ export default {
           },
         trainer: {
           searchStudents: { max: 1000, timeWindow: '1 minute' },
+          inviteStudent: { max: 1000, timeWindow: '1 minute' },
+          resendStudentInvite: { max: 1000, timeWindow: '1 minute' },
         },
         trainingProtocol: {
           create: { max: 1000, timeWindow: '1 minute' },

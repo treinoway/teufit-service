@@ -5,6 +5,7 @@ import { setupApp } from "../helpers/setup-app.js";
 import { cleanDatabase } from "../helpers/db-cleanup.js";
 import { GamificationErrorCode } from "../../src/constants/gamification.js";
 import { ChallengeParticipantMode } from "../../src/constants/challenge.js";
+import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -30,7 +31,7 @@ e2eDescribe("e2e: gamification", () => {
     const email = `trainer+gamification+${Date.now()}@example.com`;
     const password = "StrongPassw0rd!";
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: "POST",
       url: "/auth/signup",
       payload: { email, password },
@@ -63,7 +64,7 @@ e2eDescribe("e2e: gamification", () => {
     const email = `student+gamification+${Date.now()}@example.com`;
     const password = "StrongPassw0rd!";
 
-    const signupRes = await app.inject({
+    const signupRes = await signupVerified(app, {
       method: "POST",
       url: "/auth/signup",
       payload: { email, password },

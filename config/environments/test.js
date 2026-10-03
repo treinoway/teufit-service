@@ -1,4 +1,11 @@
 export default {
+  auth: {
+    exposeResetTokenInResponse: true,
+    // E2E suites re-request codes back to back; the throttle has its own tests
+    // that override these values.
+    passwordResetCooldownMs: 0,
+    passwordResetMaxPerHour: 1000,
+  },
   // The closed-beta gate on /become-trainer defaults OFF in the test environment,
   // mirroring how rate limiting is disabled in test (see api/server.js). Dozens of
   // pre-existing e2e fixtures self-promote a fresh user to trainer via

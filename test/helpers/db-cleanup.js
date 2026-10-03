@@ -57,6 +57,10 @@ export async function cleanDatabase() {
     'ai_usage_events',
     'users',
     'user_waitlist',
+    // Not FK-linked to users, so TRUNCATE ... CASCADE on users does not reach them.
+    'pending_signup_codes',
+    'pending_signups',
+    'existing_account_notices',
   ];
 
   // TRUNCATE with CASCADE will automatically handle foreign key constraints
