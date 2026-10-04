@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock Prisma before any service imports
 vi.mock('../../src/db.js', () => ({
@@ -415,6 +415,19 @@ describe('student-dashboard-service', () => {
   // ---------------------------------------------------------------------------
 
   describe('getDashboardSummary — adherence', () => {
+    // Adherence is month-to-date, so on the first days of a month (before the
+    // protocol's first training weekday) expected is 0 and adherence is null.
+    // Pin "now" to a mid-month Wednesday so the assertions don't depend on the
+    // day the suite runs. Only Date is faked; timers and promises stay real.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-05-20T12:00:00.000Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     // Adherence is computed via computeStudentMonthlyAdherence, which issues
     // prisma.trainingProtocol.findMany + prisma.workoutSession.aggregate per
     // month call. The dashboard's dateFrom/dateTo window does NOT affect adherence.
