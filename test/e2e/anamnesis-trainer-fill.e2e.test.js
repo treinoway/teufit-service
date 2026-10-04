@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
+import { signupVerified } from '../helpers/signup-user.js';
 import { prisma } from '../../src/db.js';
 import {
   AnamnesisQuestionType,
@@ -50,9 +51,7 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
 
   async function signup(prefix) {
     const email = uniqueEmail(prefix);
-    const response = await app.inject({
-      method: 'POST',
-      url: '/auth/signup',
+    const response = await signupVerified(app, {
       payload: { email, password: PASSWORD },
     });
     expect(response.statusCode).toBe(201);
