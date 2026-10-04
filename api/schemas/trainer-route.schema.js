@@ -340,6 +340,7 @@ export const getLinkedStudentSchema = {
   tags: ['trainer'],
   summary: 'Get the basic profile of one student linked to the authenticated trainer',
   description:
+    'Includes lastWorkoutAt (ISO timestamp of the latest finished workout session, null if none). ' +
     'Returns 404 (messageCode student.notLinked) when the student is not linked to this trainer ' +
     'or the student account was deleted.',
   security: [{ bearerAuth: [] }],
@@ -375,6 +376,7 @@ export const getLinkedStudentSchema = {
         avatarUrl: { type: 'string', nullable: true },
         activeOnPlan: { type: 'boolean' },
         linkedAt: { type: 'string', format: 'date-time' },
+        lastWorkoutAt: { type: 'string', format: 'date-time', nullable: true },
       },
     },
     400: badRequestErrorResponseSchema,

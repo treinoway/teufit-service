@@ -2396,7 +2396,7 @@
                 }
               ]
             },
-            "description": "Returns the basic profile of one student linked to the authenticated trainer: id, email, firstName, lastName, avatarUrl (resolved URL), activeOnPlan and linkedAt. 404 (messageCode student.notLinked) when the student is not linked to this trainer or the account was deleted; 409 TRAINER_PROFILE_MISSING when the user has no trainer profile."
+            "description": "Returns the basic profile of one student linked to the authenticated trainer: id, email, firstName, lastName, avatarUrl (resolved URL), activeOnPlan, linkedAt and lastWorkoutAt (ISO timestamp of the latest finished workout session, null if none). 404 (messageCode student.notLinked) when the student is not linked to this trainer or the account was deleted; 409 TRAINER_PROFILE_MISSING when the user has no trainer profile."
           },
           "response": [
             {
@@ -2432,7 +2432,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"b3c1f2a4-0000-4000-8000-000000000001\",\n  \"email\": \"maria@example.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Silva\",\n  \"avatarUrl\": null,\n  \"activeOnPlan\": true,\n  \"linkedAt\": \"2026-09-01T12:00:00.000Z\"\n}"
+              "body": "{\n  \"id\": \"b3c1f2a4-0000-4000-8000-000000000001\",\n  \"email\": \"maria@example.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Silva\",\n  \"avatarUrl\": null,\n  \"activeOnPlan\": true,\n  \"linkedAt\": \"2026-09-01T12:00:00.000Z\",\n  \"lastWorkoutAt\": \"2026-09-28T18:30:00.000Z\"\n}"
             },
             {
               "name": "Get Linked Student - 404 student.notLinked",

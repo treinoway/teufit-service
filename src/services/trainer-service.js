@@ -636,7 +636,8 @@ export async function searchStudents({ trainerId, query, limit = 10 }) {
  * - Throws ConflictAppError TRAINER_PROFILE_MISSING (409) if the user has no trainer profile
  * - Throws NotFoundAppError student.notLinked (404) if the student is not linked to this
  *   trainer or the student's account was deleted
- * - Output: { id, email, firstName, lastName, avatarUrl, activeOnPlan, linkedAt }
+ * - Output: { id, email, firstName, lastName, avatarUrl, activeOnPlan, linkedAt, lastWorkoutAt }
+ *   (lastWorkoutAt is a denormalized ISO timestamp, null if the student never finished a session)
  */
 export async function getLinkedStudent({ trainerUserId, studentId }, prismaClient = prisma) {
   const trainer = await prismaClient.trainer.findUnique({
@@ -657,6 +658,7 @@ export async function getLinkedStudent({ trainerUserId, studentId }, prismaClien
     select: {
       createdAt: true,
       activeOnPlan: true,
+      lastWorkoutAt: true,
       student: {
         select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true, deletedAt: true },
       },
@@ -679,6 +681,7 @@ export async function getLinkedStudent({ trainerUserId, studentId }, prismaClien
     avatarUrl: await s3BucketHandler.resolveUrl(student.avatarUrl),
     activeOnPlan: link.activeOnPlan,
     linkedAt: link.createdAt,
+    lastWorkoutAt: link.lastWorkoutAt,
   };
 }
 

@@ -902,8 +902,32 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       });
       expect(Number.isNaN(Date.parse(body.linkedAt))).toBe(false);
       expect(Object.keys(body).sort()).toEqual(
-        ['activeOnPlan', 'avatarUrl', 'email', 'firstName', 'id', 'lastName', 'linkedAt'],
+        ['activeOnPlan', 'avatarUrl', 'email', 'firstName', 'id', 'lastName', 'lastWorkoutAt', 'linkedAt'],
       );
+    });
+
+    it('returns lastWorkoutAt null for a freshly linked student', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      const res = await getStudent(trainerToken, studentId);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().lastWorkoutAt).toBeNull();
+    });
+
+    it('returns lastWorkoutAt as an ISO timestamp once the link has a finished workout', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+      const lastWorkoutAt = new Date('2026-09-20T08:30:00.000Z');
+      await prisma.trainerStudent.updateMany({ where: { studentId }, data: { lastWorkoutAt } });
+
+      const res = await getStudent(trainerToken, studentId);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().lastWorkoutAt).toBe(lastWorkoutAt.toISOString());
     });
 
     it('returns 404 student.notLinked for a student linked only to another trainer', async () => {
