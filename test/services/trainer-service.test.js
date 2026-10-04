@@ -979,6 +979,7 @@ describe('getLinkedStudent', () => {
   const makeLink = (studentOverrides = {}) => ({
     createdAt: LINKED_AT,
     activeOnPlan: true,
+    lastWorkoutAt: null,
     student: {
       id: 'student1',
       email: 'maria@example.com',
@@ -1009,8 +1010,35 @@ describe('getLinkedStudent', () => {
       avatarUrl: 'https://cdn.example.com/avatars/maria.png',
       activeOnPlan: true,
       linkedAt: LINKED_AT,
+      lastWorkoutAt: null,
     });
     expect(s3BucketHandler.resolveUrl).toHaveBeenCalledWith('avatars/maria.png');
+  });
+
+  it('maps lastWorkoutAt as null when the student never finished a session', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue({ ...makeLink(), lastWorkoutAt: null });
+
+    const result = await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    expect(result.lastWorkoutAt).toBeNull();
+  });
+
+  it('maps lastWorkoutAt from the link when a session was finished', async () => {
+    const lastWorkoutAt = new Date('2026-09-20T08:30:00.000Z');
+    prisma.trainerStudent.findUnique.mockResolvedValue({ ...makeLink(), lastWorkoutAt });
+
+    const result = await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    expect(result.lastWorkoutAt).toEqual(lastWorkoutAt);
+  });
+
+  it('selects lastWorkoutAt on the link query', async () => {
+    prisma.trainerStudent.findUnique.mockResolvedValue(makeLink());
+
+    await getLinkedStudent({ trainerUserId: 'trainer-user1', studentId: 'student1' });
+
+    const { select } = prisma.trainerStudent.findUnique.mock.calls[0][0];
+    expect(select.lastWorkoutAt).toBe(true);
   });
 
   it('looks up the link by the trainer resolved from the user id', async () => {
