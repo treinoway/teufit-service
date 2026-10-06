@@ -3,7 +3,9 @@ import { AppError } from '../errors/app-error.js';
 import {
   SubscriptionErrorCode,
   SubscriptionMessageCode,
+  SubscriptionStatus,
 } from '../constants/subscription.js';
+import { assertValidMoneyAmount, assertValidPercentage } from '../helpers/subscription-helpers.js';
 
 const { Decimal } = Prisma;
 
@@ -71,7 +73,7 @@ export function validateDiscount(price, discountPercent, discountAmount) {
   }
 }
 
-function formatPlan(plan) {
+function formatPlan(plan, activeSubscriptionCount) {
   return {
     id: plan.id,
     trainerId: plan.trainerId,
@@ -82,6 +84,7 @@ function formatPlan(plan) {
     discountPercent: plan.discountPercent != null ? plan.discountPercent.toString() : null,
     discountAmount: plan.discountAmount != null ? plan.discountAmount.toString() : null,
     isArchived: plan.deletedAt != null,
+    ...(activeSubscriptionCount !== undefined ? { activeSubscriptionCount } : {}),
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt ?? null,
   };
@@ -92,6 +95,9 @@ function formatPlan(plan) {
 export async function createPlan(prisma, userId, data) {
   const trainer = await resolveTrainerOrThrow(prisma, userId);
 
+  assertValidMoneyAmount(data.price);
+  assertValidMoneyAmount(data.discountAmount);
+  assertValidPercentage(data.discountPercent);
   validateDiscount(data.price, data.discountPercent ?? null, data.discountAmount ?? null);
 
   const plan = await prisma.subscriptionPlan.create({
@@ -120,7 +126,20 @@ export async function listPlans(prisma, userId, { includeArchived = false } = {}
     orderBy: [{ createdAt: 'desc' }],
   });
 
-  return plans.map(formatPlan);
+  // One batched groupBy for every listed plan — never a count per plan.
+  const activeCounts = plans.length === 0
+    ? []
+    : await prisma.studentSubscription.groupBy({
+      by: ['planId'],
+      where: {
+        planId: { in: plans.map((plan) => plan.id) },
+        status: SubscriptionStatus.ACTIVE,
+      },
+      _count: { _all: true },
+    });
+  const activeCountByPlanId = new Map(activeCounts.map((row) => [row.planId, row._count._all]));
+
+  return plans.map((plan) => formatPlan(plan, activeCountByPlanId.get(plan.id) ?? 0));
 }
 
 export async function getPlanById(prisma, userId, planId) {
@@ -166,6 +185,10 @@ export async function updatePlan(prisma, userId, planId, patch) {
       message: 'This plan is archived and cannot be edited',
     });
   }
+
+  assertValidMoneyAmount(patch.price);
+  assertValidMoneyAmount(patch.discountAmount);
+  assertValidPercentage(patch.discountPercent);
 
   const newPrice = patch.price != null ? patch.price : existing.price;
   const newDiscountPercent =

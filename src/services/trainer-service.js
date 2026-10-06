@@ -13,7 +13,14 @@ import { markBriefingDirty } from './briefing-service.js';
 import { computeExpectedSessions } from '../helpers/adherence-helpers.js';
 import { assertStudentCap } from './platform-plan-service.js';
 import { TrainingStatus } from '../constants/training.js';
-import { SubscriptionStatus, PaymentStatus } from '../constants/subscription.js';
+import {
+  SubscriptionStatus,
+  CANCELLATION_REASON_UNLINKED,
+} from '../constants/subscription.js';
+import { buildOverduePaymentWhere } from '../helpers/payment-status-helpers.js';
+import { todayInBusinessTz } from '../helpers/date-helpers.js';
+import { cancelUpcomingPayments } from './subscription-cycle-service.js';
+import { buildAssignmentLockKey } from '../helpers/subscription-helpers.js';
 import { StudentBlocker } from '../constants/student-blocker.js';
 
 function buildUserUpdateData(trainer) {
@@ -379,7 +386,7 @@ export async function listStudents({ trainerId }) {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   // Date-only "today" boundary for the no_active_protocol / subscription_overdue
   // blocker checks — distinct from monthStart, which is the adherence window.
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = todayInBusinessTz(now);
 
   const [protocols, completedGroups, activeProtocolRows, subscriptions] = await Promise.all([
     prisma.trainingProtocol.findMany({
@@ -492,8 +499,7 @@ export async function listStudents({ trainerId }) {
     ? await prisma.subscriptionPayment.findMany({
       where: {
         subscriptionId: { in: activeSubscriptionIds },
-        status: PaymentStatus.PENDING,
-        dueDate: { lt: today },
+        ...buildOverduePaymentWhere(today),
       },
       select: { subscriptionId: true },
     })
@@ -705,8 +711,26 @@ export async function unlinkStudent({ trainerId, studentId }) {
     });
   }
 
-  await prisma.trainerStudent.delete({
-    where: { trainerId_studentId: { trainerId, studentId } },
+  // The link and the active subscription end together: not-yet-due pending
+  // charges are voided, already-due ones stay pending as debt (visible in the
+  // finance overview even after the unlink).
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    // Same key as assignPlanToStudent: waits for an in-flight assignment, and an
+    // assignment starting afterwards re-checks the link and finds it gone.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildAssignmentLockKey(trainerId, studentId)}))`;
+    await tx.trainerStudent.delete({
+      where: { trainerId_studentId: { trainerId, studentId } },
+    });
+    await tx.studentSubscription.updateMany({
+      where: { trainerId, studentId, status: SubscriptionStatus.ACTIVE },
+      data: {
+        status: SubscriptionStatus.CANCELLED,
+        cancelledAt: now,
+        cancellationReason: CANCELLATION_REASON_UNLINKED,
+      },
+    });
+    await cancelUpcomingPayments(tx, { trainerId, studentId }, todayInBusinessTz(now), { now });
   });
 
   // Roster change affects activeStudents and inactiveStudents KPIs.

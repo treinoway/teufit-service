@@ -187,6 +187,8 @@ export default {
     paymentStatus: {
       pending: 'Pending',
       paid: 'Paid',
+      overdue: 'Overdue',
+      cancelled: 'Voided',
     },
     inviteStatus: {
       pending: 'Pending',
@@ -342,6 +344,15 @@ export default {
     'subscription.notFound': 'Subscription not found.',
     'subscription.cannotEditCancelled': 'Cannot edit a cancelled subscription.',
     'subscription.paymentNotFound': 'Subscription payment not found.',
+    'subscription.paymentAlreadyPaid': 'This payment is already paid. Revert it to pending before changing or voiding it.',
+    'subscription.paymentCancelled': 'This payment was voided and cannot be changed.',
+    'subscription.cancelled': 'This subscription is cancelled.',
+    'subscription.alreadyActive': 'This student already has an active subscription.',
+    'subscription.cycleNotDue': 'The next billing cycle is not available yet.',
+    'subscription.paymentConflict': 'The payment was changed by another operation. Refresh and try again.',
+    'subscription.cycleAlreadyExists': 'This billing cycle already exists.',
+    'subscription.invalidAmount': 'Invalid amount. Use at most two decimal places and no more than 99,999,999.99.',
+    'subscription.invalidPaidAt': 'Invalid payment date: it cannot be in the future or more than a year before the subscription start.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'You have reached the student limit for your plan. Upgrade to unlock more slots.',

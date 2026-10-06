@@ -16,7 +16,7 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
-import { getDateOnlyAsMidnightUtc, addDaysMs } from '../../src/helpers/date-helpers.js';
+import { todayInBusinessTz, addDaysMs } from '../../src/helpers/date-helpers.js';
 import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -45,8 +45,8 @@ e2eDescribe('e2e: GET /trainer/dashboard', () => {
   // ─── Date fixtures ───────────────────────────────────────────────────────────
 
   function daysFromToday(days) {
-    const today = getDateOnlyAsMidnightUtc(new Date());
-    return addDaysMs(today, days);
+    // Business-timezone civil day, same "today" the services use.
+    return addDaysMs(todayInBusinessTz(new Date()), days);
   }
 
   // ─── Auth helpers ────────────────────────────────────────────────────────────
@@ -124,9 +124,12 @@ e2eDescribe('e2e: GET /trainer/dashboard', () => {
   }
 
   async function createPayment(subscriptionId, overrides = {}) {
+    // (subscriptionId, cycleIndex) is unique — number the cycles sequentially.
+    const cycleIndex = await prisma.subscriptionPayment.count({ where: { subscriptionId } });
     return prisma.subscriptionPayment.create({
       data: {
         subscriptionId,
+        cycleIndex,
         cycleStartDate: daysFromToday(-30),
         cycleEndDate: daysFromToday(0),
         dueDate: daysFromToday(0),
@@ -306,6 +309,83 @@ e2eDescribe('e2e: GET /trainer/dashboard', () => {
       expect(res.json().plans.expiredCount).toBe(0);
     });
 
+    it('does NOT count a pending payment due at today+8d (outside the window)', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { dueDate: daysFromToday(8) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: getUrl(),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(res.json().plans.renewingSoonCount).toBe(0);
+    });
+
+    it('does NOT count a PAID payment due inside the window', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      const plan = await createPlan(trainerId);
+      const paidSubscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(paidSubscription.id, {
+        dueDate: daysFromToday(3),
+        status: PaymentStatus.PAID,
+        paidAt: new Date(),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: getUrl(),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(res.json().plans.renewingSoonCount).toBe(0);
+    });
+
+    it.each([
+      ['due yesterday (grace window)', -1],
+      ['due exactly today - 3 (last grace day)', -3],
+    ])('counts a pending payment %s as renewing soon and NOT as overdue', async (_label, offsetDays) => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { dueDate: daysFromToday(offsetDays) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: getUrl(),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const body = res.json();
+      expect(body.plans.renewingSoonCount).toBe(1);
+      expect(body.plans.expiredCount).toBe(0);
+      expect(body.finance.overdueCount).toBe(0);
+    });
+
+    it('counts a pending payment due today - 4 as overdue and NOT as renewing soon', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { dueDate: daysFromToday(-4) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: getUrl(),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const body = res.json();
+      expect(body.plans.renewingSoonCount).toBe(0);
+      expect(body.plans.expiredCount).toBe(1);
+      expect(body.finance.overdueCount).toBe(1);
+    });
+
     it('does NOT count an active subscription with zero materialized payments toward renewingSoonCount or expiredCount', async () => {
       const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: studentId } = await createStudentWithToken();
@@ -396,15 +476,36 @@ e2eDescribe('e2e: GET /trainer/dashboard', () => {
       expect(finance.overdueCount).toBe(0);
     });
 
+    it('applies the 3-day grace window: due today-3 is NOT overdue, today-4 is', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { dueDate: daysFromToday(-3), amount: 70 });
+      await createPayment(subscription.id, { dueDate: daysFromToday(-4), amount: 30 });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: getUrl(),
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const body = res.json();
+      expect(body.finance.overdueCount).toBe(1);
+      expect(body.finance.overdueAmount).toBe('30.00');
+      expect(body.plans.expiredCount).toBe(1);
+    });
+
     it('a single active subscription with 3 overdue pending payments: plans.expiredCount=1 but finance.overdueCount=3', async () => {
       const { trainerId, accessToken } = await createTrainerWithToken();
       const { userId: studentId } = await createStudentWithToken();
       const plan = await createPlan(trainerId);
       const subscription = await createSubscription(trainerId, studentId, plan.id);
 
-      await createPayment(subscription.id, { dueDate: daysFromToday(-1), amount: 100 });
-      await createPayment(subscription.id, { dueDate: daysFromToday(-2), amount: 150 });
-      await createPayment(subscription.id, { dueDate: daysFromToday(-3), amount: 200 });
+      // Overdue = pending AND dueDate < today - 3 days (grace window).
+      await createPayment(subscription.id, { dueDate: daysFromToday(-4), amount: 100 });
+      await createPayment(subscription.id, { dueDate: daysFromToday(-5), amount: 150 });
+      await createPayment(subscription.id, { dueDate: daysFromToday(-6), amount: 200 });
 
       const res = await app.inject({
         method: 'GET',

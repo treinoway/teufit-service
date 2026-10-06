@@ -93,8 +93,17 @@ DATABASE_URL="${{treinoway-service-db-prod.DATABASE_URL}}"
   refuses to boot (intentional — `src/helpers/asaas-webhook-helpers.js:34`).
 - `ENABLE_BRIEFING_CRON` — the daily briefing cron auto-enables when
   `NODE_ENV=production` (`api/server.js:380`). Expect it to run in prod with no var.
+- `ENABLE_SUBSCRIPTION_CYCLE_CRON` — the daily subscription-cycle generation cron
+  (03:00 America/Sao_Paulo) auto-enables when `NODE_ENV=production`; set `true` to
+  run it elsewhere. Idempotent, safe with multiple instances.
 - `GIT_COMMIT` — Railway injects at build (falls back to package version).
 - `FRONTEND_REDIRECT_URL` — optional, falls back to `FRONTEND_URL`.
+
+## Deploy note: subscription_payments.cycle_index
+Migration `20261005120000_add_payment_cycle_index` adds `cycle_index INTEGER NOT NULL`
+(no default). Old instances insert payments without it and will fail — deploy the
+migration and the new code together, without a rolling overlap of old/new instances
+(stop old instances, migrate, start new ones).
 
 ## Note: staging has no `GOOGLE_OAUTH_CLIENT_SECRET`
 Staging runs with only `GOOGLE_OAUTH_CLIENT_ID` — web Google login goes through

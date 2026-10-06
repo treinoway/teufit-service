@@ -51,9 +51,11 @@ import { studentSubscriptionRoutes } from './routes/student-subscription-route.j
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
+import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
+import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { healthRoutes } from './routes/health-route.js';
@@ -390,6 +392,7 @@ export async function buildServer(options = {}) {
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
     await fastify.register(trainerDashboardRoutes);
+    await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);
   });
 
@@ -402,6 +405,16 @@ export async function buildServer(options = {}) {
   if (cronEnabled) {
     startBriefingCron(prisma, fastify.log);
     fastify.log.info('[cron:briefing] daily 22:00 UTC refresh scheduled');
+  }
+
+  // Daily subscription cycle generation — same gating as the briefing cron.
+  // Idempotent, so safe with multiple instances (see subscription-cycle-service.js).
+  const subscriptionCycleCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_SUBSCRIPTION_CYCLE_CRON, false);
+  if (subscriptionCycleCronEnabled) {
+    startSubscriptionCycleCron(prisma, fastify.log);
+    fastify.log.info('[cron:subscription-cycles] daily 03:00 America/Sao_Paulo generation scheduled');
   }
 
   return fastify;

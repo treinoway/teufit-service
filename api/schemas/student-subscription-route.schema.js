@@ -1,5 +1,8 @@
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
-import { subscriptionStatusValues } from '../../src/constants/subscription.js';
+import {
+  subscriptionStatusValues,
+  MAX_MONEY_AMOUNT,
+} from '../../src/constants/subscription.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const authHeaders = {
@@ -24,8 +27,12 @@ const paymentSchema = {
     cycleEndDate: { type: 'string', format: 'date' },
     dueDate: { type: 'string', format: 'date' },
     amount: moneyString,
+    cycleIndex: { type: 'integer' },
     status: { type: 'string' },
+    effectiveStatus: { type: 'string' },
+    daysOverdue: { type: 'integer' },
     paidAt: { type: 'string', format: 'date-time', nullable: true },
+    voidedAt: { type: 'string', format: 'date-time', nullable: true },
     notes: { type: 'string', nullable: true },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -65,6 +72,9 @@ const subscriptionWithFirstPaymentSchema = {
 export const assignPlanSchema = {
   tags: ['student-subscriptions'],
   summary: 'Assign a subscription plan to a student',
+  description:
+    'Creates the subscription and its first payment cycle. 409 SUBSCRIPTION_ALREADY_ACTIVE when the student ' +
+    'already has an active subscription.',
   security: [{ bearerAuth: [] }],
   headers: authHeaders,
   params: {
@@ -82,7 +92,7 @@ export const assignPlanSchema = {
       planId: { type: 'string', format: 'uuid' },
       startDate: { type: 'string', format: 'date' },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
-      discountAmount: { type: 'number', minimum: 0, nullable: true },
+      discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
     },
   },
   response: {
@@ -181,6 +191,9 @@ export const getSubscriptionByIdSchema = {
 export const cancelSubscriptionSchema = {
   tags: ['student-subscriptions'],
   summary: 'Cancel a subscription',
+  description:
+    'Voids (status cancelled) pending payments that are not yet due; due/overdue pending payments are kept ' +
+    'for collection and paid payments are untouched.',
   security: [{ bearerAuth: [] }],
   headers: authHeaders,
   params: {

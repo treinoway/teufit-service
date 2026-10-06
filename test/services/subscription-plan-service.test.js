@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import {
   SubscriptionErrorCode,
   SubscriptionMessageCode,
+  SubscriptionStatus,
 } from '../../src/constants/subscription.js';
 
 const { Decimal } = Prisma;
@@ -17,6 +18,7 @@ const mockPrisma = {
     findFirst: vi.fn(),
     update: vi.fn(),
   },
+  studentSubscription: { groupBy: vi.fn() },
 };
 
 import {
@@ -118,6 +120,22 @@ describe('createPlan', () => {
     });
   });
 
+  it.each([
+    ['price with more than 2 decimals', { price: 10.005 }],
+    ['price above the Decimal(10,2) maximum', { price: 100000000 }],
+    ['discountAmount with more than 2 decimals', { price: 100, discountAmount: 1.001 }],
+    ['discountPercent with more than 2 decimals', { price: 100, discountPercent: 33.333 }],
+  ])('throws 400 SUBSCRIPTION_INVALID_AMOUNT for %s', async (_label, money) => {
+    await expect(
+      createPlan(mockPrisma, TRAINER_USER_ID, { name: 'x', recurrence: 'monthly', ...money }),
+    ).rejects.toMatchObject({
+      httpStatus: 400,
+      error: SubscriptionErrorCode.INVALID_AMOUNT,
+      messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+    });
+    expect(mockPrisma.subscriptionPlan.create).not.toHaveBeenCalled();
+  });
+
   it('throws 404 when trainer not found', async () => {
     mockPrisma.trainer.findUnique.mockResolvedValue(null);
 
@@ -137,6 +155,10 @@ describe('createPlan', () => {
 // ─── listPlans ────────────────────────────────────────────────────────────────
 
 describe('listPlans', () => {
+  beforeEach(() => {
+    mockPrisma.studentSubscription.groupBy.mockResolvedValue([]);
+  });
+
   it('excludes archived plans by default', async () => {
     const activePlan = makePlanRecord();
     mockPrisma.subscriptionPlan.findMany.mockResolvedValue([activePlan]);
@@ -158,6 +180,74 @@ describe('listPlans', () => {
     expect(result).toHaveLength(2);
     const callArgs = mockPrisma.subscriptionPlan.findMany.mock.calls[0][0];
     expect(callArgs.where.deletedAt).toBeUndefined();
+  });
+
+  describe('activeSubscriptionCount', () => {
+    it('adds the count per plan using a single groupBy for all plans (no N+1)', async () => {
+      mockPrisma.subscriptionPlan.findMany.mockResolvedValue([
+        makePlanRecord({ id: 'plan-a' }),
+        makePlanRecord({ id: 'plan-b' }),
+        makePlanRecord({ id: 'plan-c' }),
+      ]);
+      mockPrisma.studentSubscription.groupBy.mockResolvedValue([
+        { planId: 'plan-a', _count: { _all: 2 } },
+        { planId: 'plan-b', _count: { _all: 1 } },
+      ]);
+
+      const result = await listPlans(mockPrisma, TRAINER_USER_ID);
+
+      expect(mockPrisma.studentSubscription.groupBy).toHaveBeenCalledOnce();
+      expect(result.map((plan) => plan.activeSubscriptionCount)).toEqual([2, 1, 0]);
+    });
+
+    it('counts only active subscriptions of the listed plans', async () => {
+      mockPrisma.subscriptionPlan.findMany.mockResolvedValue([
+        makePlanRecord({ id: 'plan-a' }),
+        makePlanRecord({ id: 'plan-b' }),
+      ]);
+      mockPrisma.studentSubscription.groupBy.mockResolvedValue([]);
+
+      await listPlans(mockPrisma, TRAINER_USER_ID);
+
+      const args = mockPrisma.studentSubscription.groupBy.mock.calls[0][0];
+      expect(args.by).toEqual(['planId']);
+      expect(args.where).toEqual({
+        planId: { in: ['plan-a', 'plan-b'] },
+        status: SubscriptionStatus.ACTIVE,
+      });
+    });
+
+    it('returns zero for plans whose subscriptions are all cancelled (absent from groupBy)', async () => {
+      mockPrisma.subscriptionPlan.findMany.mockResolvedValue([makePlanRecord()]);
+      mockPrisma.studentSubscription.groupBy.mockResolvedValue([]);
+
+      const [plan] = await listPlans(mockPrisma, TRAINER_USER_ID);
+
+      expect(plan.activeSubscriptionCount).toBe(0);
+    });
+
+    it('skips the groupBy query when the trainer has no plans', async () => {
+      mockPrisma.subscriptionPlan.findMany.mockResolvedValue([]);
+
+      const result = await listPlans(mockPrisma, TRAINER_USER_ID);
+
+      expect(result).toEqual([]);
+      expect(mockPrisma.studentSubscription.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('is not included by getPlanById, createPlan or updatePlan', async () => {
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+      mockPrisma.subscriptionPlan.create.mockResolvedValue(makePlanRecord());
+      mockPrisma.subscriptionPlan.update.mockResolvedValue(makePlanRecord());
+
+      const results = [
+        await getPlanById(mockPrisma, TRAINER_USER_ID, PLAN_ID),
+        await createPlan(mockPrisma, TRAINER_USER_ID, { name: 'x', recurrence: 'monthly', price: 100 }),
+        await updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { name: 'y' }),
+      ];
+
+      results.forEach((plan) => expect(plan).not.toHaveProperty('activeSubscriptionCount'));
+    });
   });
 });
 
@@ -204,6 +294,28 @@ describe('updatePlan', () => {
     expect(Number(result.price)).toBe(120);
   });
 
+  it('throws 400 SUBSCRIPTION_INVALID_AMOUNT when the patch has a discountPercent with more than 2 decimals', async () => {
+    mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+
+    await expect(
+      updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { discountPercent: 33.333 }),
+    ).rejects.toMatchObject({
+      httpStatus: 400,
+      error: SubscriptionErrorCode.INVALID_AMOUNT,
+      messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+    });
+    expect(mockPrisma.subscriptionPlan.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts a discountPercent with exactly 2 decimals on update', async () => {
+    mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+    mockPrisma.subscriptionPlan.update.mockResolvedValue(makePlanRecord({ discountPercent: new Decimal('33.33') }));
+
+    const result = await updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { discountPercent: 33.33 });
+
+    expect(result.discountPercent).toBe('33.33');
+  });
+
   it('throws 404 when plan not found', async () => {
     mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(null);
 
@@ -219,6 +331,20 @@ describe('updatePlan', () => {
     await expect(
       updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { name: 'x' }),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PLAN_ARCHIVED });
+  });
+
+  it.each([
+    ['price with more than 2 decimals', { price: 99.999 }],
+    ['price above the Decimal(10,2) maximum', { price: 100000000.5 }],
+    ['discountAmount with more than 2 decimals', { discountAmount: 0.001 }],
+  ])('throws 400 SUBSCRIPTION_INVALID_AMOUNT on update for %s', async (_label, patch) => {
+    mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+
+    await expect(updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, patch)).rejects.toMatchObject({
+      httpStatus: 400,
+      error: SubscriptionErrorCode.INVALID_AMOUNT,
+    });
+    expect(mockPrisma.subscriptionPlan.update).not.toHaveBeenCalled();
   });
 
   it('throws 400 when patch sets both discounts', async () => {
