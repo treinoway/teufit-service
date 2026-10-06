@@ -2513,7 +2513,7 @@
                 "dashboard"
               ]
             },
-            "description": "Returns aggregated \"Torre de Controle\" KPIs (plans, routines, finance, engagement) for the trainer Home screen. Requires TRAINER role. Rate limited: 60 requests/minute. engagement.* (except weekPrCount) is read from the trainer briefing snapshot and may be up to ~1 day stale; every other field is computed live."
+            "description": "Returns aggregated \"Torre de Controle\" KPIs (plans, routines, finance, engagement) for the trainer Home screen. Requires TRAINER role. Rate limited: 60 requests/minute. plans.renewingSoonCount = active subscriptions with a pending payment whose dueDate is in [today-3d, today+7d]; overdue = dueDate < today-3d. engagement.* (except weekPrCount) is read from the trainer briefing snapshot and may be up to ~1 day stale; every other field is computed live."
           },
           "response": [
             {
@@ -11716,7 +11716,7 @@
                 "subscription-plans"
               ]
             },
-            "description": "Create a subscription plan. recurrence: monthly|quarterly|semiannual|annual. Optionally set discountPercent OR discountAmount (not both).",
+            "description": "Create a subscription plan. recurrence: monthly|quarterly|semiannual|annual. Optionally set discountPercent OR discountAmount (not both). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Plano Mensal\",\n  \"recurrence\": \"monthly\",\n  \"price\": 150.0\n}",
@@ -11750,9 +11750,44 @@
                 "subscription-plans"
               ]
             },
-            "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans."
+            "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan."
           },
-          "response": []
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/subscription-plans",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "subscription-plans"
+                  ]
+                },
+                "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"b5a1c7d2-1e3f-4a6b-8c9d-0e1f2a3b4c5d\",\n    \"trainerId\": \"a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"name\": \"Plano Mensal\",\n    \"description\": null,\n    \"recurrence\": \"monthly\",\n    \"recurrenceLabel\": \"Mensal\",\n    \"price\": \"150.00\",\n    \"discountPercent\": null,\n    \"discountAmount\": null,\n    \"isArchived\": false,\n    \"activeSubscriptionCount\": 4,\n    \"createdAt\": \"2026-06-01T12:00:00.000Z\",\n    \"updatedAt\": null\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Get Subscription Plan by ID",
@@ -11807,7 +11842,7 @@
                 "{{subscriptionPlanId}}"
               ]
             },
-            "description": "Update subscription plan fields. Archived plans cannot be edited.",
+            "description": "Update subscription plan fields. Archived plans cannot be edited. discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Plano Mensal Premium\",\n  \"price\": 180.0,\n  \"discountPercent\": 10\n}",
@@ -11907,7 +11942,7 @@
                 "subscriptions"
               ]
             },
-            "description": "Assign a subscription plan to a student. Cancels any existing active subscription. Auto-creates first payment cycle. Response includes firstPayment.",
+            "description": "Assign a subscription plan to a student. Auto-creates the first payment cycle (response includes firstPayment). A student may have one active subscription per trainer (not globally). 409 SUBSCRIPTION_ALREADY_ACTIVE when the student already has an active subscription from this trainer, or when another assignment for the same student is in flight. A backdated startDate bills ONLY the grid cycle that contains today (firstPayment.cycleIndex is that grid index; firstPayment.cycleStartDate may be before today but after startDate); earlier cycles are not generated. Replacing an active plan voids only the replaced plan's pending charges starting on or after the new first cycle start (a same-day replace leaves exactly one pending cycle); every older charge stays billable at full price, and for a future-dated start the old plan's missing cycles before the new start are created at replacement time so it keeps billing until then. No proration. The trainer-student link is re-checked on assign (403 SUBSCRIPTION_STUDENT_NOT_LINKED). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"planId\": \"{{subscriptionPlanId}}\",\n  \"startDate\": \"2026-06-01\"\n}",
@@ -11918,7 +11953,36 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "Already active",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_ALREADY_ACTIVE\",\n  \"messageCode\": \"subscription.alreadyActive\",\n  \"message\": \"Este aluno já possui uma assinatura ativa.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Student not linked",
+              "originalRequest": {},
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_STUDENT_NOT_LINKED\",\n  \"messageCode\": \"student.notLinked\",\n  \"message\": \"Este aluno não está vinculado à sua conta.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "List Student Subscriptions (History)",
@@ -12054,7 +12118,7 @@
                 "cancel"
               ]
             },
-            "description": "Cancel a student's subscription. Existing pending payments are NOT deleted.",
+            "description": "Cancel a student's subscription. Pending payments that are not yet due are voided (status cancelled); already due/overdue pending payments are kept so the trainer can still collect them. Paid payments are untouched. 409 SUBSCRIPTION_CANNOT_EDIT_CANCELLED when the subscription is already cancelled, including a concurrent cancel.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Cliente solicitou cancelamento\"\n}",
@@ -12065,7 +12129,22 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "Already cancelled",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_CANNOT_EDIT_CANCELLED\",\n  \"messageCode\": \"subscription.cannotEditCancelled\",\n  \"message\": \"Não é possível editar uma assinatura cancelada.\",\n  \"details\": {}\n}"
+            }
+          ]
         }
       ]
     },
@@ -12100,10 +12179,10 @@
                 "payments"
               ]
             },
-            "description": "Create a new billing cycle payment. cycleEndDate is auto-computed from recurrence. dueDate defaults to cycleStartDate.",
+            "description": "Generate the next billing cycle of a subscription. Cycle dates (cycleIndex, cycleStartDate, cycleEndDate) are derived from the subscription anchor and cannot be chosen. Body is optional: dueDate overrides the due date (defaults to cycleStartDate) and notes is free text (max 500). 409 SUBSCRIPTION_CANCELLED when the subscription is cancelled; 409 SUBSCRIPTION_CYCLE_NOT_DUE when the next cycle is not yet inside the generation lead window; 409 SUBSCRIPTION_CYCLE_ALREADY_EXISTS when that cycle was already generated. Sending cycleStartDate (or any unknown body field) returns 400 VALIDATION_ERROR. Rate limited per config.rateLimit.subscriptionPayment.create.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cycleStartDate\": \"2026-07-01\",\n  \"notes\": \"Segundo ciclo mensal\"\n}",
+              "raw": "{\n  \"dueDate\": \"2026-10-05\",\n  \"notes\": \"Segundo ciclo mensal\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -12111,7 +12190,114 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}/payments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "subscriptions",
+                    "{{studentSubscriptionId}}",
+                    "payments"
+                  ]
+                },
+                "description": "Generate the next billing cycle of a subscription. Cycle dates (cycleIndex, cycleStartDate, cycleEndDate) are derived from the subscription anchor and cannot be chosen. Body is optional: dueDate overrides the due date (defaults to cycleStartDate) and notes is free text (max 500). 409 SUBSCRIPTION_CANCELLED when the subscription is cancelled; 409 SUBSCRIPTION_CYCLE_NOT_DUE when the next cycle is not yet inside the generation lead window; 409 SUBSCRIPTION_CYCLE_ALREADY_EXISTS when that cycle was already generated. Sending cycleStartDate (or any unknown body field) returns 400 VALIDATION_ERROR. Rate limited per config.rateLimit.subscriptionPayment.create.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dueDate\": \"2026-10-05\",\n  \"notes\": \"Segundo ciclo mensal\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n  \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n  \"cycleIndex\": 2,\n  \"cycleStartDate\": \"2026-09-01\",\n  \"cycleEndDate\": \"2026-09-30\",\n  \"dueDate\": \"2026-09-01\",\n  \"amount\": \"250.00\",\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"effectiveStatus\": \"overdue\",\n  \"effectiveStatusLabel\": \"Atrasado\",\n  \"daysOverdue\": 4,\n  \"paidAt\": null,\n  \"voidedAt\": null,\n  \"notes\": null,\n  \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "Subscription cancelled",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_CANCELLED\",\n  \"messageCode\": \"subscription.cancelled\",\n  \"message\": \"Subscription is cancelled\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Cycle not due",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_CYCLE_NOT_DUE\",\n  \"messageCode\": \"subscription.cycleNotDue\",\n  \"message\": \"Next cycle is not due yet\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Cycle already exists",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_CYCLE_ALREADY_EXISTS\",\n  \"messageCode\": \"subscription.cycleAlreadyExists\",\n  \"message\": \"Este ciclo de cobrança já existe.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Validation error (cycleStartDate not accepted)",
+              "originalRequest": {},
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"body\",\n      \"message\": \"must NOT have additional properties\",\n      \"params\": {\n        \"additionalProperty\": \"cycleStartDate\"\n      }\n    }\n  ]\n}"
+            }
+          ]
         },
         {
           "name": "List Payments for Subscription",
@@ -12138,7 +12324,44 @@
             },
             "description": "List all payment cycles for a subscription, ordered by cycleStartDate desc."
           },
-          "response": []
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/subscriptions/{{studentSubscriptionId}}/payments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "subscriptions",
+                    "{{studentSubscriptionId}}",
+                    "payments"
+                  ]
+                },
+                "description": "List all payment cycles for a subscription, ordered by cycleStartDate desc."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n    \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n    \"cycleIndex\": 2,\n    \"cycleStartDate\": \"2026-09-01\",\n    \"cycleEndDate\": \"2026-09-30\",\n    \"dueDate\": \"2026-09-01\",\n    \"amount\": \"250.00\",\n    \"status\": \"paid\",\n    \"statusLabel\": \"Pago\",\n    \"effectiveStatus\": \"paid\",\n    \"effectiveStatusLabel\": \"Pago\",\n    \"daysOverdue\": 0,\n    \"paidAt\": \"2026-09-03T15:00:00.000Z\",\n    \"voidedAt\": null,\n    \"notes\": null,\n    \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n    \"updatedAt\": null\n  },\n  {\n    \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n    \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n    \"cycleIndex\": 2,\n    \"cycleStartDate\": \"2026-09-01\",\n    \"cycleEndDate\": \"2026-09-30\",\n    \"dueDate\": \"2026-09-01\",\n    \"amount\": \"250.00\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"effectiveStatus\": \"overdue\",\n    \"effectiveStatusLabel\": \"Atrasado\",\n    \"daysOverdue\": 4,\n    \"paidAt\": null,\n    \"voidedAt\": null,\n    \"notes\": null,\n    \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n    \"updatedAt\": null\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Update Payment",
@@ -12167,10 +12390,10 @@
                 "{{subscriptionPaymentId}}"
               ]
             },
-            "description": "Update payment fields: dueDate, amount, notes.",
+            "description": "Update payment fields: dueDate, amount (> 0), notes. 409 when the payment is paid (amount/dueDate cannot change; notes can) or cancelled. 400 SUBSCRIPTION_INVALID_AMOUNT for an invalid amount.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dueDate\": \"2026-06-10\",\n  \"notes\": \"Pagamento via pix\"\n}",
+              "raw": "{\n  \"dueDate\": \"2026-10-10\",\n  \"amount\": 270.0,\n  \"notes\": \"Pagamento via pix\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -12178,7 +12401,85 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "payments",
+                    "{{subscriptionPaymentId}}"
+                  ]
+                },
+                "description": "Update payment fields: dueDate, amount (> 0), notes. 409 when the payment is paid (amount/dueDate cannot change; notes can) or cancelled. 400 SUBSCRIPTION_INVALID_AMOUNT for an invalid amount.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dueDate\": \"2026-10-10\",\n  \"amount\": 270.0,\n  \"notes\": \"Pagamento via pix\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n  \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n  \"cycleIndex\": 2,\n  \"cycleStartDate\": \"2026-09-01\",\n  \"cycleEndDate\": \"2026-09-30\",\n  \"dueDate\": \"2026-09-01\",\n  \"amount\": \"250.00\",\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"effectiveStatus\": \"overdue\",\n  \"effectiveStatusLabel\": \"Atrasado\",\n  \"daysOverdue\": 4,\n  \"paidAt\": null,\n  \"voidedAt\": null,\n  \"notes\": null,\n  \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "Payment already paid",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_ALREADY_PAID\",\n  \"messageCode\": \"subscription.paymentAlreadyPaid\",\n  \"message\": \"Payment is already paid\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Invalid amount",
+              "originalRequest": {},
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_INVALID_AMOUNT\",\n  \"messageCode\": \"subscription.invalidAmount\",\n  \"message\": \"Invalid payment amount\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Mark Payment as Paid",
@@ -12188,6 +12489,11 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
                 "type": "text"
               }
             ],
@@ -12203,9 +12509,111 @@
                 "mark-paid"
               ]
             },
-            "description": "Mark a payment cycle as paid. Sets paidAt to current timestamp."
+            "description": "Mark a payment as paid. Optional body paidAt (YYYY-MM-DD, not in the future, America/Sao_Paulo) registers money received earlier; omit the body to use the current timestamp. Voided (cancelled) payments can be paid (late settlement). paidAt must be <= today and >= the subscription start minus 12 months (400 SUBSCRIPTION_INVALID_PAID_AT otherwise). Paying an already paid payment with a DIFFERENT paidAt returns 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID; same or omitted paidAt is idempotent. 409 SUBSCRIPTION_PAYMENT_CONFLICT when the payment was changed by a concurrent operation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paidAt\": \"2026-10-03\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
-          "response": []
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/mark-paid",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "payments",
+                    "{{subscriptionPaymentId}}",
+                    "mark-paid"
+                  ]
+                },
+                "description": "Mark a payment as paid. Optional body paidAt (YYYY-MM-DD, not in the future, America/Sao_Paulo) registers money received earlier; omit the body to use the current timestamp. Voided (cancelled) payments can be paid (late settlement). paidAt must be <= today and >= the subscription start minus 12 months (400 SUBSCRIPTION_INVALID_PAID_AT otherwise). Paying an already paid payment with a DIFFERENT paidAt returns 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID; same or omitted paidAt is idempotent. 409 SUBSCRIPTION_PAYMENT_CONFLICT when the payment was changed by a concurrent operation.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"paidAt\": \"2026-10-03\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n  \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n  \"cycleIndex\": 2,\n  \"cycleStartDate\": \"2026-09-01\",\n  \"cycleEndDate\": \"2026-09-30\",\n  \"dueDate\": \"2026-09-01\",\n  \"amount\": \"250.00\",\n  \"status\": \"paid\",\n  \"statusLabel\": \"Pago\",\n  \"effectiveStatus\": \"paid\",\n  \"effectiveStatusLabel\": \"Pago\",\n  \"daysOverdue\": 0,\n  \"paidAt\": \"2026-09-03T15:00:00.000Z\",\n  \"voidedAt\": null,\n  \"notes\": null,\n  \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "Invalid paidAt",
+              "originalRequest": {},
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_INVALID_PAID_AT\",\n  \"messageCode\": \"subscription.invalidPaidAt\",\n  \"message\": \"Data de pagamento inválida: não pode ser futura nem anterior a um ano antes do início da assinatura.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Already paid with different paidAt",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_ALREADY_PAID\",\n  \"messageCode\": \"subscription.paymentAlreadyPaid\",\n  \"message\": \"Esta cobrança já foi paga. Para alterá-la ou anulá-la, volte-a para pendente primeiro.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Concurrent modification",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_CONFLICT\",\n  \"messageCode\": \"subscription.paymentConflict\",\n  \"message\": \"O pagamento foi alterado por outra operação. Atualize e tente novamente.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Mark Payment as Pending",
@@ -12230,12 +12638,63 @@
                 "mark-pending"
               ]
             },
-            "description": "Undo a payment (set back to pending). Clears paidAt."
+            "description": "Mark a payment as pending (undo paid). Voided (cancelled) payments cannot be reopened (409 SUBSCRIPTION_PAYMENT_CANCELLED). A payment of a cancelled subscription whose cycle started after the cancellation reverts to cancelled instead of pending. A payment that was ever voided (manually, by cancel, replace or unlink) and then paid late reverts to cancelled instead of pending."
           },
-          "response": []
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/mark-pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "payments",
+                    "{{subscriptionPaymentId}}",
+                    "mark-pending"
+                  ]
+                },
+                "description": "Mark a payment as pending (undo paid). Voided (cancelled) payments cannot be reopened (409 SUBSCRIPTION_PAYMENT_CANCELLED). A payment of a cancelled subscription whose cycle started after the cancellation reverts to cancelled instead of pending. A payment that was ever voided (manually, by cancel, replace or unlink) and then paid late reverts to cancelled instead of pending."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n  \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n  \"cycleIndex\": 2,\n  \"cycleStartDate\": \"2026-09-01\",\n  \"cycleEndDate\": \"2026-09-30\",\n  \"dueDate\": \"2026-09-01\",\n  \"amount\": \"250.00\",\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"effectiveStatus\": \"pending\",\n  \"effectiveStatusLabel\": \"Pendente\",\n  \"daysOverdue\": 0,\n  \"paidAt\": null,\n  \"voidedAt\": null,\n  \"notes\": null,\n  \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "Payment voided",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_CANCELLED\",\n  \"messageCode\": \"subscription.paymentCancelled\",\n  \"message\": \"Payment is cancelled\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
-          "name": "Delete Payment",
+          "name": "Delete Payment (Void alias)",
           "request": {
             "method": "DELETE",
             "header": [
@@ -12256,9 +12715,290 @@
                 "{{subscriptionPaymentId}}"
               ]
             },
-            "description": "Hard-delete a payment cycle record."
+            "description": "Soft void, alias of POST /trainer/payments/:id/void. A pending payment becomes cancelled (the cycle generator will not recreate it); no body is returned (204). 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID when the payment is paid."
           },
-          "response": []
+          "response": [
+            {
+              "name": "No Content",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "payments",
+                    "{{subscriptionPaymentId}}"
+                  ]
+                },
+                "description": "Soft void, alias of POST /trainer/payments/:id/void. A pending payment becomes cancelled (the cycle generator will not recreate it); no body is returned (204). 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID when the payment is paid."
+              },
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "body": ""
+            },
+            {
+              "name": "Payment already paid",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_ALREADY_PAID\",\n  \"messageCode\": \"subscription.paymentAlreadyPaid\",\n  \"message\": \"Payment is already paid\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Void Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/void",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "payments",
+                "{{subscriptionPaymentId}}",
+                "void"
+              ]
+            },
+            "description": "Soft void: status becomes cancelled (the cycle generator will not recreate it). Idempotent for already voided payments. 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID when the payment is paid."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/payments/{{subscriptionPaymentId}}/void",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "payments",
+                    "{{subscriptionPaymentId}}",
+                    "void"
+                  ]
+                },
+                "description": "Soft void: status becomes cancelled (the cycle generator will not recreate it). Idempotent for already voided payments. 409 SUBSCRIPTION_PAYMENT_ALREADY_PAID when the payment is paid."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n  \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n  \"cycleIndex\": 2,\n  \"cycleStartDate\": \"2026-09-01\",\n  \"cycleEndDate\": \"2026-09-30\",\n  \"dueDate\": \"2026-09-01\",\n  \"amount\": \"250.00\",\n  \"status\": \"cancelled\",\n  \"statusLabel\": \"Cancelado\",\n  \"effectiveStatus\": \"cancelled\",\n  \"effectiveStatusLabel\": \"Cancelado\",\n  \"daysOverdue\": 0,\n  \"paidAt\": null,\n  \"voidedAt\": \"2026-10-05T14:30:00.000Z\",\n  \"notes\": null,\n  \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "Payment already paid",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUBSCRIPTION_PAYMENT_ALREADY_PAID\",\n  \"messageCode\": \"subscription.paymentAlreadyPaid\",\n  \"message\": \"Payment is already paid\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Student Payments (History)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/{{studentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                "{{studentId}}",
+                "payments"
+              ]
+            },
+            "description": "List every payment of a student across all subscriptions, with a summary (totalReceived, receivedCount, customerSince). Scoped by trainer only: history stays available after the student is unlinked. The response includes a top-level student {id, name, avatarUrl}, which is null when the trainer has no link or history with that student id."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/{{studentId}}/payments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    "{{studentId}}",
+                    "payments"
+                  ]
+                },
+                "description": "List every payment of a student across all subscriptions, with a summary (totalReceived, receivedCount, customerSince). Scoped by trainer only: history stays available after the student is unlinked. The response includes a top-level student {id, name, avatarUrl}, which is null when the trainer has no link or history with that student id."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"student\": {\n    \"id\": \"d3b07384-d9a0-4c9b-8f1e-2a6c4e8f0b12\",\n    \"name\": \"Maria Silva\",\n    \"avatarUrl\": null\n  },\n  \"summary\": {\n    \"totalReceived\": \"500.00\",\n    \"receivedCount\": 2,\n    \"customerSince\": \"2026-07-01\"\n  },\n  \"payments\": [\n    {\n      \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n      \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n      \"cycleIndex\": 2,\n      \"cycleStartDate\": \"2026-09-01\",\n      \"cycleEndDate\": \"2026-09-30\",\n      \"dueDate\": \"2026-09-01\",\n      \"amount\": \"250.00\",\n      \"status\": \"pending\",\n      \"statusLabel\": \"Pendente\",\n      \"effectiveStatus\": \"overdue\",\n      \"effectiveStatusLabel\": \"Atrasado\",\n      \"daysOverdue\": 4,\n      \"paidAt\": null,\n      \"voidedAt\": null,\n      \"notes\": null,\n      \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n      \"updatedAt\": null,\n      \"subscriptionStatus\": \"active\",\n      \"subscriptionStatusLabel\": \"Ativa\",\n      \"plan\": {\n        \"id\": \"b5a1c7d2-1e3f-4a6b-8c9d-0e1f2a3b4c5d\",\n        \"name\": \"Plano Mensal\",\n        \"recurrence\": \"monthly\",\n        \"recurrenceLabel\": \"Mensal\"\n      }\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Trainer Finance",
+      "item": [
+        {
+          "name": "Get Finance Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/finance/overview?month=2026-10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "finance",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-10",
+                  "description": "YYYY-MM (America/Sao_Paulo). Defaults to the current month."
+                }
+              ]
+            },
+            "description": "KPIs and payment rows for a month in a single call. Row scope: pending payments with dueDate before the first day of the next month (no lower bound), overdue payments as of today (any month, including those of cancelled subscriptions), and paid payments inside the month window (America/Sao_Paulo). Overdue = pending AND dueDate < today - 3 days. month defaults to the current month. Lazy billing-cycle generation errors are logged and never fail the GET. The response includes overdueGraceDays (3), the grace period in days used for the overdue rule."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/finance/overview?month=2026-10",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "finance",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "YYYY-MM (America/Sao_Paulo). Defaults to the current month."
+                    }
+                  ]
+                },
+                "description": "KPIs and payment rows for a month in a single call. Row scope: pending payments with dueDate before the first day of the next month (no lower bound), overdue payments as of today (any month, including those of cancelled subscriptions), and paid payments inside the month window (America/Sao_Paulo). Overdue = pending AND dueDate < today - 3 days. month defaults to the current month. Lazy billing-cycle generation errors are logged and never fail the GET. The response includes overdueGraceDays (3), the grace period in days used for the overdue rule."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"month\": \"2026-10\",\n  \"overdueGraceDays\": 3,\n  \"kpis\": {\n    \"receivedAmount\": \"500.00\",\n    \"receivedCount\": 2,\n    \"pendingAmount\": \"250.00\",\n    \"pendingCount\": 1,\n    \"overdueAmount\": \"250.00\",\n    \"overdueCount\": 1,\n    \"overdueStudents\": 1,\n    \"billedStudents\": 3,\n    \"delinquencyRate\": 33.33\n  },\n  \"payments\": [\n    {\n      \"id\": \"7c1b0a52-3f0e-4d2a-9d54-0b6d6f1a1e10\",\n      \"subscriptionId\": \"2e4f9c1a-8a55-4b8e-b0c3-5d1f7a9e3b21\",\n      \"cycleIndex\": 2,\n      \"cycleStartDate\": \"2026-09-01\",\n      \"cycleEndDate\": \"2026-09-30\",\n      \"dueDate\": \"2026-09-01\",\n      \"amount\": \"250.00\",\n      \"status\": \"pending\",\n      \"statusLabel\": \"Pendente\",\n      \"effectiveStatus\": \"overdue\",\n      \"effectiveStatusLabel\": \"Atrasado\",\n      \"daysOverdue\": 4,\n      \"paidAt\": null,\n      \"voidedAt\": null,\n      \"notes\": null,\n      \"createdAt\": \"2026-08-25T12:00:00.000Z\",\n      \"updatedAt\": null,\n      \"subscriptionStatus\": \"active\",\n      \"subscriptionStatusLabel\": \"Ativa\",\n      \"plan\": {\n        \"id\": \"b5a1c7d2-1e3f-4a6b-8c9d-0e1f2a3b4c5d\",\n        \"name\": \"Plano Mensal\",\n        \"recurrence\": \"monthly\",\n        \"recurrenceLabel\": \"Mensal\"\n      },\n      \"student\": {\n        \"id\": \"d3b07384-d9a0-4c9b-8f1e-2a6c4e8f0b12\",\n        \"name\": \"Maria Silva\",\n        \"avatarUrl\": null\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "Invalid month",
+              "originalRequest": {},
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"month\",\n      \"message\": \"must match pattern\"\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     },

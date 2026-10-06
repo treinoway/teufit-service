@@ -19,22 +19,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getTrainerDashboard } from '../../src/services/trainer-dashboard-service.js';
 import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
-import { getDateOnlyAsMidnightUtc, addDaysMs } from '../../src/helpers/date-helpers.js';
+import { todayInBusinessTz, addDaysMs, monthWindowInBusinessTz } from '../../src/helpers/date-helpers.js';
+import { overdueThreshold } from '../../src/helpers/payment-status-helpers.js';
 
-// Mocked wholesale — see file docstring. startOfCurrentMonth is re-implemented
-// (not stubbed to a constant) so it stays correct under vi.useFakeTimers()
-// without needing to keep a hardcoded date in sync with each test's system time.
-// Mirrors the real signature (from = new Date()) rather than ignoring args —
-// this lets tests assert getTrainerDashboard passes its own captured `now`
-// through, instead of letting the mock silently call `new Date()` again.
+// Mocked wholesale — see file docstring. The dashboard derives its own
+// business-timezone (America/Sao_Paulo) month window, so it no longer uses
+// briefing-service's startOfCurrentMonth.
 vi.mock('../../src/services/briefing-service.js', () => ({
   getBriefingByTrainerId: vi.fn(),
-  startOfCurrentMonth: vi.fn((from = new Date()) => {
-    return new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
-  }),
 }));
 
-import { getBriefingByTrainerId, startOfCurrentMonth } from '../../src/services/briefing-service.js';
+import { getBriefingByTrainerId } from '../../src/services/briefing-service.js';
 
 const TRAINER_ID = 'trainer-001';
 const USER_ID = 'user-001';
@@ -223,7 +218,7 @@ describe('getTrainerDashboard', () => {
     it('queries plans.expiredCount as SUBSCRIPTIONS scoped to status=active only', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
 
       const studentSubscriptionCount = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0);
       const prisma = buildMockPrisma({ studentSubscription: { count: studentSubscriptionCount } });
@@ -235,7 +230,9 @@ describe('getTrainerDashboard', () => {
         where: {
           trainerId: TRAINER_ID,
           status: SubscriptionStatus.ACTIVE,
-          payments: { some: { status: PaymentStatus.PENDING, dueDate: { lt: today } } },
+          payments: {
+            some: { status: PaymentStatus.PENDING, dueDate: { lt: overdueThreshold(today) } },
+          },
         },
       });
     });
@@ -243,7 +240,7 @@ describe('getTrainerDashboard', () => {
     it('resolves subscriptionIds via findMany scoped by trainerId ONLY (no status filter), and uses that full id list for finance.overdueCount — proving cancelled subscriptions are not excluded', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
 
       const findMany = vi.fn().mockResolvedValue([
         { id: 'sub-active' },
@@ -275,7 +272,7 @@ describe('getTrainerDashboard', () => {
         where: {
           subscriptionId: { in: ['sub-active', 'sub-cancelled'] },
           status: PaymentStatus.PENDING,
-          dueDate: { lt: today },
+          dueDate: { lt: overdueThreshold(today) },
         },
         _count: { _all: true },
         _sum: { amount: true },
@@ -303,27 +300,64 @@ describe('getTrainerDashboard', () => {
   // ─── plans.renewingSoonCount — 7-day inclusive window ───────────────────────
 
   describe('plans.renewingSoonCount window', () => {
-    it('queries with an inclusive [today, today+7d] window via gte/lte, and excludes payments beyond the window via none/gt', async () => {
+    it('counts active subscriptions with a PENDING payment due in the inclusive [overdueThreshold(today), today+7d] window (grace-window payments included)', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
       const windowEnd = addDaysMs(today, 7);
 
       const studentSubscriptionCount = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(2);
       const prisma = buildMockPrisma({ studentSubscription: { count: studentSubscriptionCount } });
 
-      await getTrainerDashboard(prisma, USER_ID);
+      const result = await getTrainerDashboard(prisma, USER_ID);
 
+      expect(result.plans.renewingSoonCount).toBe(2);
       expect(studentSubscriptionCount).toHaveBeenNthCalledWith(2, {
         where: {
           trainerId: TRAINER_ID,
           status: SubscriptionStatus.ACTIVE,
           payments: {
-            some: { cycleEndDate: { gte: today, lte: windowEnd } },
-            none: { cycleEndDate: { gt: windowEnd } },
+            some: { status: PaymentStatus.PENDING, dueDate: { gte: overdueThreshold(today), lte: windowEnd } },
           },
         },
       });
+    });
+
+    it('uses the Sao Paulo civil day as "today" (00:30 UTC is still the previous day)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-14T00:30:00.000Z')); // Jul 13 21:30 in SP
+
+      const studentSubscriptionCount = vi.fn().mockResolvedValue(0);
+      const prisma = buildMockPrisma({ studentSubscription: { count: studentSubscriptionCount } });
+
+      await getTrainerDashboard(prisma, USER_ID);
+
+      const { dueDate } = studentSubscriptionCount.mock.calls[1][0].where.payments.some;
+      expect(dueDate.gte).toEqual(new Date('2026-07-10T00:00:00.000Z')); // today (Jul 13) - 3 grace days
+      expect(dueDate.lte).toEqual(new Date('2026-07-20T00:00:00.000Z'));
+    });
+  });
+
+  describe('renewing-soon vs overdue boundary (grace window)', () => {
+    it('the renewing-soon lower bound (today - 3) is the same day the overdue filter stops counting', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
+
+      const studentSubscriptionCount = vi.fn().mockResolvedValue(0);
+      const aggregate = vi.fn().mockResolvedValue({ _sum: { amount: null }, _count: { _all: 0 } });
+      const prisma = buildMockPrisma({
+        studentSubscription: { count: studentSubscriptionCount },
+        subscriptionPayment: { aggregate },
+      });
+
+      await getTrainerDashboard(prisma, USER_ID);
+
+      const { dueDate: renewingRange } = studentSubscriptionCount.mock.calls[1][0].where.payments.some;
+      const overdueRange = aggregate.mock.calls[2][0].where.dueDate;
+      // due today-3 -> inside renewing (gte) and NOT overdue (lt); due today-4 -> overdue, outside renewing.
+      expect(renewingRange.gte).toEqual(addDaysMs(today, -3));
+      expect(overdueRange.lt).toEqual(renewingRange.gte);
     });
   });
 
@@ -333,7 +367,7 @@ describe('getTrainerDashboard', () => {
     it('queries expiredCount with a strict (exclusive) lt today and non-null expirationDate', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
 
       const trainingProtocolCount = vi.fn().mockResolvedValueOnce(4).mockResolvedValueOnce(0);
       const prisma = buildMockPrisma({ trainingProtocol: { count: trainingProtocolCount } });
@@ -353,7 +387,7 @@ describe('getTrainerDashboard', () => {
     it('queries expiringSoonCount with an inclusive [today, today+7d] window (gte/lte)', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
       const windowEnd = addDaysMs(today, 7);
 
       const trainingProtocolCount = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(2);
@@ -387,13 +421,13 @@ describe('getTrainerDashboard', () => {
       const renewingSoonWhere = studentSubscriptionCount.mock.calls[1][0].where;
       const expiringSoonWhere = trainingProtocolCount.mock.calls[1][0].where;
 
-      const renewingSoonWindowEnd = renewingSoonWhere.payments.some.cycleEndDate.lte;
+      const renewingSoonWindowEnd = renewingSoonWhere.payments.some.dueDate.lte;
       const expiringSoonWindowEnd = expiringSoonWhere.expirationDate.lte;
 
       // Same day offset (today + 7d), same convention (inclusive both ends
       // via lte, not lt) — symmetry required by the spec.
       expect(expiringSoonWindowEnd.getTime()).toBe(renewingSoonWindowEnd.getTime());
-      expect(renewingSoonWhere.payments.some.cycleEndDate.gte).toBeInstanceOf(Date);
+      expect(renewingSoonWhere.payments.some.dueDate.gte).toBeInstanceOf(Date);
       expect(expiringSoonWhere.expirationDate.gte).toBeInstanceOf(Date);
     });
   });
@@ -405,7 +439,8 @@ describe('getTrainerDashboard', () => {
       vi.useFakeTimers();
       const now = new Date('2026-07-14T12:00:00.000Z');
       vi.setSystemTime(now);
-      const monthStart = new Date(Date.UTC(2026, 6, 1));
+      // July 1st 00:00 in Sao Paulo (UTC-3)
+      const monthStart = new Date('2026-07-01T03:00:00.000Z');
 
       const findMany = vi.fn().mockResolvedValue([{ id: 'sub-x' }]);
       const aggregate = vi.fn().mockResolvedValue({ _sum: { amount: null }, _count: { _all: 0 } });
@@ -436,15 +471,11 @@ describe('getTrainerDashboard', () => {
       });
     });
 
-    it('derives monthStart from the SAME captured `now` instant used for generatedAt and the paidAt upper bound — guards against a month-boundary race from two independent `new Date()` calls', async () => {
+    it('uses the Sao Paulo month window and the SAME captured `now` for generatedAt and the paidAt upper bound', async () => {
       vi.useFakeTimers();
-      // Last instant of January (UTC) — the exact scenario the bug fix
-      // targets: a second, independent `new Date()` call a moment later
-      // would already read February.
+      // Last instant of January in UTC — still January 31 17:59 in Sao Paulo.
       const now = new Date('2026-01-31T23:59:59.999Z');
       vi.setSystemTime(now);
-
-      startOfCurrentMonth.mockClear();
 
       const findMany = vi.fn().mockResolvedValue([{ id: 'sub-x' }]);
       const aggregate = vi.fn().mockResolvedValue({ _sum: { amount: null }, _count: { _all: 0 } });
@@ -455,16 +486,29 @@ describe('getTrainerDashboard', () => {
 
       const result = await getTrainerDashboard(prisma, USER_ID);
 
-      // startOfCurrentMonth must be called with the exact `now` instant
-      // reflected in generatedAt — not a fresh, independently-read `new Date()`.
-      expect(startOfCurrentMonth).toHaveBeenCalledWith(now);
       expect(result.generatedAt).toBe(now.toISOString());
-
-      // monthStart must resolve to January 1st, not February 1st — proving
-      // the range isn't inverted/empty at the exact millisecond of the race.
       const monthReceivedCall = aggregate.mock.calls[0][0];
-      expect(monthReceivedCall.where.paidAt.gte).toEqual(new Date(Date.UTC(2026, 0, 1)));
+      expect(monthReceivedCall.where.paidAt.gte).toEqual(monthWindowInBusinessTz('2026-01').start);
       expect(monthReceivedCall.where.paidAt.lt).toEqual(now);
+    });
+
+    it('keeps 21h-24h BRT of the last day of the month inside that month (UTC already in the next month)', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-02-01T01:30:00.000Z'); // Jan 31 22:30 in SP, Feb in UTC
+      vi.setSystemTime(now);
+
+      const aggregate = vi.fn().mockResolvedValue({ _sum: { amount: null }, _count: { _all: 0 } });
+      const prisma = buildMockPrisma({
+        studentSubscription: { findMany: vi.fn().mockResolvedValue([{ id: 'sub-x' }]) },
+        subscriptionPayment: { aggregate },
+      });
+
+      await getTrainerDashboard(prisma, USER_ID);
+
+      const { paidAt } = aggregate.mock.calls[0][0].where;
+      expect(paidAt.gte).toEqual(new Date('2026-01-01T03:00:00.000Z'));
+      expect(paidAt.lt).toEqual(now);
+      expect(paidAt.gte < paidAt.lt).toBe(true);
     });
   });
 
@@ -497,7 +541,7 @@ describe('getTrainerDashboard', () => {
     it('is computed live (not from the briefing snapshot) via trainerStudent.count with currentPrAt >= today-7d', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
-      const today = getDateOnlyAsMidnightUtc(new Date('2026-07-14T12:00:00.000Z'));
+      const today = todayInBusinessTz(new Date('2026-07-14T12:00:00.000Z'));
       const prWindowStart = addDaysMs(today, -7);
 
       const trainerStudentCount = vi.fn().mockResolvedValue(4);

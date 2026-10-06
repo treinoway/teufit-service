@@ -1,5 +1,8 @@
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
-import { subscriptionRecurrenceValues } from '../../src/constants/subscription.js';
+import {
+  subscriptionRecurrenceValues,
+  MAX_MONEY_AMOUNT,
+} from '../../src/constants/subscription.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const authHeaders = {
@@ -27,6 +30,7 @@ const subscriptionPlanSchema = {
     discountPercent: moneyStringNullable,
     discountAmount: moneyStringNullable,
     isArchived: { type: 'boolean' },
+    activeSubscriptionCount: { type: 'integer', description: 'Active subscriptions on this plan (list endpoint only)' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -47,9 +51,9 @@ export const createPlanSchema = {
       name: { type: 'string', minLength: 1, maxLength: 100 },
       description: { type: 'string', maxLength: 500, nullable: true },
       recurrence: { type: 'string', enum: subscriptionRecurrenceValues },
-      price: { type: 'number', exclusiveMinimum: 0 },
+      price: { type: 'number', exclusiveMinimum: 0, maximum: MAX_MONEY_AMOUNT },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
-      discountAmount: { type: 'number', minimum: 0, nullable: true },
+      discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
     },
   },
   response: {
@@ -121,9 +125,9 @@ export const updatePlanSchema = {
       name: { type: 'string', minLength: 1, maxLength: 100 },
       description: { type: 'string', maxLength: 500, nullable: true },
       recurrence: { type: 'string', enum: subscriptionRecurrenceValues },
-      price: { type: 'number', exclusiveMinimum: 0 },
+      price: { type: 'number', exclusiveMinimum: 0, maximum: MAX_MONEY_AMOUNT },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
-      discountAmount: { type: 'number', minimum: 0, nullable: true },
+      discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
     },
   },
   response: {

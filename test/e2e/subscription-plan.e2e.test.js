@@ -8,6 +8,12 @@ import {
   SubscriptionMessageCode,
 } from '../../src/constants/subscription.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { SubscriptionStatus } from '../../src/constants/subscription.js';
+import {
+  createStudent as createBillingStudent,
+  createSubscriptionRow,
+  linkStudent,
+} from '../helpers/billing-fixtures.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -112,6 +118,28 @@ e2eDescribe('e2e: subscription plans', () => {
       expect(body.messageCode).toBe(SubscriptionMessageCode.BOTH_DISCOUNTS_SET);
     });
 
+    it('rejects a discountPercent with more than 2 decimals with 400 SUBSCRIPTION_INVALID_AMOUNT', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken, { discountPercent: 33.333 });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: SubscriptionErrorCode.INVALID_AMOUNT,
+        messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+      });
+    });
+
+    it('accepts a discountPercent with exactly 2 decimals and does not include activeSubscriptionCount', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken, { discountPercent: 33.33 });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().discountPercent).toBe('33.33');
+      expect(res.json()).not.toHaveProperty('activeSubscriptionCount');
+    });
+
     it('returns 400 when discount amount exceeds price', async () => {
       const { accessToken } = await createTrainerWithToken();
 
@@ -166,6 +194,56 @@ e2eDescribe('e2e: subscription plans', () => {
       const plans = res.json();
       expect(plans.every((p) => !p.isArchived)).toBe(true);
       expect(plans).toHaveLength(1);
+    });
+
+    it('counts only active subscriptions per plan (2 active + 1 cancelled => 2; no subs => 0)', async () => {
+      const trainer = await createTrainerWithToken();
+      const busyPlan = (await createPlan(trainer.accessToken, { name: 'Busy' })).json();
+      const idlePlan = (await createPlan(trainer.accessToken, { name: 'Idle' })).json();
+      const [studentA, studentB, studentC] = [
+        await createBillingStudent(app),
+        await createBillingStudent(app),
+        await createBillingStudent(app),
+      ];
+      for (const student of [studentA, studentB, studentC]) {
+        await linkStudent(trainer.trainerId, student.userId);
+      }
+      const base = { trainerId: trainer.trainerId, planId: busyPlan.id };
+      await createSubscriptionRow({ ...base, studentId: studentA.userId });
+      await createSubscriptionRow({ ...base, studentId: studentB.userId });
+      await createSubscriptionRow({ ...base, studentId: studentC.userId, status: SubscriptionStatus.CANCELLED });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/subscription-plans',
+        headers: { authorization: `Bearer ${trainer.accessToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const countById = Object.fromEntries(res.json().map((plan) => [plan.id, plan.activeSubscriptionCount]));
+      expect(countById).toEqual({ [busyPlan.id]: 2, [idlePlan.id]: 0 });
+    });
+
+    it('includes the count for archived plans when includeArchived=true', async () => {
+      const trainer = await createTrainerWithToken();
+      const plan = (await createPlan(trainer.accessToken, { name: 'To archive' })).json();
+      const student = await createBillingStudent(app);
+      await linkStudent(trainer.trainerId, student.userId);
+      await createSubscriptionRow({ trainerId: trainer.trainerId, studentId: student.userId, planId: plan.id });
+      await app.inject({
+        method: 'POST',
+        url: `/trainer/subscription-plans/${plan.id}/archive`,
+        headers: { authorization: `Bearer ${trainer.accessToken}` },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/subscription-plans?includeArchived=true',
+        headers: { authorization: `Bearer ${trainer.accessToken}` },
+      });
+
+      const archived = res.json().find((p) => p.id === plan.id);
+      expect(archived).toMatchObject({ isArchived: true, activeSubscriptionCount: 1 });
     });
 
     it('includes archived plans when includeArchived=true', async () => {
@@ -245,6 +323,24 @@ e2eDescribe('e2e: subscription plans', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().name).toBe('Plano Atualizado');
       expect(Number(res.json().price)).toBe(200);
+    });
+
+    it('rejects a discountPercent with more than 2 decimals with 400 SUBSCRIPTION_INVALID_AMOUNT', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const planId = (await createPlan(accessToken)).json().id;
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/trainer/subscription-plans/${planId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { discountPercent: 33.333 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: SubscriptionErrorCode.INVALID_AMOUNT,
+        messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+      });
     });
 
     it('returns 409 when trying to edit an archived plan', async () => {

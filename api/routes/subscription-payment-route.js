@@ -7,7 +7,8 @@ import {
   markPaymentPaid,
   markPaymentPending,
   updatePayment,
-  deletePayment,
+  voidPayment,
+  listPaymentsByStudent,
 } from '../../src/services/subscription-payment-service.js';
 import {
   createPaymentSchema,
@@ -16,7 +17,10 @@ import {
   markPaymentPaidSchema,
   markPaymentPendingSchema,
   deletePaymentSchema,
+  voidPaymentSchema,
+  listPaymentsByStudentSchema,
 } from '../schemas/subscription-payment-route.schema.js';
+import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import config from '../../config/index.js';
 
 export async function subscriptionPaymentRoutes(fastify) {
@@ -32,7 +36,7 @@ export async function subscriptionPaymentRoutes(fastify) {
         prisma,
         request.user.id,
         request.params.subscriptionId,
-        request.body,
+        request.body ?? {},
       );
       return reply.status(201).send(payment);
     },
@@ -81,7 +85,12 @@ export async function subscriptionPaymentRoutes(fastify) {
       config: { rateLimit: config.rateLimit.subscriptionPayment.markPaid },
     },
     async (request, reply) => {
-      const payment = await markPaymentPaid(prisma, request.user.id, request.params.id);
+      const payment = await markPaymentPaid(
+        prisma,
+        request.user.id,
+        request.params.id,
+        request.body ?? {},
+      );
       return reply.send(payment);
     },
   );
@@ -107,8 +116,40 @@ export async function subscriptionPaymentRoutes(fastify) {
       config: { rateLimit: config.rateLimit.subscriptionPayment.delete },
     },
     async (request, reply) => {
-      await deletePayment(prisma, request.user.id, request.params.id);
+      await voidPayment(prisma, request.user.id, request.params.id);
       return reply.status(204).send();
+    },
+  );
+
+  fastify.post(
+    '/trainer/payments/:id/void',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: voidPaymentSchema,
+      config: { rateLimit: config.rateLimit.subscriptionPayment.void },
+    },
+    async (request, reply) => {
+      const payment = await voidPayment(prisma, request.user.id, request.params.id);
+      return reply.send(payment);
+    },
+  );
+
+  fastify.get(
+    '/trainer/students/:studentId/payments',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: listPaymentsByStudentSchema,
+      config: { rateLimit: config.rateLimit.subscriptionPayment.listByStudent },
+    },
+    async (request, reply) => {
+      const history = await listPaymentsByStudent(
+        prisma,
+        request.user.id,
+        request.params.studentId,
+        new Date(),
+        { resolveAvatarUrl: (stored) => s3BucketHandler.resolveUrl(stored) },
+      );
+      return reply.send(history);
     },
   );
 }

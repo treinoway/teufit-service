@@ -28,8 +28,14 @@
 import { SubscriptionStatus, PaymentStatus } from '../constants/subscription.js';
 import { TrainingStatus } from '../constants/training.js';
 import { NotFoundAppError } from '../errors/app-error.js';
-import { getDateOnlyAsMidnightUtc, addDaysMs } from '../helpers/date-helpers.js';
-import { getBriefingByTrainerId, startOfCurrentMonth } from './briefing-service.js';
+import {
+  addDaysMs,
+  currentYearMonthInBusinessTz,
+  monthWindowInBusinessTz,
+  todayInBusinessTz,
+} from '../helpers/date-helpers.js';
+import { buildOverduePaymentWhere, overdueThreshold } from '../helpers/payment-status-helpers.js';
+import { getBriefingByTrainerId } from './briefing-service.js';
 
 // Both the "plans renewing soon" and "routines expiring soon" windows use the
 // same 7-day, inclusive-on-both-ends convention: [today, today + 7d]. Keep
@@ -73,7 +79,7 @@ function formatMoneySum(sum) {
 
 /**
  * plans.expiredCount — active subscriptions with at least one overdue
- * (pending, past-due) payment.
+ * payment (pending AND dueDate < today - grace days; see payment-status-helpers).
  *
  * Counts SUBSCRIPTIONS, not payments — a subscription with 3 overdue
  * payments counts once here. This intentionally differs from
@@ -83,7 +89,7 @@ function formatMoneySum(sum) {
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} trainerId
- * @param {Date} today - UTC midnight of the current day
+ * @param {Date} today - business-timezone civil day (midnight UTC)
  * @returns {Promise<number>}
  */
 async function countExpiredPlans(prisma, trainerId, today) {
@@ -92,34 +98,27 @@ async function countExpiredPlans(prisma, trainerId, today) {
       trainerId,
       status: SubscriptionStatus.ACTIVE,
       payments: {
-        some: { status: PaymentStatus.PENDING, dueDate: { lt: today } },
+        some: buildOverduePaymentWhere(today),
       },
     },
   });
 }
 
 /**
- * plans.renewingSoonCount — active subscriptions whose current billing
- * cycle ends within the next 7 days (inclusive both ends).
+ * plans.renewingSoonCount — active subscriptions with a pending payment that is
+ * due or about to be due and NOT yet overdue: dueDate in
+ * [today - grace days, today + 7d] (inclusive both ends).
  *
- * StudentSubscription has no endDate/nextChargeDate field, so "renewing
- * soon" is derived from MAX(payment.cycleEndDate) landing in
- * [today, today + 7d]. Expressed relationally (no row transfer, no JS-side
- * MAX): "has a payment whose cycleEndDate falls in the window" AND "has no
- * payment whose cycleEndDate falls after the window" together imply the
- * subscription's latest cycleEndDate is inside the window.
- *
- * Known limitation (accepted): if the next billing cycle's payment row
- * hasn't been materialized yet, the subscription won't appear here even
- * though it is, in fact, renewing soon. A subscription with zero payments
- * at all also never counts (fails the `some` clause) — this is correct,
- * not a bug: there's nothing to call "renewing soon" without a cycle to
- * compare against.
+ * The lower bound is overdueThreshold(today): payments inside the grace window
+ * (due 1-3 days ago) are no longer "upcoming" but not yet "overdue" either, so
+ * without them they would appear in no dashboard count. Cycles are generated
+ * ahead of time (CYCLE_GENERATION_LEAD_DAYS), so "latest cycle ends soon" no
+ * longer works — the next charge usually already exists.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} trainerId
- * @param {Date} today - UTC midnight of the current day
- * @param {Date} windowEnd - today + RENEWING_SOON_WINDOW_DAYS, UTC midnight
+ * @param {Date} today - business-timezone civil day (midnight UTC)
+ * @param {Date} windowEnd - today + RENEWING_SOON_WINDOW_DAYS, midnight UTC
  * @returns {Promise<number>}
  */
 async function countRenewingSoonPlans(prisma, trainerId, today, windowEnd) {
@@ -128,8 +127,10 @@ async function countRenewingSoonPlans(prisma, trainerId, today, windowEnd) {
       trainerId,
       status: SubscriptionStatus.ACTIVE,
       payments: {
-        some: { cycleEndDate: { gte: today, lte: windowEnd } },
-        none: { cycleEndDate: { gt: windowEnd } },
+        some: {
+          status: PaymentStatus.PENDING,
+          dueDate: { gte: overdueThreshold(today), lte: windowEnd },
+        },
       },
     },
   });
@@ -233,8 +234,8 @@ async function resolveAllSubscriptionIds(prisma, trainerId) {
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string[]} subscriptionIds - trainer's full subscription id list, any status
- * @param {Date} today - UTC midnight of the current day
- * @param {Date} monthStart - UTC start of the current calendar month
+ * @param {Date} today - business-timezone civil day (midnight UTC)
+ * @param {Date} monthStart - start instant of the current civil month in America/Sao_Paulo
  * @param {Date} now - current instant, exclusive upper bound for "this month"
  * @returns {Promise<{
  *   monthReceived: string,
@@ -255,9 +256,8 @@ async function computeFinance(prisma, subscriptionIds, today, monthStart, now) {
       where: {
         subscriptionId: { in: subscriptionIds },
         status: PaymentStatus.PAID,
-        // Same UTC window convention as briefing's monthly adherence:
-        // [monthStart, now) — not [monthStart, endOfMonth), since paidAt
-        // can never be in the future anyway.
+        // Business-timezone month window: [monthStart, now) — not
+        // [monthStart, endOfMonth), since paidAt can never be in the future.
         paidAt: { gte: monthStart, lt: now },
       },
       _sum: { amount: true },
@@ -272,8 +272,7 @@ async function computeFinance(prisma, subscriptionIds, today, monthStart, now) {
     prisma.subscriptionPayment.aggregate({
       where: {
         subscriptionId: { in: subscriptionIds },
-        status: PaymentStatus.PENDING,
-        dueDate: { lt: today },
+        ...buildOverduePaymentWhere(today),
       },
       _count: { _all: true },
       _sum: { amount: true },
@@ -343,16 +342,13 @@ export async function getTrainerDashboard(prisma, userId) {
   const trainer = await resolveTrainerOrThrow(prisma, userId);
 
   const now = new Date();
-  const today = getDateOnlyAsMidnightUtc(now);
+  const today = todayInBusinessTz(now);
   const renewingSoonWindowEnd = addDaysMs(today, RENEWING_SOON_WINDOW_DAYS);
   const expiringSoonWindowEnd = addDaysMs(today, EXPIRING_SOON_WINDOW_DAYS);
   const prWindowStart = addDaysMs(today, -ENGAGEMENT_PR_WINDOW_DAYS);
-  // Pass the already-captured `now` so monthStart is derived from the exact
-  // same instant — two independent `new Date()` calls near midnight on the
-  // last day of the month could otherwise straddle the month boundary and
-  // produce an inverted [monthStart, now) range. See startOfCurrentMonth's
-  // docstring in briefing-service.js.
-  const monthStart = startOfCurrentMonth(now);
+  // Month window in the business timezone (21h-24h BRT on the last day of the
+  // month still belongs to that month, not to the next UTC month).
+  const monthStart = monthWindowInBusinessTz(currentYearMonthInBusinessTz(now)).start;
 
   const [
     briefing,

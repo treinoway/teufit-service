@@ -1229,18 +1229,28 @@ model StudentSubscription {
   @@index([trainerId, status])
   @@index([studentId, status])
   @@index([planId])
+  // NOTE: a partial unique index (trainer_id, student_id) WHERE status = 'active'
+  // (student_subscriptions_one_active_per_pair, raw SQL in migration
+  // per_trainer_active_subscription_unique) exists in the database — Prisma
+  // cannot express it. A student may have one active subscription per trainer.
   @@map("student_subscriptions")
 }
 
 model SubscriptionPayment {
   id             String   @id @default(uuid()) @db.Uuid
   subscriptionId String   @map("subscription_id") @db.Uuid
+  // Zero-based position of the cycle in the subscription — idempotency key for
+  // the cycle generator (see subscription-cycle-service.js).
+  cycleIndex     Int      @map("cycle_index")
   cycleStartDate DateTime @map("cycle_start_date") @db.Date
   cycleEndDate   DateTime @map("cycle_end_date") @db.Date
   dueDate        DateTime @map("due_date") @db.Date
   amount         Decimal  @db.Decimal(10, 2)
   status         String   @default("pending") @db.Text
   paidAt         DateTime? @map("paid_at") @db.Timestamptz(6)
+  // Set whenever the charge is voided (manually or by cancel/replace/unlink).
+  // Survives a later late-settlement payment so reverting it returns to 'cancelled'.
+  voidedAt       DateTime? @map("voided_at") @db.Timestamptz(6)
   notes          String?  @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1258,6 +1268,7 @@ model SubscriptionPayment {
   // MAX(cycleEndDate) per subscription — this composite avoids scanning
   // every payment row for each active subscription.
   @@index([subscriptionId, cycleEndDate])
+  @@unique([subscriptionId, cycleIndex])
   @@map("subscription_payments")
 }
 

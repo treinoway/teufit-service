@@ -34,7 +34,7 @@ import {
   PrescriptionMode,
 } from '../../src/constants/training.js';
 import { PaymentStatus, SubscriptionStatus } from '../../src/constants/subscription.js';
-import { computeCycleEndDate } from '../../src/helpers/subscription-helpers.js';
+import { computeCycleBounds } from '../../src/helpers/subscription-helpers.js';
 import {
   PLATFORM_PLAN_TIERS,
   PLATFORM_SUBSCRIPTION_STATUSES,
@@ -696,12 +696,10 @@ async function main() {
       today.getUTCDate(),
     ));
     const cycles = [];
-    let cycleStart = startDate;
-    while (cycleStart <= todayMidnight) {
-      const cycleEnd = computeCycleEndDate(cycleStart, plan.recurrence);
-      cycles.push({ start: cycleStart, end: cycleEnd });
-      // Next cycle starts the day after current cycle ends.
-      cycleStart = new Date(cycleEnd.getTime() + DAY_MS);
+    for (let cycleIndex = 0; ; cycleIndex += 1) {
+      const { cycleStartDate, cycleEndDate } = computeCycleBounds(startDate, plan.recurrence, cycleIndex);
+      if (cycleStartDate > todayMidnight) break;
+      cycles.push({ start: cycleStartDate, end: cycleEndDate });
     }
 
     for (let idx = 0; idx < cycles.length; idx += 1) {
@@ -714,6 +712,7 @@ async function main() {
       await prisma.subscriptionPayment.create({
         data: {
           subscriptionId: subscription.id,
+          cycleIndex: idx,
           cycleStartDate: cycle.start,
           cycleEndDate: cycle.end,
           dueDate: cycle.start,
