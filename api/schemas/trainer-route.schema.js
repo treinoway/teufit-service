@@ -177,6 +177,7 @@ const studentListItemSchema = {
       description: 'true when blockers is empty — the student is fully operational.',
     },
     ...i18nArrayField('blockers', 'studentBlocker'),
+    ...i18nField('billingStatus', 'billingStatus'),
   },
 };
 

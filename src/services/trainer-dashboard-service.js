@@ -34,14 +34,13 @@ import {
   monthWindowInBusinessTz,
   todayInBusinessTz,
 } from '../helpers/date-helpers.js';
-import { buildOverduePaymentWhere, overdueThreshold } from '../helpers/payment-status-helpers.js';
+import { buildDueSoonPaymentWhere, buildOverduePaymentWhere } from '../helpers/payment-status-helpers.js';
 import { getBriefingByTrainerId } from './briefing-service.js';
 
 // Both the "plans renewing soon" and "routines expiring soon" windows use the
 // same 7-day, inclusive-on-both-ends convention: [today, today + 7d]. Keep
 // them as separate constants (not shared) since they describe different
 // domain concepts that happen to share a value today.
-const RENEWING_SOON_WINDOW_DAYS = 7;
 const EXPIRING_SOON_WINDOW_DAYS = 7;
 const ENGAGEMENT_PR_WINDOW_DAYS = 7;
 
@@ -118,20 +117,14 @@ async function countExpiredPlans(prisma, trainerId, today) {
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} trainerId
  * @param {Date} today - business-timezone civil day (midnight UTC)
- * @param {Date} windowEnd - today + RENEWING_SOON_WINDOW_DAYS, midnight UTC
  * @returns {Promise<number>}
  */
-async function countRenewingSoonPlans(prisma, trainerId, today, windowEnd) {
+async function countRenewingSoonPlans(prisma, trainerId, today) {
   return prisma.studentSubscription.count({
     where: {
       trainerId,
       status: SubscriptionStatus.ACTIVE,
-      payments: {
-        some: {
-          status: PaymentStatus.PENDING,
-          dueDate: { gte: overdueThreshold(today), lte: windowEnd },
-        },
-      },
+      payments: { some: buildDueSoonPaymentWhere(today) },
     },
   });
 }
@@ -343,7 +336,6 @@ export async function getTrainerDashboard(prisma, userId) {
 
   const now = new Date();
   const today = todayInBusinessTz(now);
-  const renewingSoonWindowEnd = addDaysMs(today, RENEWING_SOON_WINDOW_DAYS);
   const expiringSoonWindowEnd = addDaysMs(today, EXPIRING_SOON_WINDOW_DAYS);
   const prWindowStart = addDaysMs(today, -ENGAGEMENT_PR_WINDOW_DAYS);
   // Month window in the business timezone (21h-24h BRT on the last day of the
@@ -360,7 +352,7 @@ export async function getTrainerDashboard(prisma, userId) {
   ] = await Promise.all([
     getBriefingByTrainerId(prisma, trainer.id),
     countExpiredPlans(prisma, trainer.id, today),
-    countRenewingSoonPlans(prisma, trainer.id, today, renewingSoonWindowEnd),
+    countRenewingSoonPlans(prisma, trainer.id, today),
     resolveAllSubscriptionIds(prisma, trainer.id),
     countRoutines(prisma, trainer.id, today, expiringSoonWindowEnd),
     countWeekPrs(prisma, trainer.id, prWindowStart),

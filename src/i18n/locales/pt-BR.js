@@ -131,6 +131,12 @@ export default {
       in_person: 'Presencial',
       hybrid: 'Híbrido',
     },
+    billingStatus: {
+      overdue: 'Em atraso',
+      due_soon: 'Vence em breve',
+      ok: 'Em dia',
+      none: 'Sem plano',
+    },
     studentBlocker: {
       no_active_protocol: 'Sem rotina ativa',
       no_subscription: 'Sem plano',

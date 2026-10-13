@@ -2282,7 +2282,7 @@
                 "students"
               ]
             },
-            "description": "Returns the list of students linked to the authenticated trainer. Requires TRAINER role."
+            "description": "Returns the list of students linked to the authenticated trainer. Requires TRAINER role. Each student includes billingStatus (with billingStatusLabel): overdue = active subscription with a pending payment past the 3-day grace (same as dashboard plans.expiredCount); due_soon = not overdue but with a pending payment due between today-3d and today+7d (dashboard plans.renewingSoonCount); ok = active subscription with nothing due soon; none = no active subscription."
           },
           "response": [
             {
@@ -2309,7 +2309,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"uuid-student-1\",\n    \"email\": \"student@example.com\",\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/ana.jpg\",\n    \"adherence\": 75.0,\n    \"adherenceCompleted\": 6,\n    \"adherenceExpected\": 8,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": \"2026-05-16T10:30:00.000Z\",\n    \"currentPrLoad\": 85.0,\n    \"currentPrAt\": \"2026-05-10T09:00:00.000Z\",\n    \"ready\": true,\n    \"blockers\": [],\n    \"blockersLabel\": []\n  },\n  {\n    \"id\": \"uuid-student-2\",\n    \"email\": \"student2@example.com\",\n    \"firstName\": \"Carlos\",\n    \"lastName\": \"Mendes\",\n    \"avatarUrl\": null,\n    \"adherence\": null,\n    \"adherenceCompleted\": null,\n    \"adherenceExpected\": null,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": null,\n    \"currentPrLoad\": null,\n    \"currentPrAt\": null,\n    \"ready\": false,\n    \"blockers\": [\"no_active_protocol\", \"no_subscription\"],\n    \"blockersLabel\": [\"Sem rotina ativa\", \"Sem plano\"]\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"uuid-student-1\",\n    \"email\": \"student@example.com\",\n    \"firstName\": \"Ana\",\n    \"lastName\": \"Silva\",\n    \"avatarUrl\": \"https://cdn.example.com/avatars/ana.jpg\",\n    \"adherence\": 75.0,\n    \"adherenceCompleted\": 6,\n    \"adherenceExpected\": 8,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": \"2026-05-16T10:30:00.000Z\",\n    \"currentPrLoad\": 85.0,\n    \"currentPrAt\": \"2026-05-10T09:00:00.000Z\",\n    \"billingStatus\": \"ok\",\n    \"billingStatusLabel\": \"Em dia\",\n    \"ready\": true,\n    \"blockers\": [],\n    \"blockersLabel\": []\n  },\n  {\n    \"id\": \"uuid-student-2\",\n    \"email\": \"student2@example.com\",\n    \"firstName\": \"Carlos\",\n    \"lastName\": \"Mendes\",\n    \"avatarUrl\": null,\n    \"adherence\": null,\n    \"adherenceCompleted\": null,\n    \"adherenceExpected\": null,\n    \"adherenceMonth\": \"2026-05-01\",\n    \"lastWorkoutAt\": null,\n    \"currentPrLoad\": null,\n    \"currentPrAt\": null,\n    \"billingStatus\": \"none\",\n    \"billingStatusLabel\": \"Sem plano\",\n    \"ready\": false,\n    \"blockers\": [\"no_active_protocol\", \"no_subscription\"],\n    \"blockersLabel\": [\"Sem rotina ativa\", \"Sem plano\"]\n  }\n]"
             }
           ]
         },

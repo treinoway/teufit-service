@@ -17,7 +17,11 @@ import {
   SubscriptionStatus,
   CANCELLATION_REASON_UNLINKED,
 } from '../constants/subscription.js';
-import { buildOverduePaymentWhere } from '../helpers/payment-status-helpers.js';
+import {
+  buildDueSoonPaymentWhere,
+  buildOverduePaymentWhere,
+  deriveBillingStatus,
+} from '../helpers/payment-status-helpers.js';
 import { todayInBusinessTz } from '../helpers/date-helpers.js';
 import { cancelUpcomingPayments } from './subscription-cycle-service.js';
 import { buildAssignmentLockKey } from '../helpers/subscription-helpers.js';
@@ -325,6 +329,7 @@ export function computeStudentBlockers({ hasActiveProtocol, subscriptions, overd
  *   - adherenceCompleted {number|null} — completed sessions this calendar month
  *   - adherenceExpected  {number|null} — expected sessions this calendar month (up to now)
  *   - adherenceMonth     {string}      — "YYYY-MM-01" (always set; period metadata)
+ *   - billingStatus      {string}      — overdue | due_soon | ok | none (same predicates as the dashboard)
  *   - ready              {boolean}     — true when blockers is empty
  *   - blockers           {string[]}    — StudentBlocker codes, see computeStudentBlockers()
  *
@@ -495,17 +500,23 @@ export async function listStudents({ trainerId }) {
     .filter((s) => s.status === SubscriptionStatus.ACTIVE)
     .map((s) => s.id);
 
-  const overduePayments = activeSubscriptionIds.length > 0
-    ? await prisma.subscriptionPayment.findMany({
-      where: {
-        subscriptionId: { in: activeSubscriptionIds },
-        ...buildOverduePaymentWhere(today),
-      },
-      select: { subscriptionId: true },
-    })
-    : [];
+  // Overdue and due-soon payments of the active subscriptions: two batched
+  // queries (no per-student queries), same predicates as the dashboard counters.
+  const [overduePayments, dueSoonPayments] = activeSubscriptionIds.length > 0
+    ? await Promise.all([
+      prisma.subscriptionPayment.findMany({
+        where: { subscriptionId: { in: activeSubscriptionIds }, ...buildOverduePaymentWhere(today) },
+        select: { subscriptionId: true },
+      }),
+      prisma.subscriptionPayment.findMany({
+        where: { subscriptionId: { in: activeSubscriptionIds }, ...buildDueSoonPaymentWhere(today) },
+        select: { subscriptionId: true },
+      }),
+    ])
+    : [[], []];
 
   const overdueSubscriptionIds = new Set(overduePayments.map((p) => p.subscriptionId));
+  const dueSoonSubscriptionIds = new Set(dueSoonPayments.map((p) => p.subscriptionId));
 
   return Promise.all(
     links.map(async (link) => {
@@ -516,12 +527,21 @@ export async function listStudents({ trainerId }) {
         overdueSubscriptionIds,
         activeOnPlan: link.activeOnPlan,
       });
+      const activeSubscriptions = (subscriptionsByStudent.get(link.studentId) ?? []).filter(
+        (s) => s.status === SubscriptionStatus.ACTIVE,
+      );
+      const billingStatus = deriveBillingStatus({
+        hasActiveSubscription: activeSubscriptions.length > 0,
+        hasOverduePayment: activeSubscriptions.some((s) => overdueSubscriptionIds.has(s.id)),
+        hasDueSoonPayment: activeSubscriptions.some((s) => dueSoonSubscriptionIds.has(s.id)),
+      });
       return {
         id: link.student.id,
         email: link.student.email,
         firstName: link.student.firstName,
         lastName: link.student.lastName,
         avatarUrl: await s3BucketHandler.resolveUrl(link.student.avatarUrl),
+        billingStatus,
         adherence,
         adherenceCompleted,
         adherenceExpected,

@@ -42,6 +42,22 @@ export const effectivePaymentStatusValues = Object.freeze(Object.values(Effectiv
 /** A pending payment is overdue only after dueDate + this many days. */
 export const PAYMENT_OVERDUE_GRACE_DAYS = 3;
 
+/** "Renewing soon" window: pending payments due up to this many days ahead. */
+export const RENEWING_SOON_WINDOW_DAYS = 7;
+
+/**
+ * Per-student billing summary shown on the students list. Derived with the
+ * same predicates as the dashboard counters (plans.expiredCount / renewingSoonCount).
+ */
+export const BillingStatus = Object.freeze({
+  OVERDUE: 'overdue',
+  DUE_SOON: 'due_soon',
+  OK: 'ok',
+  NONE: 'none',
+});
+
+export const billingStatusValues = Object.freeze(Object.values(BillingStatus));
+
 /** Next billing cycle is materialized this many days before it starts. */
 export const CYCLE_GENERATION_LEAD_DAYS = 7;
 
