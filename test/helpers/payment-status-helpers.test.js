@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildDueSoonPaymentWhere,
   buildOverduePaymentWhere,
+  deriveBillingStatus,
   deriveEffectiveStatus,
   overdueThreshold,
 } from '../../src/helpers/payment-status-helpers.js';
 import {
+  BillingStatus,
+  RENEWING_SOON_WINDOW_DAYS,
   EffectivePaymentStatus,
   PaymentStatus,
   PAYMENT_OVERDUE_GRACE_DAYS,
@@ -84,5 +88,63 @@ describe('deriveEffectiveStatus', () => {
     );
 
     expect(result).toEqual({ effectiveStatus: EffectivePaymentStatus.CANCELLED, daysOverdue: 0 });
+  });
+});
+
+describe('buildDueSoonPaymentWhere', () => {
+  it('matches pending payments due in [today - grace days, today + window days] inclusive', () => {
+    expect(RENEWING_SOON_WINDOW_DAYS).toBe(7);
+    expect(buildDueSoonPaymentWhere(TODAY)).toEqual({
+      status: PaymentStatus.PENDING,
+      dueDate: { gte: new Date('2026-06-07T00:00:00Z'), lte: new Date('2026-06-17T00:00:00Z') },
+    });
+  });
+
+  it('includes today - 3 (lower bound) and excludes today - 4, which is overdue instead', () => {
+    const { dueDate } = buildDueSoonPaymentWhere(TODAY);
+    const overdue = buildOverduePaymentWhere(TODAY).dueDate;
+    const inDueSoon = (d) => d >= dueDate.gte && d <= dueDate.lte;
+    const inOverdue = (d) => d < overdue.lt;
+
+    expect(inDueSoon(daysBeforeToday(3))).toBe(true);
+    expect(inOverdue(daysBeforeToday(3))).toBe(false);
+    expect(inDueSoon(daysBeforeToday(4))).toBe(false);
+    expect(inOverdue(daysBeforeToday(4))).toBe(true);
+  });
+
+  it('includes today + 7 (upper bound) and excludes today + 8', () => {
+    const { dueDate } = buildDueSoonPaymentWhere(TODAY);
+
+    expect(dueDate.lte.getTime()).toBe(daysBeforeToday(-7).getTime());
+    expect(daysBeforeToday(-8) <= dueDate.lte).toBe(false);
+  });
+});
+
+describe('deriveBillingStatus', () => {
+  const facts = (overrides) => ({
+    hasActiveSubscription: true,
+    hasOverduePayment: false,
+    hasDueSoonPayment: false,
+    ...overrides,
+  });
+
+  it('is none without an active subscription, even with overdue and due-soon payments', () => {
+    expect(
+      deriveBillingStatus(facts({ hasActiveSubscription: false, hasOverduePayment: true, hasDueSoonPayment: true })),
+    ).toBe(BillingStatus.NONE);
+  });
+
+  it('is overdue when overdue wins over due soon', () => {
+    expect(deriveBillingStatus(facts({ hasOverduePayment: true, hasDueSoonPayment: true }))).toBe(
+      BillingStatus.OVERDUE,
+    );
+  });
+
+  it('is due_soon when only a due-soon payment exists', () => {
+    expect(deriveBillingStatus(facts({ hasDueSoonPayment: true }))).toBe(BillingStatus.DUE_SOON);
+  });
+
+  it('is ok for an active subscription with nothing pending in range', () => {
+    expect(deriveBillingStatus(facts({}))).toBe(BillingStatus.OK);
   });
 });

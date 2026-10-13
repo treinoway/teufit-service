@@ -127,6 +127,12 @@ export default {
       in_person: 'In Person',
       hybrid: 'Hybrid',
     },
+    billingStatus: {
+      overdue: 'Overdue',
+      due_soon: 'Due soon',
+      ok: 'Up to date',
+      none: 'No plan',
+    },
     studentBlocker: {
       no_active_protocol: 'No active routine',
       no_subscription: 'No plan',
