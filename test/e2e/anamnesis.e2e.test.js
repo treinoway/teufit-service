@@ -1,9 +1,18 @@
 import 'dotenv/config';
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
-import { AnamnesisQuestionType, ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
+import emailHandler from '../../src/config/email-handler.js';
+import config from '../../config/index.js';
+import {
+  AnamnesisQuestionType,
+  ANAMNESIS_DRAFT_MAX_ANSWERS,
+  AnamnesisErrorCode,
+  AnamnesisMessageCode,
+  AnamnesisResponseStatus,
+  AnamnesisFilledBy,
+} from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
 
@@ -978,6 +987,298 @@ e2eDescribe('e2e: anamnesis', () => {
     it('returns 401 without authentication', async () => {
       const response = await app.inject({ method: 'GET', url: '/my/anamneses' });
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  // ─── Student mobile flow: trainerLinkActive, detail, assignment email ───
+
+  describe('student anamnesis app flow', () => {
+    async function assignAnamnesis(trainerToken, studentId, anamnesisId) {
+      return app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { anamnesisId },
+      });
+    }
+
+    async function getMyAnamnesisDetail(studentToken, anamnesisId) {
+      return app.inject({
+        method: 'GET',
+        url: `/my/anamneses/${anamnesisId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+    }
+
+    async function setupAssignedAnamnesis() {
+      const trainer = await createTrainerWithToken();
+      const student = await createStudentWithToken();
+      await linkTrainerStudent(trainer.accessToken, student.email);
+      const createResponse = await createAnamnesis(trainer.accessToken, {
+        title: 'Mobile Form',
+        sections: [
+          {
+            title: 'Habits',
+            questions: [
+              { text: 'Do you smoke?', type: AnamnesisQuestionType.DICHOTOMOUS, required: true },
+              {
+                text: 'Which sports?',
+                type: AnamnesisQuestionType.MULTIPLE_CHOICE,
+                options: [{ text: 'Running' }, { text: 'Swimming' }],
+              },
+            ],
+          },
+        ],
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const anamnesis = createResponse.json();
+      const assignResponse = await assignAnamnesis(trainer.accessToken, student.userId, anamnesis.id);
+      expect(assignResponse.statusCode).toBe(201);
+      return { trainer, student, anamnesis };
+    }
+
+    async function unlinkTrainerStudent(trainerToken, studentId) {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/trainer/students/${studentId}`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+      expect(response.statusCode).toBe(204);
+    }
+
+    beforeEach(() => {
+      vi.spyOn(emailHandler, 'sendAnamnesisAssignedEmail').mockResolvedValue({ data: { id: 'email-1' }, error: null });
+    });
+
+    describe('GET /my/anamneses trainerLinkActive', () => {
+      it('is true while the trainer still coaches the student', async () => {
+        const { student } = await setupAssignedAnamnesis();
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/my/anamneses',
+          headers: { authorization: `Bearer ${student.accessToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()[0].trainerLinkActive).toBe(true);
+      });
+
+      it('is false after the trainer unlinked the student, and the anamnesis stays listed', async () => {
+        const { trainer, student, anamnesis } = await setupAssignedAnamnesis();
+        await unlinkTrainerStudent(trainer.accessToken, student.userId);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/my/anamneses',
+          headers: { authorization: `Bearer ${student.accessToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({ anamnesisId: anamnesis.id, trainerLinkActive: false });
+      });
+    });
+
+    describe('GET /my/anamneses/:anamnesisId', () => {
+      it('returns 200 with the full anamnesis structure, the trainer and a null response', async () => {
+        const { trainer, student, anamnesis } = await setupAssignedAnamnesis();
+
+        const response = await getMyAnamnesisDetail(student.accessToken, anamnesis.id);
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body).toMatchObject({
+          id: expect.any(String),
+          anamnesisId: anamnesis.id,
+          studentId: student.userId,
+          trainerId: expect.any(String),
+          createdAt: expect.any(String),
+          trainerLinkActive: true,
+          trainer: { id: expect.any(String), user: expect.any(Object) },
+          response: null,
+        });
+        expect(body.anamnesis.id).toBe(anamnesis.id);
+        expect(body.anamnesis.sections[0].questions).toHaveLength(2);
+        expect(body.anamnesis.sections[0].questions[1].options).toHaveLength(2);
+        expect(body.anamnesis.sections[0].questions[0]).toHaveProperty('parentQuestionId', null);
+        expect(body.anamnesis.sections[0].questions[0]).toHaveProperty('typeLabel');
+        const trainerRecord = await prisma.trainer.findUnique({ where: { userId: trainer.userId } });
+        expect(body.trainerId).toBe(trainerRecord.id);
+      });
+
+      it('returns 200 with the full draft response, answers stored without coercion', async () => {
+        const { student, anamnesis } = await setupAssignedAnamnesis();
+        const [smoke, sports] = anamnesis.sections[0].questions;
+        const draftResponse = await app.inject({
+          method: 'PATCH',
+          url: `/my/anamneses/${anamnesis.id}/response/draft`,
+          headers: { authorization: `Bearer ${student.accessToken}` },
+          payload: {
+            answers: [
+              { questionId: smoke.id, value: false },
+              { questionId: sports.id, value: ['Running'] },
+            ],
+          },
+        });
+        expect(draftResponse.statusCode).toBe(200);
+
+        const response = await getMyAnamnesisDetail(student.accessToken, anamnesis.id);
+
+        expect(response.statusCode).toBe(200);
+        const { response: myResponse } = response.json();
+        expect(myResponse).toMatchObject({
+          anamnesisId: anamnesis.id,
+          studentId: student.userId,
+          submittedAt: null,
+          status: AnamnesisResponseStatus.DRAFT,
+          statusLabel: expect.any(String),
+          filledBy: AnamnesisFilledBy.STUDENT,
+          trainerAttestedAt: null,
+          studentConfirmedAt: null,
+        });
+        const valuesByQuestion = Object.fromEntries(myResponse.answers.map((answer) => [answer.questionId, answer.value]));
+        expect(valuesByQuestion).toEqual({ [smoke.id]: false, [sports.id]: ['Running'] });
+      });
+
+      it('returns the same response as GET /my/anamneses/:anamnesisId/response', async () => {
+        const { student, anamnesis } = await setupAssignedAnamnesis();
+        const [smoke] = anamnesis.sections[0].questions;
+        await app.inject({
+          method: 'PATCH',
+          url: `/my/anamneses/${anamnesis.id}/response/draft`,
+          headers: { authorization: `Bearer ${student.accessToken}` },
+          payload: { answers: [{ questionId: smoke.id, value: 'yes' }] },
+        });
+
+        const [detail, responseOnly] = await Promise.all([
+          getMyAnamnesisDetail(student.accessToken, anamnesis.id),
+          app.inject({
+            method: 'GET',
+            url: `/my/anamneses/${anamnesis.id}/response`,
+            headers: { authorization: `Bearer ${student.accessToken}` },
+          }),
+        ]);
+
+        expect(responseOnly.statusCode).toBe(200);
+        expect(detail.json().response).toEqual(responseOnly.json());
+      });
+
+      it('reports trainerLinkActive false after the trainer unlinked the student', async () => {
+        const { trainer, student, anamnesis } = await setupAssignedAnamnesis();
+        await unlinkTrainerStudent(trainer.accessToken, student.userId);
+
+        const response = await getMyAnamnesisDetail(student.accessToken, anamnesis.id);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().trainerLinkActive).toBe(false);
+      });
+
+      it('returns the most recent link when two trainers linked the same anamnesis', async () => {
+        const { student, anamnesis } = await setupAssignedAnamnesis();
+        const secondTrainer = await createTrainerWithToken();
+        await linkTrainerStudent(secondTrainer.accessToken, student.email);
+        // A general anamnesis is the only way two trainers can link the same one; emulate it in the DB.
+        await prisma.anamnesis.update({ where: { id: anamnesis.id }, data: { isGeneral: true } });
+        const secondAssign = await assignAnamnesis(secondTrainer.accessToken, student.userId, anamnesis.id);
+        expect(secondAssign.statusCode).toBe(201);
+
+        const response = await getMyAnamnesisDetail(student.accessToken, anamnesis.id);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().id).toBe(secondAssign.json().id);
+      });
+
+      it('returns 404 when the anamnesis is not linked to the caller', async () => {
+        const trainer = await createTrainerWithToken();
+        const student = await createStudentWithToken();
+        const anamnesisId = (await createAnamnesis(trainer.accessToken)).json().id;
+
+        const response = await getMyAnamnesisDetail(student.accessToken, anamnesisId);
+
+        expect(response.statusCode).toBe(404);
+        expect(response.json()).toMatchObject({
+          error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+          messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+          message: expect.any(String),
+        });
+      });
+
+      it("returns 404 for an anamnesis linked only to another student", async () => {
+        const { anamnesis } = await setupAssignedAnamnesis();
+        const otherStudent = await createStudentWithToken();
+
+        const response = await getMyAnamnesisDetail(otherStudent.accessToken, anamnesis.id);
+
+        expect(response.statusCode).toBe(404);
+        expect(response.json().messageCode).toBe(AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT);
+      });
+
+      it('returns 400 for a non-uuid anamnesisId', async () => {
+        const student = await createStudentWithToken();
+
+        const response = await getMyAnamnesisDetail(student.accessToken, 'not-a-uuid');
+
+        expect(response.statusCode).toBe(400);
+      });
+
+      it('returns 401 without authentication', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/my/anamneses/00000000-0000-0000-0000-000000000001',
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+    });
+
+    describe('assignment email', () => {
+      it('sends the email once after a successful link, with the web answer link', async () => {
+        const { student, anamnesis } = await setupAssignedAnamnesis();
+
+        await vi.waitFor(() => expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1));
+        expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            to: student.email,
+            anamnesisTitle: 'Mobile Form',
+            link: `${config.web.baseUrl}/my/anamneses/${anamnesis.id}/answer`,
+          }),
+        );
+      });
+
+      it('does not send the email when the link fails with 409', async () => {
+        const { trainer, student, anamnesis } = await setupAssignedAnamnesis();
+        await vi.waitFor(() => expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1));
+
+        const duplicate = await assignAnamnesis(trainer.accessToken, student.userId, anamnesis.id);
+        expect(duplicate.statusCode).toBe(409);
+        // Give a deferred task (if any were wrongly scheduled) the chance to run.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ['throws', () => emailHandler.sendAnamnesisAssignedEmail.mockRejectedValue(new Error('resend down'))],
+        [
+          'returns a provider error',
+          () => emailHandler.sendAnamnesisAssignedEmail.mockResolvedValue({ data: null, error: { name: 'x' } }),
+        ],
+      ])('still returns 201 when the email handler %s', async (_label, arrangeFailure) => {
+        arrangeFailure();
+        const trainer = await createTrainerWithToken();
+        const student = await createStudentWithToken();
+        await linkTrainerStudent(trainer.accessToken, student.email);
+        const anamnesisId = (await createAnamnesis(trainer.accessToken)).json().id;
+
+        const response = await assignAnamnesis(trainer.accessToken, student.userId, anamnesisId);
+
+        expect(response.statusCode).toBe(201);
+        await vi.waitFor(() => expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1));
+        const link = await prisma.studentAnamnesis.findFirst({ where: { studentId: student.userId, anamnesisId } });
+        expect(link).not.toBeNull();
+      });
     });
   });
 

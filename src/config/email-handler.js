@@ -862,6 +862,107 @@ ${renderStoreButtonsBlock()}
             subject: subject,
         });
     }
+
+    /**
+     * Tells a student that a trainer assigned them an anamnesis. `link` opens the
+     * web answer flow; the same anamnesis can also be answered in the mobile app.
+     */
+    sendAnamnesisAssignedEmail({to, studentName: rawStudentName, trainerName: rawTrainerName, anamnesisTitle, link}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const studentName = sanitizeSubjectText(rawStudentName);
+        const trainerLabel = trainerName ? escapeHtml(trainerName) : 'Seu treinador';
+        const heading = studentName
+            ? `${escapeHtml(studentName)}, responda a nova anamnese`
+            : 'Responda a nova anamnese';
+        const subject = trainerName
+            ? `[TeuFit] Nova anamnese de ${trainerName}`
+            : '[TeuFit] Nova anamnese do seu treinador';
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova anamnese</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F1F5F9;">
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${trainerLabel} enviou uma anamnese para você responder.</div>
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F1F5F9;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 24px rgba(16, 84, 178, 0.10); border-radius: 20px; overflow: hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(160deg, #1054B2, #0D47A1); padding: 40px 30px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">
+                                TEUFIT
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 50px 40px;">
+                            <h2 style="margin: 0 0 20px; color: #020617; font-size: 24px; font-weight: 700; text-align: center;">
+                                ${heading}
+                            </h2>
+
+                            <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
+                                ${trainerLabel} enviou a anamnese <strong>${escapeHtml(anamnesisTitle)}</strong>. Suas respostas orientam o planejamento dos seus treinos.
+                            </p>
+
+                            <!-- CTA -->
+                            <table role="presentation" style="width: 100%; margin: 12px 0 28px; border-collapse: collapse;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="${escapeHtml(link)}" style="display: inline-block; background-color: #1054B2; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 40px; border-radius: 14px; text-transform: uppercase; letter-spacing: 0.06em;">
+                                            Responder anamnese
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                                Prefere o celular? Responda também pelo app TeuFit.
+                            </p>
+
+                            <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
+                                Bons treinos,<br>
+                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f7fafc; padding: 30px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                © 2026 TeuFit. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        `;
+
+        // In test mode with no client configured, act as a no-op
+        if (!this.resendClient) {
+            return Promise.resolve();
+        }
+
+        return this.resendClient.emails.send({
+            from: 'noreply@teufit.com.br',
+            to,
+            html: htmlContent,
+            subject: subject,
+        });
+    }
 }
 
 export default new EmailHandler();

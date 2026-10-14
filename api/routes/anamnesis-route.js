@@ -2,6 +2,7 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/anamnesis-service.js';
 import * as schema from '../schemas/anamnesis-route.schema.js';
+import { runAfterResponse } from '../../src/helpers/run-after-response.js';
 
 export async function anamnesisRoutes(fastify) {
   // ═══════════════════════════════════════════════════════════
@@ -228,6 +229,19 @@ export async function anamnesisRoutes(fastify) {
         request.params.studentId,
         request.body,
       );
+      // After the response: an email outage must never fail or slow down the link.
+      runAfterResponse(
+        reply,
+        () =>
+          service.notifyStudentAnamnesisAssigned({
+            trainerId: link.trainerId,
+            studentId: link.studentId,
+            anamnesisId: link.anamnesisId,
+            anamnesisTitle: link.anamnesis.title,
+          }),
+        request.log,
+        'anamnesis-assigned-email',
+      );
       return reply.status(201).send(link);
     },
   );
@@ -391,6 +405,19 @@ export async function anamnesisRoutes(fastify) {
     async (request, reply) => {
       const anamneses = await service.getMyAnamneses(request.user.id);
       return reply.send(anamneses);
+    },
+  );
+
+  // GET /my/anamneses/:anamnesisId — One linked anamnesis with its full response (or null)
+  fastify.get(
+    '/my/anamneses/:anamnesisId',
+    {
+      preHandler: [authenticate],
+      schema: schema.getMyAnamnesisDetailSchema,
+    },
+    async (request, reply) => {
+      const detail = await service.getMyAnamnesisDetail(request.user.id, request.params.anamnesisId);
+      return reply.send(detail);
     },
   );
 

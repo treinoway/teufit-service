@@ -1,4 +1,6 @@
 import { prisma } from '../db.js';
+import config from '../../config/index.js';
+import emailHandler from '../config/email-handler.js';
 import { AppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockAnamnesisForUpdate, lockAnamnesisResponseForUpdate } from '../helpers/row-locks.js';
@@ -893,48 +895,150 @@ async function attachResponseSummaries(links, studentId, prismaClient = prisma, 
   });
 }
 
+// Shape of a student-facing link (list and detail): full anamnesis structure plus the trainer.
+const myAnamnesisLinkInclude = {
+  anamnesis: {
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      isGeneral: true,
+      createdAt: true,
+      // parentQuestionId and condition are returned via default field selection
+      ...fullAnamnesisInclude,
+    },
+  },
+  trainer: {
+    select: {
+      id: true,
+      user: { select: { firstName: true, lastName: true, avatarUrl: true } },
+    },
+  },
+};
+
+/**
+ * Attach `trainerLinkActive` to each student-anamnesis link: true while a TrainerStudent row
+ * exists for (link.trainerId, studentId), i.e. the trainer still coaches the student. The
+ * trainer-student unlink hard-deletes that row; `activeOnPlan` is deliberately ignored — it is
+ * the trainer's billing seat quota, not the coaching relationship.
+ * Uses a single query for all links — no N+1.
+ *
+ * @param {object[]} links - StudentAnamnesis rows
+ * @param {string} studentId
+ * @param {object} [prismaClient]
+ * @returns {Promise<object[]>}
+ */
+async function attachTrainerLinkActive(links, studentId, prismaClient = prisma) {
+  if (links.length === 0) return links;
+
+  const activeTrainerLinks = await prismaClient.trainerStudent.findMany({
+    where: { studentId, trainerId: { in: [...new Set(links.map((link) => link.trainerId))] } },
+    select: { trainerId: true },
+  });
+  const activeTrainerIds = new Set(activeTrainerLinks.map((trainerLink) => trainerLink.trainerId));
+
+  return links.map((link) => ({ ...link, trainerLinkActive: activeTrainerIds.has(link.trainerId) }));
+}
+
 /**
  * Get all anamneses linked to the authenticated student.
  *
  * @param {string} userId - Student's user ID
+ * @param {object} [prismaClient]
  * @returns {Promise<object[]>}
  */
-export async function getMyAnamneses(userId) {
-  const links = await prisma.studentAnamnesis.findMany({
+export async function getMyAnamneses(userId, prismaClient = prisma) {
+  const links = await prismaClient.studentAnamnesis.findMany({
     where: { studentId: userId },
     orderBy: { createdAt: 'desc' },
-    include: {
-      anamnesis: {
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          isGeneral: true,
-          createdAt: true,
-          sections: {
-            where: { deletedAt: null },
-            orderBy: { order: 'asc' },
-            include: {
-              questions: {
-                where: { deletedAt: null },
-                orderBy: { order: 'asc' },
-                include: { options: { orderBy: { order: 'asc' } } },
-                // parentQuestionId and condition are returned via default field selection
-              },
-            },
-          },
-        },
-      },
-      trainer: {
-        select: {
-          id: true,
-          user: { select: { firstName: true, lastName: true, avatarUrl: true } },
-        },
-      },
-    },
+    include: myAnamnesisLinkInclude,
   });
 
-  return attachResponseSummaries(links, userId);
+  const linksWithTrainerStatus = await attachTrainerLinkActive(links, userId, prismaClient);
+  return attachResponseSummaries(linksWithTrainerStatus, userId, prismaClient);
+}
+
+/**
+ * Get one anamnesis linked to the authenticated student, with its full structure and the
+ * full response (answers included; draft, awaiting confirmation or submitted), or null.
+ * When several trainers linked the same anamnesis, the most recent link wins (the response
+ * itself is unique per anamnesis and student, so it is the same for every link).
+ *
+ * @param {string} userId - Student's user ID
+ * @param {string} anamnesisId
+ * @param {object} [prismaClient]
+ * @returns {Promise<object>}
+ */
+export async function getMyAnamnesisDetail(userId, anamnesisId, prismaClient = prisma) {
+  const link = await prismaClient.studentAnamnesis.findFirst({
+    where: { studentId: userId, anamnesisId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    include: myAnamnesisLinkInclude,
+  });
+
+  if (!link) {
+    throw new AppError({
+      httpStatus: 404,
+      error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      message: 'This anamnesis is not linked to your account',
+    });
+  }
+
+  const [[linkWithTrainerStatus], response] = await Promise.all([
+    attachTrainerLinkActive([link], userId, prismaClient),
+    prismaClient.anamnesisResponse.findUnique({
+      where: { anamnesisId_studentId: { anamnesisId, studentId: userId } },
+      include: { answers: true },
+    }),
+  ]);
+
+  return { ...linkWithTrainerStatus, response: response ? withResponseStatus(response) : null };
+}
+
+/**
+ * Email the student that a trainer assigned them an anamnesis. Meant to run after the link
+ * response was sent: throws on delivery failure so the caller can log it, never retries.
+ * Skips silently when the student has no deliverable email (deleted account, no email).
+ *
+ * @param {{ trainerId: string, studentId: string, anamnesisId: string, anamnesisTitle: string }} assignment
+ * @param {object} [prismaClient]
+ * @param {{ emailSender?: object }} [deps]
+ * @returns {Promise<void>}
+ */
+export async function notifyStudentAnamnesisAssigned(
+  { trainerId, studentId, anamnesisId, anamnesisTitle },
+  prismaClient = prisma,
+  { emailSender = emailHandler } = {},
+) {
+  const [student, trainer] = await Promise.all([
+    prismaClient.user.findUnique({
+      where: { id: studentId },
+      select: { email: true, firstName: true, deletedAt: true },
+    }),
+    prismaClient.trainer.findUnique({
+      where: { id: trainerId },
+      select: { user: { select: { firstName: true, lastName: true } } },
+    }),
+  ]);
+
+  if (!student?.email || student.deletedAt) return;
+
+  const trainerName = `${trainer?.user?.firstName ?? ''} ${trainer?.user?.lastName ?? ''}`.trim();
+  const link = `${config.web.baseUrl}/my/anamneses/${encodeURIComponent(anamnesisId)}/answer`;
+
+  // The Resend SDK returns { data, error } instead of throwing.
+  const emailResponse = await emailSender.sendAnamnesisAssignedEmail({
+    to: student.email,
+    studentName: student.firstName,
+    trainerName,
+    anamnesisTitle,
+    link,
+  });
+  if (emailResponse?.error) {
+    // Only the provider's error name: its message may echo the recipient address.
+    throw new Error(`Anamnesis assigned email rejected by provider: ${emailResponse.error.name ?? 'unknown_error'}`);
+  }
 }
 
 // ─── Versioning ───────────────────────────────────────────────────────────────
