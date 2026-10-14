@@ -5,7 +5,7 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
-import { getDateOnlyAsMidnightUtc, addDaysMs } from '../../src/helpers/date-helpers.js';
+import { todayInBusinessTz, addDaysMs } from '../../src/helpers/date-helpers.js';
 import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -76,8 +76,8 @@ e2eDescribe('e2e: link student to trainer by email', () => {
   // trainer-dashboard.e2e.test.js) ────────────────────────────────────────────
 
   function daysFromToday(days) {
-    const today = getDateOnlyAsMidnightUtc(new Date());
-    return addDaysMs(today, days);
+    // Business-timezone civil day, same "today" the services use.
+    return addDaysMs(todayInBusinessTz(new Date()), days);
   }
 
   async function createProtocol(trainerId, assigneeId, overrides = {}) {
@@ -121,9 +121,12 @@ e2eDescribe('e2e: link student to trainer by email', () => {
   }
 
   async function createPayment(subscriptionId, overrides = {}) {
+    // (subscriptionId, cycleIndex) is unique — number the cycles sequentially.
+    const cycleIndex = await prisma.subscriptionPayment.count({ where: { subscriptionId } });
     return prisma.subscriptionPayment.create({
       data: {
         subscriptionId,
+        cycleIndex,
         cycleStartDate: daysFromToday(-30),
         cycleEndDate: daysFromToday(0),
         dueDate: daysFromToday(0),
@@ -641,7 +644,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       expect(student.blockers).toEqual([]);
     });
 
-    it('flags subscription_overdue when the active subscription has a payment past due', async () => {
+    it('flags subscription_overdue when the active subscription has a payment past the grace window', async () => {
       const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
       const { email: studentEmail, userId: studentId } = await createStudent();
       await linkStudent(trainerToken, studentEmail);
@@ -652,7 +655,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       });
       const plan = await createPlan(trainerId);
       const subscription = await createSubscription(trainerId, studentId, plan.id);
-      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-1) });
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-4) });
 
       const res = await app.inject({
         method: 'GET',
@@ -725,7 +728,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       expect(student.ready).toBe(true);
     });
 
-    it('flags subscription_overdue when the pending payment was due yesterday (exclusive, past due)', async () => {
+    it('does not flag subscription_overdue when the pending payment was due today-3 (last day of the grace window)', async () => {
       const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
       const { email: studentEmail, userId: studentId } = await createStudent();
       await linkStudent(trainerToken, studentEmail);
@@ -736,7 +739,31 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       });
       const plan = await createPlan(trainerId);
       const subscription = await createSubscription(trainerId, studentId, plan.id);
-      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-1) });
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-3) });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [student] = res.json();
+      expect(student.blockers).not.toContain(StudentBlocker.SUBSCRIPTION_OVERDUE);
+    });
+
+    it('flags subscription_overdue when the pending payment was due today-4 (first day past the grace window)', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
+
+      await createProtocol(trainerId, studentId, {
+        startDate: daysFromToday(-30),
+        expirationDate: daysFromToday(30),
+      });
+      const plan = await createPlan(trainerId);
+      const subscription = await createSubscription(trainerId, studentId, plan.id);
+      await createPayment(subscription.id, { status: PaymentStatus.PENDING, dueDate: daysFromToday(-4) });
 
       const res = await app.inject({
         method: 'GET',

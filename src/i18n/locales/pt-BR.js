@@ -131,6 +131,12 @@ export default {
       in_person: 'Presencial',
       hybrid: 'Híbrido',
     },
+    billingStatus: {
+      overdue: 'Em atraso',
+      due_soon: 'Vence em breve',
+      ok: 'Em dia',
+      none: 'Sem plano',
+    },
     studentBlocker: {
       no_active_protocol: 'Sem rotina ativa',
       no_subscription: 'Sem plano',
@@ -191,6 +197,8 @@ export default {
     paymentStatus: {
       pending: 'Pendente',
       paid: 'Pago',
+      overdue: 'Em atraso',
+      cancelled: 'Anulada',
     },
     inviteStatus: {
       pending: 'Pendente',
@@ -342,6 +350,15 @@ export default {
     'subscription.notFound': 'Assinatura não encontrada.',
     'subscription.cannotEditCancelled': 'Não é possível editar uma assinatura cancelada.',
     'subscription.paymentNotFound': 'Pagamento de assinatura não encontrado.',
+    'subscription.paymentAlreadyPaid': 'Esta cobrança já foi paga. Para alterá-la ou anulá-la, volte-a para pendente primeiro.',
+    'subscription.paymentCancelled': 'Esta cobrança foi anulada e não pode ser alterada.',
+    'subscription.cancelled': 'Esta assinatura está cancelada.',
+    'subscription.alreadyActive': 'Este aluno já possui uma assinatura ativa.',
+    'subscription.cycleNotDue': 'O próximo ciclo ainda não está disponível para cobrança.',
+    'subscription.paymentConflict': 'O pagamento foi alterado por outra operação. Atualize e tente novamente.',
+    'subscription.cycleAlreadyExists': 'Este ciclo de cobrança já existe.',
+    'subscription.invalidAmount': 'Valor inválido. Use até duas casas decimais e no máximo 99.999.999,99.',
+    'subscription.invalidPaidAt': 'Data de pagamento inválida: não pode ser futura nem anterior a um ano antes do início da assinatura.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'Você atingiu o limite de alunos do seu plano. Atualize para liberar mais espaço.',

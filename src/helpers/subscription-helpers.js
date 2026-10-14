@@ -1,39 +1,160 @@
-import { RECURRENCE_MONTHS } from '../constants/subscription.js';
-import { parseDateOnlyAsUtc } from './date-helpers.js';
+import { Prisma } from '@prisma/client';
+import { AppError } from '../errors/app-error.js';
+import {
+  RECURRENCE_MONTHS,
+  SubscriptionErrorCode,
+  SubscriptionMessageCode,
+  MAX_MONEY_AMOUNT,
+  MONEY_DECIMAL_PLACES,
+  SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX,
+} from '../constants/subscription.js';
+import { addMonthsClamped, formatDateOnly } from './date-helpers.js';
+import { deriveEffectiveStatus } from './payment-status-helpers.js';
+
+const { Decimal } = Prisma;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Compute the last day of the billing cycle (cycleEndDate).
+ * Bounds of billing cycle `cycleIndex` of a subscription.
  *
- * Semantics: the cycle ends the day before the next billing date would fall.
- * When the start day does not exist in the target month (e.g. Jan 31 + 1 month → Feb has no 31),
- * the cycle ends on the last calendar day of that month instead of rolling over to the next month.
+ * Every cycle is derived from the ORIGINAL anchor (the subscription startDate),
+ * never from the previous cycle, so the billing day never drifts:
+ *   start(i) = anchor + i * months   (day clamped to month length)
+ *   end(i)   = start(i + 1) - 1 day
  *
- * Examples:
- *   May 1  + monthly  → May 31   (Jun 1 − 1d, no overflow)
- *   Jan 31 + monthly  → Feb 28/29 (Feb has no day 31 → last day of Feb)
- *   Aug 31 + monthly  → Sep 30   (Sep has no day 31 → last day of Sep)
- *   Jan 1  + quarterly → Mar 31  (Apr 1 − 1d, no overflow)
+ * Examples (anchor Jan 31, monthly): i=0 → Jan 31..Feb 27, i=1 → Feb 28..Mar 30,
+ * i=2 → Mar 31..Apr 29 — the billing day returns to the 31st when it exists.
  *
- * @param {Date|string} startDate - UTC Date or "YYYY-MM-DD" string
- * @param {string} recurrence - one of the RECURRENCE_MONTHS keys (monthly, quarterly, …)
- * @returns {Date} cycleEndDate in UTC
+ * @param {Date} anchorDate - subscription startDate (date-only, UTC)
+ * @param {string} recurrence - key of RECURRENCE_MONTHS
+ * @param {number} cycleIndex - zero-based
+ * @returns {{ cycleStartDate: Date, cycleEndDate: Date }}
  */
-export function computeCycleEndDate(startDate, recurrence) {
+export function computeCycleBounds(anchorDate, recurrence, cycleIndex) {
   const months = RECURRENCE_MONTHS[recurrence];
-  const d = startDate instanceof Date ? startDate : parseDateOnlyAsUtc(startDate);
+  const cycleStartDate = addMonthsClamped(anchorDate, cycleIndex * months);
+  const nextCycleStart = addMonthsClamped(anchorDate, (cycleIndex + 1) * months);
+  return {
+    cycleStartDate,
+    cycleEndDate: new Date(nextCycleStart.getTime() - ONE_DAY_MS),
+  };
+}
 
-  const startDay = d.getUTCDate();
-  const targetYear = d.getUTCFullYear();
-  const targetMonth = d.getUTCMonth() + months;
+/**
+ * Next cycle to materialize for a subscription: always a cell of the anchor
+ * grid (computeCycleBounds), so every cycle has the full recurrence length.
+ *
+ * Without `today` it is simply grid cycle `lastCycleIndex + 1` (0 when there is
+ * no cycle yet). With `today` (business-timezone civil day) cycles that already
+ * ended are skipped — a backdated subscription must not burst-create a charge
+ * for every past period. The skipped indexes are simply never materialized, so
+ * cycleIndex stays the grid index and the (subscriptionId, cycleIndex) unique
+ * key keeps working.
+ *
+ * @param {{ startDate: Date, recurrence: string }} subscription
+ * @param {{ cycleIndex: number } | null} lastCycle
+ * @param {Date} [today]
+ * @returns {{ cycleIndex: number, cycleStartDate: Date, cycleEndDate: Date }}
+ */
+export function computeNextCycle(subscription, lastCycle, today = null) {
+  const { startDate, recurrence } = subscription;
 
-  // Last day of the target month: Date.UTC(y, targetMonth+1, 0) gives day 0 of next month = last day.
-  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  let cycleIndex = lastCycle ? lastCycle.cycleIndex + 1 : 0;
+  let bounds = computeCycleBounds(startDate, recurrence, cycleIndex);
 
-  if (startDay > lastDayOfTargetMonth) {
-    // Start day overflows in target month: cycle ends on the last day of that month.
-    return new Date(Date.UTC(targetYear, targetMonth, lastDayOfTargetMonth));
+  while (today && bounds.cycleEndDate < today) {
+    cycleIndex += 1;
+    bounds = computeCycleBounds(startDate, recurrence, cycleIndex);
   }
 
-  // No overflow: next billing falls on the same day in the target month; cycle ends the day before.
-  return new Date(Date.UTC(targetYear, targetMonth, startDay) - 24 * 60 * 60 * 1000);
+  return { cycleIndex, ...bounds };
+}
+
+/**
+ * Key of the advisory lock that serializes assign/unlink for one
+ * trainer/student pair (hashed by Postgres with hashtext()).
+ */
+export function buildAssignmentLockKey(trainerId, studentId) {
+  return `${SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX}:${trainerId}:${studentId}`;
+}
+
+/**
+ * Net amount after applying the discount: a Decimal floored at 0 and rounded
+ * half-up to 2 places (explicit, so it never depends on the DB write cast).
+ */
+export function computeAmount(price, discountPercent, discountAmount) {
+  const priceDecimal = new Decimal(price);
+  let net = priceDecimal;
+
+  if (discountPercent != null) {
+    const discounted = priceDecimal.times(new Decimal(discountPercent)).dividedBy(100);
+    net = priceDecimal.minus(discounted);
+  } else if (discountAmount != null) {
+    net = priceDecimal.minus(new Decimal(discountAmount));
+  }
+
+  return Decimal.max(net, new Decimal(0)).toDecimalPlaces(MONEY_DECIMAL_PLACES, Decimal.ROUND_HALF_UP);
+}
+
+/**
+ * Reject monetary inputs that Decimal(10,2) cannot store faithfully:
+ * more than 2 decimal places (0.001 would silently become 0.00) or above the maximum.
+ * `null`/`undefined` are ignored (optional fields).
+ */
+export function assertValidMoneyAmount(value) {
+  if (value == null) return;
+
+  const amount = new Decimal(value);
+  if (amount.decimalPlaces() > MONEY_DECIMAL_PLACES || amount.greaterThan(MAX_MONEY_AMOUNT)) {
+    throw new AppError({
+      httpStatus: 400,
+      error: SubscriptionErrorCode.INVALID_AMOUNT,
+      messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+      message: 'Amount must have at most 2 decimal places and not exceed 99999999.99',
+    });
+  }
+}
+
+/**
+ * Reject discount percentages with more than 2 decimal places (Decimal(5,2)
+ * would silently round them). Range is enforced by the schema/validateDiscount.
+ */
+export function assertValidPercentage(value) {
+  if (value == null) return;
+
+  if (new Decimal(value).decimalPlaces() > MONEY_DECIMAL_PLACES) {
+    throw new AppError({
+      httpStatus: 400,
+      error: SubscriptionErrorCode.INVALID_AMOUNT,
+      messageCode: SubscriptionMessageCode.INVALID_AMOUNT,
+      message: 'Percentage must have at most 2 decimal places',
+    });
+  }
+}
+
+/**
+ * Serialize a SubscriptionPayment row, including the derived effective status.
+ *
+ * @param {object} payment - Prisma row
+ * @param {Date} today - business-timezone civil today (midnight UTC)
+ */
+export function formatPayment(payment, today) {
+  const { effectiveStatus, daysOverdue } = deriveEffectiveStatus(payment, today);
+  return {
+    id: payment.id,
+    subscriptionId: payment.subscriptionId,
+    cycleIndex: payment.cycleIndex,
+    cycleStartDate: formatDateOnly(payment.cycleStartDate),
+    cycleEndDate: formatDateOnly(payment.cycleEndDate),
+    dueDate: formatDateOnly(payment.dueDate),
+    amount: payment.amount.toString(),
+    status: payment.status,
+    effectiveStatus,
+    daysOverdue,
+    paidAt: payment.paidAt ?? null,
+    voidedAt: payment.voidedAt ?? null,
+    notes: payment.notes ?? null,
+    createdAt: payment.createdAt,
+    updatedAt: payment.updatedAt ?? null,
+  };
 }

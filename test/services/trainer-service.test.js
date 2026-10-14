@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock platform-plan-service — gating is tested separately
 vi.mock('../../src/services/platform-plan-service.js', () => ({
@@ -62,8 +62,14 @@ import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import emailHandler from '../../src/config/email-handler.js';
 import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, getLinkedStudent, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
+import { buildAssignmentLockKey } from '../../src/helpers/subscription-helpers.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
-import { SubscriptionStatus } from '../../src/constants/subscription.js';
+import {
+  SubscriptionStatus,
+  PaymentStatus,
+  BillingStatus,
+  CANCELLATION_REASON_UNLINKED,
+} from '../../src/constants/subscription.js';
 
 describe('trainerService', () => {
   beforeEach(() => {
@@ -623,6 +629,7 @@ describe('listStudents', () => {
         firstName: 'Alice',
         lastName: 'A',
         avatarUrl: 'https://cdn.example.com/alice.jpg',
+        billingStatus: BillingStatus.NONE,
         adherence: null,
         adherenceCompleted: null,
         adherenceExpected: null,
@@ -639,6 +646,7 @@ describe('listStudents', () => {
         firstName: 'Bob',
         lastName: 'B',
         avatarUrl: null,
+        billingStatus: BillingStatus.NONE,
         adherence: null,
         adherenceCompleted: null,
         adherenceExpected: null,
@@ -650,6 +658,35 @@ describe('listStudents', () => {
         blockers: expectedBlockers,
       },
     ]);
+  });
+
+  it('flags overdue payments with the shared grace rule (pending AND dueDate < today SP - 3 days)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-11T02:00:00Z')); // 23:00 on Jun 10 in Sao Paulo
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      {
+        studentId: 's1',
+        activeOnPlan: true,
+        lastWorkoutAt: null,
+        currentPrLoad: null,
+        currentPrAt: null,
+        student: { id: 's1', email: 'a@x.com', firstName: 'A', lastName: 'A', avatarUrl: null },
+      },
+    ]);
+
+    prisma.studentSubscription.findMany.mockResolvedValue([
+      { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+    ]);
+
+    await listStudents({ trainerId: 'trainer1' });
+
+    const overdueCall = prisma.subscriptionPayment.findMany.mock.calls[0][0];
+    expect(overdueCall.where).toEqual({
+      subscriptionId: { in: ['sub1'] },
+      status: PaymentStatus.PENDING,
+      dueDate: { lt: new Date('2026-06-07T00:00:00Z') },
+    });
+    vi.useRealTimers();
   });
 
   it('computes adherence per student from batched protocol + groupBy queries', async () => {
@@ -798,6 +835,132 @@ describe('listStudents', () => {
 
     expect(result[0].ready).toBe(false);
     expect(result[0].blockers).toEqual([StudentBlocker.BLOCKED_ON_PLAN]);
+  });
+
+  describe('billingStatus', () => {
+    const studentLink = (id) => ({
+      studentId: id,
+      activeOnPlan: true,
+      lastWorkoutAt: null,
+      currentPrLoad: null,
+      currentPrAt: null,
+      student: { id, email: `${id}@x.com`, firstName: id, lastName: 'T', avatarUrl: null },
+    });
+    // Route the two payment queries by their where shape (overdue uses `lt`, due soon `gte`).
+    const mockPayments = ({ overdue = [], dueSoon = [] }) => {
+      prisma.subscriptionPayment.findMany.mockImplementation(({ where }) => Promise.resolve(
+        (where.dueDate.lt ? overdue : dueSoon).map((subscriptionId) => ({ subscriptionId })),
+      ));
+    };
+    const statusOf = (result, id) => result.find((r) => r.id === id).billingStatus;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-11T02:00:00Z')); // 23:00 on Jun 10 in Sao Paulo
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('is none for a student without any subscription', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.NONE);
+    });
+
+    it('is none when the only subscription is cancelled, even if it has overdue payments', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1'), studentLink('s2')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'subCancelled', studentId: 's1', status: SubscriptionStatus.CANCELLED },
+        { id: 'subActive', studentId: 's2', status: SubscriptionStatus.ACTIVE },
+      ]);
+      mockPayments({ overdue: ['subCancelled'] });
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.NONE);
+      expect(statusOf(result, 's2')).toBe(BillingStatus.OK);
+    });
+
+    it('is ok for an active subscription without overdue or due-soon payments', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+      ]);
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.OK);
+    });
+
+    it('is due_soon for an active subscription with a due-soon payment', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+      ]);
+      mockPayments({ dueSoon: ['sub1'] });
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.DUE_SOON);
+    });
+
+    it('is overdue for an active subscription with an overdue payment', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+      ]);
+      mockPayments({ overdue: ['sub1'] });
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.OVERDUE);
+    });
+
+    it('is overdue when the student has both overdue and due-soon payments', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'sub1', studentId: 's1', status: SubscriptionStatus.ACTIVE },
+      ]);
+      mockPayments({ overdue: ['sub1'], dueSoon: ['sub1'] });
+
+      const result = await listStudents({ trainerId: 'trainer1' });
+
+      expect(statusOf(result, 's1')).toBe(BillingStatus.OVERDUE);
+    });
+
+    it('queries payments in 2 batched calls regardless of the roster size', async () => {
+      const ids = ['s1', 's2', 's3', 's4'];
+      prisma.trainerStudent.findMany.mockResolvedValue(ids.map(studentLink));
+      prisma.studentSubscription.findMany.mockResolvedValue(
+        ids.map((id) => ({ id: `sub-${id}`, studentId: id, status: SubscriptionStatus.ACTIVE })),
+      );
+
+      await listStudents({ trainerId: 'trainer1' });
+
+      expect(prisma.subscriptionPayment.findMany).toHaveBeenCalledTimes(2);
+      expect(prisma.subscriptionPayment.findMany.mock.calls[1][0].where).toEqual({
+        subscriptionId: { in: ids.map((id) => `sub-${id}`) },
+        status: PaymentStatus.PENDING,
+        dueDate: {
+          gte: new Date('2026-06-07T00:00:00Z'),
+          lte: new Date('2026-06-17T00:00:00Z'),
+        },
+      });
+    });
+
+    it('runs no payment query at all when no subscription is active', async () => {
+      prisma.trainerStudent.findMany.mockResolvedValue([studentLink('s1')]);
+      prisma.studentSubscription.findMany.mockResolvedValue([
+        { id: 'sub1', studentId: 's1', status: SubscriptionStatus.CANCELLED },
+      ]);
+
+      await listStudents({ trainerId: 'trainer1' });
+
+      expect(prisma.subscriptionPayment.findMany).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -1108,18 +1271,93 @@ describe('unlinkStudent', () => {
     expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
   });
 
-  it('deletes the link when it exists', async () => {
-    prisma.trainerStudent.findUnique.mockResolvedValue({
-      id: 'link1',
-      trainerId: 'trainer1',
-      studentId: 'student1',
+  describe('when the link exists', () => {
+    const NOW = new Date('2026-06-11T02:00:00Z'); // 23:00 on Jun 10 in Sao Paulo
+
+    function buildTx() {
+      return {
+        $executeRaw: vi.fn().mockResolvedValue(1),
+        trainerStudent: { delete: vi.fn().mockResolvedValue({}) },
+        studentSubscription: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+        subscriptionPayment: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      prisma.trainerStudent.findUnique.mockResolvedValue({
+        id: 'link1',
+        trainerId: 'trainer1',
+        studentId: 'student1',
+      });
     });
-    prisma.trainerStudent.delete.mockResolvedValue({});
 
-    await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-    expect(prisma.trainerStudent.delete).toHaveBeenCalledWith({
-      where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
+    it('deletes the link, cancels the active subscription and voids upcoming payments in ONE transaction', async () => {
+      const tx = buildTx();
+      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+
+      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+      expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
+      expect(tx.trainerStudent.delete).toHaveBeenCalledWith({
+        where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
+      });
+      expect(tx.studentSubscription.updateMany).toHaveBeenCalledWith({
+        where: { trainerId: 'trainer1', studentId: 'student1', status: SubscriptionStatus.ACTIVE },
+        data: {
+          status: SubscriptionStatus.CANCELLED,
+          cancelledAt: NOW,
+          cancellationReason: CANCELLATION_REASON_UNLINKED,
+        },
+      });
+    });
+
+    it('voids only payments whose cycle has not started (today in Sao Paulo), keeping due ones as debt', async () => {
+      const tx = buildTx();
+      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+
+      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+
+      expect(tx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
+        where: {
+          status: PaymentStatus.PENDING,
+          cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') },
+          subscription: { trainerId: 'trainer1', studentId: 'student1' },
+        },
+        data: { status: PaymentStatus.CANCELLED, voidedAt: NOW },
+      });
+    });
+
+    it('takes the blocking per-pair advisory lock (same key as assign) before deleting the link or writing anything', async () => {
+      const tx = buildTx();
+      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+
+      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+
+      expect(tx.$executeRaw).toHaveBeenCalledOnce();
+      const [strings, lockKey] = tx.$executeRaw.mock.calls[0];
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock');
+      expect(strings.join('?')).not.toContain('try');
+      expect(lockKey).toBe(buildAssignmentLockKey('trainer1', 'student1'));
+      const lockOrder = tx.$executeRaw.mock.invocationCallOrder[0];
+      expect(lockOrder).toBeLessThan(tx.trainerStudent.delete.mock.invocationCallOrder[0]);
+      expect(lockOrder).toBeLessThan(tx.studentSubscription.updateMany.mock.invocationCallOrder[0]);
+      expect(lockOrder).toBeLessThan(tx.subscriptionPayment.updateMany.mock.invocationCallOrder[0]);
+    });
+
+    it('propagates a transaction failure (link deletion is not applied alone)', async () => {
+      prisma.$transaction.mockRejectedValue(new Error('tx failed'));
+
+      await expect(
+        unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' }),
+      ).rejects.toThrow('tx failed');
+      expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
     });
   });
 });

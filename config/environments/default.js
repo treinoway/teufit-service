@@ -289,6 +289,8 @@ export default {
       markPaid: { max: 30, timeWindow: '1 minute' },
       markPending: { max: 30, timeWindow: '1 minute' },
       delete: { max: 10, timeWindow: '1 minute' },
+      void: { max: 10, timeWindow: '1 minute' },
+      listByStudent: { max: 60, timeWindow: '1 minute' },
     },
     platformPlan: {
       get: { max: 30, timeWindow: '1 minute' },
@@ -298,6 +300,9 @@ export default {
     },
     trainerDashboard: {
       get: { max: 60, timeWindow: '1 minute' },
+    },
+    trainerFinance: {
+      overview: { max: 60, timeWindow: '1 minute' },
     },
   },
 };

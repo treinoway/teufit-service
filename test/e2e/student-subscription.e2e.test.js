@@ -8,6 +8,7 @@ import {
   SubscriptionStatus,
   PaymentStatus,
 } from '../../src/constants/subscription.js';
+import { addMonthsClamped, formatDateOnly, todayInBusinessTz } from '../../src/helpers/date-helpers.js';
 import { signupVerified } from '../helpers/signup-user.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -111,7 +112,10 @@ e2eDescribe('e2e: student subscriptions', () => {
       await linkStudentToTrainer(trainerId, studentId);
       const plan = await createPlan(accessToken);
 
-      const res = await assignPlan(accessToken, studentId, plan.id);
+      // Start today so the billed cycle is cycle 0 regardless of the run date
+      // (a backdated start bills the grid cycle containing today instead).
+      const startDate = formatDateOnly(todayInBusinessTz());
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate });
 
       expect(res.statusCode).toBe(201);
       const body = res.json();
@@ -121,9 +125,12 @@ e2eDescribe('e2e: student subscriptions', () => {
       expect(body.studentId).toBe(studentId);
       expect(body.firstPayment).toBeDefined();
       expect(body.firstPayment.status).toBe(PaymentStatus.PENDING);
-      expect(body.firstPayment.cycleStartDate).toBe('2026-05-01');
-      // Monthly: May 1 + 1 month - 1 day = May 31
-      expect(body.firstPayment.cycleEndDate).toBe('2026-05-31');
+      expect(body.firstPayment.voidedAt).toBeNull();
+      expect(body.firstPayment.cycleIndex).toBe(0);
+      expect(body.firstPayment.cycleStartDate).toBe(startDate);
+      // Monthly: cycle ends one day before the same day next month.
+      const expectedEnd = new Date(addMonthsClamped(todayInBusinessTz(), 1).getTime() - 24 * 60 * 60 * 1000);
+      expect(body.firstPayment.cycleEndDate).toBe(formatDateOnly(expectedEnd));
     });
 
     it('cancels existing active subscription when assigning a new plan', async () => {
@@ -153,6 +160,32 @@ e2eDescribe('e2e: student subscriptions', () => {
         where: { studentId, status: SubscriptionStatus.ACTIVE },
       });
       expect(activeSub.planId).toBe(plan2.id);
+    });
+
+    it('rejects a discountPercent override with more than 2 decimals with 400 SUBSCRIPTION_INVALID_AMOUNT', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      await linkStudentToTrainer(trainerId, studentId);
+      const plan = await createPlan(accessToken);
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { discountPercent: 33.333 });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: SubscriptionErrorCode.INVALID_AMOUNT,
+        messageCode: 'subscription.invalidAmount',
+      });
+    });
+
+    it('accepts a discountPercent override with exactly 2 decimals', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      await linkStudentToTrainer(trainerId, studentId);
+      const plan = await createPlan(accessToken);
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { discountPercent: 33.33 });
+
+      expect(res.statusCode).toBe(201);
     });
 
     it('returns 403 when student is not linked to trainer', async () => {
