@@ -483,8 +483,16 @@ export const unlinkAnamnesisFromStudentSchema = {
 
 // ─── Student (my) schemas ─────────────────────────────────────────────────────
 
+const trainerLinkActiveSchema = {
+  type: 'boolean',
+  description:
+    'Whether the trainer who linked this anamnesis still coaches the student (the trainer-student link ' +
+    'exists). False after the trainer unlinked the student; the anamnesis stays listed and answerable.',
+};
+
 const myAnamnesisItemSchema = {
   type: 'object',
+  required: ['trainerLinkActive'],
   properties: {
     id: { type: 'string', format: 'uuid' },
     anamnesisId: { type: 'string', format: 'uuid' },
@@ -515,6 +523,7 @@ const myAnamnesisItemSchema = {
         },
       },
     },
+    trainerLinkActive: trainerLinkActiveSchema,
     response: responseSummarySchema,
     createdAt: { type: 'string', format: 'date-time' },
   },
@@ -718,6 +727,36 @@ export const getMyAnamnesisResponseSchema = {
   },
   response: {
     200: anamnesisResponseSchema,
+    401: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const getMyAnamnesisDetailSchema = {
+  tags: ['Anamnesis - My'],
+  summary: 'Get one of my linked anamneses with its full structure and my full response (student view)',
+  description:
+    'Same link shape as an item of GET /my/anamneses, but `response` is the full response (answers included, ' +
+    'as returned by GET /my/anamneses/{anamnesisId}/response) or null when nothing was saved yet. When more ' +
+    'than one trainer linked the same anamnesis, the most recent link is returned (the response is shared). ' +
+    'Returns 404 ANAMNESIS_NOT_LINKED_TO_STUDENT when the anamnesis is not linked to the caller.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['anamnesisId'],
+    properties: { anamnesisId: { type: 'string', format: 'uuid' } },
+  },
+  response: {
+    200: {
+      ...myAnamnesisItemSchema,
+      properties: {
+        ...myAnamnesisItemSchema.properties,
+        response: { ...anamnesisResponseSchema, nullable: true },
+      },
+    },
+    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     404: errorResponseSchema,
     429: errorResponseSchema,
