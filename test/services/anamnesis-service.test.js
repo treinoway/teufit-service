@@ -33,7 +33,8 @@ vi.mock('../../src/db.js', () => ({
       delete: vi.fn(),
       count: vi.fn(),
     },
-    trainerStudent: { findUnique: vi.fn() },
+    trainerStudent: { findUnique: vi.fn(), findMany: vi.fn() },
+    user: { findUnique: vi.fn() },
     anamnesisResponse: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -68,6 +69,8 @@ import {
   listStudentAnamneses,
   unlinkAnamnesisFromStudent,
   getMyAnamneses,
+  getMyAnamnesisDetail,
+  notifyStudentAnamnesisAssigned,
   forkAnamnesis,
   copyAnamnesis,
   submitAnamnesisResponse,
@@ -96,6 +99,7 @@ import {
   fullAnamnesisInclude,
 } from '../../src/services/anamnesis-shared.js';
 import { AppError } from '../../src/errors/app-error.js';
+import config from '../../config/index.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
@@ -1304,6 +1308,10 @@ describe('anamnesis-service', () => {
       ...overrides,
     });
 
+    beforeEach(() => {
+      prisma.trainerStudent.findMany.mockResolvedValue([{ trainerId: 'trainer-1' }]);
+    });
+
     it('returns all anamneses linked to the student with a null response when nothing was saved', async () => {
       const links = [makeLinkWithAnamnesis('anamnesis-1')];
       prisma.studentAnamnesis.findMany.mockResolvedValue(links);
@@ -1311,7 +1319,7 @@ describe('anamnesis-service', () => {
 
       const result = await getMyAnamneses('student-1');
 
-      expect(result).toEqual([{ ...links[0], response: null }]);
+      expect(result).toEqual([{ ...links[0], trainerLinkActive: true, response: null }]);
       expect(prisma.studentAnamnesis.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { studentId: 'student-1' },
@@ -1553,6 +1561,241 @@ describe('anamnesis-service', () => {
       const [result] = await getMyAnamneses('student-1');
 
       expect(result).toMatchObject({ id: link.id, anamnesis: link.anamnesis, trainer: link.trainer });
+    });
+
+    describe('trainerLinkActive', () => {
+      it('is true for links whose trainer still coaches the student and false for unlinked trainers', async () => {
+        prisma.studentAnamnesis.findMany.mockResolvedValue([
+          makeLinkWithAnamnesis('anamnesis-1', { trainerId: 'trainer-1' }),
+          makeLinkWithAnamnesis('anamnesis-2', { trainerId: 'trainer-2' }),
+        ]);
+        prisma.trainerStudent.findMany.mockResolvedValue([{ trainerId: 'trainer-1' }]);
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        const result = await getMyAnamneses('student-1');
+
+        expect(result.map((item) => [item.anamnesisId, item.trainerLinkActive])).toEqual([
+          ['anamnesis-1', true],
+          ['anamnesis-2', false],
+        ]);
+      });
+
+      it('issues a single trainer-student query scoped to the student and the distinct trainer ids', async () => {
+        prisma.studentAnamnesis.findMany.mockResolvedValue([
+          makeLinkWithAnamnesis('anamnesis-1', { trainerId: 'trainer-1' }),
+          makeLinkWithAnamnesis('anamnesis-2', { trainerId: 'trainer-1' }),
+          makeLinkWithAnamnesis('anamnesis-3', { trainerId: 'trainer-2' }),
+        ]);
+        prisma.anamnesisResponse.findMany.mockResolvedValue([]);
+
+        await getMyAnamneses('student-1');
+
+        expect(prisma.trainerStudent.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.trainerStudent.findMany).toHaveBeenCalledWith({
+          where: { studentId: 'student-1', trainerId: { in: ['trainer-1', 'trainer-2'] } },
+          select: { trainerId: true },
+        });
+      });
+
+      it('skips the trainer-student query when the student has no links', async () => {
+        prisma.studentAnamnesis.findMany.mockResolvedValue([]);
+
+        await getMyAnamneses('student-1');
+
+        expect(prisma.trainerStudent.findMany).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ── getMyAnamnesisDetail ─────────────────────────────────────────────────
+
+  describe('getMyAnamnesisDetail', () => {
+    const makeDetailLink = (overrides = {}) => ({
+      ...makeStudentAnamnesisLink(),
+      anamnesis: { id: 'anamnesis-1', title: 'Health Questionnaire', sections: [] },
+      trainer: { id: 'trainer-1', user: { firstName: 'John', lastName: 'Doe', avatarUrl: null } },
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      prisma.trainerStudent.findMany.mockResolvedValue([{ trainerId: 'trainer-1' }]);
+    });
+
+    it('throws 404 ANAMNESIS_NOT_LINKED_TO_STUDENT when the anamnesis is not linked to the caller', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(null);
+
+      await expect(getMyAnamnesisDetail('student-1', 'anamnesis-1')).rejects.toMatchObject({
+        httpStatus: 404,
+        error: AnamnesisErrorCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+        messageCode: AnamnesisMessageCode.ANAMNESIS_NOT_LINKED_TO_STUDENT,
+      });
+      expect(prisma.anamnesisResponse.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('scopes the link lookup to the caller and picks the most recent link deterministically', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(makeDetailLink());
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      expect(prisma.studentAnamnesis.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { studentId: 'student-1', anamnesisId: 'anamnesis-1' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }),
+      );
+    });
+
+    it('loads the full anamnesis structure (sections, questions and options)', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(makeDetailLink());
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      const { include } = prisma.studentAnamnesis.findFirst.mock.calls[0][0];
+      expect(include.anamnesis.select).toMatchObject(fullAnamnesisInclude);
+      expect(include.trainer).toBeDefined();
+    });
+
+    it('returns the link with a null response when nothing was saved yet', async () => {
+      const link = makeDetailLink();
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(link);
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      const result = await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      expect(result).toEqual({ ...link, trainerLinkActive: true, response: null });
+    });
+
+    it('returns the full draft response with its answers, status and filledBy', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(makeDetailLink());
+      const draft = {
+        id: 'response-1',
+        anamnesisId: 'anamnesis-1',
+        studentId: 'student-1',
+        submittedAt: null,
+        filledByRole: AnamnesisFilledBy.STUDENT,
+        studentConfirmedAt: null,
+        trainerAttestedAt: null,
+        answers: [{ id: 'answer-1', questionId: 'question-1', value: ['A', 'B'] }],
+      };
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(draft);
+
+      const result = await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      expect(result.response).toEqual({
+        ...draft,
+        status: AnamnesisResponseStatus.DRAFT,
+        filledBy: AnamnesisFilledBy.STUDENT,
+      });
+      expect(prisma.anamnesisResponse.findUnique).toHaveBeenCalledWith({
+        where: { anamnesisId_studentId: { anamnesisId: 'anamnesis-1', studentId: 'student-1' } },
+        include: { answers: true },
+      });
+    });
+
+    it('derives awaiting_confirmation for a trainer submission the student has not confirmed', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(makeDetailLink());
+      prisma.anamnesisResponse.findUnique.mockResolvedValue({
+        id: 'response-1',
+        submittedAt: new Date(),
+        filledByRole: AnamnesisFilledBy.TRAINER,
+        studentConfirmedAt: null,
+        answers: [],
+      });
+
+      const result = await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      expect(result.response.status).toBe(AnamnesisResponseStatus.AWAITING_CONFIRMATION);
+    });
+
+    it('reports trainerLinkActive false when the trainer no longer coaches the student', async () => {
+      prisma.studentAnamnesis.findFirst.mockResolvedValue(makeDetailLink({ trainerId: 'trainer-9' }));
+      prisma.trainerStudent.findMany.mockResolvedValue([]);
+      prisma.anamnesisResponse.findUnique.mockResolvedValue(null);
+
+      const result = await getMyAnamnesisDetail('student-1', 'anamnesis-1');
+
+      expect(result.trainerLinkActive).toBe(false);
+      expect(prisma.trainerStudent.findMany).toHaveBeenCalledWith({
+        where: { studentId: 'student-1', trainerId: { in: ['trainer-9'] } },
+        select: { trainerId: true },
+      });
+    });
+  });
+
+  // ── notifyStudentAnamnesisAssigned ───────────────────────────────────────
+
+  describe('notifyStudentAnamnesisAssigned', () => {
+    const assignment = {
+      trainerId: 'trainer-1',
+      studentId: 'student-1',
+      anamnesisId: 'anamnesis-1',
+      anamnesisTitle: 'Health Questionnaire',
+    };
+    let emailSender;
+
+    beforeEach(() => {
+      emailSender = { sendAnamnesisAssignedEmail: vi.fn().mockResolvedValue({ data: { id: 'email-1' }, error: null }) };
+      prisma.user.findUnique.mockResolvedValue({ email: 'student@example.com', firstName: 'Maria', deletedAt: null });
+      prisma.trainer.findUnique.mockResolvedValue({ user: { firstName: 'Ana', lastName: 'Coach' } });
+    });
+
+    it('sends the email to the student with the trainer name, the title and the web answer link', async () => {
+      await notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
+
+      expect(emailSender.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1);
+      expect(emailSender.sendAnamnesisAssignedEmail).toHaveBeenCalledWith({
+        to: 'student@example.com',
+        studentName: 'Maria',
+        trainerName: 'Ana Coach',
+        anamnesisTitle: 'Health Questionnaire',
+        link: `${config.web.baseUrl}/my/anamneses/anamnesis-1/answer`,
+      });
+    });
+
+    it('looks up the trainer by Trainer id (not user id)', async () => {
+      await notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
+
+      expect(prisma.trainer.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'trainer-1' } }));
+    });
+
+    it('sends an empty trainer name when the trainer has no name', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ user: { firstName: null, lastName: null } });
+
+      await notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
+
+      expect(emailSender.sendAnamnesisAssignedEmail).toHaveBeenCalledWith(expect.objectContaining({ trainerName: '' }));
+    });
+
+    it.each([
+      ['the student no longer exists', null],
+      ['the student has no email', { email: null, firstName: 'Maria', deletedAt: null }],
+      ['the student account is deleted', { email: 'student@example.com', firstName: 'Maria', deletedAt: new Date() }],
+    ])('does not send when %s', async (_label, student) => {
+      prisma.user.findUnique.mockResolvedValue(student);
+
+      await notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
+
+      expect(emailSender.sendAnamnesisAssignedEmail).not.toHaveBeenCalled();
+    });
+
+    it('throws when the provider rejects the email, without echoing the provider message', async () => {
+      emailSender.sendAnamnesisAssignedEmail.mockResolvedValue({
+        data: null,
+        error: { name: 'validation_error', message: 'Invalid `to` field: student@example.com' },
+      });
+
+      const promise = notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
+
+      await expect(promise).rejects.toThrow('validation_error');
+      await expect(promise).rejects.not.toThrow('student@example.com');
+    });
+
+    it('propagates a thrown delivery error', async () => {
+      emailSender.sendAnamnesisAssignedEmail.mockRejectedValue(new Error('resend down'));
+
+      await expect(notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender })).rejects.toThrow('resend down');
     });
   });
 

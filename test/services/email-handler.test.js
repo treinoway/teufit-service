@@ -188,6 +188,79 @@ describe('email-handler rendered emails', () => {
     });
   });
 
+  describe('sendAnamnesisAssignedEmail', () => {
+    const LINK = 'https://app.example.com/my/anamneses/11111111-1111-1111-1111-111111111111/answer';
+    const sendAssigned = (overrides = {}) =>
+      emailHandler.sendAnamnesisAssignedEmail({
+        to: 'student@example.com',
+        studentName: 'Maria',
+        trainerName: 'Ana Coach',
+        anamnesisTitle: 'Saúde e histórico',
+        link: LINK,
+        ...overrides,
+      });
+
+    it('should address the student with the trainer in the subject', async () => {
+      await sendAssigned();
+
+      const { to, subject } = lastEmail();
+      expect(to).toBe('student@example.com');
+      expect(subject).toBe('[TeuFit] Nova anamnese de Ana Coach');
+    });
+
+    it('should render the title, the CTA to the answer link and the mobile app alternative', async () => {
+      await sendAssigned();
+
+      const { html } = lastEmail();
+      expect(html).toContain('Saúde e histórico');
+      expect(html).toContain(`href="${LINK}"`);
+      expect(html).toContain('Responder anamnese');
+      expect(html).toContain('app TeuFit');
+      expectNoLegacyBranding(lastEmail());
+    });
+
+    it('should keep an imperative voice without greetings or "Por favor"', async () => {
+      await sendAssigned();
+
+      const { html } = lastEmail();
+      expect(html).not.toMatch(/Olá|Por favor|Bem-vindo/i);
+    });
+
+    it('should fall back to a generic subject and heading without names', async () => {
+      await sendAssigned({ trainerName: '\r\n', studentName: undefined });
+
+      const { subject, html } = lastEmail();
+      expect(subject).toBe('[TeuFit] Nova anamnese do seu treinador');
+      expect(html).toContain('Responda a nova anamnese');
+      expect(html).toContain('Seu treinador enviou a anamnese');
+    });
+
+    it('should keep the subject on a single line when the trainer name contains CR/LF', async () => {
+      await sendAssigned({ trainerName: 'Ana\r\nBcc: evil@example.com' });
+
+      expect(lastEmail().subject).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+    });
+
+    it('should HTML-escape user-controlled text', async () => {
+      await sendAssigned({
+        trainerName: '<b>Ana</b>',
+        studentName: '<i>Maria</i>',
+        anamnesisTitle: '<script>alert(1)</script>',
+      });
+
+      const { html } = lastEmail();
+      expect(html).not.toContain('<script>alert(1)</script>');
+      expect(html).not.toContain('<b>Ana</b>');
+      expect(html).not.toContain('<i>Maria</i>');
+    });
+
+    it('should be a no-op when no email client is configured', async () => {
+      emailHandler.resendClient = null;
+
+      await expect(sendAssigned()).resolves.toBeUndefined();
+    });
+  });
+
   describe('sendEmailVerificationEmail', () => {
     it('should render the 6-digit code and only the TeuFit brand', async () => {
       await emailHandler.sendEmailVerificationEmail({ to: 'student@example.com', code: '048213' });
