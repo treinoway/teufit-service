@@ -371,20 +371,442 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
       expect(response.json()).toMatchObject({ error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
     });
 
-    it.each([
-      ['student-submitted', 'student'],
-      ['trainer-submitted', 'trainer'],
-    ])('returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED over a %s response', async (_label, author) => {
-      const scenario = await setupScenario();
-      if (author === 'student') await studentSubmit(scenario, answersFor(scenario));
-      else await trainerSubmit(scenario, answersFor(scenario));
+    describe('over an already submitted response', () => {
+      // Row state used to assert that a rejected draft wrote NOTHING (answers sorted for a stable comparison)
+      const findResponseSnapshot = async (scenario) => {
+        const row = await findResponseRow(scenario);
+        return { ...row, answers: [...row.answers].sort((a, b) => a.questionId.localeCompare(b.questionId)) };
+      };
 
-      const response = await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+      const answerValuesByQuestion = (row) =>
+        Object.fromEntries(row.answers.map((answer) => [answer.questionId, answer.value]));
 
-      expectErrorContract(response, {
-        statusCode: 409,
-        error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
-        messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+      const markFillerAsDeleted = (scenario) =>
+        prisma.anamnesisResponse.update({
+          where: { anamnesisId_studentId: { anamnesisId: scenario.anamnesisId, studentId: scenario.student.userId } },
+          data: { filledByUserId: null },
+        });
+
+      describe('reopening the trainer own submission', () => {
+        it('returns 200 draft and resets submittedAt, studentConfirmedAt and trainerAttestedAt on an awaiting_confirmation response', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'first version'));
+          const submittedRow = await findResponseRow(scenario);
+          expect(submittedRow.submittedAt).toBeInstanceOf(Date);
+          expect(submittedRow.trainerAttestedAt).toBeInstanceOf(Date);
+
+          const response = await trainerSaveDraft(scenario, [
+            { questionId: scenario.optionalQuestionId, value: 'edited by trainer' },
+          ]);
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json()).toMatchObject({
+            studentId: scenario.student.userId,
+            status: AnamnesisResponseStatus.DRAFT,
+            submittedAt: null,
+            studentConfirmedAt: null,
+            trainerAttestedAt: null,
+          });
+          const row = await findResponseRow(scenario);
+          expect(row).toMatchObject({ submittedAt: null, studentConfirmedAt: null, trainerAttestedAt: null });
+        });
+
+        it('keeps the authorship columns untouched while reopened', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+
+          await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+
+          expect(await findResponseRow(scenario)).toMatchObject({
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: scenario.trainer.userId,
+          });
+        });
+
+        it('reopens a trainer submission the student already confirmed (status submitted), clearing the confirmation', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+          expect((await studentConfirm(scenario)).statusCode).toBe(200);
+          expect((await findResponseRow(scenario)).studentConfirmedAt).toBeInstanceOf(Date);
+
+          const response = await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+          expect(await findResponseRow(scenario)).toMatchObject({
+            submittedAt: null,
+            studentConfirmedAt: null,
+            trainerAttestedAt: null,
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: scenario.trainer.userId,
+          });
+        });
+
+        it('applies the payload answers and keeps the previous answers that are not in the payload', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'first version'));
+
+          const response = await trainerSaveDraft(scenario, [
+            { questionId: scenario.optionalQuestionId, value: 'second version' },
+          ]);
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().answers).toHaveLength(2);
+          expect(answerValuesByQuestion(await findResponseRow(scenario))).toEqual({
+            [scenario.requiredQuestionId]: 'yes',
+            [scenario.optionalQuestionId]: 'second version',
+          });
+        });
+
+        it('clears a previous answer when the payload sends an empty value for it', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'to be cleared'));
+
+          const response = await trainerSaveDraft(scenario, [{ questionId: scenario.optionalQuestionId, value: '' }]);
+
+          expect(response.statusCode).toBe(200);
+          expect(answerValuesByQuestion(await findResponseRow(scenario))).toEqual({
+            [scenario.requiredQuestionId]: 'yes',
+          });
+        });
+
+        it('reopens when the filler user was deleted (filledByUserId null, role trainer)', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+          await markFillerAsDeleted(scenario);
+
+          const response = await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+          expect(await findResponseRow(scenario)).toMatchObject({
+            submittedAt: null,
+            studentConfirmedAt: null,
+            trainerAttestedAt: null,
+            filledByRole: AnamnesisFilledBy.TRAINER,
+            filledByUserId: null,
+          });
+        });
+
+        it('lets another trainer reopen when the filler user was deleted', async () => {
+          const { asA, asB } = await setupSharedScenario();
+          await trainerSubmit(asA, answersFor(asA, 'yes'));
+          await markFillerAsDeleted(asA);
+
+          const response = await trainerSaveDraft(asB, answersFor(asB, 'no'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+          expect((await findResponseRow(asB)).submittedAt).toBeNull();
+        });
+
+        it('lets trainer A reopen their own submission on a general anamnesis shared with trainer B', async () => {
+          const { asA } = await setupSharedScenario();
+          await trainerSubmit(asA, answersFor(asA, 'yes'));
+
+          const response = await trainerSaveDraft(asA, answersFor(asA, 'no'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+        });
+
+        it('returns 400 for an empty answers array without reopening', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+          const before = await findResponseSnapshot(scenario);
+
+          const response = await trainerSaveDraft(scenario, []);
+
+          expect(response.statusCode).toBe(400);
+          expect(await findResponseSnapshot(scenario)).toEqual(before);
+        });
+
+        it('does not reopen when the payload references a question outside the anamnesis (404)', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+          const before = await findResponseSnapshot(scenario);
+
+          const response = await trainerSaveDraft(scenario, [
+            { questionId: '00000000-0000-0000-0000-000000000099', value: 'x' },
+          ]);
+
+          expectErrorContract(response, {
+            statusCode: 404,
+            error: AnamnesisErrorCode.ANAMNESIS_QUESTION_NOT_FOUND,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_QUESTION_NOT_FOUND,
+          });
+          expect(await findResponseSnapshot(scenario)).toEqual(before);
+        });
+      });
+
+      describe('responses the trainer may not reopen', () => {
+        it('returns 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT over a student submission and writes nothing', async () => {
+          const scenario = await setupScenario();
+          await studentSubmit(scenario, answersFor(scenario, 'no', 'student notes'));
+          const before = await findResponseSnapshot(scenario);
+
+          const response = await trainerSaveDraft(scenario, answersFor(scenario, 'yes', 'trainer edit'));
+
+          expectErrorContract(response, {
+            statusCode: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expect(await findResponseSnapshot(scenario)).toEqual(before);
+          expect(before.submittedAt).toBeInstanceOf(Date);
+        });
+
+        it('returns 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT over a legacy row created with column defaults', async () => {
+          const scenario = await setupScenario();
+          await prisma.anamnesisResponse.create({
+            data: {
+              anamnesisId: scenario.anamnesisId,
+              studentId: scenario.student.userId,
+              submittedAt: new Date('2026-01-10T12:00:00.000Z'),
+            },
+          });
+          const before = await findResponseSnapshot(scenario);
+
+          const response = await trainerSaveDraft(scenario, answersFor(scenario, 'yes'));
+
+          expectErrorContract(response, {
+            statusCode: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expect(await findResponseSnapshot(scenario)).toEqual(before);
+        });
+
+        it('returns 409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER over another trainer submission and writes nothing', async () => {
+          const { asA, asB } = await setupSharedScenario();
+          await trainerSubmit(asA, answersFor(asA, 'yes', 'trainer A notes'));
+          const before = await findResponseSnapshot(asA);
+
+          const response = await trainerSaveDraft(asB, answersFor(asB, 'no', 'trainer B edit'));
+
+          expectErrorContract(response, {
+            statusCode: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+          });
+          expect(await findResponseSnapshot(asA)).toEqual(before);
+          expect(before.filledByUserId).toBe(asA.trainer.userId);
+        });
+
+        it('returns the translated 409 message for the student-submission block', async () => {
+          const scenario = await setupScenario();
+          await studentSubmit(scenario, answersFor(scenario));
+
+          const ptBr = await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+          const enUs = await trainerSaveDraft(scenario, answersFor(scenario, 'no'), {
+            headers: { [LANG_HEADER]: EN_US },
+          });
+
+          expect(ptBr.json()).toMatchObject({
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            message: 'O aluno já enviou esta anamnese.',
+          });
+          expect(enUs.json()).toMatchObject({
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            message: 'The student has already submitted this anamnesis.',
+          });
+        });
+      });
+
+      describe('consequences while the response is reopened', () => {
+        async function setupReopened() {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'first version'));
+          expect((await trainerGetDossier(scenario)).statusCode).toBe(200);
+          const reopen = await trainerSaveDraft(scenario, answersFor(scenario, 'yes', 'second version'));
+          expect(reopen.statusCode).toBe(200);
+          return scenario;
+        }
+
+        it('hides the response from the trainer dossier (404 ANAMNESIS_RESPONSE_NOT_FOUND)', async () => {
+          const scenario = await setupReopened();
+
+          const response = await trainerGetDossier(scenario);
+
+          expectErrorContract(response, {
+            statusCode: 404,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_FOUND,
+          });
+        });
+
+        it('shows status draft with submittedAt null and canFill true in the trainer list', async () => {
+          const scenario = await setupReopened();
+
+          const item = listItemFor(await trainerList(scenario.trainer, scenario.student.userId), scenario.anamnesisId);
+
+          expect(item.response).toMatchObject({
+            status: AnamnesisResponseStatus.DRAFT,
+            statusLabel: 'Rascunho',
+            submittedAt: null,
+            answeredCount: 2,
+          });
+          expect(item.canFill).toBe(true);
+        });
+
+        it('shows status draft in the student list', async () => {
+          const scenario = await setupReopened();
+
+          const list = await studentList(scenario);
+
+          expect(summaryStatusFor(list.json(), scenario.anamnesisId)).toMatchObject({
+            status: AnamnesisResponseStatus.DRAFT,
+            submittedAt: null,
+          });
+        });
+
+        it('blocks the student confirmation (409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION)', async () => {
+          const scenario = await setupReopened();
+
+          const response = await studentConfirm(scenario);
+
+          expectErrorContract(response, {
+            statusCode: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION,
+          });
+          expect((await findResponseRow(scenario)).studentConfirmedAt).toBeNull();
+        });
+
+        it('lets the student keep editing the reopened draft through the shared row (200)', async () => {
+          const scenario = await setupReopened();
+
+          const response = await studentSaveDraft(scenario, [
+            { questionId: scenario.optionalQuestionId, value: 'student edit' },
+          ]);
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+          expect(answerValuesByQuestion(await findResponseRow(scenario))).toEqual({
+            [scenario.requiredQuestionId]: 'yes',
+            [scenario.optionalQuestionId]: 'student edit',
+          });
+        });
+
+        it('returns the reopened draft in GET .../fill with canFinalize true', async () => {
+          const scenario = await setupReopened();
+
+          const response = await trainerGetFill(scenario);
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().canFinalize).toBe(true);
+          expect(response.json().response).toMatchObject({
+            status: AnamnesisResponseStatus.DRAFT,
+            submittedAt: null,
+          });
+          expect(response.json().response.answers).toHaveLength(2);
+        });
+
+        it('can be reopened again by further trainer drafts while it stays a draft', async () => {
+          const scenario = await setupReopened();
+
+          const response = await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json().status).toBe(AnamnesisResponseStatus.DRAFT);
+        });
+      });
+
+      describe('re-finalizing after a reopen', () => {
+        it('POST by the trainer returns 200 awaiting_confirmation with trainerAttestedAt set and studentConfirmedAt null', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'first version'));
+          await studentConfirm(scenario);
+          const firstSubmission = await findResponseRow(scenario);
+          await trainerSaveDraft(scenario, answersFor(scenario, 'no', 'second version'));
+
+          const response = await trainerSubmit(scenario, answersFor(scenario, 'no', 'second version'));
+
+          expect(response.statusCode).toBe(200);
+          expect(response.json()).toMatchObject({
+            status: AnamnesisResponseStatus.AWAITING_CONFIRMATION,
+            filledBy: AnamnesisFilledBy.TRAINER,
+            submittedAt: expect.any(String),
+            trainerAttestedAt: expect.any(String),
+            studentConfirmedAt: null,
+          });
+          const row = await findResponseRow(scenario);
+          expect(row.studentConfirmedAt).toBeNull();
+          expect(row.trainerAttestedAt.getTime()).toBeGreaterThan(firstSubmission.trainerAttestedAt.getTime());
+          expect(row.filledByUserId).toBe(scenario.trainer.userId);
+        });
+
+        it('makes the dossier visible again as awaiting_confirmation and lets the student confirm', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+          await trainerSaveDraft(scenario, answersFor(scenario, 'no'));
+          expect((await trainerGetDossier(scenario)).statusCode).toBe(404);
+
+          await trainerSubmit(scenario, answersFor(scenario, 'no'));
+
+          const dossier = await trainerGetDossier(scenario);
+          expect(dossier.statusCode).toBe(200);
+          expect(dossier.json()).toMatchObject({ status: AnamnesisResponseStatus.AWAITING_CONFIRMATION });
+          const confirmed = await studentConfirm(scenario);
+          expect(confirmed.statusCode).toBe(200);
+          expect(confirmed.json().status).toBe(AnamnesisResponseStatus.SUBMITTED);
+        });
+
+        it('finalizes with the reopened answers', async () => {
+          const scenario = await setupScenario();
+          await trainerSubmit(scenario, answersFor(scenario, 'yes', 'first version'));
+          await trainerSaveDraft(scenario, [{ questionId: scenario.optionalQuestionId, value: 'second version' }]);
+
+          const response = await trainerSubmit(scenario, [
+            { questionId: scenario.requiredQuestionId, value: 'yes' },
+            { questionId: scenario.optionalQuestionId, value: 'second version' },
+          ]);
+
+          expect(response.statusCode).toBe(200);
+          expect(answerValuesByQuestion(await findResponseRow(scenario))).toEqual({
+            [scenario.requiredQuestionId]: 'yes',
+            [scenario.optionalQuestionId]: 'second version',
+          });
+        });
+      });
+
+      describe('student draft route (regression guard)', () => {
+        it('still returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED over a student submission', async () => {
+          const scenario = await setupScenario();
+          await studentSubmit(scenario, answersFor(scenario, 'no'));
+          const before = await findResponseSnapshot(scenario);
+
+          const response = await studentSaveDraft(scenario, answersFor(scenario, 'yes'));
+
+          expectErrorContract(response, {
+            statusCode: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+          });
+          expect(await findResponseSnapshot(scenario)).toEqual(before);
+        });
+
+        it.each([
+          ['awaiting_confirmation', false],
+          ['confirmed (submitted)', true],
+        ])(
+          'still returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED over a %s trainer submission, never reopening it',
+          async (_label, confirmed) => {
+            const scenario = await setupScenario();
+            await trainerSubmit(scenario, answersFor(scenario, 'yes'));
+            if (confirmed) await studentConfirm(scenario);
+            const before = await findResponseSnapshot(scenario);
+
+            const response = await studentSaveDraft(scenario, answersFor(scenario, 'no'));
+
+            expectErrorContract(response, {
+              statusCode: 409,
+              error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+              messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+            });
+            expect(await findResponseSnapshot(scenario)).toEqual(before);
+          },
+        );
       });
     });
   });
@@ -1527,6 +1949,65 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
         // Answers belong to exactly one of the two payloads (never a merge of both)
         const values = rows[0].answers.map((a) => a.value).sort();
         expect([['first', 'yes'], ['no', 'second']]).toContainEqual(values);
+      }
+    });
+
+    it('trainer reopening draft racing the student confirm always ends as a draft without confirmation', async () => {
+      const scenario = await setupScenario();
+
+      for (let iteration = 0; iteration < RACE_ITERATIONS; iteration += 1) {
+        await prisma.anamnesisResponse.deleteMany({ where: { anamnesisId: scenario.anamnesisId } });
+        expect((await trainerSubmit(scenario, answersFor(scenario, 'yes'))).statusCode).toBe(200);
+
+        const [draftResult, confirmResult] = await Promise.all([
+          trainerSaveDraft(scenario, answersFor(scenario, 'no', 'reopened')),
+          studentConfirm(scenario),
+        ]);
+
+        // Either the confirm landed first (and the reopen cleared it) or the reopen won (confirm gets a 409)
+        expect(draftResult.statusCode).toBe(200);
+        expect([200, 409]).toContain(confirmResult.statusCode);
+        if (confirmResult.statusCode === 409) {
+          expect(confirmResult.json().error).toBe(AnamnesisErrorCode.ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION);
+        }
+        const row = await findResponseRow(scenario);
+        expect(row).toMatchObject({
+          submittedAt: null,
+          studentConfirmedAt: null,
+          trainerAttestedAt: null,
+          filledByRole: AnamnesisFilledBy.TRAINER,
+        });
+        expect(row.answers.map((a) => a.value).sort()).toEqual(['no', 'reopened']);
+      }
+    });
+
+    it('trainer reopening draft racing the student submit always ends student-authored and consistent', async () => {
+      const scenario = await setupScenario();
+
+      for (let iteration = 0; iteration < RACE_ITERATIONS; iteration += 1) {
+        await prisma.anamnesisResponse.deleteMany({ where: { anamnesisId: scenario.anamnesisId } });
+        expect((await trainerSubmit(scenario, answersFor(scenario, 'yes', 'trainer'))).statusCode).toBe(200);
+
+        const [draftResult, studentResult] = await Promise.all([
+          trainerSaveDraft(scenario, answersFor(scenario, 'maybe', 'trainer draft')),
+          studentSubmit(scenario, answersFor(scenario, 'no')),
+        ]);
+
+        // The student is never rejected; the trainer draft either ran first (reopen) or was blocked by the student submission
+        expect(studentResult.statusCode).toBe(200);
+        expect([200, 409]).toContain(draftResult.statusCode);
+        if (draftResult.statusCode === 409) {
+          expect(draftResult.json().error).toBe(AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT);
+        }
+        const row = await findResponseRow(scenario);
+        expect(row).toMatchObject({
+          filledByRole: AnamnesisFilledBy.STUDENT,
+          filledByUserId: scenario.student.userId,
+          trainerAttestedAt: null,
+        });
+        expect(row.submittedAt).toBeInstanceOf(Date);
+        expect(row.studentConfirmedAt).toBeInstanceOf(Date);
+        expect(row.answers.map((a) => a.value)).toEqual(['no']);
       }
     });
 

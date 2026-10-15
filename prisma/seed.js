@@ -2,6 +2,7 @@ import 'dotenv/config';
 import prismaClient from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { validateCondition } from '../src/constants/anamnesis.js';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const { PrismaClient } = prismaClient;
@@ -9,7 +10,14 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 const CAVEIRA_TEAM_TITLE = 'Anamnese Completa';
 
-const caveiraSections = [
+// Conditional children: `parentOrder` is the order of the trigger question in the SAME section.
+// Nested `create` cannot reference sibling ids, so links are applied in a second pass.
+const whenMenstruates = {
+  parentOrder: 0,
+  condition: { operator: 'equals', value: 'yes' },
+};
+
+export const caveiraSections = [
   {
     title: '01 — Identificação',
     order: 0,
@@ -44,20 +52,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '03 — Hábitos de Vida',
+    title: '03 — Hábitos de Sono',
     order: 2,
-    questions: [
-      { order: 0, text: 'Possui alguma restrição alimentar?', type: 'free_text' },
-      { order: 1, text: 'Qual o horário habitual das suas refeições?', type: 'free_text' },
-      { order: 2, text: 'Descreva um dia típico de alimentação (do café ao jantar)', type: 'free_text' },
-      { order: 3, text: 'Consome bebida alcoólica? Com qual frequência?', type: 'free_text' },
-      { order: 4, text: 'É fumante ou usa cigarro eletrônico?', type: 'dichotomous' },
-      { order: 5, text: 'Come fora de casa com frequência? (sim/não + quantas vezes/semana)', type: 'free_text' },
-    ],
-  },
-  {
-    title: '04 — Hábitos de Sono',
-    order: 3,
     questions: [
       {
         order: 0,
@@ -76,8 +72,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '05 — Estresse e Contexto de Vida',
-    order: 4,
+    title: '04 — Estresse e Contexto de Vida',
+    order: 3,
     questions: [
       { order: 0, text: 'De 0 a 10, qual o seu nível de estresse diário atual?', type: 'numeric', required: true },
       { order: 1, text: 'Tem períodos de estresse intenso (trabalho, família, financeiro)? Descreva.', type: 'free_text' },
@@ -85,8 +81,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '06 — Histórico Médico',
-    order: 5,
+    title: '05 — Histórico Médico',
+    order: 4,
     questions: [
       { order: 0, text: 'Possui plano de saúde?', type: 'dichotomous' },
       { order: 1, text: 'Realiza exames de rotina com frequência?', type: 'dichotomous' },
@@ -97,8 +93,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '07 — Histórico de Lesões e Limitações',
-    order: 6,
+    title: '06 — Histórico de Lesões e Limitações',
+    order: 5,
     questions: [
       { order: 0, text: 'Tem ou já teve alguma lesão muscular ou articular? Qual(is)?', type: 'free_text' },
       { order: 1, text: 'Qual articulação/região? Há quanto tempo ocorreu?', type: 'free_text' },
@@ -108,31 +104,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '08 — Avaliação Clínica',
-    order: 7,
-    questions: [
-      {
-        order: 0,
-        text: 'Como está seu apetite?',
-        type: 'single_choice',
-        options: [
-          { text: 'Normal', order: 0 },
-          { text: 'Aumentado', order: 1 },
-          { text: 'Reduzido', order: 2 },
-        ],
-      },
-      { order: 1, text: 'Mastiga bem os alimentos?', type: 'dichotomous' },
-      { order: 2, text: 'Hábito intestinal (regularidade)', type: 'free_text' },
-      { order: 3, text: 'Frequência de evacuação', type: 'free_text' },
-      { order: 4, text: 'Faz uso de laxante?', type: 'dichotomous' },
-      { order: 5, text: 'Cor das fezes (referência de saúde digestiva)', type: 'free_text' },
-      { order: 6, text: 'Frequência urinária', type: 'free_text' },
-      { order: 7, text: 'Ingestão hídrica diária (em litros)', type: 'numeric' },
-    ],
-  },
-  {
-    title: '09 — Postura e Mobilidade',
-    order: 8,
+    title: '07 — Postura e Mobilidade',
+    order: 6,
     questions: [
       { order: 0, text: 'Tem algum movimento que sente travado, limitado ou que evita fazer?', type: 'free_text' },
       { order: 1, text: 'Sente dor ou rigidez ao acordar? Em qual região?', type: 'free_text' },
@@ -142,29 +115,8 @@ const caveiraSections = [
     ],
   },
   {
-    title: '10 — Hábitos Alimentares e Suplementação',
-    order: 9,
-    questions: [
-      { order: 0, text: 'Quais alimentos você mais gosta?', type: 'free_text' },
-      { order: 1, text: 'Usa suplementos alimentares atualmente? Quais?', type: 'free_text' },
-      { order: 2, text: 'Possui alergia alimentar?', type: 'free_text' },
-      { order: 3, text: 'Possui intolerância alimentar (lactose, glúten, etc.)?', type: 'free_text' },
-      { order: 4, text: 'Tem aversão a algum alimento (algo que se recusa a comer)?', type: 'free_text' },
-    ],
-  },
-  {
-    title: '11 — Relação com Alimentação',
-    order: 10,
-    questions: [
-      { order: 0, text: 'Já fez dieta restritiva (low carb extremo, jejum prolongado, etc.)? Por quanto tempo?', type: 'free_text' },
-      { order: 1, text: 'Tem ou já teve episódios de compulsão alimentar?', type: 'free_text' },
-      { order: 2, text: 'Come por ansiedade ou estresse?', type: 'dichotomous' },
-      { order: 3, text: 'Qual a sua maior dificuldade com a alimentação hoje?', type: 'free_text' },
-    ],
-  },
-  {
-    title: '12 — Treino de Musculação',
-    order: 11,
+    title: '08 — Treino de Musculação',
+    order: 7,
     questions: [
       {
         order: 0,
@@ -187,26 +139,95 @@ const caveiraSections = [
     ],
   },
   {
-    title: '13 — Exercício Aeróbico',
-    order: 12,
+    title: '09 — Exercício Aeróbico',
+    order: 8,
     questions: [
       { order: 0, text: 'Pratica ou quer praticar exercício aeróbico? (corrida, bike, funcional, etc.)', type: 'free_text' },
       { order: 1, text: 'Qual a disponibilidade para realizar (dias/semana e duração)?', type: 'free_text' },
     ],
   },
   {
-    title: '14 — Ciclo Menstrual',
+    title: '10 — Ciclo Menstrual',
     description: 'Exclusivo para mulheres. Afeta performance, retenção e resultado.',
-    order: 13,
+    order: 9,
     questions: [
-      { order: 0, text: 'Seu ciclo menstrual é regular?', type: 'dichotomous' },
-      { order: 1, text: 'Usa anticoncepcional hormonal? Qual tipo (pílula, DIU hormonal, injetável, etc.)?', type: 'free_text' },
-      { order: 2, text: 'Tem TPM intensa (inchaço, fadiga, irritabilidade, compulsão alimentar)?', type: 'free_text' },
-      { order: 3, text: 'Já percebeu variação de performance ou disposição ao longo do mês?', type: 'dichotomous' },
-      { order: 4, text: 'Está em período de pré-menopausa ou menopausa?', type: 'dichotomous' },
+      { order: 0, text: 'Você menstrua?', type: 'dichotomous' },
+      { order: 1, text: 'Seu ciclo menstrual é regular?', type: 'dichotomous', ...whenMenstruates },
+      { order: 2, text: 'Usa anticoncepcional hormonal? Qual tipo (pílula, DIU hormonal, injetável, etc.)?', type: 'free_text', ...whenMenstruates },
+      { order: 3, text: 'Tem TPM intensa (inchaço, fadiga, irritabilidade, compulsão alimentar)?', type: 'free_text', ...whenMenstruates },
+      { order: 4, text: 'Já percebeu variação de performance ou disposição ao longo do mês?', type: 'dichotomous', ...whenMenstruates },
+      { order: 5, text: 'Está em período de pré-menopausa ou menopausa?', type: 'dichotomous', ...whenMenstruates },
     ],
   },
 ];
+
+function buildQuestionCreateData(question) {
+  return {
+    text: question.text,
+    type: question.type,
+    required: question.required ?? false,
+    order: question.order,
+    options: question.options?.length
+      ? { create: question.options.map((opt) => ({ text: opt.text, order: opt.order })) }
+      : undefined,
+  };
+}
+
+function buildSectionCreateData(section) {
+  return {
+    title: section.title,
+    description: section.description ?? null,
+    order: section.order,
+    questions: { create: section.questions.map(buildQuestionCreateData) },
+  };
+}
+
+/**
+ * Same rules as `validateParentLink` (src/services/anamnesis-shared.js), minus the DB lookup:
+ * the parent is resolved inside the child's own section (same-section rule), must not be a
+ * child itself (single level) and its type/condition must pass `validateCondition`
+ * (eligible parent type, operator/value coherent with the parent).
+ */
+function assertValidConditionalLink({ parentQuestion, parentDefinition, childDefinition }) {
+  if (!parentQuestion) {
+    throw new Error(`Seed: parent question (order ${childDefinition.parentOrder}) not found for "${childDefinition.text}"`);
+  }
+  if (parentDefinition.parentOrder !== undefined) {
+    throw new Error(`Seed: conditional questions cannot be chained ("${childDefinition.text}")`);
+  }
+  validateCondition(parentQuestion, childDefinition.condition);
+}
+
+/**
+ * Second pass of the seed: set `parentQuestionId` / `condition` on the conditional children.
+ * Runs after the nested create because sibling ids are only known once the rows exist.
+ */
+async function linkConditionalQuestions(client, anamnesisId) {
+  const createdSections = await client.anamnesisSection.findMany({
+    where: { anamnesisId },
+    include: { questions: { include: { options: true } } },
+  });
+
+  for (const sectionDefinition of caveiraSections) {
+    const createdSection = createdSections.find((section) => section.order === sectionDefinition.order);
+    const createdByOrder = new Map(createdSection.questions.map((question) => [question.order, question]));
+    const definitionByOrder = new Map(sectionDefinition.questions.map((question) => [question.order, question]));
+
+    for (const childDefinition of sectionDefinition.questions.filter((q) => q.parentOrder !== undefined)) {
+      const parentQuestion = createdByOrder.get(childDefinition.parentOrder);
+      assertValidConditionalLink({
+        parentQuestion,
+        parentDefinition: definitionByOrder.get(childDefinition.parentOrder),
+        childDefinition,
+      });
+
+      await client.anamnesisQuestion.update({
+        where: { id: createdByOrder.get(childDefinition.order).id },
+        data: { parentQuestionId: parentQuestion.id, condition: childDefinition.condition },
+      });
+    }
+  }
+}
 
 export async function seedPublicAnamnesis(client) {
   const existing = await client.anamnesis.findFirst({
@@ -218,32 +239,23 @@ export async function seedPublicAnamnesis(client) {
     return existing;
   }
 
-  const anamnesis = await client.anamnesis.create({
-    data: {
-      trainerId: null,
-      title: CAVEIRA_TEAM_TITLE,
-      description: 'Diagnóstico individualizado. Sem atalhos. Sem planilha de gaveta.',
-      isGeneral: true,
-      sections: {
-        create: caveiraSections.map((section) => ({
-          title: section.title,
-          description: section.description ?? null,
-          order: section.order,
-          questions: {
-            create: section.questions.map((q) => ({
-              text: q.text,
-              type: q.type,
-              required: q.required ?? false,
-              order: q.order,
-              options: q.options?.length
-                ? { create: q.options.map((opt) => ({ text: opt.text, order: opt.order })) }
-                : undefined,
-            })),
-          },
-        })),
+  // One transaction: a failure in the second pass must not leave a half-built anamnesis
+  // that the idempotency check above would then treat as "already seeded".
+  const anamnesis = await client.$transaction(async (tx) => {
+    const created = await tx.anamnesis.create({
+      data: {
+        trainerId: null,
+        title: CAVEIRA_TEAM_TITLE,
+        description: 'Diagnóstico individualizado. Sem atalhos. Sem planilha de gaveta.',
+        isGeneral: true,
+        sections: { create: caveiraSections.map(buildSectionCreateData) },
       },
-    },
-    select: { id: true, title: true },
+      select: { id: true, title: true },
+    });
+
+    await linkConditionalQuestions(tx, created.id);
+
+    return created;
   });
 
   console.log(`Seeded public anamnesis "${anamnesis.title}" (id: ${anamnesis.id})`);

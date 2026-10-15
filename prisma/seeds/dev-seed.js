@@ -41,6 +41,7 @@ import {
   getBillingMonth,
 } from '../../src/constants/platform-plan.js';
 import { seedPublicAnamnesis } from '../seed.js';
+import { AnamnesisConditionOperator, isQuestionVisible } from '../../src/constants/anamnesis.js';
 
 // ─── Guardrails ──────────────────────────────────────────────────────────────
 
@@ -625,10 +626,10 @@ async function main() {
         },
       });
 
-      const answerRows = anamnesisQuestions.map((q) => ({
+      const answerRows = buildAnamnesisAnswers(anamnesisQuestions).map(({ question, value }) => ({
         responseId: response.id,
-        questionId: q.id,
-        value: buildAnamnesisAnswerValue(q),
+        questionId: question.id,
+        value,
       }));
       if (answerRows.length) {
         await prisma.anamnesisAnswer.createMany({ data: answerRows });
@@ -784,6 +785,31 @@ async function main() {
   console.log(`Done in ${elapsed}s.`);
 }
 
+/**
+ * Answer the public anamnesis the way a student would: trigger questions of conditional
+ * logic get the value that reveals their children, and only visible questions are answered
+ * (same rule as the final submit, which drops answers of hidden questions).
+ */
+function buildAnamnesisAnswers(questions) {
+  const triggerValueByQuestionId = new Map(
+    questions
+      .filter((q) => q.parentQuestionId && q.condition?.operator === AnamnesisConditionOperator.EQUALS)
+      .filter((q) => q.condition.value !== undefined)
+      .map((q) => [q.parentQuestionId, q.condition.value]),
+  );
+
+  const answered = questions.map((question) => ({
+    question,
+    value: triggerValueByQuestionId.has(question.id)
+      ? triggerValueByQuestionId.get(question.id)
+      : buildAnamnesisAnswerValue(question),
+  }));
+
+  const valueByQuestionId = new Map(answered.map(({ question, value }) => [question.id, value]));
+
+  return answered.filter(({ question }) => isQuestionVisible(question, valueByQuestionId));
+}
+
 function buildAnamnesisAnswerValue(question) {
   switch (question.type) {
     case 'free_text':
@@ -791,7 +817,8 @@ function buildAnamnesisAnswerValue(question) {
     case 'numeric':
       return randInt(3, 8);
     case 'dichotomous':
-      return rnd() < 0.6 ? 'Sim' : 'Não';
+      // Same values the app sends and conditions compare against (see isQuestionVisible).
+      return rnd() < 0.6 ? 'yes' : 'no';
     case 'single_choice': {
       const opt = question.options?.[0];
       return opt ? opt.text : '';

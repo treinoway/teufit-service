@@ -5,6 +5,7 @@ import {
   AnamnesisMessageCode,
   AnamnesisQuestionType,
   anamnesisQuestionTypeValues,
+  anamnesisCreatableQuestionTypes,
   questionTypesWithOptions,
   anamnesisParentEligibleTypes,
   validateCondition,
@@ -75,16 +76,30 @@ export async function findQuestionOrThrow(sectionId, questionId) {
 }
 
 /**
- * Validate that the question type is a known value.
- * Throws 400 with INVALID_QUESTION_TYPE if invalid.
+ * Validate the question type of a write (create or update).
+ * Throws 400 with INVALID_QUESTION_TYPE when the type is unknown or retired (`matrix`).
+ * A retired type is tolerated only when it is the question's current type (`existingType`),
+ * so a legacy question can still be edited without changing its type.
+ *
+ * @param {string} type
+ * @param {{ existingType?: string }} [options]
  */
-export function validateQuestionType(type) {
+export function validateQuestionType(type, { existingType } = {}) {
   if (!anamnesisQuestionTypeValues.includes(type)) {
     throw new AppError({
       httpStatus: 400,
       error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
       messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
-      message: `Invalid question type: ${type}. Valid values are: ${anamnesisQuestionTypeValues.join(', ')}`,
+      message: `Invalid question type: ${type}. Valid values are: ${anamnesisCreatableQuestionTypes.join(', ')}`,
+    });
+  }
+
+  if (!anamnesisCreatableQuestionTypes.includes(type) && type !== existingType) {
+    throw new AppError({
+      httpStatus: 400,
+      error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
+      messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+      message: `Question type "${type}" is no longer supported. Valid values are: ${anamnesisCreatableQuestionTypes.join(', ')}`,
     });
   }
 }

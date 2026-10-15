@@ -39,7 +39,7 @@ import {
   updatePublicQuestion,
   deletePublicQuestion,
 } from '../../src/services/admin-anamnesis-service.js';
-import { AnamnesisQuestionType } from '../../src/constants/anamnesis.js';
+import { AnamnesisQuestionType, AnamnesisErrorCode, AnamnesisMessageCode } from '../../src/constants/anamnesis.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -656,6 +656,113 @@ describe('admin-anamnesis-service', () => {
         httpStatus: 404,
         messageCode: 'anamnesis.question.notFound',
       });
+    });
+  });
+
+  // ── Retired `matrix` question type ────────────────────────────────────────
+
+  describe('retired matrix question type', () => {
+    const matrixQuestion = {
+      text: 'Rate each item',
+      type: AnamnesisQuestionType.MATRIX,
+      options: [{ text: 'Row 1' }, { text: 'Row 2' }],
+    };
+    const invalidQuestionTypeError = {
+      httpStatus: 400,
+      error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
+      messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+    };
+
+    beforeEach(() => {
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
+    });
+
+    it('addPublicQuestion rejects a matrix question without creating it', async () => {
+      await expect(
+        addPublicQuestion('anamnesis-1', 'section-1', matrixQuestion),
+      ).rejects.toMatchObject(invalidQuestionTypeError);
+
+      expect(prisma.anamnesisQuestion.create).not.toHaveBeenCalled();
+    });
+
+    it('createPublicAnamnesis rejects a nested matrix question without opening a transaction', async () => {
+      await expect(
+        createPublicAnamnesis({
+          title: 'Test',
+          sections: [{ title: 'Section 1', questions: [matrixQuestion] }],
+        }),
+      ).rejects.toMatchObject(invalidQuestionTypeError);
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('addPublicSection rejects a nested matrix question without creating the section', async () => {
+      await expect(
+        addPublicSection('anamnesis-1', { title: 'New Section', questions: [matrixQuestion] }),
+      ).rejects.toMatchObject(invalidQuestionTypeError);
+
+      expect(prisma.anamnesisSection.create).not.toHaveBeenCalled();
+    });
+
+    it('updatePublicQuestion rejects changing a question type TO matrix without writing', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }),
+      );
+
+      await expect(
+        updatePublicQuestion('anamnesis-1', 'section-1', 'question-1', { type: AnamnesisQuestionType.MATRIX }),
+      ).rejects.toMatchObject(invalidQuestionTypeError);
+
+      expect(prisma.anamnesisQuestion.count).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('updatePublicQuestion lets a legacy matrix question be updated with its type unchanged', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+      );
+      const txUpdate = vi
+        .fn()
+        .mockResolvedValue(makeQuestion({ type: AnamnesisQuestionType.MATRIX, text: 'Renamed' }));
+      prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesisQuestion: { update: txUpdate } }));
+
+      const result = await updatePublicQuestion('anamnesis-1', 'section-1', 'question-1', {
+        text: 'Renamed',
+        type: AnamnesisQuestionType.MATRIX,
+      });
+
+      expect(result.type).toBe(AnamnesisQuestionType.MATRIX);
+      expect(txUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { text: 'Renamed', type: AnamnesisQuestionType.MATRIX } }),
+      );
+    });
+
+    it('updatePublicQuestion lets a legacy matrix question move to a creatable type', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+      );
+      prisma.anamnesisQuestion.count.mockResolvedValue(0);
+      const txUpdate = vi.fn().mockResolvedValue(makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }));
+      prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesisQuestion: { update: txUpdate } }));
+
+      await updatePublicQuestion('anamnesis-1', 'section-1', 'question-1', {
+        type: AnamnesisQuestionType.SINGLE_CHOICE,
+      });
+
+      expect(txUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { type: AnamnesisQuestionType.SINGLE_CHOICE } }),
+      );
+    });
+
+    it('updatePublicQuestion still rejects an unknown type on a legacy matrix question', async () => {
+      prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+        makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+      );
+
+      await expect(
+        updatePublicQuestion('anamnesis-1', 'section-1', 'question-1', { type: 'foo' }),
+      ).rejects.toMatchObject(invalidQuestionTypeError);
     });
   });
 });

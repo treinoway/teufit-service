@@ -1,4 +1,4 @@
-import { anamnesisQuestionTypeValues } from '../../src/constants/anamnesis.js';
+import { anamnesisQuestionTypeValues, anamnesisCreatableQuestionTypes } from '../../src/constants/anamnesis.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 // ─── Shared sub-schemas used by both anamnesis-route.schema.js and admin-anamnesis-route.schema.js
@@ -118,12 +118,23 @@ export const questionOptionBodySchema = {
   additionalProperties: false,
 };
 
+// Request `type`. The enum is intentionally the FULL list (legacy `matrix` included) so that a retired
+// type reaches the service and is rejected with the domain error 400 INVALID_QUESTION_TYPE (instead of
+// a generic VALIDATION_ERROR), while a legacy question can still be edited without changing its type.
+export const questionTypeBodySchema = {
+  type: 'string',
+  enum: anamnesisQuestionTypeValues,
+  description:
+    `Accepted for new content: ${anamnesisCreatableQuestionTypes.join(', ')}. "matrix" is retired: creating a ` +
+    'question with it, or changing a question to it, returns 400 INVALID_QUESTION_TYPE.',
+};
+
 export const questionBodySchema = {
   type: 'object',
   required: ['text', 'type'],
   properties: {
     text: { type: 'string', minLength: 1 },
-    type: { type: 'string', enum: anamnesisQuestionTypeValues },
+    type: questionTypeBodySchema,
     required: { type: 'boolean' },
     order: { type: 'integer', minimum: 0 },
     config: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] },

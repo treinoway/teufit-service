@@ -14,7 +14,14 @@ export const AnamnesisQuestionType = Object.freeze({
   MATRIX: 'matrix',
 });
 
+// Every type that may exist in the database (legacy rows included). Used by READ paths and response schemas.
 export const anamnesisQuestionTypeValues = Object.freeze(Object.values(AnamnesisQuestionType));
+
+// Types accepted when creating/updating content. `matrix` is retired: legacy rows are still
+// read, copied and forked, but no new question may be created (or changed) to that type.
+export const anamnesisCreatableQuestionTypes = Object.freeze(
+  anamnesisQuestionTypeValues.filter((type) => type !== AnamnesisQuestionType.MATRIX),
+);
 
 // Question types that require options (checkbox/radio items or matrix rows)
 export const questionTypesWithOptions = Object.freeze([

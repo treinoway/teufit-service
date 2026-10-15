@@ -350,3 +350,37 @@ Creates an independent private copy of an anamnesis. Works for public (`isGenera
 | `test/services/anamnesis-service.test.js` | Added `copyAnamnesis` tests |
 | `test/e2e/anamnesis.e2e.test.js` | Added copy E2E tests |
 | `postman/Treinoway.postman_collection.json` | Added 13 new requests + `adminToken` variable |
+
+---
+
+## Part 5: Trainer Reopen, Matrix Retirement and Default Anamnesis Cleanup
+
+### Trainer Draft Reopens a Finalized Response
+
+`PATCH /trainer/students/:studentId/anamneses/:anamnesisId/response/draft` on a response the
+trainer may finalize (filled by this trainer, or the filler's user was deleted) now reopens it:
+`submittedAt`, `studentConfirmedAt` and `trainerAttestedAt` are cleared and the status goes back
+to `draft` until the trainer finalizes again. Authorship (`filledByRole`, `filledByUserId`) is
+kept. The only 409s left on this route are `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` and
+`ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER`; the student draft route still returns
+`ANAMNESIS_RESPONSE_ALREADY_SUBMITTED`.
+
+### `matrix` Can No Longer Be Created
+
+Creating a question as `matrix`, or changing a question's type to `matrix`, returns
+`400 INVALID_QUESTION_TYPE` on trainer and admin routes (including nested creation). Existing
+matrix questions keep working for reading, answering, fork and copy, and may be updated as long
+as the type sent is still `matrix`. Creatable types: `anamnesisCreatableQuestionTypes`.
+
+### Default Anamnesis ("Anamnese Completa") Restructure
+
+Data-only migration `20260930120000_update_default_anamnesis_structure` (seed updated to match):
+
+- Soft-deletes sections `03 — Hábitos de Vida`, `08 — Avaliação Clínica`,
+  `10 — Hábitos Alimentares e Suplementação`, `11 — Relação com Alimentação` and their questions.
+  Existing answers stay in the database.
+- Renumbers the remaining sections to `01`…`10`.
+- `Ciclo Menstrual` gets an optional trigger question "Você menstrua?"; all other questions of the
+  section become optional conditional children shown only when the answer is `yes`.
+- Guarded by the exact current titles: no-op on a fresh database, when re-run, and for trainers'
+  copies and forks.

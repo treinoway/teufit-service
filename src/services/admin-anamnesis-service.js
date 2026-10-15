@@ -406,7 +406,7 @@ export async function updatePublicQuestion(anamnesisId, sectionId, questionId, d
   const existingQuestion = await findQuestionOrThrow(sectionId, questionId);
 
   if (data.type !== undefined) {
-    validateQuestionType(data.type);
+    validateQuestionType(data.type, { existingType: existingQuestion.type });
   }
 
   // Block type change if the question has dependent (child) questions

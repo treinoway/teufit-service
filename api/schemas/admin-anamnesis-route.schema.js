@@ -1,4 +1,3 @@
-import { anamnesisQuestionTypeValues } from '../../src/constants/anamnesis.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import {
   questionSchema,
@@ -8,6 +7,7 @@ import {
   deletedAtResponseSchema,
   questionOptionBodySchema,
   questionBodySchema,
+  questionTypeBodySchema,
   sectionBodySchema,
   conditionSchema,
 } from './anamnesis-shared.schema.js';
@@ -271,7 +271,7 @@ export const updatePublicQuestionSchema = {
     type: 'object',
     properties: {
       text: { type: 'string', minLength: 1 },
-      type: { type: 'string', enum: anamnesisQuestionTypeValues },
+      type: questionTypeBodySchema,
       required: { type: 'boolean' },
       order: { type: 'integer', minimum: 0 },
       config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
