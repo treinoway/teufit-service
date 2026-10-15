@@ -4,7 +4,6 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import emailHandler from '../../src/config/email-handler.js';
-import config from '../../config/index.js';
 import {
   AnamnesisQuestionType,
   ANAMNESIS_DRAFT_MAX_ANSWERS,
@@ -1234,15 +1233,14 @@ e2eDescribe('e2e: anamnesis', () => {
     });
 
     describe('assignment email', () => {
-      it('sends the email once after a successful link, with the web answer link', async () => {
-        const { student, anamnesis } = await setupAssignedAnamnesis();
+      it('sends the email once after a successful link', async () => {
+        const { student } = await setupAssignedAnamnesis();
 
         await vi.waitFor(() => expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1));
         expect(emailHandler.sendAnamnesisAssignedEmail).toHaveBeenCalledWith(
           expect.objectContaining({
             to: student.email,
             anamnesisTitle: 'Mobile Form',
-            link: `${config.web.baseUrl}/my/anamneses/${anamnesis.id}/answer`,
           }),
         );
       });

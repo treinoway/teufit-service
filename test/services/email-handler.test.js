@@ -189,14 +189,12 @@ describe('email-handler rendered emails', () => {
   });
 
   describe('sendAnamnesisAssignedEmail', () => {
-    const LINK = 'https://app.example.com/my/anamneses/11111111-1111-1111-1111-111111111111/answer';
     const sendAssigned = (overrides = {}) =>
       emailHandler.sendAnamnesisAssignedEmail({
         to: 'student@example.com',
         studentName: 'Maria',
         trainerName: 'Ana Coach',
         anamnesisTitle: 'Saúde e histórico',
-        link: LINK,
         ...overrides,
       });
 
@@ -208,15 +206,24 @@ describe('email-handler rendered emails', () => {
       expect(subject).toBe('[TeuFit] Nova anamnese de Ana Coach');
     });
 
-    it('should render the title, the CTA to the answer link and the mobile app alternative', async () => {
+    it('should render the title and send the student to the mobile app, never to the web', async () => {
       await sendAssigned();
 
       const { html } = lastEmail();
       expect(html).toContain('Saúde e histórico');
-      expect(html).toContain(`href="${LINK}"`);
-      expect(html).toContain('Responder anamnese');
-      expect(html).toContain('app TeuFit');
+      expect(html).toContain('Responda pelo app TeuFit');
+      expect(html).toContain(config.stores.appStoreUrl);
+      expect(html).toContain(config.stores.playStoreUrl);
+      expect(html).not.toContain('/my/anamneses');
       expectNoLegacyBranding(lastEmail());
+    });
+
+    it('should use the TeuFit lockup logo in the header, like the other transactional emails', async () => {
+      await sendAssigned();
+
+      const { html } = lastEmail();
+      expect(html).toContain('https://teufit.com.br/img/teufit-lockup.png');
+      expect(html).not.toMatch(/<h1[^>]*>\s*TEUFIT\s*<\/h1>/);
     });
 
     it('should keep an imperative voice without greetings or "Por favor"', async () => {

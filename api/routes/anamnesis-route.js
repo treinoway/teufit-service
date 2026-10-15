@@ -236,7 +236,6 @@ export async function anamnesisRoutes(fastify) {
           service.notifyStudentAnamnesisAssigned({
             trainerId: link.trainerId,
             studentId: link.studentId,
-            anamnesisId: link.anamnesisId,
             anamnesisTitle: link.anamnesis.title,
           }),
         request.log,
