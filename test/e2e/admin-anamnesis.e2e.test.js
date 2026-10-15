@@ -7,6 +7,7 @@ import {
   AnamnesisQuestionType,
   AnamnesisErrorCode,
   AnamnesisMessageCode,
+  AnamnesisCategory,
 } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
@@ -331,6 +332,145 @@ e2eDescribe('e2e: admin anamnesis', () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ error: 'ANAMNESIS_HAS_STUDENT_LINKS' });
+    });
+  });
+
+  // ─── Catalog category ──────────────────────────────────────────────────────
+
+  describe('catalog category', () => {
+    async function createLinkedPublicAnamnesis(adminToken, payload) {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, email: studentEmail } = await createStudentWithToken();
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/students',
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { email: studentEmail },
+      });
+
+      const { id: anamnesisId } = (await createPublicAnamnesis(adminToken, payload)).json();
+      const linkResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/students/${studentId}/anamneses`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { anamnesisId },
+      });
+      expect(linkResponse.statusCode).toBe(201);
+
+      return anamnesisId;
+    }
+
+    it('POST creates a public anamnesis with category and categoryLabel', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+
+      const response = await createPublicAnamnesis(adminToken, { category: AnamnesisCategory.SCREENING });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toMatchObject({ category: AnamnesisCategory.SCREENING, categoryLabel: 'Triagem' });
+    });
+
+    it('POST without category creates an uncategorized anamnesis', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+
+      const response = await createPublicAnamnesis(adminToken);
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toMatchObject({ category: null, categoryLabel: null });
+    });
+
+    it('POST returns 400 VALIDATION_ERROR for an unknown category', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+
+      const response = await createPublicAnamnesis(adminToken, { category: 'cardio' });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+        message: expect.any(String),
+        details: expect.any(Array),
+      });
+    });
+
+    it('PATCH changes the category of an anamnesis linked to a student (metadata, no 409)', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+      const anamnesisId = await createLinkedPublicAnamnesis(adminToken, { title: 'Linked' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/admin/anamneses/${anamnesisId}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: { category: AnamnesisCategory.HYPERTROPHY },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        title: 'Linked',
+        category: AnamnesisCategory.HYPERTROPHY,
+        categoryLabel: 'Hipertrofia',
+      });
+    });
+
+    it('PATCH still returns 409 when the title changes along with the category on a linked anamnesis', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+      const anamnesisId = await createLinkedPublicAnamnesis(adminToken, { title: 'Linked' });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/admin/anamneses/${anamnesisId}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: { title: 'Renamed', category: AnamnesisCategory.GENERAL },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const stored = await prisma.anamnesis.findUnique({ where: { id: anamnesisId } });
+      expect(stored).toMatchObject({ title: 'Linked', category: null });
+    });
+
+    it('PATCH clears the category with null', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+      const { id } = (await createPublicAnamnesis(adminToken, { category: AnamnesisCategory.GENERAL })).json();
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/admin/anamneses/${id}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: { category: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ category: null, categoryLabel: null });
+    });
+
+    it('GET /admin/anamneses returns category and questionCount', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken();
+      await createPublicAnamnesis(adminToken, {
+        category: AnamnesisCategory.WEIGHT_LOSS,
+        sections: [
+          {
+            title: 'S1',
+            questions: [
+              { text: 'Q1', type: AnamnesisQuestionType.FREE_TEXT },
+              { text: 'Q2', type: AnamnesisQuestionType.NUMERIC },
+            ],
+          },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/admin/anamneses',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([
+        expect.objectContaining({
+          category: AnamnesisCategory.WEIGHT_LOSS,
+          categoryLabel: 'Emagrecimento',
+          questionCount: 2,
+        }),
+      ]);
     });
   });
 

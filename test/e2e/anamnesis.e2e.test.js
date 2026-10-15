@@ -11,6 +11,8 @@ import {
   AnamnesisMessageCode,
   AnamnesisResponseStatus,
   AnamnesisFilledBy,
+  AnamnesisCategory,
+  ANAMNESIS_COPY_TITLE_MAX_LENGTH,
 } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
@@ -1710,6 +1712,271 @@ e2eDescribe('e2e: anamnesis', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  // ─── Anamnesis catalog: category, questionCount and copy with a new title ──
+
+  describe('anamnesis catalog', () => {
+    async function createCategorizedPublicAnamnesis(payload) {
+      const adminToken = await createAdminToken();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/admin/anamneses',
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload,
+      });
+      expect(response.statusCode).toBe(201);
+      return response.json();
+    }
+
+    function copy(trainerToken, anamnesisId, payload) {
+      return app.inject({
+        method: 'POST',
+        url: `/trainer/anamneses/${anamnesisId}/copy`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        ...(payload !== undefined && { payload }),
+      });
+    }
+
+    function listAnamneses(trainerToken, query = '', headers = {}) {
+      return app.inject({
+        method: 'GET',
+        url: `/trainer/anamneses${query}`,
+        headers: { authorization: `Bearer ${trainerToken}`, ...headers },
+      });
+    }
+
+    describe('POST /trainer/anamneses/:anamnesisId/copy with a body', () => {
+      it('creates the copy with the given title and description and keeps the category', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({
+          title: 'Triagem',
+          description: 'Descrição do modelo',
+          category: AnamnesisCategory.SCREENING,
+        });
+
+        const response = await copy(trainerToken, source.id, {
+          title: 'Triagem — Turma da manhã',
+          description: 'Só para a turma da manhã',
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toMatchObject({
+          title: 'Triagem — Turma da manhã',
+          description: 'Só para a turma da manhã',
+          category: AnamnesisCategory.SCREENING,
+          categoryLabel: 'Triagem',
+          isGeneral: false,
+          parentId: null,
+          version: 1,
+        });
+      });
+
+      it('keeps the source title and description when no body is sent', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({
+          title: 'Hipertrofia',
+          description: 'Modelo base',
+          category: AnamnesisCategory.HYPERTROPHY,
+        });
+
+        const response = await copy(trainerToken, source.id);
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toMatchObject({
+          title: 'Hipertrofia',
+          description: 'Modelo base',
+          category: AnamnesisCategory.HYPERTROPHY,
+        });
+      });
+
+      it('trims the title and clears the description with null', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({ title: 'Geral', description: 'Algo' });
+
+        const response = await copy(trainerToken, source.id, { title: '  Minha geral  ', description: null });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toMatchObject({ title: 'Minha geral', description: null, category: null });
+      });
+
+      it.each([
+        ['whitespace-only', '   '],
+        ['empty', ''],
+        ['too long', 'a'.repeat(ANAMNESIS_COPY_TITLE_MAX_LENGTH + 1)],
+      ])('returns 400 VALIDATION_ERROR for a %s title and creates nothing', async (_label, title) => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({ title: 'Geral' });
+
+        const response = await copy(trainerToken, source.id, { title });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+          message: expect.any(String),
+          details: [expect.objectContaining({ field: 'title' })],
+        });
+        expect(await prisma.anamnesis.count({ where: { isGeneral: false } })).toBe(0);
+      });
+
+      it('never copies the seedKey and never exposes it', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({ title: 'Seeded', category: AnamnesisCategory.GENERAL });
+        await prisma.anamnesis.update({ where: { id: source.id }, data: { seedKey: 'catalog.general.v1' } });
+
+        const response = await copy(trainerToken, source.id);
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).not.toHaveProperty('seedKey');
+        const stored = await prisma.anamnesis.findUnique({ where: { id: response.json().id } });
+        expect(stored.seedKey).toBeNull();
+      });
+    });
+
+    describe('POST /trainer/anamneses/:anamnesisId/fork', () => {
+      it('keeps the category of the source', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({
+          title: 'Emagrecimento',
+          category: AnamnesisCategory.WEIGHT_LOSS,
+        });
+        const { id: ownCopyId } = (await copy(trainerToken, source.id)).json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/anamneses/${ownCopyId}/fork`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toMatchObject({
+          category: AnamnesisCategory.WEIGHT_LOSS,
+          version: 2,
+          parentId: ownCopyId,
+        });
+      });
+    });
+
+    describe('GET /trainer/anamneses', () => {
+      it('returns category, categoryLabel and questionCount on each item, ignoring soft-deleted questions', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({
+          title: 'Triagem',
+          category: AnamnesisCategory.SCREENING,
+          sections: [
+            {
+              title: 'S1',
+              questions: [
+                { text: 'Q1', type: AnamnesisQuestionType.FREE_TEXT },
+                { text: 'Q2', type: AnamnesisQuestionType.FREE_TEXT },
+              ],
+            },
+            { title: 'S2', questions: [{ text: 'Q3', type: AnamnesisQuestionType.NUMERIC }] },
+          ],
+        });
+        await prisma.anamnesisQuestion.updateMany({
+          where: { text: 'Q2', section: { anamnesisId: source.id } },
+          data: { deletedAt: new Date() },
+        });
+
+        const response = await listAnamneses(trainerToken);
+
+        expect(response.statusCode).toBe(200);
+        const item = response.json().find((anamnesis) => anamnesis.id === source.id);
+        expect(item).toMatchObject({
+          isGeneral: true,
+          category: AnamnesisCategory.SCREENING,
+          categoryLabel: 'Triagem',
+          questionCount: 2,
+        });
+        expect(item).not.toHaveProperty('seedKey');
+        expect(item.sections[0]).not.toHaveProperty('_count');
+      });
+
+      it('returns category null and questionCount 0 for an uncategorized anamnesis without questions', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { id } = (await createAnamnesis(trainerToken, { title: 'Vazia' })).json();
+
+        const response = await listAnamneses(trainerToken);
+
+        const item = response.json().find((anamnesis) => anamnesis.id === id);
+        expect(item).toMatchObject({ category: null, categoryLabel: null, questionCount: 0 });
+      });
+
+      it('filters by ?category= across own and general anamneses', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const publicScreening = await createCategorizedPublicAnamnesis({
+          title: 'Triagem pública',
+          category: AnamnesisCategory.SCREENING,
+        });
+        await createCategorizedPublicAnamnesis({ title: 'Hipertrofia', category: AnamnesisCategory.HYPERTROPHY });
+        await createCategorizedPublicAnamnesis({ title: 'Sem categoria' });
+        const { id: ownScreeningId } = (await copy(trainerToken, publicScreening.id, { title: 'Minha triagem' })).json();
+
+        const response = await listAnamneses(trainerToken, `?category=${AnamnesisCategory.SCREENING}`);
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.map((anamnesis) => anamnesis.id).sort()).toEqual([publicScreening.id, ownScreeningId].sort());
+        expect(body.every((anamnesis) => anamnesis.category === AnamnesisCategory.SCREENING)).toBe(true);
+      });
+
+      it('returns 400 VALIDATION_ERROR for an unknown category', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+
+        const response = await listAnamneses(trainerToken, '?category=cardio');
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+          message: expect.any(String),
+          details: [expect.objectContaining({ field: 'category' })],
+        });
+      });
+
+      it('translates categoryLabel with app-language: en-US', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        await createCategorizedPublicAnamnesis({
+          title: 'Públicos específicos',
+          category: AnamnesisCategory.SPECIAL_POPULATION,
+        });
+
+        const response = await listAnamneses(
+          trainerToken,
+          `?category=${AnamnesisCategory.SPECIAL_POPULATION}`,
+          { 'app-language': 'en-US' },
+        );
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual([
+          expect.objectContaining({
+            category: AnamnesisCategory.SPECIAL_POPULATION,
+            categoryLabel: 'Special populations',
+          }),
+        ]);
+      });
+    });
+
+    describe('GET /trainer/anamneses/:anamnesisId', () => {
+      it('returns category and categoryLabel on the detail', async () => {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const source = await createCategorizedPublicAnamnesis({
+          title: 'Geral',
+          category: AnamnesisCategory.GENERAL,
+        });
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/trainer/anamneses/${source.id}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({ category: AnamnesisCategory.GENERAL, categoryLabel: 'Geral' });
+      });
     });
   });
 

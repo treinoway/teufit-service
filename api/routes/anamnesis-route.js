@@ -30,7 +30,7 @@ export async function anamnesisRoutes(fastify) {
       schema: schema.listAnamnesisSchema,
     },
     async (request, reply) => {
-      const anamneses = await service.listAnamneses(request.user.id);
+      const anamneses = await service.listAnamneses(request.user.id, { category: request.query.category });
       return reply.send(anamneses);
     },
   );
@@ -307,7 +307,11 @@ export async function anamnesisRoutes(fastify) {
       schema: schema.copyAnamnesisSchema,
     },
     async (request, reply) => {
-      const copied = await service.copyAnamnesis(request.user.id, request.params.anamnesisId);
+      const copied = await service.copyAnamnesis(
+        request.user.id,
+        request.params.anamnesisId,
+        request.body ?? {},
+      );
       return reply.status(201).send(copied);
     },
   );

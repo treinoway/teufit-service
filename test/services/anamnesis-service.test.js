@@ -88,6 +88,8 @@ import {
   AnamnesisFilledBy,
   AnamnesisErrorCode,
   AnamnesisMessageCode,
+  AnamnesisCategory,
+  anamnesisCategoryValues,
   ANAMNESIS_DRAFT_MAX_ANSWERS,
   anamnesisCreatableQuestionTypes,
   toResponseStatus,
@@ -100,7 +102,11 @@ import {
   buildQuestionsCreateData,
   normalizeChoiceAnswersForVisibility,
   fullAnamnesisInclude,
+  cloneAnamnesisContent,
+  validateAnamnesisCategory,
 } from '../../src/services/anamnesis-shared.js';
+import ptBR from '../../src/i18n/locales/pt-BR.js';
+import enUS from '../../src/i18n/locales/en-US.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
@@ -210,6 +216,32 @@ const makeFinalizeTx = ({
   return tx;
 };
 
+/**
+ * Interactive-transaction client for the clone flows (fork/copy). Wires `prisma.$transaction`
+ * to run against it and records the data of the new anamnesis row in `createdAnamnesisData()`.
+ */
+const makeCloneTx = (resultAnamnesis = makeAnamnesis({ id: 'clone-1', sections: [] })) => {
+  let questionCount = 0;
+  let optionCount = 0;
+  const tx = {
+    anamnesis: {
+      create: vi.fn().mockResolvedValue({ id: resultAnamnesis.id }),
+      findUnique: vi.fn().mockResolvedValue(resultAnamnesis),
+    },
+    anamnesisSection: { create: vi.fn().mockResolvedValue({ id: 'new-section-1' }) },
+    anamnesisQuestion: {
+      create: vi.fn().mockImplementation(async () => ({ id: `new-question-${++questionCount}` })),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    anamnesisQuestionOption: {
+      create: vi.fn().mockImplementation(async () => ({ id: `new-opt-${++optionCount}` })),
+    },
+  };
+  prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+  tx.createdAnamnesisData = () => tx.anamnesis.create.mock.calls[0][0].data;
+  return tx;
+};
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('anamnesis-service', () => {
@@ -316,12 +348,74 @@ describe('anamnesis-service', () => {
 
     it('returns combined list of own and general anamneses', async () => {
       prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
-      const anamneses = [makeAnamnesis(), makeAnamnesis({ id: 'gen-1', trainerId: null, isGeneral: true })];
+      const anamneses = [
+        makeAnamnesis({ sections: [] }),
+        makeAnamnesis({ id: 'gen-1', trainerId: null, isGeneral: true, sections: [] }),
+      ];
       prisma.anamnesis.findMany.mockResolvedValue(anamneses);
 
       const result = await listAnamneses('user-1');
 
       expect(result).toHaveLength(2);
+    });
+
+    it('does not filter by category when none is given', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findMany.mockResolvedValue([]);
+
+      await listAnamneses('user-1');
+
+      expect(prisma.anamnesis.findMany.mock.calls[0][0].where).not.toHaveProperty('category');
+    });
+
+    it('filters by category while keeping the own + general visibility rule', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findMany.mockResolvedValue([]);
+
+      await listAnamneses('user-1', { category: AnamnesisCategory.SCREENING });
+
+      expect(prisma.anamnesis.findMany.mock.calls[0][0].where).toEqual({
+        deletedAt: null,
+        OR: [{ trainerId: 'trainer-1' }, { isGeneral: true }],
+        category: AnamnesisCategory.SCREENING,
+      });
+    });
+
+    it('counts questions in the same query, ignoring soft-deleted questions and sections', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findMany.mockResolvedValue([]);
+
+      await listAnamneses('user-1');
+
+      const { include } = prisma.anamnesis.findMany.mock.calls[0][0];
+      expect(include.sections.where).toEqual({ deletedAt: null });
+      expect(include.sections.select._count).toEqual({
+        select: { questions: { where: { deletedAt: null } } },
+      });
+    });
+
+    it('returns questionCount summed across sections and strips the per-section _count', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.anamnesis.findMany.mockResolvedValue([
+        makeAnamnesis({
+          category: AnamnesisCategory.HYPERTROPHY,
+          sections: [
+            { id: 'section-1', title: 'A', order: 0, _count: { questions: 2 } },
+            { id: 'section-2', title: 'B', order: 1, _count: { questions: 5 } },
+          ],
+        }),
+        makeAnamnesis({ id: 'empty', sections: [] }),
+      ]);
+
+      const [withQuestions, empty] = await listAnamneses('user-1');
+
+      expect(withQuestions.questionCount).toBe(7);
+      expect(withQuestions.category).toBe(AnamnesisCategory.HYPERTROPHY);
+      expect(withQuestions.sections).toEqual([
+        { id: 'section-1', title: 'A', order: 0 },
+        { id: 'section-2', title: 'B', order: 1 },
+      ]);
+      expect(empty.questionCount).toBe(0);
     });
   });
 
@@ -2069,6 +2163,32 @@ describe('anamnesis-service', () => {
         }),
       );
     });
+
+    it('keeps the source category on the fork', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1, category: AnamnesisCategory.WEIGHT_LOSS });
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce({ ...source, sections: [] });
+      const tx = makeCloneTx();
+
+      await forkAnamnesis('user-1', 'anamnesis-1');
+
+      expect(tx.createdAnamnesisData().category).toBe(AnamnesisCategory.WEIGHT_LOSS);
+    });
+
+    it('never copies the seedKey of the source (it is unique)', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis({ version: 1, seedKey: 'catalog.screening.v1' });
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce({ ...source, sections: [] });
+      const tx = makeCloneTx();
+
+      await forkAnamnesis('user-1', 'anamnesis-1');
+
+      expect(tx.createdAnamnesisData()).not.toHaveProperty('seedKey');
+    });
   });
 
   // ── copyAnamnesis ────────────────────────────────────────────────────────
@@ -2262,6 +2382,230 @@ describe('anamnesis-service', () => {
           data: expect.objectContaining({ questionId: 'new-question-1', text: 'Yes' }),
         }),
       );
+    });
+
+    describe('title, description and catalog fields', () => {
+      const SOURCE_TITLE = 'Anamnese de Triagem';
+      const SOURCE_DESCRIPTION = 'Descrição original';
+
+      const arrangeCopySource = (overrides = {}) => {
+        prisma.trainer.findUnique.mockResolvedValue(makeTrainer({ id: 'trainer-2' }));
+        const source = makeAnamnesis({
+          trainerId: null,
+          isGeneral: true,
+          title: SOURCE_TITLE,
+          description: SOURCE_DESCRIPTION,
+          category: AnamnesisCategory.SCREENING,
+          seedKey: 'catalog.screening.v1',
+          ...overrides,
+        });
+        prisma.anamnesis.findUnique
+          .mockResolvedValueOnce(source)
+          .mockResolvedValueOnce({ ...source, sections: [] });
+        return makeCloneTx();
+      };
+
+      it('keeps the source title and description when no body is given', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1');
+
+        expect(tx.createdAnamnesisData()).toMatchObject({
+          title: SOURCE_TITLE,
+          description: SOURCE_DESCRIPTION,
+        });
+      });
+
+      it('keeps the source title and description with an empty body', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', {});
+
+        expect(tx.createdAnamnesisData()).toMatchObject({
+          title: SOURCE_TITLE,
+          description: SOURCE_DESCRIPTION,
+        });
+      });
+
+      it('uses the given title and description', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', {
+          title: 'Triagem — Turma da manhã',
+          description: 'Para os alunos da manhã',
+        });
+
+        expect(tx.createdAnamnesisData()).toMatchObject({
+          title: 'Triagem — Turma da manhã',
+          description: 'Para os alunos da manhã',
+        });
+      });
+
+      it('overrides only the title and keeps the source description', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', { title: 'Minha triagem' });
+
+        expect(tx.createdAnamnesisData()).toMatchObject({
+          title: 'Minha triagem',
+          description: SOURCE_DESCRIPTION,
+        });
+      });
+
+      it('clears the description when null is given', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', { description: null });
+
+        expect(tx.createdAnamnesisData()).toMatchObject({ title: SOURCE_TITLE, description: null });
+      });
+
+      it('trims the given title', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', { title: '  Minha triagem  ' });
+
+        expect(tx.createdAnamnesisData().title).toBe('Minha triagem');
+      });
+
+      it('throws 400 VALIDATION_ERROR for a whitespace-only title without creating anything', async () => {
+        arrangeCopySource();
+
+        await expect(copyAnamnesis('user-2', 'anamnesis-1', { title: '   ' })).rejects.toMatchObject({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+          details: [expect.objectContaining({ field: 'title' })],
+        });
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('keeps the source category', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1', { title: 'Outra' });
+
+        expect(tx.createdAnamnesisData().category).toBe(AnamnesisCategory.SCREENING);
+      });
+
+      it('keeps category null for an uncategorized source', async () => {
+        const tx = arrangeCopySource({ category: null });
+
+        await copyAnamnesis('user-2', 'anamnesis-1');
+
+        expect(tx.createdAnamnesisData().category).toBeNull();
+      });
+
+      it('never copies the seedKey of the source (it is unique)', async () => {
+        const tx = arrangeCopySource();
+
+        await copyAnamnesis('user-2', 'anamnesis-1');
+
+        expect(tx.createdAnamnesisData()).not.toHaveProperty('seedKey');
+      });
+    });
+
+    it('remaps single choice condition option IDs to the copied options', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      const source = makeAnamnesis();
+      const parent = makeQuestion({
+        id: 'parent-q',
+        type: AnamnesisQuestionType.SINGLE_CHOICE,
+        options: [makeOption({ id: 'old-opt-a' }), makeOption({ id: 'old-opt-b', text: 'Option B', order: 1 })],
+      });
+      const child = makeQuestion({
+        id: 'child-q',
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'equals', optionId: 'old-opt-b' },
+      });
+      prisma.anamnesis.findUnique
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce({ ...source, sections: [{ ...makeSection(), questions: [parent, child] }] });
+      const tx = makeCloneTx();
+
+      await copyAnamnesis('user-1', 'anamnesis-1');
+
+      expect(tx.anamnesisQuestion.update).toHaveBeenCalledTimes(1);
+      expect(tx.anamnesisQuestion.update).toHaveBeenCalledWith({
+        where: { id: 'new-question-2' },
+        data: {
+          parentQuestionId: 'new-question-1',
+          condition: { operator: 'equals', optionId: 'new-opt-2' },
+        },
+      });
+    });
+  });
+
+  // ── cloneAnamnesisContent ────────────────────────────────────────────────
+
+  describe('cloneAnamnesisContent', () => {
+    it('returns the old → new ID maps and remaps multiple choice optionIds', async () => {
+      const parent = makeQuestion({
+        id: 'parent-q',
+        type: AnamnesisQuestionType.MULTIPLE_CHOICE,
+        options: [makeOption({ id: 'old-opt-a' }), makeOption({ id: 'old-opt-b', order: 1 })],
+      });
+      const child = makeQuestion({
+        id: 'child-q',
+        type: AnamnesisQuestionType.FREE_TEXT,
+        parentQuestionId: 'parent-q',
+        condition: { operator: 'includesAny', optionIds: ['old-opt-a', 'old-opt-b'] },
+      });
+      const tx = makeCloneTx();
+
+      const { questionIdMap, optionIdMap } = await cloneAnamnesisContent(
+        tx,
+        [{ ...makeSection(), questions: [parent, child] }],
+        'clone-1',
+      );
+
+      expect(tx.anamnesisSection.create).toHaveBeenCalledWith({
+        data: { anamnesisId: 'clone-1', title: 'Physical Activity', description: null, order: 0 },
+      });
+      expect(questionIdMap).toEqual(new Map([['parent-q', 'new-question-1'], ['child-q', 'new-question-2']]));
+      expect(optionIdMap).toEqual(new Map([['old-opt-a', 'new-opt-1'], ['old-opt-b', 'new-opt-2']]));
+      expect(tx.anamnesisQuestion.update).toHaveBeenCalledWith({
+        where: { id: 'new-question-2' },
+        data: {
+          parentQuestionId: 'new-question-1',
+          condition: { operator: 'includesAny', optionIds: ['new-opt-1', 'new-opt-2'] },
+        },
+      });
+    });
+
+    it('creates nothing for an anamnesis without sections', async () => {
+      const tx = makeCloneTx();
+
+      const { questionIdMap, optionIdMap } = await cloneAnamnesisContent(tx, [], 'clone-1');
+
+      expect(tx.anamnesisSection.create).not.toHaveBeenCalled();
+      expect(questionIdMap.size).toBe(0);
+      expect(optionIdMap.size).toBe(0);
+    });
+  });
+
+  // ── anamnesis category ───────────────────────────────────────────────────
+
+  describe('anamnesis category', () => {
+    it('accepts every catalog category, null and undefined', () => {
+      for (const category of [...anamnesisCategoryValues, null, undefined]) {
+        expect(() => validateAnamnesisCategory(category)).not.toThrow();
+      }
+    });
+
+    it('rejects an unknown category with 400 VALIDATION_ERROR', () => {
+      expect(() => validateAnamnesisCategory('cardio')).toThrow(
+        expect.objectContaining({ httpStatus: 400, error: 'VALIDATION_ERROR', messageCode: 'validation.failed' }),
+      );
+    });
+
+    it('has a label for every category in pt-BR and en-US', () => {
+      for (const category of anamnesisCategoryValues) {
+        expect(ptBR.categorical.anamnesisCategory[category]).toEqual(expect.any(String));
+        expect(enUS.categorical.anamnesisCategory[category]).toEqual(expect.any(String));
+      }
+      expect(ptBR.categorical.anamnesisCategory[AnamnesisCategory.SPECIAL_POPULATION]).toBe('Públicos específicos');
     });
   });
 

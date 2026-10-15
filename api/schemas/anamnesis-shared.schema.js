@@ -1,4 +1,8 @@
-import { anamnesisQuestionTypeValues, anamnesisCreatableQuestionTypes } from '../../src/constants/anamnesis.js';
+import {
+  anamnesisCategoryValues,
+  anamnesisQuestionTypeValues,
+  anamnesisCreatableQuestionTypes,
+} from '../../src/constants/anamnesis.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 // ─── Shared sub-schemas used by both anamnesis-route.schema.js and admin-anamnesis-route.schema.js
@@ -65,6 +69,7 @@ export const anamnesisSchema = {
     trainerId: { type: 'string', format: 'uuid', nullable: true },
     title: { type: 'string' },
     description: { type: 'string', nullable: true },
+    ...i18nField('category', 'anamnesisCategory', { nullable: true }),
     isGeneral: { type: 'boolean' },
     version: { type: 'integer' },
     parentId: { type: 'string', format: 'uuid', nullable: true },
@@ -81,9 +86,14 @@ export const anamnesisListItemSchema = {
     trainerId: { type: 'string', format: 'uuid', nullable: true },
     title: { type: 'string' },
     description: { type: 'string', nullable: true },
+    ...i18nField('category', 'anamnesisCategory', { nullable: true }),
     isGeneral: { type: 'boolean' },
     version: { type: 'integer' },
     parentId: { type: 'string', format: 'uuid', nullable: true },
+    questionCount: {
+      type: 'integer',
+      description: 'Number of non-deleted questions across the non-deleted sections (conditional ones included).',
+    },
     sections: {
       type: 'array',
       items: {
@@ -98,6 +108,14 @@ export const anamnesisListItemSchema = {
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
+};
+
+// Request `category` (catalog). null = uncategorized.
+export const anamnesisCategoryBodySchema = {
+  type: 'string',
+  enum: [...anamnesisCategoryValues, null],
+  nullable: true,
+  description: `Catalog category: ${anamnesisCategoryValues.join(', ')} (null = uncategorized).`,
 };
 
 export const deletedAtResponseSchema = {

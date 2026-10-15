@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
-import { AppError } from '../errors/app-error.js';
+import { AppError, ValidationAppError } from '../errors/app-error.js';
 import {
+  anamnesisCategoryValues,
   AnamnesisErrorCode,
   AnamnesisMessageCode,
   AnamnesisQuestionType,
@@ -31,6 +32,194 @@ export const fullAnamnesisInclude = {
     },
   },
 };
+
+/**
+ * Include for the trainer/admin anamnesis lists: a summary of the non-deleted sections
+ * plus, per section, the count of its non-deleted questions (aggregated in the same
+ * query — no N+1). Use toAnamnesisListItem() to turn the row into the API shape.
+ */
+export const anamnesisListInclude = {
+  sections: {
+    where: { deletedAt: null },
+    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      order: true,
+      _count: { select: { questions: { where: { deletedAt: null } } } },
+    },
+  },
+};
+
+/**
+ * Map a row loaded with anamnesisListInclude into a list item:
+ * strips the per-section `_count` and adds `questionCount` (non-deleted questions
+ * of non-deleted sections).
+ *
+ * @param {object} anamnesis
+ * @returns {object}
+ */
+export function toAnamnesisListItem(anamnesis) {
+  let questionCount = 0;
+  const sections = anamnesis.sections.map(({ _count, ...section }) => {
+    questionCount += _count.questions;
+    return section;
+  });
+
+  return { ...anamnesis, sections, questionCount };
+}
+
+/**
+ * Include used to load the content of an anamnesis that is about to be cloned
+ * (fork/copy): non-deleted sections and questions, with their options.
+ */
+export const anamnesisCloneSourceInclude = {
+  sections: {
+    where: { deletedAt: null },
+    orderBy: { order: 'asc' },
+    include: {
+      questions: {
+        where: { deletedAt: null },
+        orderBy: { order: 'asc' },
+        include: { options: { orderBy: { order: 'asc' } } },
+      },
+    },
+  },
+};
+
+/**
+ * Remap option IDs inside a condition JSONB when cloning an anamnesis.
+ * Returns a new condition object with old option IDs replaced by new ones.
+ * Returns null if the condition is null/undefined.
+ *
+ * @param {object|null} condition
+ * @param {Map<string, string>} optionIdMap - old optionId → new optionId
+ * @returns {object|null}
+ */
+function remapConditionOptionIds(condition, optionIdMap) {
+  if (!condition) return null;
+
+  if (condition.optionId !== undefined) {
+    return {
+      ...condition,
+      optionId: optionIdMap.get(condition.optionId) ?? condition.optionId,
+    };
+  }
+
+  if (Array.isArray(condition.optionIds)) {
+    return {
+      ...condition,
+      optionIds: condition.optionIds.map((id) => optionIdMap.get(id) ?? id),
+    };
+  }
+
+  return condition;
+}
+
+/**
+ * First pass of a clone: create every section, question and option under the new
+ * anamnesis, recording old → new IDs. Conditional fields are left for the second pass.
+ */
+async function cloneSectionsQuestionsAndOptions(tx, sourceSections, newAnamnesisId) {
+  const questionIdMap = new Map(); // oldQuestionId → newQuestionId
+  const optionIdMap = new Map();   // oldOptionId → newOptionId
+
+  for (const section of sourceSections) {
+    const newSection = await tx.anamnesisSection.create({
+      data: {
+        anamnesisId: newAnamnesisId,
+        title: section.title,
+        description: section.description,
+        order: section.order,
+      },
+    });
+
+    for (const question of section.questions) {
+      const newQuestion = await tx.anamnesisQuestion.create({
+        data: {
+          sectionId: newSection.id,
+          text: question.text,
+          type: question.type,
+          required: question.required,
+          order: question.order,
+          config: question.config,
+          // parentQuestionId and condition are remapped in the second pass
+        },
+      });
+
+      questionIdMap.set(question.id, newQuestion.id);
+
+      for (const option of question.options) {
+        const newOption = await tx.anamnesisQuestionOption.create({
+          data: {
+            questionId: newQuestion.id,
+            text: option.text,
+            order: option.order,
+          },
+        });
+        optionIdMap.set(option.id, newOption.id);
+      }
+    }
+  }
+
+  return { questionIdMap, optionIdMap };
+}
+
+/**
+ * Deep-clone the content (sections → questions → options) of an anamnesis into
+ * another one, inside the caller's transaction. Shared by fork and copy.
+ *
+ * Two-pass build: the first pass creates all sections, questions and options and
+ * records the ID maps; the second pass remaps parentQuestionId and the option IDs
+ * inside each conditional question's condition JSONB to the new IDs.
+ *
+ * @param {object} tx - Prisma transaction client
+ * @param {Array<object>} sourceSections - Sections loaded with anamnesisCloneSourceInclude
+ * @param {string} newAnamnesisId - The anamnesis receiving the cloned content
+ * @returns {Promise<{ questionIdMap: Map<string, string>, optionIdMap: Map<string, string> }>}
+ */
+export async function cloneAnamnesisContent(tx, sourceSections, newAnamnesisId) {
+  const { questionIdMap, optionIdMap } = await cloneSectionsQuestionsAndOptions(
+    tx,
+    sourceSections,
+    newAnamnesisId,
+  );
+
+  for (const section of sourceSections) {
+    for (const question of section.questions) {
+      if (!question.parentQuestionId) continue;
+
+      await tx.anamnesisQuestion.update({
+        where: { id: questionIdMap.get(question.id) },
+        data: {
+          parentQuestionId: questionIdMap.get(question.parentQuestionId) ?? null,
+          condition: remapConditionOptionIds(question.condition, optionIdMap),
+        },
+      });
+    }
+  }
+
+  return { questionIdMap, optionIdMap };
+}
+
+/**
+ * Validate a catalog category of a write. `undefined` (not sent) and `null` (uncategorized)
+ * are accepted. The route schemas already enforce the enum; this guards non-HTTP callers.
+ *
+ * @param {string|null|undefined} category
+ */
+export function validateAnamnesisCategory(category) {
+  if (category === undefined || category === null) return;
+
+  if (!anamnesisCategoryValues.includes(category)) {
+    throw new ValidationAppError({
+      message: `Invalid category: ${category}. Valid values are: ${anamnesisCategoryValues.join(', ')}`,
+      details: [
+        { field: 'category', validations: ['enum'], messageCode: 'validation.category.enum', message: 'Invalid category.' },
+      ],
+    });
+  }
+}
 
 /**
  * Load a section that belongs to a given anamnesis (excluding soft-deleted).

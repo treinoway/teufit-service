@@ -10,6 +10,7 @@ import {
   questionTypeBodySchema,
   sectionBodySchema,
   conditionSchema,
+  anamnesisCategoryBodySchema,
 } from './anamnesis-shared.schema.js';
 
 // ─── Anamnesis CRUD schemas ───────────────────────────────────────────────────
@@ -24,6 +25,7 @@ export const createPublicAnamnesisSchema = {
     properties: {
       title: { type: 'string', minLength: 1 },
       description: { type: 'string', nullable: true },
+      category: anamnesisCategoryBodySchema,
       sections: { type: 'array', items: sectionBodySchema },
     },
     additionalProperties: false,
@@ -72,7 +74,10 @@ export const getPublicAnamnesisSchema = {
 
 export const updatePublicAnamnesisSchema = {
   tags: ['Anamnesis - Admin'],
-  summary: 'Update a public anamnesis metadata (title, description)',
+  summary: 'Update a public anamnesis metadata (title, description, category)',
+  description:
+    'Changing `title` or `description` returns 409 ANAMNESIS_HAS_STUDENT_LINKS while the anamnesis is linked to ' +
+    'students. `category` is catalog metadata and can be changed even when the anamnesis is linked.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -84,6 +89,7 @@ export const updatePublicAnamnesisSchema = {
     properties: {
       title: { type: 'string', minLength: 1 },
       description: { type: 'string', nullable: true },
+      category: anamnesisCategoryBodySchema,
     },
     additionalProperties: false,
   },

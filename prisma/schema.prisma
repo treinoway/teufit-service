@@ -671,6 +671,11 @@ model Anamnesis {
   isGeneral   Boolean @default(false) @map("is_general")
   version     Int     @default(1)
   parentId    String? @map("parent_id") @db.Uuid
+  // Catalog category (AnamnesisCategory in src/constants/anamnesis.js). Null = uncategorized.
+  category    String? @db.Text
+  // Stable key of a system-seeded template, used by idempotent seeds. Internal only:
+  // never exposed in API responses and never copied by fork/copy (it is unique).
+  seedKey     String? @unique @map("seed_key") @db.Text
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

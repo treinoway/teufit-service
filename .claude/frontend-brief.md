@@ -1,84 +1,110 @@
-# Frontend Brief — Reopen a finalized anamnesis to edit it + default anamnesis cleanup
+# Frontend Brief — Anamnesis catalog (category + question count) and copy with a new title
 
-**Backend branch**: feat/anamnesis-edit-reopen-and-default-cleanup · **Generated**: 2026-09-30
+**Backend branch**: feat/anamnesis-template-catalog · **Generated**: 2026-10-14
 
 ## Elevator pitch
-A trainer can now go back into an anamnesis they already filled in with the student, correct it, and finalize it again (the student confirms again). The default "Anamnese Completa" is also shorter (10 sections) and its menstrual-cycle section only asks follow-ups when the student says she menstruates. The "matrix" question type can no longer be created.
+The trainer's anamnesis list now says what each anamnesis is for (category: Triagem, Geral, Emagrecimento, Hipertrofia, Públicos específicos) and how many questions it has, can be filtered by category, and the trainer can name the copy when copying a model ("Usar este modelo") instead of getting a duplicate with the same title.
 
 ## User story
-As a trainer, I want to correct an anamnesis I already finalized for my student so that the record is accurate, and as a student I want a shorter default anamnesis that only asks menstrual-cycle questions when they apply to me.
+As a trainer, I want to browse the anamnesis models by category, see how long each one is, and copy one under my own title so that I can pick the right questionnaire quickly and keep my list organized.
 
 ## User flows
-1. **Entry point**: the same "Preencher com o aluno" action in the trainer's student-anamnesis list (and the existing fill wizard). Nothing new to navigate to.
-2. **Happy path (edit a finalized anamnesis)**:
-   1. Trainer opens the fill wizard (attestation gate as today) on a row whose status is "Aguardando confirmação" or "Respondida" and `canFill = true`.
-   2. Trainer changes answers and the wizard autosaves with the existing draft call (`PATCH .../response/draft`).
-   3. The first successful save **reopens** the response: its status becomes `draft` ("Em preenchimento"), the student's confirmation and the trainer's attestation are cleared.
-   4. Trainer finalizes with the existing finalize call (`POST .../response`, attestation required). Status returns to "Aguardando confirmação"; the student must confirm again.
+1. **Entry point**: the trainer's anamnesis area (the list fed by `GET /trainer/anamneses`). The frontend PR is `feat/anamnesis-template-gallery` in treinoway-web.
+2. **Happy path (pick and copy a model)**:
+   1. Trainer opens the gallery/list; each card shows title, category label and "N perguntas".
+   2. Trainer narrows the list with a category chip/tab (`?category=`), or keeps "Todas" (no query param).
+   3. Trainer chooses "Usar este modelo" on a model; a dialog pre-fills the title with the model's title (and optionally the description).
+   4. Trainer confirms; `POST /trainer/anamneses/:id/copy` with `{ title, description }` creates the private copy, which keeps the model's category, and the UI navigates to it/refreshes the list.
 3. **Branches**:
-   - While reopened (status `draft`): the trainer cannot open "Ver respostas" (404, as for any draft); the list row shows "Em preenchimento" with `canFill = true` and no "Ver respostas". The student's confirm action fails with 409 `anamnesis.response.notAwaitingConfirmation` (hide/disable it when `status != awaiting_confirmation`). The student may still save a draft on the same response.
-   - Student already submitted the anamnesis themselves, or another trainer filled it in: the draft save answers 409 (`anamnesis.response.submittedByStudent` / `anamnesis.response.filledByAnotherTrainer`) and nothing is changed. This is already reflected by `canFill = false` / `canFinalize = false`; do not offer editing there.
-   - Warn before the first edit of a finalized anamnesis: saving will clear the student's confirmation and hide the answers from "Ver respostas" until the trainer finalizes again.
-4. **Default anamnesis changes** (no new screen): sections are renumbered 01–10; removed sections ("Hábitos de Vida", "Avaliação Clínica", "Hábitos Alimentares e Suplementação", "Relação com Alimentação") no longer appear. In "10 — Ciclo Menstrual" the first question is "Você menstrua?"; the other 5 questions are conditional children (shown only when the answer is `yes`), using the same conditional-question rendering already used elsewhere.
+   - **General vs own anamneses**: `GET /trainer/anamneses` returns BOTH the trainer's own anamneses AND every general (platform) anamnesis. Tell them apart by `isGeneral`: general ones have `isGeneral: true` and `trainerId: null` and come first (then own ones, newest first). General anamneses are read-only for trainers (edit/delete/fork answer 403 `anamnesis.forbidden.general`); they can only be copied or linked to a student. Use `isGeneral` to split "Modelos" from "Minhas anamneses".
+   - **Uncategorized**: `category` and `categoryLabel` are `null` for anything created before this change, for every anamnesis the trainer creates from scratch, and for the current default "Anamnese Completa". Show these under "Todas" only (or a "Sem categoria" bucket); they never match a `?category=` filter.
+   - **Copy without a dialog**: sending no body keeps the current behaviour (same title and description as the source).
 
 ## UI states to cover
-- Loading / Empty / Error / Success: unchanged from the fill wizard and the list.
-- Null/absent data: after a reopen `submittedAt`, `studentConfirmedAt` and `trainerAttestedAt` are `null`; `filledBy` keeps its previous value but is meaningless for a draft (do not show an author for a draft).
-- Permissions: trainer-only routes (403 otherwise); 404 `anamnesis.notLinkedToStudent` when this trainer did not link the anamnesis.
-- Historical responses to the default anamnesis: answers to removed questions are kept but no longer shown. Answers to the 5 old menstrual questions have no answer to "Você menstrua?", so with the conditional rule they stay hidden in read-only views of old responses.
-- Stale clients: a student with the old default anamnesis cached (or an in-progress draft containing answers to removed questions) gets 404 `anamnesis.question.notFound` on draft/submit until the anamnesis is refetched. Refetch the anamnesis and retry on that error.
+- Loading / Empty / Error / Success for the list and for the copy dialog.
+- Empty filtered list: a category with no models returns `[]` (200), not an error.
+- Null/absent data: `category`/`categoryLabel` may be `null`; `description` may be `null`; `questionCount` may be `0` (an anamnesis with no questions yet).
+- Copy dialog validation: title required, 1–200 characters, not only spaces (the backend trims it and answers 400 for blank).
+- Permissions: trainer-only routes (403 when the role is not TRAINER); copying another trainer's private anamnesis → 403.
 
 ## API contract
-### PATCH /trainer/students/:studentId/anamneses/:anamnesisId/response/draft
-- **Auth**: Bearer token, role TRAINER; student linked and active on the plan; this trainer linked this anamnesis to the student.
-- **Request**:
+### GET /trainer/anamneses
+- **Auth**: Bearer token, role TRAINER.
+- **Request**: optional query `category` = `screening` | `general` | `weight_loss` | `hypertrophy` | `special_population`. Header `app-language: en-US` translates `categoryLabel` (default pt-BR).
+- **Success** (200): array, general ones first.
   ```json
-  { "answers": [ { "questionId": "uuid", "value": "any JSON" } ] }
+  [
+    {
+      "id": "uuid",
+      "trainerId": null,
+      "title": "Triagem pré-participação",
+      "description": "Questionário curto de triagem",
+      "category": "screening",
+      "categoryLabel": "Triagem",
+      "isGeneral": true,
+      "version": 1,
+      "parentId": null,
+      "questionCount": 12,
+      "sections": [{ "id": "uuid", "title": "Histórico de saúde", "order": 0 }],
+      "createdAt": "2026-10-14T12:00:00.000Z",
+      "updatedAt": null
+    }
+  ]
   ```
-- **Success** (200): the response with all answers; when it reopened a finalized response:
+  `questionCount` counts every non-deleted question of the non-deleted sections, conditional (follow-up) questions included.
+- **Errors** (status · error · messageCode · when):
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · unknown `category` value (`details[0].field = "category"`)
+  - `401` · missing/invalid token
+  - `403` · authenticated user is not a trainer
+  - `404` · `TRAINER_PROFILE_MISSING` · `trainer.notFound` · trainer profile missing
+
+### POST /trainer/anamneses/:anamnesisId/copy
+- **Auth**: Bearer token, role TRAINER. Source must be general or owned by the trainer.
+- **Request** (body optional; every field optional; unknown fields are ignored):
+  ```json
+  { "title": "Triagem — Turma da manhã", "description": "Texto ou null" }
+  ```
+  `title`: 1–200 chars, trimmed. `description`: string, or `null` to leave the copy without description. Omitted fields keep the source values.
+- **Success** (201): the full anamnesis (same shape as `GET /trainer/anamneses/:id`), now with `category` and `categoryLabel`.
   ```json
   {
-    "id": "uuid", "anamnesisId": "uuid", "studentId": "uuid",
-    "status": "draft", "submittedAt": null, "studentConfirmedAt": null, "trainerAttestedAt": null,
-    "filledBy": "trainer", "answers": [ { "questionId": "uuid", "value": "..." } ]
+    "id": "uuid",
+    "trainerId": "uuid",
+    "title": "Triagem — Turma da manhã",
+    "description": "Texto ou null",
+    "category": "screening",
+    "categoryLabel": "Triagem",
+    "isGeneral": false,
+    "version": 1,
+    "parentId": null,
+    "sections": [ { "id": "uuid", "title": "...", "questions": [ "..." ] } ],
+    "createdAt": "2026-10-14T12:30:00.000Z",
+    "updatedAt": null
   }
   ```
 - **Errors** (status · error · messageCode · when):
-  - `400` · `VALIDATION_ERROR` · `validation.failed` · malformed body
-  - `404` · `ANAMNESIS_NOT_LINKED_TO_STUDENT` · `anamnesis.notLinkedToStudent` · not linked by this trainer
-  - `404` · `ANAMNESIS_QUESTION_NOT_FOUND` · `anamnesis.question.notFound` · unknown or removed question
-  - `409` · `ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT` · `anamnesis.response.submittedByStudent` · the student submitted it
-  - `409` · `ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER` · `anamnesis.response.filledByAnotherTrainer` · another trainer finalized it
+  - `400` · `VALIDATION_ERROR` · `validation.failed` · empty, blank (spaces only) or > 200 chars title (`details[0].field = "title"`)
+  - `403` · `FORBIDDEN_NOT_ANAMNESIS_OWNER` · `anamnesis.forbidden.notOwner` · another trainer's private anamnesis
+  - `404` · `ANAMNESIS_NOT_FOUND` · `anamnesis.notFound` · anamnesis missing or deleted
 
-### Unchanged but affected
-- `PATCH /my/anamneses/:anamnesisId/response/draft` (student) still answers 409 `anamnesis.response.alreadySubmitted` once submitted.
-- `POST /my/anamneses/:anamnesisId/response/confirm` answers 409 `anamnesis.response.notAwaitingConfirmation` while the response is reopened.
-- `GET /trainer/students/:studentId/anamneses/:anamnesisId/response` answers 404 `anamnesis.response.notFound` while reopened.
-- `GET .../fill` `canFinalize` keeps its meaning.
-
-### Question type `matrix` retired (anamnesis builder, if the web has one)
-- `POST/PATCH` question routes (trainer and admin) and nested `sections[].questions[]` payloads: `type: "matrix"` → `400` · `INVALID_QUESTION_TYPE` · `anamnesis.invalidQuestionType`. Offer only `free_text`, `dichotomous`, `multiple_choice`, `numeric`, `single_choice`. Existing matrix questions are still returned (`type: "matrix"`, with label) and must keep rendering read-only.
+### GET /trainer/anamneses/:anamnesisId and fork
+- Detail and `POST /trainer/anamneses/:id/fork` responses also carry `category` + `categoryLabel`. A fork keeps the category.
 
 ## i18n keys required
-- `anamnesis.invalidQuestionType` → suggested copy: "Tipo de pergunta inválido ou não suportado." (backend already translates `message`; only needed if the client maps codes)
-- `anamnesis.response.submittedByStudent` → "O aluno já enviou esta anamnese."
-- `anamnesis.response.filledByAnotherTrainer` → "Esta anamnese foi preenchida por outro professor."
-- `anamnesis.response.notAwaitingConfirmation` → "Esta anamnese não está aguardando confirmação."
+`categoryLabel` already comes translated from the backend (pt-BR: Triagem, Geral, Emagrecimento, Hipertrofia, Públicos específicos · en-US: Screening, General, Weight loss, Hypertrophy, Special populations). If the web app keeps its own labels for the filter chips, use these raw values: `screening`, `general`, `weight_loss`, `hypertrophy`, `special_population`.
+- `validation.failed` → suggested copy: "Dê um nome para a sua cópia."
 
 ## Acceptance criteria
-- [ ] A trainer can edit a finalized anamnesis they filled in; after the first save the list shows "Em preenchimento" and "Ver respostas" disappears.
-- [ ] Finalizing again returns the row to "Aguardando confirmação" and the student can confirm again.
-- [ ] A trainer cannot edit an anamnesis the student submitted or another trainer filled in (clear message, no data change).
-- [ ] The student cannot confirm while the anamnesis is reopened.
-- [ ] The default anamnesis shows 10 sections; "Você menstrua?" reveals or hides the other 5 menstrual questions.
-- [ ] No UI path creates a "matrix" question.
+- [ ] Each anamnesis card shows its category label (when not null) and "N perguntas".
+- [ ] The trainer can filter the list by category and go back to "Todas".
+- [ ] Models (`isGeneral: true`) are visually distinct from the trainer's own anamneses and offer "Usar este modelo" instead of edit/delete.
+- [ ] Copying a model opens a dialog pre-filled with the model title; the created copy has the typed title and appears under "Minhas anamneses" with the model's category.
+- [ ] A blank title cannot be submitted; a 400 from the backend is shown as a field error.
 
 ## Out of scope
-- Showing who the other trainer is.
-- Notifying the student that the anamnesis was reopened.
-- Backfilling "Você menstrua?" for historical responses.
+- Seeded catalog models per category (comes in the next backend PR); until then only anamneses an admin categorizes have a category.
+- Choosing or changing the category of a trainer's own anamnesis (only admins set categories; copies/forks inherit it).
 
 ## Open design questions
-- Wording and placement of the warning before editing a finalized anamnesis.
-- Whether the student app should tell the student that a confirmation they gave was withdrawn because the trainer reopened it.
-- How read-only views show answers of old menstrual questions that are hidden by the new conditional rule.
+- Where uncategorized items appear when a category filter is active (hidden vs a "Sem categoria" chip).
+- Whether the copy dialog also lets the trainer edit the description or only the title.

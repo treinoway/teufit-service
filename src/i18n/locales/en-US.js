@@ -98,6 +98,13 @@ export default {
       single_choice: 'Single choice',
       matrix: 'Matrix',
     },
+    anamnesisCategory: {
+      screening: 'Screening',
+      general: 'General',
+      weight_loss: 'Weight loss',
+      hypertrophy: 'Hypertrophy',
+      special_population: 'Special populations',
+    },
     anamnesisResponseStatus: {
       draft: 'Draft',
       awaiting_confirmation: 'Awaiting confirmation',

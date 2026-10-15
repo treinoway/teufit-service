@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import emailHandler from '../config/email-handler.js';
-import { AppError } from '../errors/app-error.js';
+import { AppError, ValidationAppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockAnamnesisForUpdate, lockAnamnesisResponseForUpdate } from '../helpers/row-locks.js';
 import {
@@ -21,39 +21,14 @@ import {
   validateSectionIds,
   validateParentLink,
   normalizeChoiceAnswersForVisibility,
+  anamnesisListInclude,
+  toAnamnesisListItem,
+  anamnesisCloneSourceInclude,
+  cloneAnamnesisContent,
 } from './anamnesis-shared.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
-
-/**
- * Remap option IDs inside a condition JSONB when forking/copying an anamnesis.
- * Returns a new condition object with old option IDs replaced by new ones.
- * Returns null if the condition is null/undefined.
- *
- * @param {object|null} condition
- * @param {Map<string, string>} optionIdMap - old optionId → new optionId
- * @returns {object|null}
- */
-function remapConditionOptionIds(condition, optionIdMap) {
-  if (!condition) return null;
-
-  if (condition.optionId !== undefined) {
-    return {
-      ...condition,
-      optionId: optionIdMap.get(condition.optionId) ?? condition.optionId,
-    };
-  }
-
-  if (Array.isArray(condition.optionIds)) {
-    return {
-      ...condition,
-      optionIds: condition.optionIds.map((id) => optionIdMap.get(id) ?? id),
-    };
-  }
-
-  return condition;
-}
 
 /**
  * Load the Trainer record for the given userId or throw 404.
@@ -204,29 +179,26 @@ export async function createAnamnesis(userId, data) {
 
 /**
  * List anamneses visible to the trainer: their own private ones + all general ones.
+ * Each item carries `questionCount` (non-deleted questions of non-deleted sections).
  *
  * @param {string} userId
+ * @param {{ category?: string }} [filters] - Optional catalog category (validated by the route schema)
  * @returns {Promise<object[]>}
  */
-export async function listAnamneses(userId) {
+export async function listAnamneses(userId, { category } = {}) {
   const trainer = await findTrainerOrThrow(userId);
 
   const anamneses = await prisma.anamnesis.findMany({
     where: {
       deletedAt: null,
       OR: [{ trainerId: trainer.id }, { isGeneral: true }],
+      ...(category !== undefined && { category }),
     },
     orderBy: [{ isGeneral: 'desc' }, { createdAt: 'desc' }],
-    include: {
-      sections: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        select: { id: true, title: true, order: true },
-      },
-    },
+    include: anamnesisListInclude,
   });
 
-  return anamneses;
+  return anamneses.map(toAnamnesisListItem);
 }
 
 /**
@@ -1041,9 +1013,40 @@ export async function notifyStudentAnamnesisAssigned(
 // ─── Versioning ───────────────────────────────────────────────────────────────
 
 /**
+ * Load the source of a clone (fork/copy) with its non-deleted content.
+ */
+function loadCloneSource(anamnesisId) {
+  return prisma.anamnesis.findUnique({
+    where: { id: anamnesisId },
+    include: anamnesisCloneSourceInclude,
+  });
+}
+
+/**
+ * Create the new anamnesis row and deep-clone the source content into it, in one transaction.
+ * `seedKey` is never part of `anamnesisData` — it is unique and identifies only the seeded original.
+ *
+ * @param {object} anamnesisData - Prisma create data for the new anamnesis row
+ * @param {Array<object>} sourceSections - Sections loaded with anamnesisCloneSourceInclude
+ * @returns {Promise<object>} The new anamnesis with full nested structure
+ */
+function createAnamnesisClone(anamnesisData, sourceSections) {
+  return prisma.$transaction(async (tx) => {
+    const newAnamnesis = await tx.anamnesis.create({ data: anamnesisData });
+
+    await cloneAnamnesisContent(tx, sourceSections, newAnamnesis.id);
+
+    return tx.anamnesis.findUnique({
+      where: { id: newAnamnesis.id },
+      include: fullAnamnesisInclude,
+    });
+  });
+}
+
+/**
  * Fork an anamnesis into a new version.
  * Creates a deep copy of all non-deleted sections, questions, and options.
- * Sets version = source.version + 1 and parentId = source.id.
+ * Sets version = source.version + 1 and parentId = source.id. Keeps the category.
  *
  * @param {string} userId - Trainer's user ID
  * @param {string} anamnesisId - The anamnesis to fork
@@ -1055,118 +1058,58 @@ export async function forkAnamnesis(userId, anamnesisId) {
 
   verifyAnamnesisOwnership(source, trainer.id);
 
-  const sourceWithContent = await prisma.anamnesis.findUnique({
-    where: { id: anamnesisId },
-    include: {
-      sections: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        include: {
-          questions: {
-            where: { deletedAt: null },
-            orderBy: { order: 'asc' },
-            include: { options: { orderBy: { order: 'asc' } } },
-          },
-        },
-      },
+  const sourceWithContent = await loadCloneSource(anamnesisId);
+
+  return createAnamnesisClone(
+    {
+      trainerId: source.trainerId,
+      title: source.title,
+      description: source.description,
+      category: source.category ?? null,
+      isGeneral: false,
+      version: source.version + 1,
+      parentId: source.id,
     },
-  });
+    sourceWithContent.sections,
+  );
+}
 
-  const forked = await prisma.$transaction(async (tx) => {
-    const newAnamnesis = await tx.anamnesis.create({
-      data: {
-        trainerId: source.trainerId,
-        title: source.title,
-        description: source.description,
-        isGeneral: false,
-        version: source.version + 1,
-        parentId: source.id,
-      },
+/**
+ * Resolve the title of a copy: the source title unless one is given. A given title is
+ * trimmed and must not be blank (the route schema only guarantees minLength: 1).
+ *
+ * @param {string|undefined} requestedTitle
+ * @param {string} sourceTitle
+ * @returns {string}
+ */
+function resolveCopyTitle(requestedTitle, sourceTitle) {
+  if (requestedTitle === undefined) return sourceTitle;
+
+  const title = requestedTitle.trim();
+  if (!title) {
+    throw new ValidationAppError({
+      message: 'Title must not be blank.',
+      details: [
+        { field: 'title', validations: ['minLength'], messageCode: 'validation.title.minLength', message: 'Title must not be blank.' },
+      ],
     });
+  }
 
-    // Two-pass build: first pass creates all questions and options, recording ID maps.
-    // Second pass remaps parentQuestionId and option IDs inside condition JSONB.
-    const questionIdMap = new Map(); // oldQuestionId → newQuestionId
-    const optionIdMap = new Map();   // oldOptionId → newOptionId
-
-    for (const section of sourceWithContent.sections) {
-      const newSection = await tx.anamnesisSection.create({
-        data: {
-          anamnesisId: newAnamnesis.id,
-          title: section.title,
-          description: section.description,
-          order: section.order,
-        },
-      });
-
-      for (const question of section.questions) {
-        const newQuestion = await tx.anamnesisQuestion.create({
-          data: {
-            sectionId: newSection.id,
-            text: question.text,
-            type: question.type,
-            required: question.required,
-            order: question.order,
-            config: question.config,
-            // parentQuestionId and condition are remapped in second pass
-          },
-        });
-
-        questionIdMap.set(question.id, newQuestion.id);
-
-        if (question.options.length > 0) {
-          for (const opt of question.options) {
-            const newOpt = await tx.anamnesisQuestionOption.create({
-              data: {
-                questionId: newQuestion.id,
-                text: opt.text,
-                order: opt.order,
-              },
-            });
-            optionIdMap.set(opt.id, newOpt.id);
-          }
-        }
-      }
-    }
-
-    // Second pass: remap parentQuestionId and option IDs inside condition
-    for (const section of sourceWithContent.sections) {
-      for (const question of section.questions) {
-        if (!question.parentQuestionId) continue;
-
-        const newQuestionId = questionIdMap.get(question.id);
-        const newParentId = questionIdMap.get(question.parentQuestionId);
-        const remappedCondition = remapConditionOptionIds(question.condition, optionIdMap);
-
-        await tx.anamnesisQuestion.update({
-          where: { id: newQuestionId },
-          data: {
-            parentQuestionId: newParentId ?? null,
-            condition: remappedCondition,
-          },
-        });
-      }
-    }
-
-    return tx.anamnesis.findUnique({
-      where: { id: newAnamnesis.id },
-      include: fullAnamnesisInclude,
-    });
-  });
-
-  return forked;
+  return title;
 }
 
 /**
  * Copy an anamnesis into a new independent private copy owned by the trainer.
  * Works for public anamneses (isGeneral: true) and the trainer's own private ones.
  * Unlike forkAnamnesis, the copy starts fresh: parentId = null, version = 1.
+ * The copy keeps the source category; title/description may be overridden.
  *
  * @param {string} userId - Trainer's user ID
  * @param {string} anamnesisId - The anamnesis to copy
+ * @param {{ title?: string, description?: string|null }} [data] - Optional overrides
  * @returns {Promise<object>} The newly copied anamnesis with full nested structure
  */
-export async function copyAnamnesis(userId, anamnesisId) {
+export async function copyAnamnesis(userId, anamnesisId, data = {}) {
   const trainer = await findTrainerOrThrow(userId);
   const source = await findAnamnesisOrThrow(anamnesisId);
 
@@ -1179,106 +1122,21 @@ export async function copyAnamnesis(userId, anamnesisId) {
     });
   }
 
-  const sourceWithContent = await prisma.anamnesis.findUnique({
-    where: { id: anamnesisId },
-    include: {
-      sections: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        include: {
-          questions: {
-            where: { deletedAt: null },
-            orderBy: { order: 'asc' },
-            include: { options: { orderBy: { order: 'asc' } } },
-          },
-        },
-      },
+  const title = resolveCopyTitle(data.title, source.title);
+  const sourceWithContent = await loadCloneSource(anamnesisId);
+
+  return createAnamnesisClone(
+    {
+      trainerId: trainer.id,
+      title,
+      description: data.description !== undefined ? data.description : source.description,
+      category: source.category ?? null,
+      isGeneral: false,
+      version: 1,
+      parentId: null,
     },
-  });
-
-  const copied = await prisma.$transaction(async (tx) => {
-    const newAnamnesis = await tx.anamnesis.create({
-      data: {
-        trainerId: trainer.id,
-        title: source.title,
-        description: source.description,
-        isGeneral: false,
-        version: 1,
-        parentId: null,
-      },
-    });
-
-    // Two-pass build: first pass creates all questions and options, recording ID maps.
-    // Second pass remaps parentQuestionId and option IDs inside condition JSONB.
-    const questionIdMap = new Map(); // oldQuestionId → newQuestionId
-    const optionIdMap = new Map();   // oldOptionId → newOptionId
-
-    for (const section of sourceWithContent.sections) {
-      const newSection = await tx.anamnesisSection.create({
-        data: {
-          anamnesisId: newAnamnesis.id,
-          title: section.title,
-          description: section.description,
-          order: section.order,
-        },
-      });
-
-      for (const question of section.questions) {
-        const newQuestion = await tx.anamnesisQuestion.create({
-          data: {
-            sectionId: newSection.id,
-            text: question.text,
-            type: question.type,
-            required: question.required,
-            order: question.order,
-            config: question.config,
-            // parentQuestionId and condition are remapped in second pass
-          },
-        });
-
-        questionIdMap.set(question.id, newQuestion.id);
-
-        if (question.options.length > 0) {
-          for (const opt of question.options) {
-            const newOpt = await tx.anamnesisQuestionOption.create({
-              data: {
-                questionId: newQuestion.id,
-                text: opt.text,
-                order: opt.order,
-              },
-            });
-            optionIdMap.set(opt.id, newOpt.id);
-          }
-        }
-      }
-    }
-
-    // Second pass: remap parentQuestionId and option IDs inside condition
-    for (const section of sourceWithContent.sections) {
-      for (const question of section.questions) {
-        if (!question.parentQuestionId) continue;
-
-        const newQuestionId = questionIdMap.get(question.id);
-        const newParentId = questionIdMap.get(question.parentQuestionId);
-        const remappedCondition = remapConditionOptionIds(question.condition, optionIdMap);
-
-        await tx.anamnesisQuestion.update({
-          where: { id: newQuestionId },
-          data: {
-            parentQuestionId: newParentId ?? null,
-            condition: remappedCondition,
-          },
-        });
-      }
-    }
-
-    return tx.anamnesis.findUnique({
-      where: { id: newAnamnesis.id },
-      include: fullAnamnesisInclude,
-    });
-  });
-
-  return copied;
+    sourceWithContent.sections,
+  );
 }
 
 // ─── Student responses ────────────────────────────────────────────────────────

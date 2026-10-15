@@ -1,4 +1,8 @@
-import { ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
+import {
+  ANAMNESIS_DRAFT_MAX_ANSWERS,
+  ANAMNESIS_COPY_TITLE_MAX_LENGTH,
+  anamnesisCategoryValues,
+} from '../../src/constants/anamnesis.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import {
@@ -55,7 +59,18 @@ export const createAnamnesisSchema = {
 export const listAnamnesisSchema = {
   tags: ['Anamnesis - Trainer'],
   summary: 'List anamneses (private + general)',
+  description:
+    "Returns the trainer's own anamneses and every general (public) one — tell them apart by `isGeneral` " +
+    '(general ones have `isGeneral: true` and `trainerId: null`, and come first). ' +
+    'Optional `category` narrows the list to one catalog category.',
   security: [{ bearerAuth: [] }],
+  querystring: {
+    type: 'object',
+    properties: {
+      category: { type: 'string', enum: anamnesisCategoryValues },
+    },
+    additionalProperties: false,
+  },
   response: {
     200: { type: 'array', items: anamnesisListItemSchema },
     401: errorResponseSchema,
@@ -566,14 +581,28 @@ export const forkAnamnesisSchema = {
 export const copyAnamnesisSchema = {
   tags: ['Anamnesis - Trainer'],
   summary: 'Copy an anamnesis into a new independent private copy (parentId: null, version: 1)',
+  description:
+    'The body is optional. Without it the copy keeps the source title and description. `title` (trimmed, ' +
+    'must not be blank) and `description` (null clears it) override the source values. The copy always keeps ' +
+    'the source `category`.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
     required: ['anamnesisId'],
     properties: { anamnesisId: { type: 'string', format: 'uuid' } },
   },
+  // Optional body: an absent body is validated as null (Fastify), so `null` must be accepted.
+  body: {
+    type: ['object', 'null'],
+    properties: {
+      title: { type: 'string', minLength: 1, maxLength: ANAMNESIS_COPY_TITLE_MAX_LENGTH },
+      description: { type: 'string', nullable: true },
+    },
+    additionalProperties: false,
+  },
   response: {
     201: anamnesisSchema,
+    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

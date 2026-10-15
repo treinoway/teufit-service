@@ -230,8 +230,11 @@ async function linkConditionalQuestions(client, anamnesisId) {
 }
 
 export async function seedPublicAnamnesis(client) {
+  // Explicit select (same shape as the create below): reading only the columns the seed needs
+  // keeps it working on a database migrated up to an older point (see default-anamnesis-migration.e2e).
   const existing = await client.anamnesis.findFirst({
     where: { title: CAVEIRA_TEAM_TITLE, isGeneral: true, deletedAt: null },
+    select: { id: true, title: true },
   });
 
   if (existing) {

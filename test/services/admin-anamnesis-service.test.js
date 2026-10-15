@@ -39,7 +39,12 @@ import {
   updatePublicQuestion,
   deletePublicQuestion,
 } from '../../src/services/admin-anamnesis-service.js';
-import { AnamnesisQuestionType, AnamnesisErrorCode, AnamnesisMessageCode } from '../../src/constants/anamnesis.js';
+import {
+  AnamnesisQuestionType,
+  AnamnesisErrorCode,
+  AnamnesisMessageCode,
+  AnamnesisCategory,
+} from '../../src/constants/anamnesis.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -131,6 +136,35 @@ describe('admin-anamnesis-service', () => {
       });
     });
 
+    it('persists the given category', async () => {
+      const txCreate = vi.fn().mockResolvedValue(makeAnamnesis({ sections: [] }));
+      prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesis: { create: txCreate } }));
+
+      await createPublicAnamnesis({ title: 'Triagem', category: AnamnesisCategory.SCREENING });
+
+      expect(txCreate.mock.calls[0][0].data.category).toBe(AnamnesisCategory.SCREENING);
+    });
+
+    it('stores category null when none is given', async () => {
+      const txCreate = vi.fn().mockResolvedValue(makeAnamnesis({ sections: [] }));
+      prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesis: { create: txCreate } }));
+
+      await createPublicAnamnesis({ title: 'Sem categoria' });
+
+      expect(txCreate.mock.calls[0][0].data.category).toBeNull();
+    });
+
+    it('throws 400 VALIDATION_ERROR for an unknown category without opening a transaction', async () => {
+      await expect(
+        createPublicAnamnesis({ title: 'Test', category: 'cardio' }),
+      ).rejects.toMatchObject({
+        httpStatus: 400,
+        error: 'VALIDATION_ERROR',
+        messageCode: 'validation.failed',
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('throws INVALID_QUESTION_TYPE when a question has an unknown type', async () => {
       await expect(
         createPublicAnamnesis({
@@ -166,12 +200,48 @@ describe('admin-anamnesis-service', () => {
     });
 
     it('returns list of public anamneses', async () => {
-      const anamneses = [makeAnamnesis(), makeAnamnesis({ id: 'anamnesis-2', title: 'Other' })];
+      const anamneses = [
+        makeAnamnesis({ sections: [] }),
+        makeAnamnesis({ id: 'anamnesis-2', title: 'Other', sections: [] }),
+      ];
       prisma.anamnesis.findMany.mockResolvedValue(anamneses);
 
       const result = await listPublicAnamneses();
 
       expect(result).toHaveLength(2);
+    });
+
+    it('counts only non-deleted questions of each non-deleted section in the same query', async () => {
+      prisma.anamnesis.findMany.mockResolvedValue([]);
+
+      await listPublicAnamneses();
+
+      const { include } = prisma.anamnesis.findMany.mock.calls[0][0];
+      expect(include.sections.where).toEqual({ deletedAt: null });
+      expect(include.sections.select._count).toEqual({
+        select: { questions: { where: { deletedAt: null } } },
+      });
+    });
+
+    it('returns questionCount summed across sections and strips the per-section _count', async () => {
+      prisma.anamnesis.findMany.mockResolvedValue([
+        makeAnamnesis({
+          category: AnamnesisCategory.SCREENING,
+          sections: [
+            { id: 'section-1', title: 'A', order: 0, _count: { questions: 3 } },
+            { id: 'section-2', title: 'B', order: 1, _count: { questions: 4 } },
+          ],
+        }),
+      ]);
+
+      const [item] = await listPublicAnamneses();
+
+      expect(item.questionCount).toBe(7);
+      expect(item.category).toBe(AnamnesisCategory.SCREENING);
+      expect(item.sections).toEqual([
+        { id: 'section-1', title: 'A', order: 0 },
+        { id: 'section-2', title: 'B', order: 1 },
+      ]);
     });
   });
 
@@ -262,6 +332,75 @@ describe('admin-anamnesis-service', () => {
         httpStatus: 409,
         error: 'ANAMNESIS_HAS_STUDENT_LINKS',
         messageCode: 'anamnesis.hasStudentLinks',
+      });
+    });
+
+    describe('category', () => {
+      it('updates the category of an unlinked anamnesis', async () => {
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+        prisma.anamnesis.update.mockResolvedValue(
+          makeAnamnesis({ category: AnamnesisCategory.HYPERTROPHY, sections: [] }),
+        );
+
+        const result = await updatePublicAnamnesis('anamnesis-1', { category: AnamnesisCategory.HYPERTROPHY });
+
+        expect(prisma.anamnesis.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { category: AnamnesisCategory.HYPERTROPHY } }),
+        );
+        expect(result.category).toBe(AnamnesisCategory.HYPERTROPHY);
+      });
+
+      it('changes the category of a linked anamnesis without checking student links', async () => {
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+        prisma.studentAnamnesis.count.mockResolvedValue(3);
+        prisma.anamnesis.update.mockResolvedValue(
+          makeAnamnesis({ category: AnamnesisCategory.WEIGHT_LOSS, sections: [] }),
+        );
+
+        await updatePublicAnamnesis('anamnesis-1', { category: AnamnesisCategory.WEIGHT_LOSS });
+
+        expect(prisma.studentAnamnesis.count).not.toHaveBeenCalled();
+        expect(prisma.anamnesis.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { category: AnamnesisCategory.WEIGHT_LOSS } }),
+        );
+      });
+
+      it('clears the category with null on a linked anamnesis', async () => {
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis({ category: AnamnesisCategory.GENERAL }));
+        prisma.studentAnamnesis.count.mockResolvedValue(1);
+        prisma.anamnesis.update.mockResolvedValue(makeAnamnesis({ category: null, sections: [] }));
+
+        await updatePublicAnamnesis('anamnesis-1', { category: null });
+
+        expect(prisma.anamnesis.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { category: null } }),
+        );
+      });
+
+      it('still throws 409 when title changes together with category on a linked anamnesis', async () => {
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+        prisma.studentAnamnesis.count.mockResolvedValue(1);
+
+        await expect(
+          updatePublicAnamnesis('anamnesis-1', { title: 'New', category: AnamnesisCategory.GENERAL }),
+        ).rejects.toMatchObject({
+          httpStatus: 409,
+          error: AnamnesisErrorCode.ANAMNESIS_HAS_STUDENT_LINKS,
+        });
+        expect(prisma.anamnesis.update).not.toHaveBeenCalled();
+      });
+
+      it('throws 400 VALIDATION_ERROR for an unknown category', async () => {
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+
+        await expect(
+          updatePublicAnamnesis('anamnesis-1', { category: 'cardio' }),
+        ).rejects.toMatchObject({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode: 'validation.failed',
+        });
+        expect(prisma.anamnesis.update).not.toHaveBeenCalled();
       });
     });
   });

@@ -384,3 +384,39 @@ Data-only migration `20260930120000_update_default_anamnesis_structure` (seed up
   section become optional conditional children shown only when the answer is `yes`.
 - Guarded by the exact current titles: no-op on a fresh database, when re-run, and for trainers'
   copies and forks.
+
+---
+
+## Part 6: Anamnesis Catalog and Copy With a New Title
+
+### `category` and `seedKey`
+
+Migration `20261014120000_add_anamnesis_catalog_fields` adds two nullable columns to `anamneses`
+(nothing to backfill; existing rows stay uncategorized):
+
+- `category` — catalog category (`AnamnesisCategory`: `screening`, `general`, `weight_loss`,
+  `hypertrophy`, `special_population`). Returned as `category` + translated `categoryLabel`
+  (`categorical.anamnesisCategory`) on the list, detail, fork and copy responses.
+- `seed_key` (unique) — stable key of a system-seeded template, for idempotent seeds. Internal:
+  never returned by the API and never copied by fork/copy.
+
+Admins set `category` on `POST /admin/anamneses` and `PATCH /admin/anamneses/:id` (`null` clears
+it). Changing only `category` is allowed on a linked anamnesis (it is metadata); changing `title`
+or `description` still returns `409 ANAMNESIS_HAS_STUDENT_LINKS`. Fork and copy keep the source
+`category`.
+
+### List: `?category=` and `questionCount`
+
+`GET /trainer/anamneses` accepts an optional `category` query (validated against the enum; unknown
+value → 400 `VALIDATION_ERROR`) and returns `questionCount` per item: non-deleted questions of
+non-deleted sections, aggregated in the same query. `GET /admin/anamneses` also returns
+`questionCount`.
+
+### Copy With a New Title
+
+`POST /trainer/anamneses/:id/copy` accepts an optional body `{ title?, description? }`. `title`
+(1..200 chars) is trimmed and must not be blank (400 `VALIDATION_ERROR`); `description` may be a
+string or `null`. Omitted fields keep the source values; no body keeps the previous behaviour.
+
+Fork and copy now share `cloneAnamnesisContent` (`src/services/anamnesis-shared.js`), the two-pass
+clone that remaps `parentQuestionId` and the option IDs inside conditions.
