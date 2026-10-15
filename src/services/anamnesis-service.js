@@ -561,7 +561,7 @@ export async function updateQuestion(userId, anamnesisId, sectionId, questionId,
   const existingQuestion = await findQuestionOrThrow(sectionId, questionId);
 
   if (data.type !== undefined) {
-    validateQuestionType(data.type);
+    validateQuestionType(data.type, { existingType: existingQuestion.type });
   }
 
   // Block type change if the question has dependent (child) questions
@@ -1425,11 +1425,49 @@ async function applyDraftAnswers(tx, responseId, answers) {
 }
 
 /**
- * Single draft-save transaction: get-or-create the response, lock it, verify it is
- * still a draft AFTER the lock (a concurrent final POST may have just committed),
- * apply the answers and bump `updatedAt`.
+ * Columns reset when a trainer reopens their own submitted response as a draft. Authorship
+ * (filledByRole/filledByUserId) is left as is: it is meaningless while the response is a draft
+ * and is overwritten by the next finalize.
  */
-async function saveDraftInTransaction(tx, { anamnesisId, studentId, answers }) {
+const REOPEN_AS_DRAFT_DATA = Object.freeze({
+  submittedAt: null,
+  studentConfirmedAt: null,
+  trainerAttestedAt: null,
+});
+
+/**
+ * What a draft save does to a response that is already submitted:
+ *  - student draft (no `reopeningTrainerUserId`): never allowed (409 ALREADY_SUBMITTED);
+ *  - trainer draft: allowed only when getTrainerFinalizeBlock lets that trainer finalize it,
+ *    in which case the response is reopened as a draft; otherwise 409 with the block code.
+ * Must run AFTER the row lock, on freshly re-read state.
+ *
+ * @returns {object} Extra columns to write together with the draft (empty when still a draft)
+ */
+function resolveDraftReopen(lockedResponse, reopeningTrainerUserId) {
+  if (!lockedResponse.submittedAt) return {};
+
+  if (!reopeningTrainerUserId) {
+    throw new AppError({
+      httpStatus: 409,
+      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+      message: 'This anamnesis has already been submitted',
+    });
+  }
+
+  assertTrainerMayFinalize(lockedResponse, reopeningTrainerUserId);
+
+  return REOPEN_AS_DRAFT_DATA;
+}
+
+/**
+ * Single draft-save transaction: get-or-create the response, lock it, check its state
+ * AFTER the lock (a concurrent final POST may have just committed), apply the answers and
+ * bump `updatedAt`. A submitted response is rejected, or reopened when the saver is the
+ * trainer who owns it (see resolveDraftReopen).
+ */
+async function saveDraftInTransaction(tx, { anamnesisId, studentId, answers, reopeningTrainerUserId }) {
   const draftResponse = await tx.anamnesisResponse.upsert({
     where: { anamnesisId_studentId: { anamnesisId, studentId } },
     create: { anamnesisId, studentId, submittedAt: null },
@@ -1440,24 +1478,17 @@ async function saveDraftInTransaction(tx, { anamnesisId, studentId, answers }) {
 
   const lockedResponse = await tx.anamnesisResponse.findUnique({
     where: { id: draftResponse.id },
-    select: { submittedAt: true },
+    select: { submittedAt: true, filledByRole: true, filledByUserId: true },
   });
 
-  if (lockedResponse.submittedAt) {
-    throw new AppError({
-      httpStatus: 409,
-      error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
-      messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
-      message: 'This anamnesis has already been submitted',
-    });
-  }
+  const reopenData = resolveDraftReopen(lockedResponse, reopeningTrainerUserId);
 
   await applyDraftAnswers(tx, draftResponse.id, answers);
 
   // The upsert above may not touch the row, so bump updatedAt explicitly ("saved at").
   return tx.anamnesisResponse.update({
     where: { id: draftResponse.id },
-    data: { updatedAt: new Date() },
+    data: { ...reopenData, updatedAt: new Date() },
     include: { answers: true },
   });
 }
@@ -1542,10 +1573,6 @@ async function resolveFinalAnswers(anamnesisId, answers, prismaClient) {
   return visibleAnswers;
 }
 
-/**
- * A trainer never overwrites a response the student submitted themselves.
- * Must run AFTER the row lock, on freshly re-read state.
- */
 /**
  * Why this trainer may not finalize the response, or null when they may.
  * A submitted response belongs to whoever filled it: the student's submission is never
@@ -1672,13 +1699,13 @@ async function finalizeResponse({ anamnesisId, studentId, answers, authorship },
  * flip a parent answer back, and the final submit already drops answers of hidden questions.
  * Answers not present in the payload are never touched.
  */
-async function saveDraftForStudent({ anamnesisId, studentId, answers }, prismaClient) {
+async function saveDraftForStudent({ anamnesisId, studentId, answers, reopeningTrainerUserId }, prismaClient) {
   assertNoDuplicateQuestionIds(answers);
   await assertQuestionsBelongToAnamnesis(anamnesisId, answers, prismaClient);
 
   const response = await retryOnceOnUniqueViolation(() =>
     prismaClient.$transaction((tx) =>
-      saveDraftInTransaction(tx, { anamnesisId, studentId, answers }),
+      saveDraftInTransaction(tx, { anamnesisId, studentId, answers, reopeningTrainerUserId }),
     ),
   );
 
@@ -1849,8 +1876,12 @@ export async function getTrainerFillContext(trainerUserId, studentId, anamnesisI
 }
 
 /**
- * Save a partial (draft) response on behalf of the student. Same semantics as the
- * student draft: 409 once the response has been submitted.
+ * Save a partial (draft) response on behalf of the student. Same semantics as the student
+ * draft, except for a response already submitted: when this trainer may finalize it (they
+ * filled it in themselves, or the filler's user was deleted) it is REOPENED as a draft
+ * (submittedAt, studentConfirmedAt and trainerAttestedAt reset; status "draft" until the
+ * trainer finalizes again). 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT /
+ * ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER otherwise, writing nothing.
  *
  * @param {string} trainerUserId
  * @param {string} studentId
@@ -1868,7 +1899,10 @@ export async function saveTrainerAnamnesisResponseDraft(
 ) {
   await assertTrainerCanFillAnamnesis(trainerUserId, studentId, anamnesisId, prismaClient);
 
-  return saveDraftForStudent({ anamnesisId, studentId, answers }, prismaClient);
+  return saveDraftForStudent(
+    { anamnesisId, studentId, answers, reopeningTrainerUserId: trainerUserId },
+    prismaClient,
+  );
 }
 
 /**

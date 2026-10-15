@@ -249,7 +249,7 @@ export default {
     'anamnesis.question.notFound': 'Question not found.',
     'anamnesis.forbidden.notOwner': 'You do not have access to this anamnesis.',
     'anamnesis.forbidden.general': 'General anamneses cannot be edited.',
-    'anamnesis.invalidQuestionType': 'Invalid question type.',
+    'anamnesis.invalidQuestionType': 'Invalid or unsupported question type.',
     'anamnesis.alreadyLinked': 'This anamnesis is already linked to this student.',
     'anamnesis.hasStudentLinks': 'This anamnesis is linked to students. Please create a new version before editing.',
     'anamnesis.response.notFound': 'No response found for this anamnesis.',

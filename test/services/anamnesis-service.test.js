@@ -89,12 +89,15 @@ import {
   AnamnesisErrorCode,
   AnamnesisMessageCode,
   ANAMNESIS_DRAFT_MAX_ANSWERS,
+  anamnesisCreatableQuestionTypes,
   toResponseStatus,
   validateCondition,
   isQuestionVisible,
 } from '../../src/constants/anamnesis.js';
 import {
   validateParentLink,
+  validateQuestionType,
+  buildQuestionsCreateData,
   normalizeChoiceAnswersForVisibility,
   fullAnamnesisInclude,
 } from '../../src/services/anamnesis-shared.js';
@@ -3013,33 +3016,166 @@ describe('anamnesis-service', () => {
         );
       });
 
-      it.each([
-        ['student-authored', AnamnesisFilledBy.STUDENT],
-        ['trainer-authored', AnamnesisFilledBy.TRAINER],
-      ])('throws 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED over a %s submission', async (_label, filledByRole) => {
-        const tx = setupTrainerDraft({ lockedRow: { submittedAt: EARLIER, filledByRole } });
+      describe('over an already submitted response', () => {
+        const OTHER_TRAINER_USER_ID = 'trainer-user-2';
 
-        await expect(
-          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
-        ).rejects.toMatchObject({
-          httpStatus: 409,
-          error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
-          messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_ALREADY_SUBMITTED,
+        const reopenedColumns = {
+          submittedAt: null,
+          studentConfirmedAt: null,
+          trainerAttestedAt: null,
+        };
+
+        const expectNothingWritten = (tx) => {
+          expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+          expect(tx.anamnesisAnswer.upsert).not.toHaveBeenCalled();
+          expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+        };
+
+        it.each([
+          ['their own submission', { filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID }],
+          [
+            'a submission whose filler user was deleted',
+            { filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: null },
+          ],
+        ])('reopens %s as a draft, resetting only the submission columns', async (_label, authorship) => {
+          const tx = setupTrainerDraft({ lockedRow: { submittedAt: EARLIER, ...authorship } });
+
+          const result = await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledWith({
+            where: { id: RESPONSE_ID },
+            data: { ...reopenedColumns, updatedAt: expect.any(Date) },
+            include: { answers: true },
+          });
+          expect(result).toMatchObject({ status: AnamnesisResponseStatus.DRAFT, submittedAt: null });
         });
-        expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
-        expect(tx.anamnesisAnswer.upsert).not.toHaveBeenCalled();
-        expect(tx.anamnesisResponse.update).not.toHaveBeenCalled();
+
+        it('never touches the authorship columns when reopening', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID },
+          });
+
+          await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+          const { data } = tx.anamnesisResponse.update.mock.calls[0][0];
+          expect(data).not.toHaveProperty('filledByRole');
+          expect(data).not.toHaveProperty('filledByUserId');
+        });
+
+        it('applies the payload answers on the reopened response without wiping the previous ones', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID },
+          });
+
+          await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+          expect(tx.anamnesisAnswer.upsert).toHaveBeenCalledWith({
+            where: { responseId_questionId: { responseId: RESPONSE_ID, questionId: 'question-1' } },
+            create: { responseId: RESPONSE_ID, questionId: 'question-1', value: 'yes' },
+            update: { value: 'yes' },
+          });
+          expect(tx.anamnesisAnswer.deleteMany).not.toHaveBeenCalled();
+        });
+
+        it('throws 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT over a student submission and writes nothing', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: STUDENT_ID },
+          });
+
+          await expect(
+            saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+          ).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expectNothingWritten(tx);
+        });
+
+        it('throws 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT over a legacy student submission without filler', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: null },
+          });
+
+          await expect(
+            saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+          ).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT,
+          });
+          expectNothingWritten(tx);
+        });
+
+        it('throws 409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER over another trainer submission and writes nothing', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: {
+              submittedAt: EARLIER,
+              filledByRole: AnamnesisFilledBy.TRAINER,
+              filledByUserId: OTHER_TRAINER_USER_ID,
+            },
+          });
+
+          await expect(
+            saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+          ).rejects.toMatchObject({
+            httpStatus: 409,
+            error: AnamnesisErrorCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+            messageCode: AnamnesisMessageCode.ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER,
+          });
+          expectNothingWritten(tx);
+        });
+
+        it('does not retry a 409', async () => {
+          setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: STUDENT_ID },
+          });
+
+          await expect(
+            saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
+          ).rejects.toMatchObject({ httpStatus: 409 });
+
+          expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        });
+
+        it('decides reopen/409 on the state read AFTER the lock, before any answer write', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID },
+          });
+
+          await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+          const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+          const reReadOrder = tx.anamnesisResponse.findUnique.mock.invocationCallOrder[0];
+          const answerOrder = tx.anamnesisAnswer.upsert.mock.invocationCallOrder[0];
+          const updateOrder = tx.anamnesisResponse.update.mock.invocationCallOrder[0];
+          expect(lockOrder).toBeLessThan(reReadOrder);
+          expect(reReadOrder).toBeLessThan(answerOrder);
+          expect(answerOrder).toBeLessThan(updateOrder);
+        });
+
+        it('reopens when the upsert returned a draft-looking row but the re-read after the lock shows an own submission', async () => {
+          const tx = setupTrainerDraft({
+            lockedRow: { submittedAt: EARLIER, filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: TRAINER_USER_ID },
+          });
+          tx.anamnesisResponse.upsert.mockResolvedValue({ id: RESPONSE_ID, submittedAt: null });
+
+          await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
+
+          expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining(reopenedColumns) }),
+          );
+        });
       });
 
-      it('decides the 409 on the state read AFTER the lock', async () => {
-        const tx = setupTrainerDraft({ lockedRow: { submittedAt: EARLIER } });
+      it('does not reset the submission columns when the response is still a draft', async () => {
+        const tx = setupTrainerDraft({
+          lockedRow: { submittedAt: null, filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: null },
+        });
 
-        await expect(
-          saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer),
-        ).rejects.toMatchObject({ httpStatus: 409 });
+        await saveTrainerAnamnesisResponseDraft(TRAINER_USER_ID, STUDENT_ID, ANAMNESIS_ID, oneAnswer);
 
-        expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
-          tx.anamnesisResponse.findUnique.mock.invocationCallOrder[0],
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { updatedAt: expect.any(Date) } }),
         );
       });
 
@@ -3902,7 +4038,7 @@ describe('anamnesis-service', () => {
         expect(lockedId).toBe(RESPONSE_ID);
       });
 
-      it('re-reads submittedAt from the locked response by id', async () => {
+      it('re-reads the submission state and authorship from the locked response by id', async () => {
         const tx = setupDraftSave();
 
         await saveAnamnesisResponseDraft(STUDENT_ID, ANAMNESIS_ID, {
@@ -3911,8 +4047,39 @@ describe('anamnesis-service', () => {
 
         expect(tx.anamnesisResponse.findUnique).toHaveBeenCalledWith({
           where: { id: RESPONSE_ID },
-          select: { submittedAt: true },
+          select: { submittedAt: true, filledByRole: true, filledByUserId: true },
         });
+      });
+
+      it.each([
+        ['student-authored', { filledByRole: AnamnesisFilledBy.STUDENT, filledByUserId: STUDENT_ID }],
+        ['trainer-authored', { filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: 'trainer-user-1' }],
+        ['trainer-authored with a deleted filler', { filledByRole: AnamnesisFilledBy.TRAINER, filledByUserId: null }],
+      ])('never reopens a %s submission: still 409 ALREADY_SUBMITTED, nothing written', async (_label, authorship) => {
+        const submittedAt = new Date('2026-03-05T10:00:00.000Z');
+        const tx = setupDraftSave({
+          upsertedRow: { id: RESPONSE_ID, submittedAt },
+          lockedRow: { submittedAt, ...authorship },
+        });
+
+        await expect(
+          saveAnamnesisResponseDraft(STUDENT_ID, ANAMNESIS_ID, {
+            answers: [{ questionId: 'question-1', value: 'yes' }],
+          }),
+        ).rejects.toMatchObject(alreadySubmittedError);
+        expectNoAnswerWrites(tx);
+      });
+
+      it('only bumps updatedAt on a successful student draft (never resets the submission columns)', async () => {
+        const tx = setupDraftSave();
+
+        await saveAnamnesisResponseDraft(STUDENT_ID, ANAMNESIS_ID, {
+          answers: [{ questionId: 'question-1', value: 'yes' }],
+        });
+
+        expect(tx.anamnesisResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { updatedAt: expect.any(Date) } }),
+        );
       });
 
       it('does not retry a 409', async () => {
@@ -5351,6 +5518,211 @@ describe('anamnesis-service', () => {
       // Child must be persisted with its original answer
       const childPersisted = capturedCreateManyData.find((a) => a.questionId === 'child-mc');
       expect(childPersisted.value).toBe('some free text');
+    });
+  });
+
+  // ── Retired `matrix` question type ───────────────────────────────────────
+
+  describe('retired matrix question type', () => {
+    const nonMatrixTypes = Object.values(AnamnesisQuestionType).filter(
+      (type) => type !== AnamnesisQuestionType.MATRIX,
+    );
+    const matrixQuestion = {
+      text: 'Rate each item',
+      type: AnamnesisQuestionType.MATRIX,
+      options: [{ text: 'Row 1' }, { text: 'Row 2' }],
+    };
+    const invalidQuestionTypeError = {
+      httpStatus: 400,
+      error: AnamnesisErrorCode.INVALID_QUESTION_TYPE,
+      messageCode: AnamnesisMessageCode.INVALID_QUESTION_TYPE,
+    };
+
+    describe('anamnesisCreatableQuestionTypes', () => {
+      it('lists the five non-matrix types', () => {
+        expect(anamnesisCreatableQuestionTypes).toHaveLength(5);
+        expect([...anamnesisCreatableQuestionTypes].sort()).toEqual([...nonMatrixTypes].sort());
+      });
+
+      it('does not include matrix', () => {
+        expect(anamnesisCreatableQuestionTypes).not.toContain(AnamnesisQuestionType.MATRIX);
+      });
+
+      it('keeps matrix in the enum of every type that can exist in the database (read paths)', () => {
+        expect(Object.values(AnamnesisQuestionType)).toContain(AnamnesisQuestionType.MATRIX);
+      });
+    });
+
+    describe('validateQuestionType', () => {
+      it.each(nonMatrixTypes)('accepts the %s type', (type) => {
+        expect(() => validateQuestionType(type)).not.toThrow();
+      });
+
+      it('rejects matrix with 400 INVALID_QUESTION_TYPE', () => {
+        expect(() => validateQuestionType(AnamnesisQuestionType.MATRIX)).toThrow(AppError);
+        expect(() => validateQuestionType(AnamnesisQuestionType.MATRIX)).toThrowError(
+          expect.objectContaining(invalidQuestionTypeError),
+        );
+      });
+
+      it('lists only the creatable types in the matrix rejection message', () => {
+        let thrown;
+        try {
+          validateQuestionType(AnamnesisQuestionType.MATRIX);
+        } catch (error) {
+          thrown = error;
+        }
+
+        for (const type of anamnesisCreatableQuestionTypes) {
+          expect(thrown.message).toContain(type);
+        }
+        expect(thrown.message).not.toMatch(/valid values are:.*matrix/i);
+      });
+
+      it.each(['foo', '', 'MATRIX', null, undefined])('rejects the unknown type %j', (type) => {
+        expect(() => validateQuestionType(type)).toThrowError(expect.objectContaining(invalidQuestionTypeError));
+      });
+
+      it('rejects matrix when the existing type is a different one', () => {
+        expect(() =>
+          validateQuestionType(AnamnesisQuestionType.MATRIX, { existingType: AnamnesisQuestionType.FREE_TEXT }),
+        ).toThrowError(expect.objectContaining(invalidQuestionTypeError));
+      });
+
+      it('accepts matrix only when it is the existing type of the question', () => {
+        expect(() =>
+          validateQuestionType(AnamnesisQuestionType.MATRIX, { existingType: AnamnesisQuestionType.MATRIX }),
+        ).not.toThrow();
+      });
+
+      it('still rejects an unknown type even when it equals the existing type', () => {
+        expect(() => validateQuestionType('foo', { existingType: 'foo' })).toThrowError(
+          expect.objectContaining(invalidQuestionTypeError),
+        );
+      });
+    });
+
+    describe('buildQuestionsCreateData', () => {
+      it('rejects a matrix question', () => {
+        expect(() => buildQuestionsCreateData([matrixQuestion])).toThrowError(
+          expect.objectContaining(invalidQuestionTypeError),
+        );
+      });
+
+      it('rejects the whole batch when a matrix question is mixed with valid ones', () => {
+        expect(() =>
+          buildQuestionsCreateData([{ text: 'Smoke?', type: AnamnesisQuestionType.DICHOTOMOUS }, matrixQuestion]),
+        ).toThrowError(expect.objectContaining(invalidQuestionTypeError));
+      });
+
+      it.each(nonMatrixTypes)('builds create data for a %s question', (type) => {
+        const [built] = buildQuestionsCreateData([{ text: 'Q?', type }]);
+
+        expect(built).toMatchObject({ text: 'Q?', type });
+      });
+    });
+
+    describe('trainer service', () => {
+      beforeEach(() => {
+        prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+        prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+        prisma.anamnesisSection.findUnique.mockResolvedValue(makeSection());
+      });
+
+      it('addQuestion rejects a matrix question without creating it', async () => {
+        await expect(
+          addQuestion('user-1', 'anamnesis-1', 'section-1', matrixQuestion),
+        ).rejects.toMatchObject(invalidQuestionTypeError);
+
+        expect(prisma.anamnesisQuestion.create).not.toHaveBeenCalled();
+      });
+
+      it('createAnamnesis rejects a nested matrix question without creating the anamnesis', async () => {
+        const txCreate = vi.fn();
+        prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesis: { create: txCreate } }));
+
+        await expect(
+          createAnamnesis('user-1', {
+            title: 'Test',
+            sections: [{ title: 'Section 1', questions: [matrixQuestion] }],
+          }),
+        ).rejects.toMatchObject(invalidQuestionTypeError);
+
+        expect(txCreate).not.toHaveBeenCalled();
+      });
+
+      it('addSection rejects a nested matrix question without creating the section', async () => {
+        await expect(
+          addSection('user-1', 'anamnesis-1', { title: 'New Section', questions: [matrixQuestion] }),
+        ).rejects.toMatchObject(invalidQuestionTypeError);
+
+        expect(prisma.anamnesisSection.create).not.toHaveBeenCalled();
+      });
+
+      it('updateQuestion rejects changing a question type TO matrix without writing', async () => {
+        prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+          makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }),
+        );
+
+        await expect(
+          updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+            type: AnamnesisQuestionType.MATRIX,
+          }),
+        ).rejects.toMatchObject(invalidQuestionTypeError);
+
+        expect(prisma.anamnesisQuestion.count).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('updateQuestion lets a legacy matrix question be updated with its type unchanged', async () => {
+        prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+          makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+        );
+        const updated = makeQuestion({ type: AnamnesisQuestionType.MATRIX, text: 'Renamed' });
+        const txUpdate = vi.fn().mockResolvedValue(updated);
+        prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesisQuestion: { update: txUpdate } }));
+
+        const result = await updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          text: 'Renamed',
+          type: AnamnesisQuestionType.MATRIX,
+        });
+
+        expect(result.type).toBe(AnamnesisQuestionType.MATRIX);
+        expect(txUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: { text: 'Renamed', type: AnamnesisQuestionType.MATRIX },
+          }),
+        );
+        // Same type: the dependent-children guard is not even consulted
+        expect(prisma.anamnesisQuestion.count).not.toHaveBeenCalled();
+      });
+
+      it('updateQuestion lets a legacy matrix question move to a creatable type', async () => {
+        prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+          makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+        );
+        prisma.anamnesisQuestion.count.mockResolvedValue(0);
+        const txUpdate = vi.fn().mockResolvedValue(makeQuestion({ type: AnamnesisQuestionType.SINGLE_CHOICE }));
+        prisma.$transaction.mockImplementation(async (fn) => fn({ anamnesisQuestion: { update: txUpdate } }));
+
+        await updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', {
+          type: AnamnesisQuestionType.SINGLE_CHOICE,
+        });
+
+        expect(txUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { type: AnamnesisQuestionType.SINGLE_CHOICE } }),
+        );
+      });
+
+      it('updateQuestion still rejects an unknown type on a legacy matrix question', async () => {
+        prisma.anamnesisQuestion.findUnique.mockResolvedValue(
+          makeQuestion({ type: AnamnesisQuestionType.MATRIX }),
+        );
+
+        await expect(
+          updateQuestion('user-1', 'anamnesis-1', 'section-1', 'question-1', { type: 'foo' }),
+        ).rejects.toMatchObject(invalidQuestionTypeError);
+      });
     });
   });
 });

@@ -5629,7 +5629,7 @@
                 }
               }
             },
-            "description": "Create a new private anamnesis (questionnaire) with optional nested sections, questions, and options. Always creates with isGeneral: false."
+            "description": "Create a new private anamnesis (questionnaire) with optional nested sections, questions, and options. Always creates with isGeneral: false. Nested questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType)."
           },
           "response": []
         },
@@ -5846,7 +5846,7 @@
                 }
               }
             },
-            "description": "Add a new section to an anamnesis. Optionally include questions and options."
+            "description": "Add a new section to an anamnesis. Optionally include questions and options. Nested questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType)."
           },
           "response": []
         },
@@ -6042,7 +6042,7 @@
                 }
               }
             },
-            "description": "Add a question to a section. Types: free_text, dichotomous, multiple_choice, numeric, single_choice, matrix. Types with options: multiple_choice, single_choice, matrix.\n\nConditional display: set parentQuestionId (UUID of an eligible parent in the same section) and condition:\n- Dichotomous parent: { \"operator\": \"equals\", \"value\": \"yes\" | \"no\" }\n- Single choice parent: { \"operator\": \"equals\", \"optionId\": \"<uuid>\" }\n- Multiple choice parent: { \"operator\": \"includesAny\", \"optionIds\": [\"<uuid>\"] }\n\nErrors: 400 PARENT_NOT_ELIGIBLE, PARENT_MUST_BE_SAME_SECTION, INVALID_CONDITION, CONDITIONAL_DEPTH_EXCEEDED"
+            "description": "Add a question to a section. Types: free_text, dichotomous, multiple_choice, numeric, single_choice. Types with options: multiple_choice, single_choice. The legacy type `matrix` is retired: sending it returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType).\n\nConditional display: set parentQuestionId (UUID of an eligible parent in the same section) and condition:\n- Dichotomous parent: { \"operator\": \"equals\", \"value\": \"yes\" | \"no\" }\n- Single choice parent: { \"operator\": \"equals\", \"optionId\": \"<uuid>\" }\n- Multiple choice parent: { \"operator\": \"includesAny\", \"optionIds\": [\"<uuid>\"] }\n\nErrors: 400 INVALID_QUESTION_TYPE, PARENT_NOT_ELIGIBLE, PARENT_MUST_BE_SAME_SECTION, INVALID_CONDITION, CONDITIONAL_DEPTH_EXCEEDED"
           },
           "response": []
         },
@@ -6101,7 +6101,7 @@
                 }
               }
             },
-            "description": "Update a question. If options array is provided, it completely replaces existing options.\n\nConditional display: set parentQuestionId + condition to link to a parent, or set both to null to remove the condition.\n\nErrors: 400 PARENT_NOT_ELIGIBLE | PARENT_MUST_BE_SAME_SECTION | INVALID_CONDITION | CONDITIONAL_DEPTH_EXCEEDED; 409 PARENT_TYPE_LOCKED (cannot change type if question has conditional children) | CONDITION_REFERENCES_REMOVED_OPTION (cannot remove option referenced by child condition)"
+            "description": "Update a question. If options array is provided, it completely replaces existing options.\n\nConditional display: set parentQuestionId + condition to link to a parent, or set both to null to remove the condition.\n\nQuestion type: changing `type` to the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType); valid types: free_text, dichotomous, multiple_choice, numeric, single_choice. A legacy `matrix` question can still be edited as long as its type is not changed.\n\nErrors: 400 INVALID_QUESTION_TYPE | PARENT_NOT_ELIGIBLE | PARENT_MUST_BE_SAME_SECTION | INVALID_CONDITION | CONDITIONAL_DEPTH_EXCEEDED; 409 PARENT_TYPE_LOCKED (cannot change type if question has conditional children) | CONDITION_REFERENCES_REMOVED_OPTION (cannot remove option referenced by child condition)"
           },
           "response": []
         },
@@ -6769,7 +6769,7 @@
                 }
               }
             },
-            "description": "Save a partial (draft) response on the student's behalf. Same semantics as PATCH /my/anamneses/:anamnesisId/response/draft: upserts only the answers present (1 to 300 items, no duplicate questionId), an empty value (null, blank string or empty array) clears that question's answer, required questions are NOT validated. Authorship is not changed by a draft. Errors: 400 VALIDATION_ERROR, 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response was submitted (by either party). The student must be linked to the trainer and active on the plan, and this trainer must have linked this anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND otherwise)."
+            "description": "Save a partial (draft) response on the student's behalf. Same semantics as PATCH /my/anamneses/:anamnesisId/response/draft: upserts only the answers present (1 to 300 items, no duplicate questionId), an empty value (null, blank string or empty array) clears that question's answer, required questions are NOT validated. Unlike the student route (which keeps returning 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once submitted), a response this trainer already finalized (or whose filler's user was deleted) is REOPENED as a draft: submittedAt, studentConfirmedAt and trainerAttestedAt are reset to null and status becomes \"draft\" until the trainer finalizes again with POST .../response (which re-sets the attestation and \"awaiting_confirmation\"). While reopened, GET .../response (dossier) returns 404, the student cannot confirm (409 ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION) and may still save drafts. A response submitted by the student (409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT) or filled by another trainer (409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER) is never reopened and nothing is written. Errors: 400 VALIDATION_ERROR, 404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND / ANAMNESIS_QUESTION_NOT_FOUND, 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT / ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER. The student must be linked to the trainer and active on the plan, and this trainer must have linked this anamnesis to this student (404 ANAMNESIS_NOT_LINKED_TO_STUDENT / STUDENT_NOT_FOUND otherwise)."
           },
           "response": [
             {
@@ -6834,7 +6834,68 @@
               "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-29T10:20:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"filledBy\": \"student\",\n  \"filledByLabel\": \"Aluno\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
             },
             {
-              "name": "Save Trainer Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED",
+              "name": "Save Trainer Anamnesis Response Draft - 200 OK (reopened a finalized response)",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n  \"anamnesisId\": \"b1f0c2a4-7d3e-4c1a-9a55-2f6e8d1c0a11\",\n  \"studentId\": \"3c9d7e52-1a44-4b8e-8f0d-6a2b9c5e7f10\",\n  \"submittedAt\": null,\n  \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n  \"updatedAt\": \"2026-09-30T09:15:00.000Z\",\n  \"status\": \"draft\",\n  \"statusLabel\": \"Rascunho\",\n  \"filledBy\": \"trainer\",\n  \"filledByLabel\": \"Professor\",\n  \"trainerAttestedAt\": null,\n  \"studentConfirmedAt\": null,\n  \"answers\": [\n    {\n      \"id\": \"c1a2b3d4-1111-4222-8333-444455556661\",\n      \"responseId\": \"9e8d7c6b-5a49-4382-b1a0-f9e8d7c6b5a4\",\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\",\n      \"createdAt\": \"2026-09-29T10:05:00.000Z\",\n      \"updatedAt\": null\n    }\n  ]\n}"
+            },
+            {
+              "name": "Save Trainer Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT",
               "originalRequest": {
                 "method": "PATCH",
                 "header": [
@@ -6892,7 +6953,68 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_ALREADY_SUBMITTED\",\n  \"messageCode\": \"anamnesis.response.alreadySubmitted\",\n  \"message\": \"Esta anamnese já foi enviada.\",\n  \"details\": {}\n}"
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT\",\n  \"messageCode\": \"anamnesis.response.submittedByStudent\",\n  \"message\": \"O aluno já enviou esta anamnese.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Save Trainer Anamnesis Response Draft - 409 ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/anamneses/:anamnesisId/response/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "anamneses",
+                    ":anamnesisId",
+                    "response",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "",
+                      "description": "Student user UUID"
+                    },
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c01\",\n      \"value\": \"yes\"\n    },\n    {\n      \"questionId\": \"0d4a6b8c-2e1f-4a3b-9c7d-5e6f7a8b9c02\",\n      \"value\": null\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER\",\n  \"messageCode\": \"anamnesis.response.filledByAnotherTrainer\",\n  \"message\": \"Esta anamnese foi preenchida por outro professor.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -8045,7 +8167,7 @@
                 }
               }
             },
-            "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students."
+            "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students. Nested sections[].questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType)."
           },
           "response": []
         },
@@ -8224,7 +8346,7 @@
                 }
               }
             },
-            "description": "Add a section (with optional nested questions) to a public anamnesis. No student-link guard. Requires ADMIN role."
+            "description": "Add a section (with optional nested questions) to a public anamnesis. No student-link guard. Nested questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType). Requires ADMIN role."
           },
           "response": []
         },
@@ -8415,7 +8537,7 @@
                 }
               }
             },
-            "description": "Add a question (with optional options) to a section on a public anamnesis. Supports parentQuestionId + condition for conditional display. Requires ADMIN role."
+            "description": "Add a question (with optional options) to a section on a public anamnesis. Supports parentQuestionId + condition for conditional display. Types: free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType). Requires ADMIN role."
           },
           "response": []
         },
@@ -8474,7 +8596,7 @@
                 }
               }
             },
-            "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Supports parentQuestionId + condition for conditional display. Errors: 409 PARENT_TYPE_LOCKED | CONDITION_REFERENCES_REMOVED_OPTION. Requires ADMIN role."
+            "description": "Update a question on a public anamnesis. If options are provided they completely replace existing options. Supports parentQuestionId + condition for conditional display. Changing `type` to the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType); a legacy `matrix` question can still be edited as long as its type is not changed. Errors: 400 INVALID_QUESTION_TYPE; 409 PARENT_TYPE_LOCKED | CONDITION_REFERENCES_REMOVED_OPTION. Requires ADMIN role."
           },
           "response": []
         },

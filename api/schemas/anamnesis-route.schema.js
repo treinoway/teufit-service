@@ -1,4 +1,4 @@
-import { anamnesisQuestionTypeValues, ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
+import { ANAMNESIS_DRAFT_MAX_ANSWERS } from '../../src/constants/anamnesis.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import {
@@ -10,6 +10,7 @@ import {
   deletedAtResponseSchema,
   questionOptionBodySchema,
   questionBodySchema,
+  questionTypeBodySchema,
   sectionBodySchema,
   conditionSchema,
 } from './anamnesis-shared.schema.js';
@@ -284,7 +285,7 @@ export const updateQuestionSchema = {
     type: 'object',
     properties: {
       text: { type: 'string', minLength: 1 },
-      type: { type: 'string', enum: anamnesisQuestionTypeValues },
+      type: questionTypeBodySchema,
       required: { type: 'boolean' },
       order: { type: 'integer', minimum: 0 },
       config: { anyOf: [{ type: 'object' }, { type: 'null' }] },
@@ -881,9 +882,16 @@ export const saveTrainerAnamnesisResponseDraftSchema = {
   summary: "Save a partial (draft) response on the student's behalf (trainer)",
   description:
     'Same semantics as PATCH /my/anamneses/{anamnesisId}/response/draft: only the answers present are ' +
-    'upserted, empty values clear the stored answer, required questions are not validated. Authorship is not ' +
-    'changed by a draft. Returns 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response has been ' +
-    'submitted (by either party). ' + trainerFillAccessDescription,
+    'upserted, empty values clear the stored answer, required questions are not validated. Unlike the student ' +
+    'route (which keeps returning 409 ANAMNESIS_RESPONSE_ALREADY_SUBMITTED once the response is submitted), a ' +
+    'response this trainer already finalized (or whose filler\'s user was deleted) is REOPENED as a draft: ' +
+    'submittedAt, studentConfirmedAt and trainerAttestedAt are reset to null and the status becomes "draft" ' +
+    'until the trainer finalizes again with POST (which re-sets the attestation and "awaiting_confirmation"). ' +
+    'While reopened the trainer dossier returns 404, the student cannot confirm (409 ' +
+    'ANAMNESIS_RESPONSE_NOT_AWAITING_CONFIRMATION) and the student may still save drafts. A response the ' +
+    'student submitted (409 ANAMNESIS_RESPONSE_SUBMITTED_BY_STUDENT) or another trainer filled in (409 ' +
+    'ANAMNESIS_RESPONSE_FILLED_BY_ANOTHER_TRAINER) is never reopened and nothing is written. ' +
+    trainerFillAccessDescription,
   security: [{ bearerAuth: [] }],
   params: trainerFillParamsSchema,
   body: draftBodySchema,
