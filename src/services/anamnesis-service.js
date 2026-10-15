@@ -1,5 +1,4 @@
 import { prisma } from '../db.js';
-import config from '../../config/index.js';
 import emailHandler from '../config/email-handler.js';
 import { AppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
@@ -1001,13 +1000,13 @@ export async function getMyAnamnesisDetail(userId, anamnesisId, prismaClient = p
  * response was sent: throws on delivery failure so the caller can log it, never retries.
  * Skips silently when the student has no deliverable email (deleted account, no email).
  *
- * @param {{ trainerId: string, studentId: string, anamnesisId: string, anamnesisTitle: string }} assignment
+ * @param {{ trainerId: string, studentId: string, anamnesisTitle: string }} assignment
  * @param {object} [prismaClient]
  * @param {{ emailSender?: object }} [deps]
  * @returns {Promise<void>}
  */
 export async function notifyStudentAnamnesisAssigned(
-  { trainerId, studentId, anamnesisId, anamnesisTitle },
+  { trainerId, studentId, anamnesisTitle },
   prismaClient = prisma,
   { emailSender = emailHandler } = {},
 ) {
@@ -1025,7 +1024,6 @@ export async function notifyStudentAnamnesisAssigned(
   if (!student?.email || student.deletedAt) return;
 
   const trainerName = `${trainer?.user?.firstName ?? ''} ${trainer?.user?.lastName ?? ''}`.trim();
-  const link = `${config.web.baseUrl}/my/anamneses/${encodeURIComponent(anamnesisId)}/answer`;
 
   // The Resend SDK returns { data, error } instead of throwing.
   const emailResponse = await emailSender.sendAnamnesisAssignedEmail({
@@ -1033,7 +1031,6 @@ export async function notifyStudentAnamnesisAssigned(
     studentName: student.firstName,
     trainerName,
     anamnesisTitle,
-    link,
   });
   if (emailResponse?.error) {
     // Only the provider's error name: its message may echo the recipient address.
