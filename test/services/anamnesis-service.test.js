@@ -102,7 +102,6 @@ import {
   fullAnamnesisInclude,
 } from '../../src/services/anamnesis-shared.js';
 import { AppError } from '../../src/errors/app-error.js';
-import config from '../../config/index.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
@@ -1744,7 +1743,7 @@ describe('anamnesis-service', () => {
       prisma.trainer.findUnique.mockResolvedValue({ user: { firstName: 'Ana', lastName: 'Coach' } });
     });
 
-    it('sends the email to the student with the trainer name, the title and the web answer link', async () => {
+    it('sends the email to the student with the trainer name and the title', async () => {
       await notifyStudentAnamnesisAssigned(assignment, prisma, { emailSender });
 
       expect(emailSender.sendAnamnesisAssignedEmail).toHaveBeenCalledTimes(1);
@@ -1753,7 +1752,6 @@ describe('anamnesis-service', () => {
         studentName: 'Maria',
         trainerName: 'Ana Coach',
         anamnesisTitle: 'Health Questionnaire',
-        link: `${config.web.baseUrl}/my/anamneses/anamnesis-1/answer`,
       });
     });
 
