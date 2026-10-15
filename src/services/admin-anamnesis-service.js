@@ -15,6 +15,9 @@ import {
   buildQuestionsCreateData,
   validateSectionIds,
   validateParentLink,
+  validateAnamnesisCategory,
+  anamnesisListInclude,
+  toAnamnesisListItem,
 } from './anamnesis-shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -63,10 +66,12 @@ async function assertAnamnesisNotLinked(anamnesisId) {
  * Create a new public anamnesis (isGeneral: true, trainerId: null)
  * with optional nested sections/questions/options.
  *
- * @param {object} data - { title, description, sections }
+ * @param {object} data - { title, description, category, sections }
  * @returns {Promise<object>} The created anamnesis with full nested structure
  */
 export async function createPublicAnamnesis(data) {
+  validateAnamnesisCategory(data.category);
+
   // Pre-validate question types before entering the transaction so that
   // validation errors are thrown immediately and predictably.
   const sectionsCreateData = data.sections?.length
@@ -86,6 +91,7 @@ export async function createPublicAnamnesis(data) {
         trainerId: null,
         title: data.title,
         description: data.description ?? null,
+        category: data.category ?? null,
         isGeneral: true,
         sections: sectionsCreateData
           ? { create: sectionsCreateData }
@@ -101,7 +107,7 @@ export async function createPublicAnamnesis(data) {
 }
 
 /**
- * List all public (isGeneral: true) anamneses with sections summary.
+ * List all public (isGeneral: true) anamneses with sections summary and `questionCount`.
  *
  * @returns {Promise<object[]>}
  */
@@ -109,16 +115,10 @@ export async function listPublicAnamneses() {
   const anamneses = await prisma.anamnesis.findMany({
     where: { isGeneral: true, deletedAt: null },
     orderBy: { createdAt: 'desc' },
-    include: {
-      sections: {
-        where: { deletedAt: null },
-        orderBy: { order: 'asc' },
-        select: { id: true, title: true, order: true },
-      },
-    },
+    include: anamnesisListInclude,
   });
 
-  return anamneses;
+  return anamneses.map(toAnamnesisListItem);
 }
 
 /**
@@ -137,22 +137,29 @@ export async function getPublicAnamnesisById(anamnesisId) {
 }
 
 /**
- * Update a public anamnesis title/description.
- * Blocks update if the anamnesis is linked to students.
+ * Update a public anamnesis title/description/category.
+ * Changing title/description is blocked while the anamnesis is linked to students.
+ * The catalog `category` is metadata (not content the student answers), so it can be
+ * changed even on a linked anamnesis.
  *
  * @param {string} anamnesisId
- * @param {object} data - { title, description }
+ * @param {object} data - { title, description, category }
  * @returns {Promise<object>}
  */
 export async function updatePublicAnamnesis(anamnesisId, data) {
+  validateAnamnesisCategory(data.category);
   await findPublicAnamnesisOrThrow(anamnesisId);
-  await assertAnamnesisNotLinked(anamnesisId);
+
+  if (data.title !== undefined || data.description !== undefined) {
+    await assertAnamnesisNotLinked(anamnesisId);
+  }
 
   const updated = await prisma.anamnesis.update({
     where: { id: anamnesisId },
     data: {
       ...(data.title !== undefined && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
+      ...(data.category !== undefined && { category: data.category }),
     },
     include: fullAnamnesisInclude,
   });

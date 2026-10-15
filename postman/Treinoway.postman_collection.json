@@ -5641,21 +5641,83 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "app-language",
+                "value": "pt-BR",
+                "description": "pt-BR (default) or en-US — translates categoryLabel",
+                "disabled": true
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/trainer/anamneses",
+              "raw": "{{baseUrl}}/trainer/anamneses?category=screening",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "trainer",
                 "anamneses"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "screening",
+                  "description": "Optional catalog filter: screening | general | weight_loss | hypertrophy | special_population. Unknown value → 400 VALIDATION_ERROR.",
+                  "disabled": false
+                }
               ]
             },
-            "description": "List all anamneses visible to the trainer: their own private ones + all general (platform) anamneses."
+            "description": "List all anamneses visible to the trainer: their own private ones + all general (platform) anamneses. General ones have isGeneral: true and trainerId: null and come first. Each item includes category (nullable), categoryLabel (translated via app-language) and questionCount (non-deleted questions of non-deleted sections). Optional ?category= filters by catalog category; an unknown value returns 400 VALIDATION_ERROR. Requires TRAINER role."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 - Filtered by category",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "app-language",
+                    "value": "pt-BR",
+                    "description": "pt-BR (default) or en-US — translates categoryLabel",
+                    "disabled": true
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/anamneses?category=screening",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "anamneses"
+                  ],
+                  "query": [
+                    {
+                      "key": "category",
+                      "value": "screening",
+                      "description": "Optional catalog filter: screening | general | weight_loss | hypertrophy | special_population. Unknown value → 400 VALIDATION_ERROR.",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "List all anamneses visible to the trainer: their own private ones + all general (platform) anamneses. General ones have isGeneral: true and trainerId: null and come first. Each item includes category (nullable), categoryLabel (translated via app-language) and questionCount (non-deleted questions of non-deleted sections). Optional ?category= filters by catalog category; an unknown value returns 400 VALIDATION_ERROR. Requires TRAINER role."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"5b0d6c8e-3f2a-4c1e-9a7b-1d2e3f4a5b6c\",\n    \"trainerId\": null,\n    \"title\": \"Triagem pré-participação\",\n    \"description\": \"Questionário curto de triagem antes de iniciar os treinos\",\n    \"category\": \"screening\",\n    \"categoryLabel\": \"Triagem\",\n    \"isGeneral\": true,\n    \"version\": 1,\n    \"parentId\": null,\n    \"questionCount\": 12,\n    \"sections\": [\n      {\n        \"id\": \"8c1f2e3d-4b5a-4c6d-8e7f-9a0b1c2d3e4f\",\n        \"title\": \"Histórico de saúde\",\n        \"order\": 0\n      }\n    ],\n    \"createdAt\": \"2026-10-14T12:00:00.000Z\",\n    \"updatedAt\": null\n  },\n  {\n    \"id\": \"a7e3c9d1-2b4f-4e6a-8c0d-2f4b6d8e0a1c\",\n    \"trainerId\": \"0f9e8d7c-6b5a-4c3d-2e1f-0a9b8c7d6e5f\",\n    \"title\": \"Triagem — Turma da manhã\",\n    \"description\": null,\n    \"category\": \"screening\",\n    \"categoryLabel\": \"Triagem\",\n    \"isGeneral\": false,\n    \"version\": 1,\n    \"parentId\": null,\n    \"questionCount\": 12,\n    \"sections\": [\n      {\n        \"id\": \"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n        \"title\": \"Histórico de saúde\",\n        \"order\": 0\n      }\n    ],\n    \"createdAt\": \"2026-10-14T12:30:00.000Z\",\n    \"updatedAt\": null\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Get Anamnesis Detail",
@@ -8160,14 +8222,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Platform Health Questionnaire\",\n  \"description\": \"Standard health assessment for all students\",\n  \"sections\": [\n    {\n      \"title\": \"Physical Activity\",\n      \"questions\": [\n        {\n          \"text\": \"Do you exercise regularly?\",\n          \"type\": \"dichotomous\",\n          \"required\": true\n        }\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"title\": \"Platform Health Questionnaire\",\n  \"description\": \"Standard health assessment for all students\",\n  \"category\": \"general\",\n  \"sections\": [\n    {\n      \"title\": \"Physical Activity\",\n      \"questions\": [\n        {\n          \"text\": \"Do you exercise regularly?\",\n          \"type\": \"dichotomous\",\n          \"required\": true\n        }\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students. Nested sections[].questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType)."
+            "description": "Create a new public anamnesis (isGeneral: true, trainerId: null) with optional nested sections and questions. Requires ADMIN role. Admins can edit public anamneses even when linked to students. Nested sections[].questions[].type must be one of free_text, dichotomous, multiple_choice, numeric, single_choice; the retired `matrix` returns 400 INVALID_QUESTION_TYPE (messageCode anamnesis.invalidQuestionType). Optional category (screening | general | weight_loss | hypertrophy | special_population, or null); an unknown value returns 400 VALIDATION_ERROR."
           },
           "response": []
         },
@@ -8191,7 +8253,7 @@
                 "anamneses"
               ]
             },
-            "description": "List all public (isGeneral: true) anamneses. Includes sections summary (id, title, order) for each. Requires ADMIN role."
+            "description": "List all public (isGeneral: true) anamneses. Includes sections summary (id, title, order), category, categoryLabel and questionCount for each. Requires ADMIN role."
           },
           "response": []
         },
@@ -8261,14 +8323,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Updated Public Questionnaire\",\n  \"description\": \"Updated description\"\n}",
+              "raw": "{\n  \"title\": \"Updated Public Questionnaire\",\n  \"description\": \"Updated description\",\n  \"category\": \"hypertrophy\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Update title and/or description of a public anamnesis. No student-link guard — admins can edit freely. Requires ADMIN role."
+            "description": "Update title, description and/or category of a public anamnesis. Changing title or description returns 409 ANAMNESIS_HAS_STUDENT_LINKS while the anamnesis is linked to students; category is catalog metadata and can be changed (or cleared with null) even when it is linked. Requires ADMIN role."
           },
           "response": []
         },
@@ -9175,6 +9237,10 @@
             "method": "POST",
             "header": [
               {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
               }
@@ -9198,9 +9264,129 @@
                 }
               ]
             },
-            "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. Requires TRAINER role."
+            "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false, and keeps the source category. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. The body is optional: without it the copy keeps the source title and description. title (1..200 chars, trimmed; whitespace-only → 400 VALIDATION_ERROR) and description (string or null to clear) override the source values. Requires TRAINER role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Triagem — Turma da manhã\",\n  \"description\": \"Triagem usada com os alunos do horário da manhã\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
-          "response": []
+          "response": [
+            {
+              "name": "201 - Copy with new title",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/copy",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "anamneses",
+                    ":anamnesisId",
+                    "copy"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID (public or own private)"
+                    }
+                  ]
+                },
+                "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false, and keeps the source category. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. The body is optional: without it the copy keeps the source title and description. title (1..200 chars, trimmed; whitespace-only → 400 VALIDATION_ERROR) and description (string or null to clear) override the source values. Requires TRAINER role.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Triagem — Turma da manhã\",\n  \"description\": \"Triagem usada com os alunos do horário da manhã\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"a7e3c9d1-2b4f-4e6a-8c0d-2f4b6d8e0a1c\",\n  \"trainerId\": \"0f9e8d7c-6b5a-4c3d-2e1f-0a9b8c7d6e5f\",\n  \"title\": \"Triagem — Turma da manhã\",\n  \"description\": \"Triagem usada com os alunos do horário da manhã\",\n  \"category\": \"screening\",\n  \"categoryLabel\": \"Triagem\",\n  \"isGeneral\": false,\n  \"version\": 1,\n  \"parentId\": null,\n  \"sections\": [],\n  \"createdAt\": \"2026-10-14T12:30:00.000Z\",\n  \"updatedAt\": null\n}"
+            },
+            {
+              "name": "400 - Blank title",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/anamneses/:anamnesisId/copy",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "anamneses",
+                    ":anamnesisId",
+                    "copy"
+                  ],
+                  "variable": [
+                    {
+                      "key": "anamnesisId",
+                      "value": "",
+                      "description": "Anamnesis UUID (public or own private)"
+                    }
+                  ]
+                },
+                "description": "Copy an anamnesis into a new independent private copy owned by the trainer. Works for public anamneses (isGeneral: true) or the trainer's own private anamneses. The copy starts fresh: parentId: null, version: 1, isGeneral: false, and keeps the source category. Unlike fork (which creates a new version of your own anamnesis), copy creates a completely new independent record. The body is optional: without it the copy keeps the source title and description. title (1..200 chars, trimmed; whitespace-only → 400 VALIDATION_ERROR) and description (string or null to clear) override the source values. Requires TRAINER role.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Triagem — Turma da manhã\",\n  \"description\": \"Triagem usada com os alunos do horário da manhã\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Title must not be blank.\",\n  \"details\": [\n    {\n      \"field\": \"title\",\n      \"validations\": [\n        \"minLength\"\n      ],\n      \"messageCode\": \"validation.title.minLength\",\n      \"message\": \"Title must not be blank.\"\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     },

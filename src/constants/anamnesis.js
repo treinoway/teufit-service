@@ -37,6 +37,17 @@ export const anamnesisParentEligibleTypes = Object.freeze([
   AnamnesisQuestionType.MULTIPLE_CHOICE,
 ]);
 
+// Catalog category of an anamnesis (Anamnesis.category). Null means uncategorized.
+export const AnamnesisCategory = Object.freeze({
+  SCREENING: 'screening',
+  GENERAL: 'general',
+  WEIGHT_LOSS: 'weight_loss',
+  HYPERTROPHY: 'hypertrophy',
+  SPECIAL_POPULATION: 'special_population',
+});
+
+export const anamnesisCategoryValues = Object.freeze(Object.values(AnamnesisCategory));
+
 // Operators used in condition JSONB objects
 export const AnamnesisConditionOperator = Object.freeze({
   EQUALS: 'equals',
@@ -56,6 +67,9 @@ export const AnamnesisFilledBy = Object.freeze({
   STUDENT: 'student',
   TRAINER: 'trainer',
 });
+
+// Upper bound of the title given when copying an anamnesis (POST /trainer/anamneses/:id/copy)
+export const ANAMNESIS_COPY_TITLE_MAX_LENGTH = 200;
 
 // Upper bound of answers accepted in one draft save request
 export const ANAMNESIS_DRAFT_MAX_ANSWERS = 300;

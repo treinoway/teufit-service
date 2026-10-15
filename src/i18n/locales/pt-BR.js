@@ -102,6 +102,13 @@ export default {
       single_choice: 'Escolha única',
       matrix: 'Matriz',
     },
+    anamnesisCategory: {
+      screening: 'Triagem',
+      general: 'Geral',
+      weight_loss: 'Emagrecimento',
+      hypertrophy: 'Hipertrofia',
+      special_population: 'Públicos específicos',
+    },
     anamnesisResponseStatus: {
       draft: 'Rascunho',
       awaiting_confirmation: 'Aguardando confirmação',
