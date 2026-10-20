@@ -43,9 +43,16 @@ export default {
     baseUrl: process.env.WEB_BASE_URL || 'https://teufit.com.br',
   },
   stores: {
-    // Store listing links embedded in student emails. Placeholder defaults
-    // (mocks) until the apps are published — override via env in each environment.
-    appStoreUrl: process.env.APP_STORE_URL || 'https://apps.apple.com/br/app/teufit/id0000000000',
+    // Store listing links embedded in student emails. Both apps are published, so the
+    // defaults are the live listings; the env overrides stay as an escape hatch for
+    // changing a link without a deploy.
+    //
+    // The App Store link deliberately uses the id-only form instead of
+    // `/app/<slug>/id<id>`: Apple resolves by numeric id and ignores the slug, and the
+    // current listing slug is `teufit-production`, which would render a stale name in
+    // every email. Apple id confirmed via
+    // https://itunes.apple.com/lookup?bundleId=br.com.teufit.app&country=br (trackId).
+    appStoreUrl: process.env.APP_STORE_URL || 'https://apps.apple.com/br/app/id6809516404',
     playStoreUrl: process.env.PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=br.com.teufit.app',
   },
   betaInviteGate: {

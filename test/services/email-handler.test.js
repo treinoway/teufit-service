@@ -5,6 +5,11 @@ import config from '../../config/index.js';
 const LEGACY_BRAND_SPELLINGS = ['TreinoWay', 'Teufit', 'Treinoway'];
 const BRAND = 'TeuFit';
 
+// Published listings. The App Store link is the id-only form on purpose: the listing slug
+// is still `teufit-production`, and Apple resolves by numeric id while ignoring the slug.
+const APP_STORE_URL = 'https://apps.apple.com/br/app/id6809516404';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=br.com.teufit.app';
+
 describe('sanitizeSubjectText', () => {
   it.each([
     ['CR and LF', 'Ana\r\nCoach', 'Ana Coach'],
@@ -19,6 +24,26 @@ describe('sanitizeSubjectText', () => {
 
   it.each([[null], [undefined], [''], ['\r\n']])('should return an empty string for %j', (input) => {
     expect(sanitizeSubjectText(input)).toBe('');
+  });
+});
+
+describe('store listing links (config.stores)', () => {
+  it('should default to the published App Store listing', () => {
+    expect(config.stores.appStoreUrl).toBe(APP_STORE_URL);
+  });
+
+  it('should default to the published Google Play listing', () => {
+    expect(config.stores.playStoreUrl).toBe(PLAY_STORE_URL);
+  });
+
+  it('should not ship a placeholder Apple id', () => {
+    expect(config.stores.appStoreUrl).not.toContain('id0000000000');
+    expect(config.stores.appStoreUrl).toMatch(/\/id[1-9][0-9]+$/);
+  });
+
+  it('should keep the App Store link free of the listing slug', () => {
+    expect(config.stores.appStoreUrl).not.toContain('teufit-production');
+    expect(config.stores.appStoreUrl).toMatch(/^https:\/\/apps\.apple\.com\/br\/app\/id[0-9]+$/);
   });
 });
 
@@ -76,8 +101,8 @@ describe('email-handler rendered emails', () => {
 
     it('should include the App Store and Google Play links', () => {
       const { html } = lastEmail();
-      expect(html).toContain(config.stores.appStoreUrl);
-      expect(html).toContain(config.stores.playStoreUrl);
+      expect(html).toContain(APP_STORE_URL);
+      expect(html).toContain(PLAY_STORE_URL);
     });
 
     it.each([
@@ -153,8 +178,8 @@ describe('email-handler rendered emails', () => {
     it('should include the App Store and Google Play links', async () => {
       await emailHandler.sendExistingUserStudentInviteEmail({ to: 'a@b.com', trainerName: 'Ana', code: CODE });
 
-      expect(lastEmail().html).toContain(config.stores.appStoreUrl);
-      expect(lastEmail().html).toContain(config.stores.playStoreUrl);
+      expect(lastEmail().html).toContain(APP_STORE_URL);
+      expect(lastEmail().html).toContain(PLAY_STORE_URL);
     });
 
     it('should keep the subject on a single line and escape the trainer name in the html', async () => {
@@ -182,8 +207,8 @@ describe('email-handler rendered emails', () => {
 
     it('should include the store links and the TeuFit brand only', () => {
       const { html } = lastEmail();
-      expect(html).toContain(config.stores.appStoreUrl);
-      expect(html).toContain(config.stores.playStoreUrl);
+      expect(html).toContain(APP_STORE_URL);
+      expect(html).toContain(PLAY_STORE_URL);
       expectNoLegacyBranding(lastEmail());
     });
   });
@@ -212,8 +237,8 @@ describe('email-handler rendered emails', () => {
       const { html } = lastEmail();
       expect(html).toContain('Saúde e histórico');
       expect(html).toContain('Responda pelo app TeuFit');
-      expect(html).toContain(config.stores.appStoreUrl);
-      expect(html).toContain(config.stores.playStoreUrl);
+      expect(html).toContain(APP_STORE_URL);
+      expect(html).toContain(PLAY_STORE_URL);
       expect(html).not.toContain('/my/anamneses');
       expectNoLegacyBranding(lastEmail());
     });
