@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import emailHandler, { sanitizeSubjectText } from '../../src/config/email-handler.js';
 import config from '../../config/index.js';
 
-const LEGACY_BRAND_SPELLINGS = ['TreinoWay', 'Teufit', 'Treinoway'];
-const BRAND = 'TeuFit';
+// `Teufit` (capital T, lowercase f) is the canonical spelling — it matches the App Store
+// listing, the teufit@ work address and the store docs. `TeuFit` is a past in-house
+// variant and is treated as a regression, like the older Treinoway names.
+const LEGACY_BRAND_SPELLINGS = ['TreinoWay', 'Treinoway', 'TeuFit'];
+const BRAND = 'Teufit';
 
 // Published listings. The App Store link is the id-only form on purpose: the listing slug
 // is still `teufit-production`, and Apple resolves by numeric id while ignoring the slug.
@@ -87,7 +90,7 @@ describe('email-handler rendered emails', () => {
       await emailHandler.sendStudentInviteEmail({ to: 'student@example.com', trainerName: 'Ana Coach' });
     });
 
-    it('should address the student and mention the trainer and the TeuFit brand', () => {
+    it('should address the student and mention the trainer and the Teufit brand', () => {
       const { to, subject, html } = lastEmail();
       expect(to).toBe('student@example.com');
       expect(subject).toContain(BRAND);
@@ -121,7 +124,7 @@ describe('email-handler rendered emails', () => {
       send.mockClear();
       await emailHandler.sendStudentInviteEmail({ to: 'a@b.com', trainerName: '\r\n\t' });
 
-      expect(lastEmail().subject).toBe('[TeuFit] Você foi convidado para o time do seu treinador');
+      expect(lastEmail().subject).toBe('[Teufit] Você foi convidado para o time do seu treinador');
     });
 
     it('should HTML-escape the trainer name', async () => {
@@ -136,7 +139,7 @@ describe('email-handler rendered emails', () => {
     const CODE = '048213';
     const NO_CODE_TEXT = 'peça um novo na tela de confirmação';
 
-    it('should address the student, mention the trainer and the TeuFit brand only', async () => {
+    it('should address the student, mention the trainer and the Teufit brand only', async () => {
       await emailHandler.sendExistingUserStudentInviteEmail({
         to: 'student@example.com',
         trainerName: 'Ana Coach',
@@ -145,7 +148,7 @@ describe('email-handler rendered emails', () => {
 
       const { to, subject, html } = lastEmail();
       expect(to).toBe('student@example.com');
-      expect(subject).toBe('[TeuFit] Ana Coach convidou você para o time');
+      expect(subject).toBe('[Teufit] Ana Coach convidou você para o time');
       expect(html).toContain('Ana Coach');
       expectNoLegacyBranding(lastEmail());
     });
@@ -196,7 +199,7 @@ describe('email-handler rendered emails', () => {
     it('should use the generic subject when the trainer name has no printable characters', async () => {
       await emailHandler.sendExistingUserStudentInviteEmail({ to: 'a@b.com', trainerName: '\r\n', code: CODE });
 
-      expect(lastEmail().subject).toBe('[TeuFit] Você foi convidado para o time do seu treinador');
+      expect(lastEmail().subject).toBe('[Teufit] Você foi convidado para o time do seu treinador');
     });
   });
 
@@ -205,7 +208,7 @@ describe('email-handler rendered emails', () => {
       await emailHandler.sendStudentLinkedEmail({ to: 'student@example.com', trainerName: 'Ana Coach' });
     });
 
-    it('should include the store links and the TeuFit brand only', () => {
+    it('should include the store links and the Teufit brand only', () => {
       const { html } = lastEmail();
       expect(html).toContain(APP_STORE_URL);
       expect(html).toContain(PLAY_STORE_URL);
@@ -228,7 +231,7 @@ describe('email-handler rendered emails', () => {
 
       const { to, subject } = lastEmail();
       expect(to).toBe('student@example.com');
-      expect(subject).toBe('[TeuFit] Nova anamnese de Ana Coach');
+      expect(subject).toBe('[Teufit] Nova anamnese de Ana Coach');
     });
 
     it('should render the title and send the student to the mobile app, never to the web', async () => {
@@ -236,14 +239,14 @@ describe('email-handler rendered emails', () => {
 
       const { html } = lastEmail();
       expect(html).toContain('Saúde e histórico');
-      expect(html).toContain('Responda pelo app TeuFit');
+      expect(html).toContain('Responda pelo app Teufit');
       expect(html).toContain(APP_STORE_URL);
       expect(html).toContain(PLAY_STORE_URL);
       expect(html).not.toContain('/my/anamneses');
       expectNoLegacyBranding(lastEmail());
     });
 
-    it('should use the TeuFit lockup logo in the header, like the other transactional emails', async () => {
+    it('should use the Teufit lockup logo in the header, like the other transactional emails', async () => {
       await sendAssigned();
 
       const { html } = lastEmail();
@@ -262,7 +265,7 @@ describe('email-handler rendered emails', () => {
       await sendAssigned({ trainerName: '\r\n', studentName: undefined });
 
       const { subject, html } = lastEmail();
-      expect(subject).toBe('[TeuFit] Nova anamnese do seu treinador');
+      expect(subject).toBe('[Teufit] Nova anamnese do seu treinador');
       expect(html).toContain('Responda a nova anamnese');
       expect(html).toContain('Seu treinador enviou a anamnese');
     });
@@ -294,7 +297,7 @@ describe('email-handler rendered emails', () => {
   });
 
   describe('sendEmailVerificationEmail', () => {
-    it('should render the 6-digit code and only the TeuFit brand', async () => {
+    it('should render the 6-digit code and only the Teufit brand', async () => {
       await emailHandler.sendEmailVerificationEmail({ to: 'student@example.com', code: '048213' });
 
       const { to, html } = lastEmail();
@@ -310,7 +313,7 @@ describe('email-handler rendered emails', () => {
 
       const { to, subject, html } = lastEmail();
       expect(to).toBe('owner@example.com');
-      expect(subject).toBe('[TeuFit] Você já tem uma conta');
+      expect(subject).toBe('[Teufit] Você já tem uma conta');
       expect(html).toContain('Esqueci minha senha');
       expect(html).not.toMatch(/\b[0-9]{6}\b/);
       expectNoLegacyBranding(lastEmail());
@@ -323,14 +326,30 @@ describe('email-handler rendered emails', () => {
     });
   });
 
+  // Every public send* method, so a new email template cannot reintroduce `TeuFit`.
   describe.each([
     ['sendResetPasswordEmail', { to: 'a@b.com', passwordToken: '123456' }],
     ['sendWaitlistConfirmationEmail', { to: 'a@b.com' }],
+    ['sendStudentLinkedEmail', { to: 'a@b.com', trainerName: 'Ana' }],
     [
       'sendTrainerInviteEmail',
       { to: 'a@b.com', code: 'TF-AAAA-BBBB-CC', inviteUrl: 'https://teufit.com.br/invite', invitedByName: 'Admin' },
     ],
+    ['sendStudentInviteEmail', { to: 'a@b.com', trainerName: 'Ana' }],
+    ['sendExistingUserStudentInviteEmail', { to: 'a@b.com', trainerName: 'Ana', code: '048213' }],
+    ['sendEmailVerificationEmail', { to: 'a@b.com', code: '048213' }],
+    ['sendExistingAccountSignupEmail', { to: 'a@b.com' }],
+    [
+      'sendAnamnesisAssignedEmail',
+      { to: 'a@b.com', studentName: 'Maria', trainerName: 'Ana', anamnesisTitle: 'Saúde' },
+    ],
   ])('%s', (method, payload) => {
+    it('should spell the brand as Teufit in the body', async () => {
+      await emailHandler[method](payload);
+
+      expect(lastEmail().html).toContain(BRAND);
+    });
+
     it('should not contain legacy brand spellings', async () => {
       await emailHandler[method](payload);
 
