@@ -36,7 +36,7 @@ function renderStoreButtonsBlock() {
                                 <tr>
                                     <td align="center">
                                         <p style="margin: 0 0 12px; color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
-                                            Baixe o app TeuFit:
+                                            Baixe o app Teufit:
                                         </p>
                                         ${renderStoreBadge({ href: config.stores.appStoreUrl, src: 'https://teufit.com.br/img/app-store-badge-pt-br.png', alt: 'Baixar na App Store', width: 120 })}
                                         ${renderStoreBadge({ href: config.stores.playStoreUrl, src: 'https://teufit.com.br/img/google-play-badge-pt-br.png', alt: 'Disponível no Google Play', width: 135 })}
@@ -76,7 +76,7 @@ class EmailHandler {
     }
 
     sendResetPasswordEmail({to, passwordToken}) {
-        const subject = 'TeuFit - Código para redefinir tua senha';
+        const subject = 'Teufit - Código para redefinir tua senha';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -96,7 +96,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -131,7 +131,7 @@ class EmailHandler {
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -158,14 +158,14 @@ class EmailHandler {
     }
 
     sendWaitlistConfirmationEmail({to}) {
-        const subject = '[TeuFit] Que bom ter você conosco!';
+        const subject = '[Teufit] Que bom ter você conosco!';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bem-vindo ao TeuFit</title>
+    <title>Bem-vindo ao Teufit</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
     <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
@@ -176,7 +176,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
                     
@@ -192,7 +192,7 @@ class EmailHandler {
                             </p>
                             
                             <p style="margin: 0 0 30px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Em breve, você terá acesso exclusivo a todas as funcionalidades do TeuFit!
+                                Em breve, você terá acesso exclusivo a todas as funcionalidades do Teufit!
                             </p>
                             
                             <!-- Features Box -->
@@ -242,7 +242,7 @@ class EmailHandler {
                             
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
                                 Até breve,<br>
-                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
                             </p>
                         </td>
                     </tr>
@@ -257,7 +257,7 @@ class EmailHandler {
                                 iOS • Android
                             </p>
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -285,7 +285,7 @@ class EmailHandler {
 
     sendStudentLinkedEmail({to, trainerName}) {
         const teamLabel = trainerName ? `time de ${escapeHtml(trainerName)}` : 'time do seu treinador';
-        const subject = '[TeuFit] Bem-vindo ao teste fechado!';
+        const subject = '[Teufit] Bem-vindo ao teste fechado!';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -303,7 +303,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -322,11 +322,11 @@ class EmailHandler {
                             </table>
 
                             <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
-                                Você está no teste fechado do TeuFit!
+                                Você está no teste fechado do Teufit!
                             </h2>
 
                             <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Você foi vinculado ao ${teamLabel} e é uma das primeiras pessoas a usar o TeuFit. Estamos muito felizes em ter você nessa fase inicial com a gente.
+                                Você foi vinculado ao ${teamLabel} e é uma das primeiras pessoas a usar o Teufit. Estamos muito felizes em ter você nessa fase inicial com a gente.
                             </p>
 
                             <!-- What to expect -->
@@ -339,7 +339,7 @@ class EmailHandler {
                                                     <p style="margin: 0 0 10px; color: #1054B2; font-size: 17px; font-weight: 800;">
                                                         O que esperar desta fase
                                                     </p>
-                                                    ${renderBulletList(['Alguns bugs podem aparecer — é esperado e faz parte do processo.', 'Seu feedback molda o produto: conte o que funciona e o que pode melhorar.', 'Sua participação é muito importante para deixar o TeuFit cada vez melhor.'], '#1054B2')}
+                                                    ${renderBulletList(['Alguns bugs podem aparecer — é esperado e faz parte do processo.', 'Seu feedback molda o produto: conte o que funciona e o que pode melhorar.', 'Sua participação é muito importante para deixar o Teufit cada vez melhor.'], '#1054B2')}
                                                 </td>
                                             </tr>
                                         </table>
@@ -354,7 +354,7 @@ ${renderStoreButtonsBlock()}
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
                                 Bons treinos,<br>
-                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
                             </p>
                         </td>
                     </tr>
@@ -363,7 +363,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -391,14 +391,14 @@ ${renderStoreButtonsBlock()}
 
     sendTrainerInviteEmail({to, code, inviteUrl, invitedByName}) {
         const inviterLabel = invitedByName ? `${escapeHtml(invitedByName)} te convidou` : 'Você foi convidado(a)';
-        const subject = '[TeuFit] Seu convite para o teste fechado';
+        const subject = '[Teufit] Seu convite para o teste fechado';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seu convite TeuFit</title>
+    <title>Seu convite Teufit</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
     <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
@@ -409,7 +409,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -428,11 +428,11 @@ ${renderStoreButtonsBlock()}
                             </table>
 
                             <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
-                                ${inviterLabel} para o TeuFit!
+                                ${inviterLabel} para o Teufit!
                             </h2>
 
                             <p style="margin: 0 0 30px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Você foi convidado(a) a fazer parte do teste fechado do TeuFit como treinador(a). Clique no botão abaixo para entrar — se ainda não tiver conta, você poderá criar uma com este mesmo e-mail.
+                                Você foi convidado(a) a fazer parte do teste fechado do Teufit como treinador(a). Clique no botão abaixo para entrar — se ainda não tiver conta, você poderá criar uma com este mesmo e-mail.
                             </p>
 
                             <!-- CTA -->
@@ -465,7 +465,7 @@ ${renderStoreButtonsBlock()}
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
                                 Bons treinos,<br>
-                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
                             </p>
                         </td>
                     </tr>
@@ -474,7 +474,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -504,15 +504,15 @@ ${renderStoreButtonsBlock()}
         const trainerName = sanitizeSubjectText(rawTrainerName);
         const teamLabel = trainerName ? escapeHtml(trainerName) : 'seu treinador';
         const subject = trainerName
-            ? `[TeuFit] ${trainerName} convidou você para o time`
-            : '[TeuFit] Você foi convidado para o time do seu treinador';
+            ? `[Teufit] ${trainerName} convidou você para o time`
+            : '[Teufit] Você foi convidado para o time do seu treinador';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Convite TeuFit</title>
+    <title>Convite Teufit</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
     <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
@@ -523,7 +523,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -535,7 +535,7 @@ ${renderStoreButtonsBlock()}
                             </h2>
 
                             <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                ${teamLabel} está te esperando no TeuFit para acompanhar seus treinos.
+                                ${teamLabel} está te esperando no Teufit para acompanhar seus treinos.
                             </p>
 
                             <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
@@ -549,7 +549,7 @@ ${renderStoreButtonsBlock()}
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
                                 Bons treinos,<br>
-                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
                             </p>
                         </td>
                     </tr>
@@ -558,7 +558,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -594,12 +594,12 @@ ${renderStoreButtonsBlock()}
         const trainerName = sanitizeSubjectText(rawTrainerName);
         const teamLabel = trainerName ? escapeHtml(trainerName) : 'seu treinador';
         const subject = trainerName
-            ? `[TeuFit] ${trainerName} convidou você para o time`
-            : '[TeuFit] Você foi convidado para o time do seu treinador';
+            ? `[Teufit] ${trainerName} convidou você para o time`
+            : '[Teufit] Você foi convidado para o time do seu treinador';
         const codeBlock = code
             ? `
                             <p style="margin: 0 0 12px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Abra o app TeuFit e confirme seu e-mail com o código abaixo. Ele expira em <strong>30 minutos</strong>.
+                                Abra o app Teufit e confirme seu e-mail com o código abaixo. Ele expira em <strong>30 minutos</strong>.
                             </p>
 
                             <table role="presentation" width="100%" align="center" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: separate; margin: 0 0 20px;">
@@ -611,7 +611,7 @@ ${renderStoreButtonsBlock()}
                             </table>`
             : `
                             <p style="margin: 0 0 20px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Abra o app TeuFit e confirme seu e-mail. Se o app não mostrar um código, peça um novo na tela de confirmação.
+                                Abra o app Teufit e confirme seu e-mail. Se o app não mostrar um código, peça um novo na tela de confirmação.
                             </p>`;
         const htmlContent = `
 <!DOCTYPE html>
@@ -619,7 +619,7 @@ ${renderStoreButtonsBlock()}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Convite TeuFit</title>
+    <title>Convite Teufit</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
     <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
@@ -630,7 +630,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -653,7 +653,7 @@ ${renderStoreButtonsBlock()}
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
                                 Bons treinos,<br>
-                                <strong style="color: #4b5563;">Equipe TeuFit</strong>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
                             </p>
                         </td>
                     </tr>
@@ -662,7 +662,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -689,7 +689,7 @@ ${renderStoreButtonsBlock()}
     }
 
     sendEmailVerificationEmail({to, code}) {
-        const subject = '[TeuFit] Confirme seu e-mail';
+        const subject = '[Teufit] Confirme seu e-mail';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -708,7 +708,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -733,7 +733,7 @@ ${renderStoreButtonsBlock()}
                             </table>
 
                             <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.7; text-align: center;">
-                                Se você não criou uma conta no TeuFit, pode ignorar este e-mail.
+                                Se você não criou uma conta no Teufit, pode ignorar este e-mail.
                             </p>
                         </td>
                     </tr>
@@ -742,7 +742,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -774,7 +774,7 @@ ${renderStoreButtonsBlock()}
      * account enumeration), so this email is how the real owner finds out.
      */
     sendExistingAccountSignupEmail({to}) {
-        const subject = '[TeuFit] Você já tem uma conta';
+        const subject = '[Teufit] Você já tem uma conta';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -793,7 +793,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -805,7 +805,7 @@ ${renderStoreButtonsBlock()}
                             </h2>
 
                             <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Recebemos um pedido de cadastro no TeuFit com este e-mail, mas ele já está ligado a uma conta.
+                                Recebemos um pedido de cadastro no Teufit com este e-mail, mas ele já está ligado a uma conta.
                             </p>
 
                             <p style="margin: 0 0 28px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
@@ -822,7 +822,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -860,8 +860,8 @@ ${renderStoreButtonsBlock()}
             ? `${escapeHtml(studentName)}, responda a nova anamnese`
             : 'Responda a nova anamnese';
         const subject = trainerName
-            ? `[TeuFit] Nova anamnese de ${trainerName}`
-            : '[TeuFit] Nova anamnese do seu treinador';
+            ? `[Teufit] Nova anamnese de ${trainerName}`
+            : '[Teufit] Nova anamnese do seu treinador';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -871,7 +871,7 @@ ${renderStoreButtonsBlock()}
     <title>Nova anamnese</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
-    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${trainerLabel} enviou uma anamnese. Responda pelo app TeuFit.</div>
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${trainerLabel} enviou uma anamnese. Responda pelo app Teufit.</div>
     <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
         <tr>
             <td align="center" style="padding: 40px 20px;">
@@ -880,7 +880,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="TeuFit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -900,7 +900,7 @@ ${renderStoreButtonsBlock()}
                                 <tr>
                                     <td align="center" style="text-align: center; background-color: #D6E5F8; border-radius: 16px; padding: 24px;">
                                         <p style="margin: 0 0 6px; color: #1054B2; font-size: 17px; font-weight: 800;">
-                                            Responda pelo app TeuFit
+                                            Responda pelo app Teufit
                                         </p>
                                         <p style="margin: 0; color: #0F1B2D; font-size: 15px; line-height: 1.6;">
                                             Abra o app e toque no aviso da anamnese na tela inicial. Seu treino continua liberado enquanto isso.
@@ -916,7 +916,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 TeuFit. Todos os direitos reservados.
+                                © 2026 Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
