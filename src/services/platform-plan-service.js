@@ -54,7 +54,7 @@ export async function getTrainerPlan(prisma, trainerId) {
           asaasSubscriptionId: null,
         },
       });
-      await enforceStudentCapAfterDowngrade(prisma, trainerId);
+      await syncStudentCapWithPlan(prisma, trainerId);
       return {
         tier: FREE_TIER,
         status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
@@ -228,27 +228,50 @@ export async function buildPlatformPlanForMe(prisma, trainerId) {
   };
 }
 
-export async function enforceStudentCapAfterDowngrade(prisma, trainerId) {
+/**
+ * Reconciles TrainerStudent.activeOnPlan with the trainer's current student cap.
+ *
+ * - Over the cap (downgrade): soft-blocks the newest active students, so the
+ *   longest-standing relationships keep working.
+ * - Under the cap (upgrade): unblocks the oldest blocked students until the cap
+ *   is reached — or all of them when the cap is unlimited.
+ *
+ * Call it after any tier change; it is idempotent and a no-op when the roster
+ * already matches the cap. At most 4 queries (plan, count, findMany, updateMany).
+ */
+export async function syncStudentCapWithPlan(prisma, trainerId) {
   const { limits } = await getTrainerPlan(prisma, trainerId);
 
-  if (limits.studentCap === Infinity) return;
+  if (limits.studentCap === Infinity) {
+    await prisma.trainerStudent.updateMany({
+      where: { trainerId, activeOnPlan: false },
+      data: { activeOnPlan: true },
+    });
+    return;
+  }
 
-  const activeStudents = await prisma.trainerStudent.findMany({
+  const activeCount = await prisma.trainerStudent.count({
     where: { trainerId, activeOnPlan: true },
-    orderBy: { createdAt: 'asc' },
-    select: { trainerId: true, studentId: true },
   });
 
-  const excessCount = activeStudents.length - limits.studentCap;
-  if (excessCount <= 0) return;
+  if (activeCount === limits.studentCap) return;
 
-  const toBlock = activeStudents.slice(0, excessCount);
+  const isOverCap = activeCount > limits.studentCap;
+  const candidates = await prisma.trainerStudent.findMany({
+    // Over the cap → pick active students to block; under it → blocked ones to unblock.
+    where: { trainerId, activeOnPlan: isOverCap },
+    orderBy: [{ createdAt: isOverCap ? 'desc' : 'asc' }, { studentId: 'asc' }],
+    take: Math.abs(activeCount - limits.studentCap),
+    select: { studentId: true },
+  });
+
+  if (candidates.length === 0) return;
 
   await prisma.trainerStudent.updateMany({
     where: {
       trainerId,
-      studentId: { in: toBlock.map((s) => s.studentId) },
+      studentId: { in: candidates.map((s) => s.studentId) },
     },
-    data: { activeOnPlan: false },
+    data: { activeOnPlan: !isOverCap },
   });
 }

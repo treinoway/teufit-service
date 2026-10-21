@@ -7,10 +7,10 @@ import {
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('../../src/services/platform-plan-service.js', () => ({
-  enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  syncStudentCapWithPlan: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { enforceStudentCapAfterDowngrade } from '../../src/services/platform-plan-service.js';
+import { syncStudentCapWithPlan } from '../../src/services/platform-plan-service.js';
 import { handleWebhookEvent } from '../../src/services/asaas-webhook-service.js';
 
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
@@ -174,6 +174,26 @@ describe('PAYMENT_CONFIRMED', () => {
     expect(updateArgs.data.pastDueSince).toBeNull();
   });
 
+  it('reconciles the student cap after activating the subscription, so an upgrade unblocks students', async () => {
+    mockPrisma.platformSubscriptionPayment.findUnique.mockResolvedValue(null);
+    mockPrisma.platformSubscription.findFirst.mockResolvedValue(
+      makePlatformSubscription({ tier: 'FREE' })
+    );
+    mockPrisma.platformSubscriptionPayment.upsert.mockResolvedValue({});
+    mockPrisma.platformSubscription.update.mockResolvedValue({});
+
+    await handleWebhookEvent(mockPrisma, {
+      event: 'PAYMENT_CONFIRMED',
+      payment: makePaymentPayload({ externalReference: 'tier:DIAMOND:trainer:trainer-uuid-1' }),
+    }, silentLogger);
+
+    expect(syncStudentCapWithPlan).toHaveBeenCalledOnce();
+    expect(syncStudentCapWithPlan).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
+    // Must run after the tier is persisted, otherwise it would read the old cap.
+    expect(mockPrisma.platformSubscription.update.mock.invocationCallOrder[0])
+      .toBeLessThan(syncStudentCapWithPlan.mock.invocationCallOrder[0]);
+  });
+
   it('skips processing if payment already CONFIRMED (idempotency)', async () => {
     mockPrisma.platformSubscriptionPayment.findUnique.mockResolvedValue({
       status: ASAAS_PAYMENT_STATUSES.CONFIRMED,
@@ -186,6 +206,7 @@ describe('PAYMENT_CONFIRMED', () => {
 
     expect(mockPrisma.platformSubscriptionPayment.upsert).not.toHaveBeenCalled();
     expect(mockPrisma.platformSubscription.update).not.toHaveBeenCalled();
+    expect(syncStudentCapWithPlan).not.toHaveBeenCalled();
   });
 
   it('resolves tier from externalReference (PLATINUM)', async () => {
@@ -379,7 +400,7 @@ describe('PAYMENT_REFUNDED', () => {
 describe('SUBSCRIPTION_DELETED', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('downgrades to FREE, sets status=CANCELED, clears asaasSubscriptionId, calls enforceStudentCapAfterDowngrade', async () => {
+  it('downgrades to FREE, sets status=CANCELED, clears asaasSubscriptionId, calls syncStudentCapWithPlan', async () => {
     mockPrisma.platformSubscription.findFirst.mockResolvedValue(makePlatformSubscription());
     mockPrisma.platformSubscription.update.mockResolvedValue({});
 
@@ -393,8 +414,8 @@ describe('SUBSCRIPTION_DELETED', () => {
     expect(updateArgs.data.status).toBe(PLATFORM_SUBSCRIPTION_STATUSES.CANCELED);
     expect(updateArgs.data.asaasSubscriptionId).toBeNull();
 
-    expect(enforceStudentCapAfterDowngrade).toHaveBeenCalledOnce();
-    expect(enforceStudentCapAfterDowngrade).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
+    expect(syncStudentCapWithPlan).toHaveBeenCalledOnce();
+    expect(syncStudentCapWithPlan).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
   });
 
   it('logs and returns when subscription not found in DB', async () => {
@@ -406,7 +427,7 @@ describe('SUBSCRIPTION_DELETED', () => {
     }, silentLogger);
 
     expect(mockPrisma.platformSubscription.update).not.toHaveBeenCalled();
-    expect(enforceStudentCapAfterDowngrade).not.toHaveBeenCalled();
+    expect(syncStudentCapWithPlan).not.toHaveBeenCalled();
     expect(silentLogger.warn).toHaveBeenCalled();
   });
 });

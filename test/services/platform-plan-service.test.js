@@ -22,7 +22,7 @@ import {
   assertCanUseAi,
   recordAiAction,
   assertStudentActiveOnPlan,
-  enforceStudentCapAfterDowngrade,
+  syncStudentCapWithPlan,
   buildPlatformPlanForMe,
 } from '../../src/services/platform-plan-service.js';
 
@@ -112,10 +112,11 @@ describe('getTrainerPlan', () => {
         makeSubscription('PRO', { status: 'PAST_DUE', pastDueSince })
       );
       mockPrisma.platformSubscription.update.mockResolvedValue({});
-      // enforceStudentCapAfterDowngrade will call getTrainerPlan again (now FREE/ACTIVE)
+      // syncStudentCapWithPlan will call getTrainerPlan again (now FREE/ACTIVE)
       mockPrisma.platformSubscription.findUnique
         .mockResolvedValueOnce(makeSubscription('PRO', { status: 'PAST_DUE', pastDueSince }))
         .mockResolvedValueOnce(makeSubscription('FREE', { status: 'ACTIVE', pastDueSince: null }));
+      mockPrisma.trainerStudent.count.mockResolvedValue(0);
       mockPrisma.trainerStudent.findMany.mockResolvedValue([]);
 
       const result = await getTrainerPlan(mockPrisma, TRAINER_ID);
@@ -616,64 +617,97 @@ describe('buildPlatformPlanForMe', () => {
   });
 });
 
-// ─── enforceStudentCapAfterDowngrade ──────────────────────────────────────────
+// ─── syncStudentCapWithPlan ───────────────────────────────────────────────────
 
-describe('enforceStudentCapAfterDowngrade', () => {
+describe('syncStudentCapWithPlan', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns immediately for DIAMOND without any DB calls', async () => {
-    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('DIAMOND'));
+  const studentIds = (n, offset = 0) =>
+    Array.from({ length: n }, (_, i) => ({ studentId: `student-uuid-${offset + i + 1}` }));
 
-    await enforceStudentCapAfterDowngrade(mockPrisma, TRAINER_ID);
+  describe('unlimited cap (DIAMOND)', () => {
+    it('unblocks every blocked student in a single updateMany', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('DIAMOND'));
+      mockPrisma.trainerStudent.updateMany.mockResolvedValue({ count: 1 });
+
+      await syncStudentCapWithPlan(mockPrisma, TRAINER_ID);
+
+      expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledOnce();
+      expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, activeOnPlan: false },
+        data: { activeOnPlan: true },
+      });
+      expect(mockPrisma.trainerStudent.count).not.toHaveBeenCalled();
+      expect(mockPrisma.trainerStudent.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('over the cap (downgrade)', () => {
+    it('blocks the 30 newest active students when PRO (cap 20) has 50 active', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+      mockPrisma.trainerStudent.count.mockResolvedValue(50);
+      const newest = studentIds(30, 20);
+      mockPrisma.trainerStudent.findMany.mockResolvedValue(newest);
+      mockPrisma.trainerStudent.updateMany.mockResolvedValue({ count: 30 });
+
+      await syncStudentCapWithPlan(mockPrisma, TRAINER_ID);
+
+      expect(mockPrisma.trainerStudent.count).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, activeOnPlan: true },
+      });
+      expect(mockPrisma.trainerStudent.findMany).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, activeOnPlan: true },
+        orderBy: [{ createdAt: 'desc' }, { studentId: 'asc' }],
+        take: 30,
+        select: { studentId: true },
+      });
+      expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, studentId: { in: newest.map((s) => s.studentId) } },
+        data: { activeOnPlan: false },
+      });
+    });
+  });
+
+  describe('under the cap (upgrade)', () => {
+    it('unblocks the oldest blocked students up to the free seats (PLATINUM cap 80, 78 active)', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PLATINUM'));
+      mockPrisma.trainerStudent.count.mockResolvedValue(78);
+      const oldestBlocked = studentIds(2);
+      mockPrisma.trainerStudent.findMany.mockResolvedValue(oldestBlocked);
+      mockPrisma.trainerStudent.updateMany.mockResolvedValue({ count: 2 });
+
+      await syncStudentCapWithPlan(mockPrisma, TRAINER_ID);
+
+      expect(mockPrisma.trainerStudent.findMany).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, activeOnPlan: false },
+        orderBy: [{ createdAt: 'asc' }, { studentId: 'asc' }],
+        take: 2,
+        select: { studentId: true },
+      });
+      expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledWith({
+        where: { trainerId: TRAINER_ID, studentId: { in: oldestBlocked.map((s) => s.studentId) } },
+        data: { activeOnPlan: true },
+      });
+    });
+
+    it('does not call updateMany when there are free seats but nobody is blocked', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+      mockPrisma.trainerStudent.count.mockResolvedValue(10);
+      mockPrisma.trainerStudent.findMany.mockResolvedValue([]);
+
+      await syncStudentCapWithPlan(mockPrisma, TRAINER_ID);
+
+      expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  it('is a no-op when the active count already equals the cap (20/20 for PRO)', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+    mockPrisma.trainerStudent.count.mockResolvedValue(20);
+
+    await syncStudentCapWithPlan(mockPrisma, TRAINER_ID);
 
     expect(mockPrisma.trainerStudent.findMany).not.toHaveBeenCalled();
-    expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('blocks the 30 oldest students when downgraded to PRO with 50 active', async () => {
-    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
-
-    const fiftyStudents = Array.from({ length: 50 }, (_, i) => ({
-      trainerId: TRAINER_ID,
-      studentId: `student-uuid-${i + 1}`,
-    }));
-    mockPrisma.trainerStudent.findMany.mockResolvedValue(fiftyStudents);
-    mockPrisma.trainerStudent.updateMany.mockResolvedValue({ count: 30 });
-
-    await enforceStudentCapAfterDowngrade(mockPrisma, TRAINER_ID);
-
-    expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledOnce();
-    const { where, data } = mockPrisma.trainerStudent.updateMany.mock.calls[0][0];
-    expect(where.studentId.in).toHaveLength(30);
-    expect(where.studentId.in).toEqual(fiftyStudents.slice(0, 30).map((s) => s.studentId));
-    expect(data).toEqual({ activeOnPlan: false });
-  });
-
-  it('is idempotent — does not call updateMany when already at cap (20/20 for PRO)', async () => {
-    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
-
-    const twentyStudents = Array.from({ length: 20 }, (_, i) => ({
-      trainerId: TRAINER_ID,
-      studentId: `student-uuid-${i + 1}`,
-    }));
-    mockPrisma.trainerStudent.findMany.mockResolvedValue(twentyStudents);
-
-    await enforceStudentCapAfterDowngrade(mockPrisma, TRAINER_ID);
-
-    expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
-  });
-
-  it('does not block when active count is below cap (10 active, PRO cap 20)', async () => {
-    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
-
-    const tenStudents = Array.from({ length: 10 }, (_, i) => ({
-      trainerId: TRAINER_ID,
-      studentId: `student-uuid-${i + 1}`,
-    }));
-    mockPrisma.trainerStudent.findMany.mockResolvedValue(tenStudents);
-
-    await enforceStudentCapAfterDowngrade(mockPrisma, TRAINER_ID);
-
     expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
   });
 });

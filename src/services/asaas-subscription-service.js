@@ -16,7 +16,7 @@ import {
   ASAAS_CYCLES,
   PLATFORM_PLAN_TIERS,
 } from '../constants/platform-plan.js';
-import { getTrainerPlan, enforceStudentCapAfterDowngrade } from './platform-plan-service.js';
+import { getTrainerPlan, syncStudentCapWithPlan } from './platform-plan-service.js';
 import * as asaasClient from '../billing/asaas-client.js';
 
 const FREE_TIER = PLATFORM_PLAN_TIERS.FREE;
@@ -145,8 +145,7 @@ export async function cancelAtPeriodEnd(prisma, asaasConfig, httpClient, trainer
 }
 
 /**
- * Upgrades or downgrades to a new tier.
- * On downgrade, immediately enforces the student cap.
+ * Upgrades or downgrades to a new tier and reconciles the student cap.
  */
 export async function changeTier(prisma, asaasConfig, httpClient, trainerId, newTier) {
   validateTierUpgradeable(newTier);
@@ -162,7 +161,6 @@ export async function changeTier(prisma, asaasConfig, httpClient, trainerId, new
   }
 
   const subscription = await requireActiveSubscription(prisma, trainerId);
-  const isDowngrade = isLowerTier(newTier, currentTier);
 
   if (subscription.asaasSubscriptionId) {
     const newPrice = PLAN_PRICES[newTier].monthly;
@@ -177,9 +175,9 @@ export async function changeTier(prisma, asaasConfig, httpClient, trainerId, new
     data: { tier: newTier },
   });
 
-  if (isDowngrade) {
-    await enforceStudentCapAfterDowngrade(prisma, trainerId);
-  }
+  // Runs both ways: a downgrade blocks students over the new cap, an upgrade
+  // unblocks students who were previously blocked by the old cap.
+  await syncStudentCapWithPlan(prisma, trainerId);
 
   return { tier: newTier };
 }
@@ -243,12 +241,6 @@ function parseTierFromExternalReference(externalReference) {
   if (!externalReference) return null;
   const match = externalReference.match(/^tier:([A-Z]+):trainer:/);
   return match ? match[1] : null;
-}
-
-const TIER_ORDER = [FREE_TIER, PLATFORM_PLAN_TIERS.PRO, PLATFORM_PLAN_TIERS.PLATINUM, PLATFORM_PLAN_TIERS.DIAMOND];
-
-function isLowerTier(newTier, currentTier) {
-  return TIER_ORDER.indexOf(newTier) < TIER_ORDER.indexOf(currentTier);
 }
 
 export { parseTierFromExternalReference };

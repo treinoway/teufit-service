@@ -65,7 +65,7 @@ vi.mock('../../src/services/platform-plan-service.js', () => ({
   assertCanUseBranding: vi.fn().mockResolvedValue(undefined),
   assertCanCreateChallenge: vi.fn().mockResolvedValue(undefined),
   assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
-  enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  syncStudentCapWithPlan: vi.fn().mockResolvedValue(undefined),
   getTrainerPlan: vi.fn().mockResolvedValue({ tier: 'DIAMOND', limits: {}, subscription: null }),
 }))
 
