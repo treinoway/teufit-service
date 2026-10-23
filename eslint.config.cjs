@@ -1,5 +1,6 @@
 const js = require('@eslint/js');
 const globals = require('globals');
+const local = require('./eslint-rules/index.cjs');
 
 module.exports = [
   // Ignore generated or external folders
@@ -48,6 +49,45 @@ module.exports = [
         afterEach: 'readonly',
         vi: 'readonly',
       },
+    },
+  },
+  // Comment conventions (see CLAUDE.md → Code Rules). Pre-existing violations
+  // are frozen in eslint-suppressions.json; only new ones fail.
+  {
+    plugins: { local },
+    rules: {
+      'local/function-header-comment': 'error',
+      'local/no-comments-in-function': 'error',
+      'local/disable-requires-reason': 'error',
+    },
+  },
+  // Layer rules from CLAUDE.md, enforced mechanically.
+  {
+    files: ['src/services/**/*.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)db\\.js$',
+              message: 'Services receive the Prisma client as an argument (dependency injection); never import src/db.js.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/services/**/*.js', 'api/middleware/**/*.js'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.name='Error']",
+          message: 'Throw AppError (src/errors/app-error.js) with error/messageCode/message, not a plain Error.',
+        },
+      ],
     },
   },
 ];
