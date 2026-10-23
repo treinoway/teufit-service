@@ -326,7 +326,7 @@ describe('email-handler rendered emails', () => {
     });
   });
 
-  // Every public send* method, so a new email template cannot reintroduce `TeuFit`.
+  // why: every public send* method, so a new email template cannot reintroduce `TeuFit`.
   describe.each([
     ['sendResetPasswordEmail', { to: 'a@b.com', passwordToken: '123456' }],
     ['sendWaitlistConfirmationEmail', { to: 'a@b.com' }],
