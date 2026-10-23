@@ -54,6 +54,25 @@ All error responses follow this contract — never deviate:
 - **Dependency injection**: Services receive Prisma client and external clients as arguments — never import singletons inside business logic.
 - **DRY with judgement**: Extract shared logic only when there are 3+ real usages.
 
+### Comment conventions (enforced by `eslint-rules/`)
+
+- **Header above every top-level function**: one-line summary of what it does — `// …`, or JSDoc whose summary is one line followed by `@param`/`@returns`.
+- **No comments inside functions.** If a block needs explaining, extract a well-named function. Only allowed inside a body:
+  - `// why: …` — a non-obvious reason the code can't express (external constraint, business rule). Prefer turning it into a named function or a test first.
+  - `// deviation: …` — a conscious break from these conventions (see below).
+  - Tool directives (`eslint-disable… -- <reason>`, `TODO`, `@ts-…`).
+- **Layer rules are lint errors**: services never import `src/db.js` (DI), and services/middleware never `new Error(...)` (use `AppError`).
+
+### Deviating from the conventions
+
+Follow the existing pattern of the surrounding code. When you must break a convention, make it explicit and visible:
+- Mark it with `// deviation: <reason>` or `eslint-disable-next-line <rule> -- <reason>` (reason required; a blanket `eslint-disable` is never acceptable).
+- Tell the user in your final message. The Stop hook lists every new deviation once and blocks until you do.
+
+### Lint ratchet
+
+Pre-existing violations are frozen in `eslint-suppressions.json` — only new ones fail. When you fix a frozen one, run `npx eslint --prune-suppressions` (the Stop hook does it automatically) so the count can never go back up. Never add entries by hand or re-run `--suppress-*` to silence new code.
+
 ## When Adding a New Field to a Model
 
 Check ALL places where that model is created or copied — not just direct CRUD endpoints:
