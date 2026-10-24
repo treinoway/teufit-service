@@ -177,6 +177,17 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       expect(link).not.toBeNull();
     });
 
+    it('marks a pending student active once the trainer links them', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId } = await createStudent();
+      await prisma.user.update({ where: { id: studentId }, data: { status: 'pending' } });
+
+      await linkStudent(trainerToken, studentEmail);
+
+      const student = await prisma.user.findUnique({ where: { id: studentId }, select: { status: true } });
+      expect(student.status).toBe('active');
+    });
+
     it('returns 404 when no user exists with that email', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
 

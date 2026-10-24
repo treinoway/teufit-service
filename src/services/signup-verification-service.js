@@ -12,12 +12,12 @@ import {
 } from '../constants/email-verification.js';
 import { PENDING_SIGNUP_STALE_MS, EXISTING_ACCOUNT_NOTICE_THROTTLE_MS } from '../constants/signup-verification.js';
 import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
+import { UserStatus } from '../constants/user-status.js';
 import { hashPassword } from '../helpers/password.js';
 import { generateCode, hashCode, hashesMatch } from './email-verification-service.js';
 import { acceptPendingInvitesForUser } from './student-invite-service.js';
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
-const NEW_USER_STATUS = 'pending';
 
 // Signup / resend run after the HTTP response (see the auth routes), so the
 // outcome of each branch is only visible in logs. Never log the email, the
@@ -304,7 +304,7 @@ async function createVerifiedUser(prisma, { pendingSignupId, codeId, normalizedE
     if (count === 0) throwInvalidCode();
 
     const user = await tx.user.create({
-      data: { email: normalizedEmail, passwordHash, roles: [], status: NEW_USER_STATUS },
+      data: { email: normalizedEmail, passwordHash, roles: [], status: UserStatus.ACTIVE },
     });
     await tx.account.create({
       data: { userId: user.id, provider: EMAIL_PROVIDER, providerId: normalizedEmail, verifiedAt: new Date() },

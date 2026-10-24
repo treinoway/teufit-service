@@ -16,6 +16,7 @@ import {
   STUDENT_INVITE_LIST_PAGE_SIZE_MAX,
   studentInviteStatusValues,
 } from '../constants/student-invite.js';
+import { UserStatus } from '../constants/user-status.js';
 import { assertStudentCap } from './platform-plan-service.js';
 import { linkStudentByEmail } from './trainer-service.js';
 import { maybeMarkFirstStudentLinked } from './trainer-onboarding-service.js';
@@ -556,6 +557,7 @@ async function claimInviteAndLink(prisma, { invite, studentId, activeOnPlan }) {
       data: [{ trainerId: invite.trainerId, studentId, activeOnPlan }],
       skipDuplicates: true,
     });
+    await tx.user.update({ where: { id: studentId }, data: { status: UserStatus.ACTIVE } });
     return true;
   });
 }

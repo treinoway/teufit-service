@@ -1798,7 +1798,7 @@
                 "profile"
               ]
             },
-            "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional."
+            "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional. When address.postalCode is provided it is looked up (ViaCEP): unknown CEP returns 404 (legacy.POSTAL_CODE_NOT_FOUND), lookup provider failure returns 502 (legacy.POSTAL_CODE_API_ERROR)."
           },
           "response": [
             {
@@ -1832,6 +1832,70 @@
                 }
               ],
               "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"emailVerified\": true,\n  \"betaAccess\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
+            },
+            {
+              "name": "Update Profile - 404 Not Found",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/profile",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "profile"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"POSTAL_CODE_NOT_FOUND\",\n  \"messageCode\": \"legacy.POSTAL_CODE_NOT_FOUND\",\n  \"message\": \"CEP não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Update Profile - 502 Bad Gateway",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/profile",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "profile"
+                  ]
+                }
+              },
+              "status": "Bad Gateway",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"POSTAL_CODE_API_ERROR\",\n  \"messageCode\": \"legacy.POSTAL_CODE_API_ERROR\",\n  \"message\": \"Não foi possível consultar o CEP agora. Tente novamente em instantes.\",\n  \"details\": {}\n}"
             }
           ]
         },

@@ -429,6 +429,12 @@ export default {
     'passwordReset.codeRequired': 'O código de redefinição é obrigatório.',
     'passwordReset.weakPassword': 'A senha deve ter pelo menos 8 caracteres.',
     'passwordReset.passwordMismatch': 'As senhas não coincidem.',
+
+    // Postal code lookup (legacy-coded errors from address-service)
+    'legacy.POSTAL_CODE_REQUIRED': 'O CEP é obrigatório.',
+    'legacy.INVALID_POSTAL_CODE_FORMAT': 'CEP inválido. O CEP deve ter 8 dígitos.',
+    'legacy.POSTAL_CODE_NOT_FOUND': 'CEP não encontrado.',
+    'legacy.POSTAL_CODE_API_ERROR': 'Não foi possível consultar o CEP agora. Tente novamente em instantes.',
   },
 
   notes: {

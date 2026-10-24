@@ -197,9 +197,9 @@ e2eDescribe('e2e: i18n infrastructure', () => {
     expect(meResponse.statusCode).toBe(200);
     const meBody = meResponse.json();
 
-    // User starts with status='pending' and roles=[]
-    expect(meBody.status).toBe('pending');
-    expect(meBody.statusLabel).toBe('Pending');
+    // Verified signup makes the user status='active'; roles start empty
+    expect(meBody.status).toBe('active');
+    expect(meBody.statusLabel).toBe('Active');
     expect(meBody.roles).toEqual([]);
     expect(meBody.rolesLabel).toEqual([]);
     // gender is null for a new user — label should also be null
@@ -230,7 +230,7 @@ e2eDescribe('e2e: i18n infrastructure', () => {
     expect(meResponse.statusCode).toBe(200);
     const meBody = meResponse.json();
 
-    expect(meBody.status).toBe('pending');
-    expect(meBody.statusLabel).toBe('Pendente');
+    expect(meBody.status).toBe('active');
+    expect(meBody.statusLabel).toBe('Ativo');
   });
 });

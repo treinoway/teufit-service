@@ -18,6 +18,8 @@ vi.mock('../../src/db.js', () => {
       },
       user: {
         findUnique: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
       },
       trainerStudent: {
         findUnique: vi.fn(),
@@ -298,6 +300,33 @@ describe('linkStudentByEmail', () => {
     });
 
     expect(prisma.trainerStudent.create).not.toHaveBeenCalled();
+  });
+
+  it('marks the linked student user active', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'user-student', email: 'student@example.com', firstName: 'Jane', lastName: 'Doe', avatarUrl: null })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+
+    await linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'student@example.com' });
+
+    const statusWrites = [...prisma.user.update.mock.calls, ...prisma.user.updateMany.mock.calls].map(([args]) => args);
+    expect(statusWrites).toEqual([
+      expect.objectContaining({ where: expect.objectContaining({ id: 'user-student' }), data: { status: 'active' } }),
+    ]);
+  });
+
+  it('does not mark the user active when the student is already linked', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-student', email: 'student@example.com', firstName: 'Jane', lastName: 'Doe', avatarUrl: null });
+    prisma.trainerStudent.findUnique.mockResolvedValue({ id: 'link1' });
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'student@example.com' }),
+    ).rejects.toMatchObject({ messageCode: 'student.alreadyLinked' });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
   it('creates the link and returns student profile on success', async () => {
