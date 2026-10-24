@@ -83,6 +83,14 @@ describe('findOrCreateUserFromOAuth emailVerified behavior', () => {
 
       expect(prisma.user.create).toHaveBeenCalledTimes(1);
     });
+
+    it('should create the user already active because the provider verified the email', async () => {
+      await findOrCreateUserFromOAuth(providerData({ emailVerified: true }));
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ email: NORMALIZED_EMAIL, status: 'active' }),
+      });
+    });
   });
 
   describe('unverified email (rejected before any lookup)', () => {
@@ -222,6 +230,17 @@ describe('findOrCreateUserFromOAuth emailVerified behavior', () => {
       expect(acceptPendingInvitesForUser).toHaveBeenCalledWith(prisma, user);
     });
 
+    it('should mark the existing pending user active when the provider proves the email', async () => {
+      await findOrCreateUserFromOAuth(providerData({ emailVerified: true }));
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'existing-user' },
+          data: expect.objectContaining({ status: 'active' }),
+        }),
+      );
+    });
+
     describe('verified provider attaching to a user with a password credential', () => {
       const existingWithPassword = {
         id: 'existing-user',
@@ -336,6 +355,32 @@ describe('findOrCreateUserFromOAuth emailVerified behavior', () => {
       });
       expect(acceptPendingInvitesForUser).toHaveBeenCalledTimes(1);
       expect(acceptPendingInvitesForUser).toHaveBeenCalledWith(prisma, { id: 'u1', deletedAt: null });
+    });
+
+    it('should mark the user active when the account just became verified', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        id: 'acc-1',
+        verifiedAt: null,
+        user: { id: 'u1', deletedAt: null },
+      });
+
+      await findOrCreateUserFromOAuth(providerData({ emailVerified: true }));
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'u1' }, data: expect.objectContaining({ status: 'active' }) }),
+      );
+    });
+
+    it('should not touch the user status when the account was already verified', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        id: 'acc-1',
+        verifiedAt: new Date('2026-01-01T00:00:00Z'),
+        user: { id: 'u1', deletedAt: null },
+      });
+
+      await findOrCreateUserFromOAuth(providerData({ emailVerified: true }));
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
     it('should not overwrite an existing verifiedAt', async () => {

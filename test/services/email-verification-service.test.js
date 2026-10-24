@@ -43,7 +43,7 @@ const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex'
 
 function makePrisma() {
   const prisma = {
-    user: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     account: { findFirst: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     emailVerificationToken: {
       updateMany: vi.fn(),
@@ -67,6 +67,13 @@ function makeToken(overrides = {}) {
     createdAt: NOW,
     ...overrides,
   };
+}
+
+const ACTIVE_USER_STATUS = 'active';
+
+// Collects the argument objects of every user update/updateMany call made on the mock.
+function userStatusWrites(prisma) {
+  return [...prisma.user.update.mock.calls, ...prisma.user.updateMany.mock.calls].map(([args]) => args);
 }
 
 describe('email-verification-service', () => {
@@ -333,6 +340,39 @@ describe('email-verification-service', () => {
       expect(acceptPendingInvitesForUser).toHaveBeenCalledWith(prisma, user);
     });
 
+    it('should mark the user active when the email account becomes verified', async () => {
+      prisma.account.updateMany.mockResolvedValue({ count: 1 });
+
+      await markEmailVerifiedFromInboxProof(prisma, user);
+
+      expect(userStatusWrites(prisma)).toEqual([
+        expect.objectContaining({
+          where: expect.objectContaining({ id: USER_ID }),
+          data: { status: ACTIVE_USER_STATUS },
+        }),
+      ]);
+    });
+
+    it('should mark the user active when a verified email account is created for an OAuth-only user', async () => {
+      prisma.account.updateMany.mockResolvedValue({ count: 0 });
+      prisma.account.findFirst.mockResolvedValue(null);
+
+      await markEmailVerifiedFromInboxProof(prisma, user);
+
+      expect(userStatusWrites(prisma)).toEqual([
+        expect.objectContaining({ data: { status: ACTIVE_USER_STATUS } }),
+      ]);
+    });
+
+    it('should not touch the user status when the email account was already verified', async () => {
+      prisma.account.updateMany.mockResolvedValue({ count: 0 });
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-email' });
+
+      await markEmailVerifiedFromInboxProof(prisma, user);
+
+      expect(userStatusWrites(prisma)).toEqual([]);
+    });
+
     it('should do nothing and not accept invites when the email account is already verified', async () => {
       prisma.account.updateMany.mockResolvedValue({ count: 0 });
       prisma.account.findFirst.mockResolvedValue({ id: 'acc-email' });
@@ -409,6 +449,23 @@ describe('email-verification-service', () => {
         email: USER_EMAIL,
         deletedAt: null,
       });
+    });
+
+    it('should mark the user active once the code is verified', async () => {
+      await verifyEmailCode(prisma, { userId: USER_ID, code: CORRECT_CODE });
+
+      expect(userStatusWrites(prisma)).toEqual([
+        expect.objectContaining({
+          where: expect.objectContaining({ id: USER_ID }),
+          data: { status: ACTIVE_USER_STATUS },
+        }),
+      ]);
+    });
+
+    it('should not mark the user active when the code is wrong', async () => {
+      await expect(verifyEmailCode(prisma, { userId: USER_ID, code: WRONG_CODE })).rejects.toBeDefined();
+
+      expect(userStatusWrites(prisma)).toEqual([]);
     });
 
     it('should consume an attempt atomically and burn the token on success', async () => {

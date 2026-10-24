@@ -122,13 +122,13 @@ e2eDescribe('e2e: POST /auth/signup/invite (trainer invite signup)', () => {
       });
     });
 
-    it('should create a pending trainer user with a hashed password and a Trainer row', async () => {
+    it('should create an active trainer user with a hashed password and a Trainer row', async () => {
       const { code } = await createInviteCode();
 
       const res = await signupWithInvite(code);
 
       const user = await prisma.user.findUnique({ where: { id: res.json().user.id } });
-      expect(user).toMatchObject({ email: INVITEE_EMAIL, roles: [Roles.TRAINER], status: 'pending' });
+      expect(user).toMatchObject({ email: INVITEE_EMAIL, roles: [Roles.TRAINER], status: 'active' });
       expect(verifyPassword(PASSWORD, user.passwordHash)).toBe(true);
       expect(await prisma.trainer.count({ where: { userId: user.id } })).toBe(1);
     });
