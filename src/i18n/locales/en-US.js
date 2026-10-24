@@ -425,6 +425,12 @@ export default {
     'passwordReset.codeRequired': 'The reset code is required.',
     'passwordReset.weakPassword': 'Password must be at least 8 characters.',
     'passwordReset.passwordMismatch': 'Passwords do not match.',
+
+    // Postal code lookup (legacy-coded errors from address-service)
+    'legacy.POSTAL_CODE_REQUIRED': 'Postal code is required.',
+    'legacy.INVALID_POSTAL_CODE_FORMAT': 'Invalid postal code. It must have 8 digits.',
+    'legacy.POSTAL_CODE_NOT_FOUND': 'Postal code not found.',
+    'legacy.POSTAL_CODE_API_ERROR': 'Could not look up the postal code right now. Please try again shortly.',
   },
 
   notes: {

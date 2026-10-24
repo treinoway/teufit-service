@@ -1,3 +1,5 @@
+import { PostalCodeErrorCode } from '../constants/address.js';
+
 /**
  * Address service
  * Provides integration with postal code APIs (e.g., ViaCEP for Brazilian addresses)
@@ -12,7 +14,7 @@
 export async function getAddressByPostalCode(postalCode) {
 	if (!postalCode) {
 		const err = new Error('Postal code is required');
-		err.code = 'POSTAL_CODE_REQUIRED';
+		err.code = PostalCodeErrorCode.REQUIRED;
 		err.statusCode = 400;
 		throw err;
 	}
@@ -23,7 +25,7 @@ export async function getAddressByPostalCode(postalCode) {
 	// Validate Brazilian postal code format (8 digits)
 	if (cleanPostalCode.length !== 8) {
 		const err = new Error('Invalid postal code format. Brazilian postal codes must have 8 digits');
-		err.code = 'INVALID_POSTAL_CODE_FORMAT';
+		err.code = PostalCodeErrorCode.INVALID_FORMAT;
 		err.statusCode = 400;
 		throw err;
 	}
@@ -33,7 +35,7 @@ export async function getAddressByPostalCode(postalCode) {
 
 		if (!response.ok) {
 			const err = new Error('Failed to fetch postal code information');
-			err.code = 'POSTAL_CODE_API_ERROR';
+			err.code = PostalCodeErrorCode.API_ERROR;
 			err.statusCode = 502;
 			throw err;
 		}
@@ -43,7 +45,7 @@ export async function getAddressByPostalCode(postalCode) {
 		// ViaCEP returns { erro: true } when postal code is not found
 		if (data.erro) {
 			const err = new Error('Postal code not found');
-			err.code = 'POSTAL_CODE_NOT_FOUND';
+			err.code = PostalCodeErrorCode.NOT_FOUND;
 			err.statusCode = 404;
 			throw err;
 		}
@@ -68,7 +70,7 @@ export async function getAddressByPostalCode(postalCode) {
 
 		// Handle network or parsing errors
 		const err = new Error('Failed to fetch postal code information');
-		err.code = 'POSTAL_CODE_API_ERROR';
+		err.code = PostalCodeErrorCode.API_ERROR;
 		err.statusCode = 502;
 		err.cause = error;
 		throw err;

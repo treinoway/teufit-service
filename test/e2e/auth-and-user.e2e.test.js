@@ -84,7 +84,7 @@ e2eDescribe('e2e: auth and user flows', () => {
     expect(meBody).toMatchObject({
       email,
       roles: expect.any(Array),
-      status: 'pending',
+      status: 'active',
       statusLabel: expect.any(String),
       rolesLabel: expect.any(Array),
     });

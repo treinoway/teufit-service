@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { UserStatus } from '../constants/user-status.js';
 import { prisma } from '../db.js';
 import config from '../../config/index.js';
 import { Roles } from '../constants/roles.js';
@@ -442,7 +443,7 @@ export async function getInvitePreview({ code }) {
 }
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
-const NEW_USER_STATUS = 'pending';
+const NEW_USER_STATUS = UserStatus.ACTIVE;
 
 function createAccountExistsError() {
   return new ConflictAppError({

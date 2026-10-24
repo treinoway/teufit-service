@@ -242,7 +242,7 @@ describe('e2e: signup with email verification (no enumeration)', () => {
         linkedTrainers: 0,
       });
       const user = await prisma.user.findUnique({ where: { id: body.user.id }, include: { accounts: true } });
-      expect(user).toMatchObject({ email, roles: [], status: 'pending' });
+      expect(user).toMatchObject({ email, roles: [], status: 'active' });
       expect(user.accounts).toEqual([
         expect.objectContaining({ provider: EMAIL_PROVIDER, providerId: email, verifiedAt: expect.any(Date) }),
       ]);
@@ -250,6 +250,16 @@ describe('e2e: signup with email verification (no enumeration)', () => {
 
       const me = await app.inject({ method: 'GET', url: '/me', headers: auth(body.token.accessToken) });
       expect(me.statusCode).toBe(200);
+    });
+
+    it('should report status active in GET /me right after a self-signup without any invite', async () => {
+      const email = uniqueEmail('selfsignup-me');
+      const code = await signupAndGetCode(email);
+
+      const res = await verify(email, code);
+
+      const me = await app.inject({ method: 'GET', url: '/me', headers: auth(res.json().token.accessToken) });
+      expect(me.json()).toMatchObject({ status: 'active' });
     });
 
     it('should use the password sent with the code, not the one from the signup request', async () => {
@@ -300,6 +310,30 @@ describe('e2e: signup with email verification (no enumeration)', () => {
       expect(res.json().linkedTrainers).toBe(1);
       const invite = await prisma.studentInvite.findFirst({ where: { email } });
       expect(invite).toMatchObject({ status: StudentInviteStatus.ACCEPTED, studentId: res.json().user.id });
+    });
+
+    it('should mark the invited user active in the database and in GET /me', async () => {
+      const trainerSignup = await signupVerified(app, { payload: { email: uniqueEmail('trainer-active'), password: PASSWORD } });
+      const { user: trainerUser, token } = trainerSignup.json();
+      const become = await app.inject({ method: 'PATCH', url: '/become-trainer', headers: auth(token.accessToken) });
+      const trainer = await prisma.trainer.findUnique({ where: { userId: trainerUser.id } });
+      await provisionTrainerPlan(trainer.id);
+      const email = uniqueEmail('invited-active');
+      await app.inject({
+        method: 'POST',
+        url: '/trainer/student-invites',
+        headers: auth(become.json().token.accessToken),
+        payload: { email },
+      });
+      sentCodes = [];
+
+      const code = await signupAndGetCode(email);
+      const res = await verify(email, code);
+
+      const user = await prisma.user.findUnique({ where: { id: res.json().user.id } });
+      expect(user.status).toBe('active');
+      const me = await app.inject({ method: 'GET', url: '/me', headers: auth(res.json().token.accessToken) });
+      expect(me.json()).toMatchObject({ status: 'active' });
     });
 
     describe('indistinguishable 400 invalidCode', () => {

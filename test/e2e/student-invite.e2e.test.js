@@ -240,6 +240,18 @@ e2eDescribe('e2e: student invites + email verification', () => {
       expect(await prisma.studentInvite.count()).toBe(0);
     });
 
+    it('should mark a pending verified student active when the trainer links them', async () => {
+      const trainer = await createTrainer();
+      const student = await signupVerified(uniqueEmail('linkpending'));
+      await prisma.user.update({ where: { id: student.userId }, data: { status: 'pending' } });
+
+      const res = await inviteStudent(trainer.token, student.email);
+
+      expect(res.json().outcome).toBe(StudentInviteOutcome.LINKED);
+      const persisted = await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } });
+      expect(persisted.status).toBe('active');
+    });
+
     it('should return canResend false and a future resendAvailableAt on the created invite', async () => {
       const trainer = await createTrainer();
 
@@ -295,6 +307,33 @@ e2eDescribe('e2e: student invites + email verification', () => {
         expect(link).not.toBeNull();
         const persisted = await prisma.studentInvite.findUnique({ where: { id: invite.id } });
         expect(persisted).toMatchObject({ status: StudentInviteStatus.ACCEPTED, studentId: student.userId });
+      });
+
+      it('should mark the user active once the invite is accepted on email verification', async () => {
+        const trainer = await createTrainer();
+        const student = await signup(uniqueEmail('activateonverify'));
+        await inviteStudent(trainer.token, student.email);
+
+        await verifyEmail(student.accessToken, verificationCodes.get(student.email));
+
+        const persisted = await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } });
+        expect(persisted.status).toBe('active');
+      });
+
+      it('should mark the user active on email verification even without any invite', async () => {
+        const student = await signup(uniqueEmail('activatenoinvite'));
+
+        await verifyEmail(student.accessToken, verificationCodes.get(student.email));
+
+        const persisted = await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } });
+        expect(persisted.status).toBe('active');
+      });
+
+      it('should keep the user pending while the email is still unverified', async () => {
+        const student = await signup(uniqueEmail('stillpending'));
+
+        const persisted = await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } });
+        expect(persisted.status).toBe('pending');
       });
 
       it('should return 409 studentInvite.alreadyPending on a duplicate invite', async () => {

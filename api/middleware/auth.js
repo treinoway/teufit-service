@@ -1,6 +1,7 @@
 import config from '../../config/index.js';
 import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 import { ForbiddenAppError, UnauthorizedAppError } from '../../src/errors/app-error.js';
+import { UserStatus } from '../../src/constants/user-status.js';
 import { InviteMessageCode } from '../../src/constants/trainer-invite.js';
 
 // Middleware to check if user is authenticated
@@ -119,7 +120,7 @@ export function requireActiveUser() {
     const user = request.user || request.session?.get?.('user');
     if (!user) return reply.status(401).send({ error: 'Authentication required' });
 
-    if (user.status !== 'active') {
+    if (user.status !== UserStatus.ACTIVE) {
       return reply.status(403).send({
         error: 'Account not active',
         message: 'Please complete onboarding before accessing this resource',

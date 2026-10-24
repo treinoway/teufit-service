@@ -161,12 +161,12 @@ describe('signupWithInvite', () => {
       expect(result.preferences).toEqual({ userId: NEW_USER_ID, activeProfile: 'trainer' });
     });
 
-    it('should create a pending trainer user with the normalized email and hashed password', async () => {
+    it('should create an active trainer user with the normalized email and hashed password', async () => {
       await signupWithInvite({ code: CODE, password: PASSWORD });
 
       expect(hashPassword).toHaveBeenCalledWith(PASSWORD);
       expect(prisma.user.create).toHaveBeenCalledWith({
-        data: { email: NORMALIZED_EMAIL, passwordHash: PASSWORD_HASH, roles: [Roles.TRAINER], status: 'pending' },
+        data: { email: NORMALIZED_EMAIL, passwordHash: PASSWORD_HASH, roles: [Roles.TRAINER], status: 'active' },
       });
     });
 
