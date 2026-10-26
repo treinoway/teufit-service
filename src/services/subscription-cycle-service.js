@@ -185,6 +185,7 @@ export async function ensureUpcomingCycles(prisma, { trainerId, today }) {
         price: true,
         discountPercent: true,
         discountAmount: true,
+        billingDay: true,
       },
       orderBy: { id: 'asc' },
       take: CYCLE_GENERATION_BATCH_SIZE,
@@ -200,6 +201,14 @@ export async function ensureUpcomingCycles(prisma, { trainerId, today }) {
   }
 
   return { subscriptionsChecked, cyclesCreated };
+}
+
+// Payment effective start = max(cycleStartDate, subscription.startDate): it passes the bound iff either does.
+function buildEffectiveStartFilter(operator, bound) {
+  return [
+    { cycleStartDate: { [operator]: bound } },
+    { subscription: { startDate: { [operator]: bound } } },
+  ];
 }
 
 /**
@@ -223,14 +232,14 @@ export async function cancelUpcomingPayments(
   today,
   { now = new Date(), replacementCycleStart } = {},
 ) {
-  const voidFilter = replacementCycleStart
-    ? { cycleStartDate: { gte: replacementCycleStart } }
-    : { cycleStartDate: { gt: today } };
+  const effectiveStartFilter = replacementCycleStart
+    ? buildEffectiveStartFilter('gte', replacementCycleStart)
+    : buildEffectiveStartFilter('gt', today);
 
   const result = await client.subscriptionPayment.updateMany({
     where: {
       status: PaymentStatus.PENDING,
-      ...voidFilter,
+      OR: effectiveStartFilter,
       subscription: subscriptionWhere,
     },
     data: { status: PaymentStatus.CANCELLED, voidedAt: now },

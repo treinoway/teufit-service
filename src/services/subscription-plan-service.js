@@ -83,6 +83,7 @@ function formatPlan(plan, activeSubscriptionCount) {
     price: plan.price.toString(),
     discountPercent: plan.discountPercent != null ? plan.discountPercent.toString() : null,
     discountAmount: plan.discountAmount != null ? plan.discountAmount.toString() : null,
+    billingDay: plan.billingDay ?? null,
     isArchived: plan.deletedAt != null,
     ...(activeSubscriptionCount !== undefined ? { activeSubscriptionCount } : {}),
     createdAt: plan.createdAt,
@@ -109,6 +110,7 @@ export async function createPlan(prisma, userId, data) {
       price: new Decimal(data.price),
       discountPercent: data.discountPercent != null ? new Decimal(data.discountPercent) : null,
       discountAmount: data.discountAmount != null ? new Decimal(data.discountAmount) : null,
+      billingDay: data.billingDay ?? null,
     },
   });
 
@@ -209,6 +211,7 @@ export async function updatePlan(prisma, userId, planId, patch) {
         newDiscountPercent != null ? new Decimal(newDiscountPercent) : null,
       discountAmount:
         newDiscountAmount != null ? new Decimal(newDiscountAmount) : null,
+      billingDay: patch.billingDay !== undefined ? patch.billingDay : existing.billingDay,
     },
   });
 

@@ -395,4 +395,155 @@ e2eDescribe('e2e: student subscriptions', () => {
       expect(secondCancel.json().error).toBe(SubscriptionErrorCode.CANNOT_EDIT_CANCELLED);
     });
   });
+  describe('billingDay on assign', () => {
+    const FUTURE_START = '2099-10-10';
+
+    async function setupLinkedStudent() {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      const { userId: studentId } = await createStudentWithToken();
+      await linkStudentToTrainer(trainerId, studentId);
+      return { trainerId, accessToken, studentId };
+    }
+
+    it('uses the plan billingDay: aligned cycle 0 and dueDate = startDate (S=2099-10-10, D=5)', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken, { billingDay: 5 });
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START });
+
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.billingDay).toBe(5);
+      expect(body.firstPayment).toMatchObject({
+        cycleIndex: 0,
+        cycleStartDate: '2099-10-05',
+        cycleEndDate: '2099-11-04',
+        dueDate: FUTURE_START,
+      });
+    });
+
+    it('the body billingDay overrides the plan billingDay', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken, { billingDay: 5 });
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START, billingDay: 20 });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().billingDay).toBe(20);
+      expect(res.json().firstPayment).toMatchObject({
+        cycleStartDate: '2099-09-20',
+        cycleEndDate: '2099-10-19',
+        dueDate: FUTURE_START,
+      });
+    });
+
+    it('without any billingDay the effective day is the day of startDate and the cycle is anchored on it', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken);
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().billingDay).toBe(10);
+      expect(res.json().firstPayment).toMatchObject({
+        cycleStartDate: FUTURE_START,
+        cycleEndDate: '2099-11-09',
+        dueDate: FUTURE_START,
+      });
+      const stored = await prisma.studentSubscription.findUnique({ where: { id: res.json().id } });
+      expect(stored.billingDay).toBeNull();
+    });
+
+    it('clamps a month-end billing day (S=2099-03-15, D=31 => cycle Feb 28..Mar 30, dueDate Mar 15)', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken, { billingDay: 31 });
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate: '2099-03-15' });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().firstPayment).toMatchObject({
+        cycleStartDate: '2099-02-28',
+        cycleEndDate: '2099-03-30',
+        dueDate: '2099-03-15',
+      });
+    });
+
+    it('exposes the effective billingDay on every read endpoint', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken, { billingDay: 5 });
+      const subscriptionId = (await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START })).json().id;
+      const headers = { authorization: `Bearer ${accessToken}` };
+
+      const [history, active, list] = await Promise.all([
+        app.inject({ method: 'GET', url: `/trainer/students/${studentId}/subscriptions`, headers }),
+        app.inject({ method: 'GET', url: `/trainer/students/${studentId}/subscriptions/active`, headers }),
+        app.inject({ method: 'GET', url: '/trainer/subscriptions', headers }),
+      ]);
+
+      expect(history.json().map((subscription) => subscription.billingDay)).toEqual([5]);
+      expect(active.json().billingDay).toBe(5);
+      expect(list.json().find((subscription) => subscription.id === subscriptionId).billingDay).toBe(5);
+    });
+
+    it('returns the day of startDate for a legacy subscription stored without billingDay', async () => {
+      const { trainerId, accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken);
+      await prisma.studentSubscription.create({
+        data: {
+          trainerId,
+          studentId,
+          planId: plan.id,
+          recurrence: 'monthly',
+          price: 150,
+          startDate: new Date('2026-05-17T00:00:00Z'),
+          status: SubscriptionStatus.ACTIVE,
+        },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/subscriptions/active`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().billingDay).toBe(17);
+    });
+
+    it('changing the plan billingDay does not change existing subscriptions', async () => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken, { billingDay: 5 });
+      const subscriptionId = (await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START })).json().id;
+
+      const patchRes = await app.inject({
+        method: 'PATCH',
+        url: `/trainer/subscription-plans/${plan.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { billingDay: 25 },
+      });
+      const subscriptionRes = await app.inject({
+        method: 'GET',
+        url: `/trainer/students/${studentId}/subscriptions/active`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(patchRes.json().billingDay).toBe(25);
+      expect(subscriptionRes.json().id).toBe(subscriptionId);
+      expect(subscriptionRes.json().billingDay).toBe(5);
+      const stored = await prisma.studentSubscription.findUnique({ where: { id: subscriptionId } });
+      expect(stored.billingDay).toBe(5);
+    });
+
+    it.each([0, 32, 1.5])('rejects billingDay %j with 400 VALIDATION_ERROR and creates nothing', async (billingDay) => {
+      const { accessToken, studentId } = await setupLinkedStudent();
+      const plan = await createPlan(accessToken);
+
+      const res = await assignPlan(accessToken, studentId, plan.id, { startDate: FUTURE_START, billingDay });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
+      expect(await prisma.studentSubscription.count()).toBe(0);
+    });
+  });
+
 });

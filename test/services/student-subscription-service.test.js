@@ -74,6 +74,7 @@ function makePlanRecord(overrides = {}) {
     price: new Decimal('100.00'),
     discountPercent: null,
     discountAmount: null,
+    billingDay: null,
     deletedAt: null,
     ...overrides,
   };
@@ -89,6 +90,7 @@ function makeSubscriptionRecord(overrides = {}) {
     price: new Decimal('100.00'),
     discountPercent: null,
     discountAmount: null,
+    billingDay: null,
     startDate: new Date('2026-05-01T12:00:00Z'),
     status: SubscriptionStatus.ACTIVE,
     cancelledAt: null,
@@ -237,6 +239,7 @@ describe('assignPlanToStudent', () => {
         price: true,
         discountPercent: true,
         discountAmount: true,
+        billingDay: true,
       },
     });
     const call = mockTx.studentSubscription.updateMany.mock.calls[0][0];
@@ -247,7 +250,7 @@ describe('assignPlanToStudent', () => {
     );
   });
 
-  it('voids only the replaced subscriptions pending payments starting on/after the new first cycle (no upcoming-OR branch), stamping voidedAt', async () => {
+  it('voids only the replaced subscriptions pending payments whose effective start is on/after the new cut-off, stamping voidedAt', async () => {
     mockTx.studentSubscription.findMany.mockResolvedValue([{ id: 'old-1' }]);
     const now = new Date('2026-06-11T02:00:00Z'); // still Jun 10 in Sao Paulo
 
@@ -258,8 +261,11 @@ describe('assignPlanToStudent', () => {
     expect(mockTx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
       where: {
         status: PaymentStatus.PENDING,
-        cycleStartDate: { gte: new Date('2026-06-10T00:00:00Z') },
         subscription: { id: { in: ['old-1'] } },
+        OR: [
+          { cycleStartDate: { gte: new Date('2026-06-10T00:00:00Z') } },
+          { subscription: { startDate: { gte: new Date('2026-06-10T00:00:00Z') } } },
+        ],
       },
       data: { status: PaymentStatus.CANCELLED, voidedAt: now },
     });
@@ -277,8 +283,11 @@ describe('assignPlanToStudent', () => {
     );
 
     const { where } = mockTx.subscriptionPayment.updateMany.mock.calls[0][0];
-    expect(where.cycleStartDate).toEqual({ gte: new Date('2026-06-25T00:00:00Z') });
-    expect(where).not.toHaveProperty('OR');
+    expect(where.OR).toEqual([
+      { cycleStartDate: { gte: new Date('2026-06-25T00:00:00Z') } },
+      { subscription: { startDate: { gte: new Date('2026-06-25T00:00:00Z') } } },
+    ]);
+    expect(JSON.stringify(where)).not.toContain('2026-06-10T00:00:00.000Z');
   });
 
   describe('materializing the replaced plan cycles before cancelling it', () => {
@@ -389,6 +398,165 @@ describe('assignPlanToStudent', () => {
     expect(formatDateOnly(paymentData.dueDate)).toBe('2026-05-15');
     const { data: subData } = mockTx.studentSubscription.create.mock.calls[0][0];
     expect(formatDateOnly(subData.startDate)).toBe('2026-03-15');
+  });
+
+  describe('billingDay', () => {
+    const NOW_OCT_10 = new Date('2026-10-10T15:00:00Z');
+
+    function assignOn(startDate, data = {}, now = NOW_OCT_10) {
+      return assignPlanToStudent(
+        mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate, ...data }, now,
+      );
+    }
+
+    function createdSubscriptionData() {
+      return mockTx.studentSubscription.create.mock.calls[0][0].data;
+    }
+
+    function createdPaymentData() {
+      return mockTx.subscriptionPayment.create.mock.calls[0][0].data;
+    }
+
+    describe('which billingDay is stored on the subscription', () => {
+      it('stores the plan billingDay when the body has no override', async () => {
+        mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 5 }));
+
+        await assignOn('2026-10-10');
+
+        expect(createdSubscriptionData().billingDay).toBe(5);
+      });
+
+      it('stores the body override instead of the plan billingDay', async () => {
+        mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 5 }));
+
+        await assignOn('2026-10-10', { billingDay: 20 });
+
+        expect(createdSubscriptionData().billingDay).toBe(20);
+      });
+
+      it('stores the body override when the plan has no billingDay', async () => {
+        await assignOn('2026-10-10', { billingDay: 28 });
+
+        expect(createdSubscriptionData().billingDay).toBe(28);
+      });
+
+      it('stores null when neither the body nor the plan define a billingDay (legacy: day of startDate)', async () => {
+        await assignOn('2026-10-10');
+
+        expect(createdSubscriptionData().billingDay).toBeNull();
+      });
+    });
+
+    describe('first cycle and dueDate', () => {
+      it('aligns cycle 0 to the billingDay and uses startDate as dueDate when the cycle starts before it (S=Oct 10, D=5)', async () => {
+        await assignOn('2026-10-10', { billingDay: 5 });
+
+        const payment = createdPaymentData();
+        expect(payment.cycleIndex).toBe(0);
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-10-05');
+        expect(formatDateOnly(payment.cycleEndDate)).toBe('2026-11-04');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-10-10');
+      });
+
+      it('dueDate equals startDate (not the cycle start) when the aligned cycle starts in the previous month (S=Oct 3, D=5)', async () => {
+        await assignOn('2026-10-03', { billingDay: 5 }, new Date('2026-10-03T15:00:00Z'));
+
+        const payment = createdPaymentData();
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-09-05');
+        expect(formatDateOnly(payment.cycleEndDate)).toBe('2026-10-04');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-10-03');
+      });
+
+      it('dueDate equals the cycle start when startDate is the billing day itself (S=D=Oct 5)', async () => {
+        await assignOn('2026-10-05', { billingDay: 5 }, new Date('2026-10-05T15:00:00Z'));
+
+        const payment = createdPaymentData();
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-10-05');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-10-05');
+      });
+
+      it('clamps a month-end billing day (S=Mar 15 2026, D=31 => cycle Feb 28..Mar 30, dueDate Mar 15)', async () => {
+        await assignOn('2026-03-15', { billingDay: 31 }, new Date('2026-03-15T15:00:00Z'));
+
+        const payment = createdPaymentData();
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-02-28');
+        expect(formatDateOnly(payment.cycleEndDate)).toBe('2026-03-30');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-03-15');
+      });
+
+      it('uses the plan billingDay for the first cycle when the body has no override', async () => {
+        mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 5 }));
+
+        await assignOn('2026-10-10');
+
+        expect(formatDateOnly(createdPaymentData().cycleStartDate)).toBe('2026-10-05');
+      });
+
+      it('billingDay null keeps the legacy cycle anchored on startDate with dueDate = cycle start', async () => {
+        await assignOn('2026-10-10');
+
+        const payment = createdPaymentData();
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-10-10');
+        expect(formatDateOnly(payment.cycleEndDate)).toBe('2026-11-09');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-10-10');
+      });
+
+      it('backdated start bills the aligned grid cycle containing today, with dueDate = that cycle start (S=Mar 10, D=5, today Jun 10)', async () => {
+        await assignOn('2026-03-10', { billingDay: 5 }, new Date('2026-06-10T15:00:00Z'));
+
+        const payment = createdPaymentData();
+        expect(payment.cycleIndex).toBe(3);
+        expect(formatDateOnly(payment.cycleStartDate)).toBe('2026-06-05');
+        expect(formatDateOnly(payment.cycleEndDate)).toBe('2026-07-04');
+        expect(formatDateOnly(payment.dueDate)).toBe('2026-06-05');
+      });
+    });
+
+    describe('replacing a subscription', () => {
+      const NOW = new Date('2026-06-10T15:00:00Z');
+
+      it('cuts the voiding of the replaced plan at the new subscription effective start, not the aligned cycle start (S=Jul 20, D=5 => Jul 20)', async () => {
+        mockTx.studentSubscription.findMany.mockResolvedValue([
+          makeSubscriptionRecord({ id: 'old-1', startDate: new Date('2026-06-05T00:00:00Z') }),
+        ]);
+
+        await assignOn('2026-07-20', { billingDay: 5 }, NOW);
+
+        const { where } = mockTx.subscriptionPayment.updateMany.mock.calls[0][0];
+        const serializedWhere = JSON.stringify(where);
+        expect(serializedWhere).toContain('2026-07-20T00:00:00.000Z');
+        expect(serializedWhere).not.toContain('2026-07-05T00:00:00.000Z');
+      });
+
+      it('materializes the replaced plan cycles using the replaced subscription billingDay', async () => {
+        const replaced = {
+          id: 'old-1',
+          startDate: new Date('2026-06-20T00:00:00Z'),
+          recurrence: 'monthly',
+          price: new Decimal('100.00'),
+          discountPercent: null,
+          discountAmount: null,
+          billingDay: 5,
+        };
+        mockTx.studentSubscription.findMany.mockResolvedValue([replaced]);
+        mockTx.$queryRaw
+          .mockResolvedValueOnce([{ locked: true }])
+          .mockResolvedValueOnce([
+            { subscriptionId: 'old-1', cycleIndex: 0, cycleEndDate: new Date('2026-07-04T00:00:00Z') },
+          ]);
+
+        await assignOn('2026-07-20', {}, NOW);
+
+        expect(mockTx.$executeRaw).toHaveBeenCalledOnce();
+        const [subscriptionId, cycleIndex, cycleStartDate, cycleEndDate, dueDate] =
+          mockTx.$executeRaw.mock.calls[0][2].values;
+        expect(subscriptionId).toBe('old-1');
+        expect(cycleIndex).toBe(1);
+        expect(cycleStartDate).toBe('2026-07-05');
+        expect(cycleEndDate).toBe('2026-08-04');
+        expect(dueDate).toBe('2026-07-05');
+      });
+    });
   });
 
   it('maps a unique violation (concurrent assign) to 409 SUBSCRIPTION_ALREADY_ACTIVE', async () => {
@@ -677,8 +845,11 @@ describe('cancelSubscription', () => {
     expect(mockTx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
       where: {
         status: PaymentStatus.PENDING,
-        cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') },
         subscription: { id: SUBSCRIPTION_ID },
+        OR: [
+          { cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') } },
+          { subscription: { startDate: { gt: new Date('2026-06-10T00:00:00Z') } } },
+        ],
       },
       data: { status: PaymentStatus.CANCELLED, voidedAt: now },
     });
@@ -721,5 +892,61 @@ describe('cancelSubscription', () => {
       httpStatus: 404,
       error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
     });
+  });
+});
+
+// ─── billingDay in subscription responses ─────────────────────────────────────
+
+describe('subscription responses expose the effective billingDay', () => {
+  const LEGACY_START_DAY = 17;
+
+  function legacyRecord() {
+    return makeSubscriptionRecord({
+      billingDay: null,
+      startDate: new Date(`2026-05-${LEGACY_START_DAY}T00:00:00Z`),
+    });
+  }
+
+  it('assign returns the stored billingDay', async () => {
+    mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+    mockTx.studentSubscription.create.mockResolvedValue(
+      makeSubscriptionRecord({ billingDay: 5, startDate: new Date('2026-10-10T00:00:00Z') }),
+    );
+
+    const result = await assignPlanToStudent(
+      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-10-10', billingDay: 5 },
+    );
+
+    expect(result.billingDay).toBe(5);
+  });
+
+  it('assign returns the day of startDate for a subscription stored without billingDay', async () => {
+    mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord());
+    mockTx.studentSubscription.create.mockResolvedValue(legacyRecord());
+
+    const result = await assignPlanToStudent(
+      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-05-17' },
+    );
+
+    expect(result.billingDay).toBe(LEGACY_START_DAY);
+  });
+
+  it('listSubscriptionsByStudent returns stored and legacy (day of startDate) billing days', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscriptionRecord({ id: 'with-day', billingDay: 31 }),
+      { ...legacyRecord(), id: 'legacy' },
+    ]);
+
+    const result = await listSubscriptionsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+
+    expect(result.map((subscription) => subscription.billingDay)).toEqual([31, LEGACY_START_DAY]);
+  });
+
+  it('getActiveSubscriptionByStudent returns the effective billingDay', async () => {
+    mockPrisma.studentSubscription.findFirst.mockResolvedValue(legacyRecord());
+
+    const result = await getActiveSubscriptionByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+
+    expect(result.billingDay).toBe(LEGACY_START_DAY);
   });
 });

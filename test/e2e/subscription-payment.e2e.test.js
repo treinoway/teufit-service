@@ -1400,4 +1400,76 @@ e2eDescribe('e2e: subscription payments (financeiro cycle model)', () => {
       expect((await history(student.accessToken, ctx.studentId)).statusCode).toBe(403);
     });
   });
+  describe('billingDay-aligned cycles', () => {
+    const START_OFFSET_DAYS = -25;
+    const BILLING_DAY_OFFSET_DAYS = -27;
+
+    async function setupWithBillingDay() {
+      const billingDay = businessDay(BILLING_DAY_OFFSET_DAYS).getUTCDate();
+      const trainer = await createTrainer(app);
+      const student = await createStudent(app);
+      await linkStudent(trainer.trainerId, student.userId);
+      const plan = await createPlanViaApi(app, trainer.accessToken, { billingDay });
+      const assignRes = await assignPlanViaApi(
+        app,
+        trainer.accessToken,
+        student.userId,
+        plan.id,
+        businessDayString(START_OFFSET_DAYS),
+      );
+      expect(assignRes.statusCode).toBe(201);
+      expect(assignRes.json().billingDay).toBe(billingDay);
+      return { ...trainer, billingDay, subscription: assignRes.json() };
+    }
+
+    it('assign bills the aligned cycle containing today with dueDate = startDate', async () => {
+      const { billingDay, subscription } = await setupWithBillingDay();
+
+      expect(subscription.billingDay).toBe(billingDay);
+      expect(subscription.firstPayment).toMatchObject({
+        cycleIndex: 0,
+        cycleStartDate: businessDayString(BILLING_DAY_OFFSET_DAYS),
+        dueDate: businessDayString(START_OFFSET_DAYS),
+      });
+    });
+
+    it('manual next cycle follows the aligned grid with dueDate = cycle start', async () => {
+      const { accessToken, billingDay, subscription } = await setupWithBillingDay();
+      const expected = computeCycleBounds(
+        businessDay(START_OFFSET_DAYS),
+        SubscriptionRecurrence.MONTHLY,
+        1,
+        billingDay,
+      );
+
+      const res = await post(`/trainer/subscriptions/${subscription.id}/payments`, accessToken, {});
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toMatchObject({
+        cycleIndex: 1,
+        cycleStartDate: formatDateOnly(expected.cycleStartDate),
+        cycleEndDate: formatDateOnly(expected.cycleEndDate),
+        dueDate: formatDateOnly(expected.cycleStartDate),
+      });
+    });
+
+    it('the cron generator creates the same next cycle from the stored billingDay', async () => {
+      const { billingDay, subscription } = await setupWithBillingDay();
+      const expected = computeCycleBounds(
+        businessDay(START_OFFSET_DAYS),
+        SubscriptionRecurrence.MONTHLY,
+        1,
+        billingDay,
+      );
+
+      await ensureUpcomingCycles(prisma, { today: todayInBusinessTz() });
+
+      const created = await prisma.subscriptionPayment.findUnique({
+        where: { subscriptionId_cycleIndex: { subscriptionId: subscription.id, cycleIndex: 1 } },
+      });
+      expect(formatDateOnly(created.cycleStartDate)).toBe(formatDateOnly(expected.cycleStartDate));
+      expect(formatDateOnly(created.dueDate)).toBe(formatDateOnly(expected.cycleStartDate));
+    });
+  });
+
 });

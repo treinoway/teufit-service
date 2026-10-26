@@ -1355,10 +1355,13 @@ describe('unlinkStudent', () => {
 
       expect(tx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
         where: {
-          status: PaymentStatus.PENDING,
-          cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') },
-          subscription: { trainerId: 'trainer1', studentId: 'student1' },
-        },
+        status: PaymentStatus.PENDING,
+        subscription: { trainerId: 'trainer1', studentId: 'student1' },
+        OR: [
+          { cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') } },
+          { subscription: { startDate: { gt: new Date('2026-06-10T00:00:00Z') } } },
+        ],
+      },
         data: { status: PaymentStatus.CANCELLED, voidedAt: NOW },
       });
     });

@@ -146,6 +146,83 @@ describe('createPayment', () => {
     });
   });
 
+  describe('billingDay', () => {
+    it('creates the next cycle on the aligned grid with dueDate = cycle start (D=5, S=May 10, last cycle 0)', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-05-10T00:00:00Z'), billingDay: 5 }),
+      );
+      mockLastCycle(0);
+
+      const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+
+      const row = insertedRow();
+      expect(row.cycleIndex).toBe(1);
+      expect(row.cycleStartDate).toBe('2026-06-05');
+      expect(row.cycleEndDate).toBe('2026-07-04');
+      expect(row.dueDate).toBe('2026-06-05');
+      expect(result.cycleStartDate).toBe('2026-06-05');
+    });
+
+    it('keeps a month-end billing day (D=31, S=Jan 10, last cycle 4 => May 31..Jun 29)', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-01-10T00:00:00Z'), billingDay: 31 }),
+      );
+      mockLastCycle(4);
+
+      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+
+      expect(insertedRow()).toMatchObject({
+        cycleIndex: 5,
+        cycleStartDate: '2026-05-31',
+        cycleEndDate: '2026-06-29',
+      });
+    });
+
+    it('allows an aligned cycle starting exactly today + 7 (D=17, S=May 20 => Jun 17)', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-05-20T00:00:00Z'), billingDay: 17 }),
+      );
+      mockLastCycle(0);
+
+      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+
+      expect(insertedRow().cycleStartDate).toBe('2026-06-17');
+    });
+
+    it('rejects with 409 CYCLE_NOT_DUE when the aligned cycle starts after today + 7 (D=18, S=May 20 => Jun 18)', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-05-20T00:00:00Z'), billingDay: 18 }),
+      );
+      mockLastCycle(0);
+
+      await expect(
+        createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.CYCLE_NOT_DUE });
+    });
+
+    it('an explicit dueDate still overrides the cycle start on an aligned cycle', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-05-10T00:00:00Z'), billingDay: 5 }),
+      );
+      mockLastCycle(0);
+
+      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, { dueDate: '2026-06-12' }, NOW);
+
+      expect(insertedRow().dueDate).toBe('2026-06-12');
+    });
+
+    it('billingDay null keeps the legacy cycle anchored on the start date day', async () => {
+      mockPrisma.studentSubscription.findFirst.mockResolvedValue(
+        makeSubscriptionRecord({ startDate: new Date('2026-05-10T00:00:00Z'), billingDay: null }),
+      );
+      mockLastCycle(0);
+
+      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+
+      expect(insertedRow()).toMatchObject({ cycleStartDate: '2026-06-10', cycleEndDate: '2026-07-09', dueDate: '2026-06-10' });
+    });
+  });
+
   it('creates the next cycle (index + 1) from the subscription anchor, ignoring any caller dates', async () => {
     mockLastCycle(0);
 

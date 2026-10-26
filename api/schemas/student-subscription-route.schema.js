@@ -50,6 +50,7 @@ const subscriptionSchema = {
     price: moneyString,
     discountPercent: moneyStringNullable,
     discountAmount: moneyStringNullable,
+    billingDay: { type: 'integer', description: 'Effective day of month charges fall due (1-31)' },
     startDate: { type: 'string', format: 'date' },
     ...i18nField('status', 'subscriptionStatus'),
     cancelledAt: { type: 'string', format: 'date-time', nullable: true },
@@ -93,6 +94,7 @@ export const assignPlanSchema = {
       startDate: { type: 'string', format: 'date' },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
       discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
+      billingDay: { type: 'integer', minimum: 1, maximum: 31, nullable: true, description: 'Overrides the plan billing day' },
     },
   },
   response: {
