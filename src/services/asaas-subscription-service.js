@@ -9,12 +9,15 @@
  * All functions use dependency injection for prisma and asaas client.
  */
 
-import { AppError } from '../errors/app-error.js';
+import { AppError, ConflictAppError } from '../errors/app-error.js';
 import {
   PLAN_PRICES,
   PLATFORM_SUBSCRIPTION_STATUSES,
   ASAAS_CYCLES,
   PLATFORM_PLAN_TIERS,
+  PLATFORM_PLAN_ERRORS,
+  PURCHASABLE_TIERS,
+  isTierUpgrade,
 } from '../constants/platform-plan.js';
 import {
   getTrainerPlan,
@@ -118,7 +121,7 @@ export async function createCheckout(prisma, asaasConfig, httpClient, { trainerI
 
   await prisma.platformSubscription.update({
     where: { trainerId },
-    data: { asaasSubscriptionId: asaasSubscription.id },
+    data: { asaasSubscriptionId: asaasSubscription.id, checkoutPendingSince: new Date() },
   });
 
   return {
@@ -135,15 +138,14 @@ export async function createCheckout(prisma, asaasConfig, httpClient, { trainerI
  */
 export async function cancelAtPeriodEnd(prisma, asaasConfig, httpClient, trainerId) {
   const subscription = await requireActiveSubscription(prisma, trainerId);
+  assertHasPaidSubscription(subscription);
 
   await prisma.platformSubscription.update({
     where: { trainerId },
     data: { cancelAtPeriodEnd: true },
   });
 
-  if (subscription.asaasSubscriptionId) {
-    await asaasClient.cancelSubscriptionAtNextCycle(httpClient, asaasConfig, subscription.asaasSubscriptionId);
-  }
+  await asaasClient.cancelSubscriptionAtNextCycle(httpClient, asaasConfig, subscription.asaasSubscriptionId);
 
   return { cancelAtPeriodEnd: true };
 }
@@ -166,15 +168,13 @@ export async function changeTier(prisma, asaasConfig, httpClient, trainerId, new
   }
 
   const subscription = await requireActiveSubscription(prisma, trainerId);
-  const isDowngrade = isLowerTier(newTier, currentTier);
+  assertHasPaidSubscription(subscription);
+  const isDowngrade = !isTierUpgrade(currentTier, newTier);
 
-  if (subscription.asaasSubscriptionId) {
-    const newPrice = PLAN_PRICES[newTier].monthly;
-    await asaasClient.updateSubscription(httpClient, asaasConfig, subscription.asaasSubscriptionId, {
-      value: newPrice,
-      externalReference: buildExternalReference(newTier, trainerId),
-    });
-  }
+  await asaasClient.updateSubscription(httpClient, asaasConfig, subscription.asaasSubscriptionId, {
+    value: PLAN_PRICES[newTier].monthly,
+    externalReference: buildExternalReference(newTier, trainerId),
+  });
 
   await prisma.platformSubscription.update({
     where: { trainerId },
@@ -192,8 +192,9 @@ export async function changeTier(prisma, asaasConfig, httpClient, trainerId, new
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
+// Rejects tiers that cannot be bought through Asaas (FREE, BETA, unknown).
 function validateTierUpgradeable(tier) {
-  if (tier === FREE_TIER || !PLATFORM_PLAN_TIERS[tier]) {
+  if (!PURCHASABLE_TIERS.includes(tier)) {
     throw new AppError({
       httpStatus: 400,
       error: 'INVALID_TIER',
@@ -201,6 +202,18 @@ function validateTierUpgradeable(tier) {
       message: 'Invalid plan tier.',
     });
   }
+}
+
+// Blocks plan changes on rows without an Asaas subscription or whose checkout was never paid.
+function assertHasPaidSubscription(subscription) {
+  if (subscription.asaasSubscriptionId && !subscription.checkoutPendingSince) return;
+  const { code, messageCode } = PLATFORM_PLAN_ERRORS.NO_PAID_SUBSCRIPTION;
+  throw new ConflictAppError({
+    error: code,
+    messageCode,
+    message: 'This plan is not billed through a paid subscription.',
+    details: {},
+  });
 }
 
 async function findTrainerWithUser(prisma, trainerId) {
@@ -249,12 +262,6 @@ function parseTierFromExternalReference(externalReference) {
   if (!externalReference) return null;
   const match = externalReference.match(/^tier:([A-Z]+):trainer:/);
   return match ? match[1] : null;
-}
-
-const TIER_ORDER = [FREE_TIER, PLATFORM_PLAN_TIERS.PRO, PLATFORM_PLAN_TIERS.PLATINUM, PLATFORM_PLAN_TIERS.DIAMOND];
-
-function isLowerTier(newTier, currentTier) {
-  return TIER_ORDER.indexOf(newTier) < TIER_ORDER.indexOf(currentTier);
 }
 
 export { parseTierFromExternalReference };

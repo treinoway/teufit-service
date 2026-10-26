@@ -17,6 +17,8 @@ import { AppError, ValidationAppError, ForbiddenAppError, NotFoundAppError, Conf
 import { setActiveProfileToTrainer } from './user-service.js';
 import { markEmailVerifiedFromInboxProof } from './email-verification-service.js';
 import emailHandler from '../config/email-handler.js';
+import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../constants/platform-plan.js';
+import { reactivateStudentsUpToCap } from './platform-plan-service.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
 import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
 import { hashPassword } from '../helpers/password.js';
@@ -354,6 +356,52 @@ async function loadInviteAndAssertActionable(
   return invite;
 }
 
+// Looks up the id of the trainer profile owned by the user.
+async function findTrainerIdByUserId(db, userId) {
+  const trainer = await db.trainer.findUnique({ where: { userId }, select: { id: true } });
+  if (!trainer) {
+    throw new NotFoundAppError({
+      error: 'TRAINER_NOT_FOUND',
+      messageCode: 'trainer.notFound',
+      message: 'Trainer profile not found.',
+    });
+  }
+  return trainer.id;
+}
+
+// Whether an existing subscription row may be replaced by the invite BETA grant (never a paying one).
+function canReceiveBeta(subscription) {
+  if (!subscription) return true;
+  return subscription.tier === PLATFORM_PLAN_TIERS.FREE && !subscription.asaasSubscriptionId;
+}
+
+// Locks the trainer's subscription row so a concurrent checkout cannot interleave with the BETA grant.
+async function lockSubscriptionRow(tx, trainerId) {
+  await tx.$queryRaw`SELECT id FROM platform_subscriptions WHERE trainer_id = ${trainerId}::uuid FOR UPDATE`;
+}
+
+// Writes BETA unless the row already pays through Asaas; returns whether it was written.
+async function writeBetaGrant(tx, trainerId) {
+  await lockSubscriptionRow(tx, trainerId);
+  const subscription = await tx.platformSubscription.findUnique({ where: { trainerId } });
+  if (!canReceiveBeta(subscription)) return false;
+
+  const grant = { tier: PLATFORM_PLAN_TIERS.BETA, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE };
+  await tx.platformSubscription.upsert({
+    where: { trainerId },
+    create: { trainerId, ...grant },
+    update: { ...grant, pastDueSince: null },
+  });
+  return true;
+}
+
+// Grants BETA to the invited user's trainer unless they already pay through Asaas, then unblocks students.
+async function grantBetaToRedeemer(userId) {
+  const trainerId = await findTrainerIdByUserId(prisma, userId);
+  const granted = await prisma.$transaction((tx) => writeBetaGrant(tx, trainerId));
+  if (granted) await reactivateStudentsUpToCap(prisma, trainerId);
+}
+
 /**
  * Redeems an invite code for the given authenticated user, granting the
  * trainer role via setActiveProfileToTrainer on success.
@@ -376,6 +424,7 @@ export async function redeemInvite({ user, code }) {
     // setActiveProfileToTrainer is safe to re-run (role-add no-ops when
     // already present) so a stale client retry still succeeds.
     const preferences = await setActiveProfileToTrainer(user.id);
+    await grantBetaToRedeemer(user.id);
     return { invite, preferences };
   }
 
@@ -404,6 +453,7 @@ export async function redeemInvite({ user, code }) {
   await markEmailVerifiedFromInboxProof(prisma, user);
 
   const preferences = await setActiveProfileToTrainer(user.id);
+  await grantBetaToRedeemer(user.id);
   const updatedInvite = await prisma.trainerInvite.findUnique({ where: { id: invite.id } });
 
   return { invite: updatedInvite, preferences };
@@ -473,6 +523,10 @@ async function createTrainerAccountFromInvite(invite, passwordHash) {
     // Same grant as /become-trainer and redeemInvite, on the tx client: the
     // global client cannot see the uncommitted user.
     const preferences = await setActiveProfileToTrainer(user.id, { tx });
+    const trainerId = await findTrainerIdByUserId(tx, user.id);
+    await tx.platformSubscription.create({
+      data: { trainerId, tier: PLATFORM_PLAN_TIERS.BETA, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
+    });
     // The signup code flow is superseded by the invite proof for this inbox.
     await tx.pendingSignup.deleteMany({ where: { email: normalizedEmail } });
     return { user, preferences };

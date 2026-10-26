@@ -1,5 +1,5 @@
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
-import { PLATFORM_PLAN_TIERS, ASAAS_BILLING_TYPES } from '../../src/constants/platform-plan.js';
+import { PLATFORM_PLAN_TIERS, PURCHASABLE_TIERS, ASAAS_BILLING_TYPES } from '../../src/constants/platform-plan.js';
 
 const tierValues = Object.values(PLATFORM_PLAN_TIERS);
 const billingTypeValues = Object.values(ASAAS_BILLING_TYPES);
@@ -94,7 +94,7 @@ export const checkoutSchema = {
     required: ['tier', 'billingType'],
     additionalProperties: false,
     properties: {
-      tier: { type: 'string', enum: tierValues.filter((t) => t !== 'FREE') },
+      tier: { type: 'string', enum: [...PURCHASABLE_TIERS] },
       billingType: { type: 'string', enum: billingTypeValues },
     },
   },
@@ -134,6 +134,7 @@ export const cancelPlanSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: errorResponseSchema,
     500: errorResponseSchema,
   },
 };
@@ -150,7 +151,7 @@ export const changePlanSchema = {
     required: ['tier'],
     additionalProperties: false,
     properties: {
-      tier: { type: 'string', enum: tierValues.filter((t) => t !== 'FREE') },
+      tier: { type: 'string', enum: [...PURCHASABLE_TIERS] },
     },
   },
   response: {

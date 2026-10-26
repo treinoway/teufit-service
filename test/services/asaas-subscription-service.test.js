@@ -411,7 +411,7 @@ describe('changeTier — student reactivation on tier change', () => {
     mockPrisma.platformSubscription.findUnique.mockResolvedValue({
       trainerId: TRAINER_ID,
       tier: PLATFORM_PLAN_TIERS.FREE,
-      asaasSubscriptionId: null,
+      asaasSubscriptionId: 'sub_sandbox_001',
     });
     mockPrisma.platformSubscription.update.mockResolvedValue({});
   });

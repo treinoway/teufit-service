@@ -9415,7 +9415,7 @@
                 }
               }
             },
-            "description": "Override a trainer's platform plan tier directly (no billing call to Asaas). Tier is one of FREE | PRO | PLATINUM | DIAMOND. Requires ADMIN role. Errors: 400 validation, 401, 403 (not admin), 404 trainer not found, 429, 500."
+            "description": "Override a trainer's platform plan tier directly (no billing call to Asaas). Tier is one of FREE | PRO | PLATINUM | DIAMOND | BETA. BETA is the closed-beta tier (DIAMOND-equivalent limits) and is rejected with 409 PLATFORM_PLAN_BETA_WITH_PAID_SUBSCRIPTION when the trainer has an Asaas subscription. Requires ADMIN role. Errors: 400 validation, 401, 403 (not admin), 404 trainer not found, 409 (BETA with paid subscription), 429, 500."
           },
           "response": [
             {
@@ -13808,7 +13808,7 @@
                 "checkout"
               ]
             },
-            "description": "Create a checkout for a platform plan. tier: PRO|PLATINUM|DIAMOND. billingType: PIX|CREDIT_CARD|BOLETO|UNDEFINED. Returns checkoutUrl for the first payment.",
+            "description": "Create a checkout for a platform plan. tier: PRO|PLATINUM|DIAMOND (BETA is not purchasable: 400). billingType: PIX|CREDIT_CARD|BOLETO|UNDEFINED. Returns checkoutUrl for the first payment.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"tier\": \"PRO\",\n  \"billingType\": \"PIX\"\n}",
@@ -13843,7 +13843,7 @@
                 "cancel"
               ]
             },
-            "description": "Schedule cancellation at the end of the current billing period. Subscription remains active until currentPeriodEnd."
+            "description": "Schedule cancellation at the end of the current billing period. Subscription remains active until currentPeriodEnd. 409 PLATFORM_PLAN_NO_PAID_SUBSCRIPTION when the plan has no Asaas subscription (e.g. BETA)."
           },
           "response": []
         },
@@ -13874,7 +13874,7 @@
                 "change"
               ]
             },
-            "description": "Upgrade or downgrade to a new tier. Downgrade immediately soft-blocks excess students (older ones first). tier: PRO|PLATINUM|DIAMOND.",
+            "description": "Upgrade or downgrade to a new tier. Downgrade immediately soft-blocks excess students (older ones first). tier: PRO|PLATINUM|DIAMOND (BETA: 400). Requires a paid Asaas subscription, otherwise 409 PLATFORM_PLAN_NO_PAID_SUBSCRIPTION (e.g. BETA or admin-granted plans).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"tier\": \"PLATINUM\"\n}",

@@ -6,6 +6,8 @@ vi.mock('../../src/db.js', () => ({
     user: { create: vi.fn() },
     account: { create: vi.fn() },
     pendingSignup: { deleteMany: vi.fn() },
+    trainer: { findUnique: vi.fn() },
+    platformSubscription: { create: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   },
@@ -62,6 +64,8 @@ describe('signupWithInvite', () => {
     prisma.account.create.mockResolvedValue({});
     setActiveProfileToTrainer.mockResolvedValue({ userId: NEW_USER_ID, activeProfile: 'trainer' });
     prisma.pendingSignup.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+    prisma.platformSubscription.create.mockResolvedValue({});
     hashPassword.mockReturnValue(PASSWORD_HASH);
   });
 

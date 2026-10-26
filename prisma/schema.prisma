@@ -1336,6 +1336,7 @@ enum PlatformPlanTier {
   PRO
   PLATINUM
   DIAMOND
+  BETA
 }
 
 enum PlatformSubscriptionStatus {
@@ -1371,6 +1372,7 @@ model PlatformSubscription {
   cancelAtPeriodEnd   Boolean                    @default(false) @map("cancel_at_period_end")
   trialEndsAt         DateTime?                  @map("trial_ends_at")
   pastDueSince        DateTime?                  @map("past_due_since")
+  checkoutPendingSince DateTime?                 @map("checkout_pending_since")
   createdAt           DateTime                   @default(now()) @map("created_at")
   updatedAt           DateTime                   @updatedAt @map("updated_at")
 
