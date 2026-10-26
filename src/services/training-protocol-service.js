@@ -1,5 +1,5 @@
 import { prisma } from '../db.js';
-import { TrainingStatus, trainingStatusValues, BulkProtocolErrorCode, BulkProtocolMessageCode } from '../constants/training.js';
+import { TrainingStatus, trainingStatusValues, BulkProtocolErrorCode, BulkProtocolMessageCode, ExerciseOrderBy } from '../constants/training.js';
 import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode, applyPrescriptionModeExclusivity } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
@@ -449,7 +449,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
                 include: {
                   exerciseTemplate: true,
                 },
-                orderBy: { order: 'asc' },
+                orderBy: ExerciseOrderBy,
               },
             },
           },

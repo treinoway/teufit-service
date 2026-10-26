@@ -7,6 +7,7 @@ import {
   LastPerformanceMessageCode,
   WorkoutSessionFinalizedErrorCode,
   WorkoutSessionFinalizedMessageCode,
+  ExerciseOrderBy,
 } from '../constants/training.js';
 import { buildError } from '../helpers/training-validators.js';
 import { AppError } from '../errors/app-error.js';
@@ -147,7 +148,7 @@ async function resolveAssigneeTraining(trainingId, userId) {
         // Only principals — substitutes are logged on-demand when the student swaps
         where: { deletedAt: null, substituteForExerciseId: null },
         select: { id: true, order: true },
-        orderBy: { order: 'asc' },
+        orderBy: ExerciseOrderBy,
       },
     },
   });
@@ -313,7 +314,7 @@ export async function startSession(userId, trainingId, data = null) {
       include: {
         training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
         exerciseLogs: {
-          orderBy: { order: 'asc' },
+          orderBy: ExerciseOrderBy,
           include: {
             exercise: exerciseSelectWithSubstitutes,
             setLogs: { orderBy: { setNumber: 'asc' } },
@@ -548,7 +549,7 @@ export async function getSession(userId, sessionId) {
     include: {
       training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
-        orderBy: { order: 'asc' },
+        orderBy: ExerciseOrderBy,
         include: {
           exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },
@@ -618,7 +619,7 @@ export async function updateSession(userId, sessionId, data) {
     include: {
       training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
-        orderBy: { order: 'asc' },
+        orderBy: ExerciseOrderBy,
         include: {
           exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },
@@ -1134,7 +1135,7 @@ export async function getStudentSession(trainerId, studentId, sessionId) {
     include: {
       training: { select: { id: true, name: true, category: true, estimatedDurationSeconds: true } },
       exerciseLogs: {
-        orderBy: { order: 'asc' },
+        orderBy: ExerciseOrderBy,
         include: {
           exercise: exerciseSelectWithSubstitutes,
           setLogs: { orderBy: { setNumber: 'asc' } },

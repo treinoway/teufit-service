@@ -10,6 +10,7 @@ import {
 } from '../helpers/training-validators.js';
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { ExerciseOrderBy } from '../constants/training.js';
 
 /**
  * Verify protocol ownership (trainer context)
@@ -316,7 +317,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     where: { id: templateId },
     include: {
       trainingTemplateExerciseTemplates: {
-        orderBy: { order: 'asc' },
+        orderBy: ExerciseOrderBy,
       },
     },
   });
@@ -394,7 +395,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
       include: {
         exercises: {
           where: { deletedAt: null },
-          orderBy: { order: 'asc' },
+          orderBy: ExerciseOrderBy,
         },
       },
     });

@@ -6,6 +6,7 @@ import {
   WorkoutsTodayMessageCode,
   AUTO_COMPLETE_PENDING_AFTER_MS,
   WorkoutSessionStatus,
+  ExerciseOrderBy,
 } from '../constants/training.js';
 import { translate } from '../i18n/index.js';
 
@@ -217,7 +218,7 @@ export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', lo
         where: { deletedAt: null },
         orderBy: { order: 'asc' },
         include: {
-          exercises: { where: { deletedAt: null }, orderBy: { order: 'asc' } },
+          exercises: { where: { deletedAt: null }, orderBy: ExerciseOrderBy },
         },
       },
     },

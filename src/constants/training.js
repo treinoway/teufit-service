@@ -198,3 +198,6 @@ export const BulkProtocolMessageCode = Object.freeze({
   TRAINING_TEMPLATE_NOT_OWNED: 'protocol.trainingTemplateNotOwned',
   EXERCISE_TEMPLATE_NOT_OWNED: 'protocol.exerciseTemplateNotOwned',
 });
+
+// Total read order for exercise/junction rows: ties on `order` fall back to creation time, then id (rows from one tx share createdAt).
+export const ExerciseOrderBy = Object.freeze([{ order: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }]);

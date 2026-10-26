@@ -1049,7 +1049,7 @@
   },
   "src/services/training-template-service.js": {
     "local/function-header-comment": {
-      "count": 8
+      "count": 7
     },
     "local/no-comments-in-function": {
       "count": 33

@@ -57,3 +57,13 @@ export async function lockAnamnesisForUpdate(tx, id) {
 export async function lockAnamnesisResponseForUpdate(tx, id) {
   await tx.$queryRaw`SELECT id FROM anamnesis_responses WHERE id = ${id}::uuid FOR UPDATE`;
 }
+
+/**
+ * Acquire an exclusive row-level lock on the `training_templates` row (call FIRST when appending junction rows).
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {string} id - TrainingTemplate UUID
+ */
+export async function lockTrainingTemplateForUpdate(tx, id) {
+  await tx.$queryRaw`SELECT id FROM training_templates WHERE id = ${id}::uuid FOR UPDATE`;
+}
