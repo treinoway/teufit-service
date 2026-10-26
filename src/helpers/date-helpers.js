@@ -214,6 +214,16 @@ export function addMonthsClamped(date, months) {
 }
 
 /**
+ * Date-only value for `day` of the given month, clamped to the month length.
+ *
+ * @returns {Date} midnight UTC
+ */
+export function dateWithClampedDay(year, monthIndex, day) {
+	const lastDayOfMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+	return new Date(Date.UTC(year, monthIndex, Math.min(day, lastDayOfMonth)));
+}
+
+/**
  * Whole days between two midnight-UTC dates (later - earlier).
  */
 export function diffInDays(later, earlier) {

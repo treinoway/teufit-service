@@ -317,6 +317,115 @@ describe('ensureUpcomingCycles', () => {
   });
 });
 
+describe('billingDay-aligned cycles', () => {
+  it('selects billingDay for every active subscription it checks', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    expect(mockPrisma.studentSubscription.findMany.mock.calls[0][0].select).toMatchObject({
+      billingDay: true,
+    });
+  });
+
+  it('creates the next cycle on the aligned grid with dueDate = cycle start (S=Mar 10, D=5, today Jun 10)', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscription('s1', { startDate: new Date('2026-03-10T00:00:00Z'), billingDay: 5 }),
+    ]);
+    mockPrisma.$queryRaw.mockResolvedValue([latestCycle('s1', 2, '2026-06-04')]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    expect(insertedRows()).toEqual([
+      expect.objectContaining({
+        subscriptionId: 's1',
+        cycleIndex: 3,
+        cycleStartDate: '2026-06-05',
+        cycleEndDate: '2026-07-04',
+        dueDate: '2026-06-05',
+      }),
+    ]);
+  });
+
+  it('skips ended aligned cycles for a stale subscription (S=Oct 10 2025, D=5 => only the Jun 5 cycle)', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscription('s1', { startDate: new Date('2025-10-10T00:00:00Z'), billingDay: 5 }),
+    ]);
+    mockPrisma.$queryRaw.mockResolvedValue([latestCycle('s1', 0, '2025-11-04')]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    const rows = insertedRows();
+    expect(rows.map((row) => row.cycleIndex)).toEqual([8]);
+    expect(rows[0].cycleStartDate).toBe('2026-06-05');
+    expect(rows[0].cycleEndDate).toBe('2026-07-04');
+  });
+
+  it('keeps a month-end billing day across short months (D=31, S=Jan 10 => May 31..Jun 29 after Apr 30)', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscription('s1', { startDate: new Date('2026-01-10T00:00:00Z'), billingDay: 31 }),
+    ]);
+    mockPrisma.$queryRaw.mockResolvedValue([latestCycle('s1', 4, '2026-05-30')]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    const rows = insertedRows();
+    expect(rows).toEqual([
+      expect.objectContaining({ cycleIndex: 5, cycleStartDate: '2026-05-31', cycleEndDate: '2026-06-29' }),
+    ]);
+  });
+
+  it('honours the 7-day lead window on the aligned grid (next cycle Jun 17 is created, Jun 18 is not)', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscription('in-window', { startDate: new Date('2026-01-20T00:00:00Z'), billingDay: 17 }),
+      makeSubscription('out-of-window', { startDate: new Date('2026-01-20T00:00:00Z'), billingDay: 18 }),
+    ]);
+    mockPrisma.$queryRaw.mockResolvedValue([
+      latestCycle('in-window', 4, '2026-06-16'),
+      latestCycle('out-of-window', 4, '2026-06-17'),
+    ]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    expect(insertedRows().map((row) => row.subscriptionId)).toEqual(['in-window']);
+  });
+
+  it('billingDay null yields exactly the legacy rows (anchored on the start date day)', async () => {
+    mockPrisma.studentSubscription.findMany.mockResolvedValue([
+      makeSubscription('s1', { startDate: new Date('2026-03-01T12:00:00Z'), billingDay: null }),
+    ]);
+    mockPrisma.$queryRaw.mockResolvedValue([latestCycle('s1', 2, '2026-05-31')]);
+
+    await ensureUpcomingCycles(mockPrisma, { today: TODAY });
+
+    expect(insertedRows()).toEqual([
+      expect.objectContaining({
+        cycleIndex: 3,
+        cycleStartDate: '2026-06-01',
+        cycleEndDate: '2026-06-30',
+        dueDate: '2026-06-01',
+      }),
+    ]);
+  });
+
+  it('materializeCycles uses each subscription billingDay (future-dated replace path)', async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([latestCycle('s1', 0, '2026-07-04')]);
+
+    await materializeCycles(
+      mockPrisma,
+      [makeSubscription('s1', { startDate: new Date('2026-06-20T00:00:00Z'), billingDay: 5 })],
+      new Date('2026-07-19T00:00:00Z'),
+      TODAY,
+      TODAY,
+    );
+
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledOnce();
+    expect(insertedRows()).toEqual([
+      expect.objectContaining({ cycleIndex: 1, cycleStartDate: '2026-07-05', cycleEndDate: '2026-08-04', dueDate: '2026-07-05' }),
+    ]);
+  });
+});
+
 describe('insertCyclesForActiveSubscriptions', () => {
   it('returns 0 without touching the database when there are no rows', async () => {
     const inserted = await insertCyclesForActiveSubscriptions(mockPrisma, []);
@@ -346,41 +455,104 @@ describe('insertCyclesForActiveSubscriptions', () => {
 
 describe('cancelUpcomingPayments', () => {
   const NOW = new Date('2026-06-10T12:00:00Z');
+  const TODAY_ISO = '2026-06-10T00:00:00.000Z';
+  const CUTOFF = new Date('2026-06-30T00:00:00Z');
+  const CUTOFF_ISO = '2026-06-30T00:00:00.000Z';
 
-  it('voids pending payments whose cycle has not started with a single updateMany, stamping voidedAt', async () => {
-    mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 2 });
-    const where = { trainerId: TRAINER_ID, studentId: 'student-1' };
+  function updateManyArgs() {
+    return mockPrisma.subscriptionPayment.updateMany.mock.calls[0][0];
+  }
 
-    const count = await cancelUpcomingPayments(mockPrisma, where, TODAY, { now: NOW });
+  describe('without replacementCycleStart (cancel / unlink)', () => {
+    it('voids pending payments of the scoped subscriptions with a single updateMany, stamping voidedAt, and returns the count', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 2 });
+      const where = { trainerId: TRAINER_ID, studentId: 'student-1' };
 
-    expect(count).toBe(2);
-    expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledOnce();
-    expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledWith({
-      where: {
-        status: PaymentStatus.PENDING,
-        cycleStartDate: { gt: TODAY },
-        subscription: where,
-      },
-      data: { status: PaymentStatus.CANCELLED, voidedAt: NOW },
+      const count = await cancelUpcomingPayments(mockPrisma, where, TODAY, { now: NOW });
+
+      expect(count).toBe(2);
+      expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledOnce();
+      expect(updateManyArgs().where.status).toBe(PaymentStatus.PENDING);
+      expect(updateManyArgs().where.subscription).toEqual(where);
+      expect(updateManyArgs().data).toEqual({ status: PaymentStatus.CANCELLED, voidedAt: NOW });
+    });
+
+    it('bounds the void by today on the payment cycleStartDate (cycle not started yet)', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: 'sub-1' }, TODAY, { now: NOW });
+
+      const serialized = JSON.stringify(updateManyArgs().where);
+      expect(serialized).toContain('cycleStartDate');
+      expect(serialized).toContain(TODAY_ISO);
+    });
+
+    it('also bounds the void by today on the subscription startDate (cycle started but subscription starts after today)', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: 'sub-1' }, TODAY, { now: NOW });
+
+      expect(JSON.stringify(updateManyArgs().where)).toContain('startDate');
+    });
+
+    it('never keys the void on the payment dueDate', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: 'sub-1' }, TODAY, { now: NOW });
+
+      expect(JSON.stringify(updateManyArgs().where)).not.toContain('dueDate');
     });
   });
 
-  it('voids ONLY pending payments starting on/after replacementCycleStart when replacing a plan (no upcoming branch)', async () => {
-    mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
-    const replacementCycleStart = new Date('2026-06-30T00:00:00Z');
+  describe('with replacementCycleStart (replace)', () => {
+    it('voids ONLY pending payments of the replaced subscriptions, stamping voidedAt, and returns the count', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
 
-    await cancelUpcomingPayments(mockPrisma, { id: { in: ['a'] } }, TODAY, {
-      now: NOW,
-      replacementCycleStart,
+      const count = await cancelUpcomingPayments(mockPrisma, { id: { in: ['a'] } }, TODAY, {
+        now: NOW,
+        replacementCycleStart: CUTOFF,
+      });
+
+      expect(count).toBe(1);
+      expect(updateManyArgs().where.status).toBe(PaymentStatus.PENDING);
+      expect(updateManyArgs().where.subscription).toEqual({ id: { in: ['a'] } });
+      expect(updateManyArgs().data).toEqual({ status: PaymentStatus.CANCELLED, voidedAt: NOW });
     });
 
-    expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledWith({
-      where: {
-        status: PaymentStatus.PENDING,
-        cycleStartDate: { gte: replacementCycleStart },
-        subscription: { id: { in: ['a'] } },
-      },
-      data: { status: PaymentStatus.CANCELLED, voidedAt: NOW },
+    it('bounds the void by the cut-off on the payment cycleStartDate and not by today', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: { in: ['a'] } }, TODAY, {
+        now: NOW,
+        replacementCycleStart: CUTOFF,
+      });
+
+      const serialized = JSON.stringify(updateManyArgs().where);
+      expect(serialized).toContain('cycleStartDate');
+      expect(serialized).toContain(CUTOFF_ISO);
+      expect(serialized).not.toContain(TODAY_ISO);
+    });
+
+    it('also bounds the void by the cut-off on the subscription startDate (cycle started earlier, subscription starts on/after the cut-off)', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: { in: ['a'] } }, TODAY, {
+        now: NOW,
+        replacementCycleStart: CUTOFF,
+      });
+
+      expect(JSON.stringify(updateManyArgs().where)).toContain('startDate');
+    });
+
+    it('never keys the void on the payment dueDate', async () => {
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 0 });
+
+      await cancelUpcomingPayments(mockPrisma, { id: { in: ['a'] } }, TODAY, {
+        now: NOW,
+        replacementCycleStart: CUTOFF,
+      });
+
+      expect(JSON.stringify(updateManyArgs().where)).not.toContain('dueDate');
     });
   });
 });

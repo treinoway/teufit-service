@@ -8,11 +8,27 @@ import {
   MONEY_DECIMAL_PLACES,
   SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX,
 } from '../constants/subscription.js';
-import { addMonthsClamped, formatDateOnly } from './date-helpers.js';
+import { addMonthsClamped, dateWithClampedDay, formatDateOnly } from './date-helpers.js';
 import { deriveEffectiveStatus } from './payment-status-helpers.js';
 
 const { Decimal } = Prisma;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Start of the billing-day-aligned cycle `monthsOffset` months after cycle 0.
+ *
+ * @param {Date} anchorDate
+ * @param {number} billingDay - 1..31
+ * @param {number} monthsOffset
+ * @returns {Date} midnight UTC
+ */
+function computeAlignedCycleStart(anchorDate, billingDay, monthsOffset) {
+  const year = anchorDate.getUTCFullYear();
+  const monthIndex = anchorDate.getUTCMonth();
+  const anchorMonthStart = dateWithClampedDay(year, monthIndex, billingDay);
+  const baseMonthIndex = anchorDate < anchorMonthStart ? monthIndex - 1 : monthIndex;
+  return dateWithClampedDay(year, baseMonthIndex + monthsOffset, billingDay);
+}
 
 /**
  * Bounds of billing cycle `cycleIndex` of a subscription.
@@ -25,19 +41,43 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
  * Examples (anchor Jan 31, monthly): i=0 → Jan 31..Feb 27, i=1 → Feb 28..Mar 30,
  * i=2 → Mar 31..Apr 29 — the billing day returns to the 31st when it exists.
  *
+ * With a `billingDay` the grid is aligned to that day of the month instead
+ * (see computeAlignedCycleStart); null/undefined keeps the anchor-day grid.
+ *
  * @param {Date} anchorDate - subscription startDate (date-only, UTC)
  * @param {string} recurrence - key of RECURRENCE_MONTHS
  * @param {number} cycleIndex - zero-based
+ * @param {number|null} [billingDay] - 1..31 or null
  * @returns {{ cycleStartDate: Date, cycleEndDate: Date }}
  */
-export function computeCycleBounds(anchorDate, recurrence, cycleIndex) {
+export function computeCycleBounds(anchorDate, recurrence, cycleIndex, billingDay = null) {
   const months = RECURRENCE_MONTHS[recurrence];
-  const cycleStartDate = addMonthsClamped(anchorDate, cycleIndex * months);
-  const nextCycleStart = addMonthsClamped(anchorDate, (cycleIndex + 1) * months);
+  // why: offset applies to the base month then re-clamps, never to a clamped date (no drift)
+  const startOf = (index) => billingDay == null
+    ? addMonthsClamped(anchorDate, index * months)
+    : computeAlignedCycleStart(anchorDate, billingDay, index * months);
+  const cycleStartDate = startOf(cycleIndex);
+  const nextCycleStart = startOf(cycleIndex + 1);
   return {
     cycleStartDate,
     cycleEndDate: new Date(nextCycleStart.getTime() - ONE_DAY_MS),
   };
+}
+
+/**
+ * Effective start of a cycle: the later of its start and the subscription start day (midnight UTC).
+ *
+ * @param {Date} cycleStartDate
+ * @param {Date} subscriptionStartDate
+ * @returns {Date}
+ */
+export function computeEffectiveStart(cycleStartDate, subscriptionStartDate) {
+  const startDay = new Date(Date.UTC(
+    subscriptionStartDate.getUTCFullYear(),
+    subscriptionStartDate.getUTCMonth(),
+    subscriptionStartDate.getUTCDate(),
+  ));
+  return cycleStartDate > startDay ? cycleStartDate : startDay;
 }
 
 /**
@@ -51,20 +91,20 @@ export function computeCycleBounds(anchorDate, recurrence, cycleIndex) {
  * cycleIndex stays the grid index and the (subscriptionId, cycleIndex) unique
  * key keeps working.
  *
- * @param {{ startDate: Date, recurrence: string }} subscription
+ * @param {{ startDate: Date, recurrence: string, billingDay?: number|null }} subscription
  * @param {{ cycleIndex: number } | null} lastCycle
  * @param {Date} [today]
  * @returns {{ cycleIndex: number, cycleStartDate: Date, cycleEndDate: Date }}
  */
 export function computeNextCycle(subscription, lastCycle, today = null) {
-  const { startDate, recurrence } = subscription;
+  const { startDate, recurrence, billingDay = null } = subscription;
 
   let cycleIndex = lastCycle ? lastCycle.cycleIndex + 1 : 0;
-  let bounds = computeCycleBounds(startDate, recurrence, cycleIndex);
+  let bounds = computeCycleBounds(startDate, recurrence, cycleIndex, billingDay);
 
   while (today && bounds.cycleEndDate < today) {
     cycleIndex += 1;
-    bounds = computeCycleBounds(startDate, recurrence, cycleIndex);
+    bounds = computeCycleBounds(startDate, recurrence, cycleIndex, billingDay);
   }
 
   return { cycleIndex, ...bounds };

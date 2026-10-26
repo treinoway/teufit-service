@@ -12467,10 +12467,10 @@
                 "subscription-plans"
               ]
             },
-            "description": "Create a subscription plan. recurrence: monthly|quarterly|semiannual|annual. Optionally set discountPercent OR discountAmount (not both). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
+            "description": "Create a subscription plan. recurrence: monthly|quarterly|semiannual|annual. Optionally set discountPercent OR discountAmount (not both). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT. billingDay (integer 1-31, nullable) is the day of month charges fall due; null (or omitted on create) means the day of the subscription start. On PATCH, omitting billingDay keeps the current value; null clears it. Changing it affects only future subscriptions, not existing ones.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Plano Mensal\",\n  \"recurrence\": \"monthly\",\n  \"price\": 150.0\n}",
+              "raw": "{\n  \"name\": \"Plano Mensal\",\n  \"recurrence\": \"monthly\",\n  \"price\": 150.0,\n  \"billingDay\": 10\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -12501,7 +12501,7 @@
                 "subscription-plans"
               ]
             },
-            "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan."
+            "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan. Each plan includes billingDay (integer 1-31 or null)."
           },
           "response": [
             {
@@ -12525,7 +12525,7 @@
                     "subscription-plans"
                   ]
                 },
-                "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan."
+                "description": "List trainer's subscription plans. Add ?includeArchived=true to include archived plans. Each plan includes activeSubscriptionCount (integer): the number of active subscriptions on that plan. Each plan includes billingDay (integer 1-31 or null)."
               },
               "status": "OK",
               "code": 200,
@@ -12536,7 +12536,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "[\n  {\n    \"id\": \"b5a1c7d2-1e3f-4a6b-8c9d-0e1f2a3b4c5d\",\n    \"trainerId\": \"a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"name\": \"Plano Mensal\",\n    \"description\": null,\n    \"recurrence\": \"monthly\",\n    \"recurrenceLabel\": \"Mensal\",\n    \"price\": \"150.00\",\n    \"discountPercent\": null,\n    \"discountAmount\": null,\n    \"isArchived\": false,\n    \"activeSubscriptionCount\": 4,\n    \"createdAt\": \"2026-06-01T12:00:00.000Z\",\n    \"updatedAt\": null\n  }\n]"
+              "body": "[\n  {\n    \"id\": \"b5a1c7d2-1e3f-4a6b-8c9d-0e1f2a3b4c5d\",\n    \"trainerId\": \"a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"name\": \"Plano Mensal\",\n    \"description\": null,\n    \"recurrence\": \"monthly\",\n    \"recurrenceLabel\": \"Mensal\",\n    \"price\": \"150.00\",\n    \"discountPercent\": null,\n    \"discountAmount\": null,\n    \"billingDay\": 10,\n    \"isArchived\": false,\n    \"activeSubscriptionCount\": 4,\n    \"createdAt\": \"2026-06-01T12:00:00.000Z\",\n    \"updatedAt\": null\n  }\n]"
             }
           ]
         },
@@ -12593,10 +12593,10 @@
                 "{{subscriptionPlanId}}"
               ]
             },
-            "description": "Update subscription plan fields. Archived plans cannot be edited. discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
+            "description": "Update subscription plan fields. Archived plans cannot be edited. discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT. billingDay (integer 1-31, nullable) is the day of month charges fall due; null (or omitted on create) means the day of the subscription start. On PATCH, omitting billingDay keeps the current value; null clears it. Changing it affects only future subscriptions, not existing ones.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Plano Mensal Premium\",\n  \"price\": 180.0,\n  \"discountPercent\": 10\n}",
+              "raw": "{\n  \"name\": \"Plano Mensal Premium\",\n  \"price\": 180.0,\n  \"discountPercent\": 10,\n  \"billingDay\": 5\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -12693,10 +12693,10 @@
                 "subscriptions"
               ]
             },
-            "description": "Assign a subscription plan to a student. Auto-creates the first payment cycle (response includes firstPayment). A student may have one active subscription per trainer (not globally). 409 SUBSCRIPTION_ALREADY_ACTIVE when the student already has an active subscription from this trainer, or when another assignment for the same student is in flight. A backdated startDate bills ONLY the grid cycle that contains today (firstPayment.cycleIndex is that grid index; firstPayment.cycleStartDate may be before today but after startDate); earlier cycles are not generated. Replacing an active plan voids only the replaced plan's pending charges starting on or after the new first cycle start (a same-day replace leaves exactly one pending cycle); every older charge stays billable at full price, and for a future-dated start the old plan's missing cycles before the new start are created at replacement time so it keeps billing until then. No proration. The trainer-student link is re-checked on assign (403 SUBSCRIPTION_STUDENT_NOT_LINKED). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT.",
+            "description": "Assign a subscription plan to a student. Auto-creates the first payment cycle (response includes firstPayment). A student may have one active subscription per trainer (not globally). 409 SUBSCRIPTION_ALREADY_ACTIVE when the student already has an active subscription from this trainer, or when another assignment for the same student is in flight. A backdated startDate bills ONLY the grid cycle that contains today (firstPayment.cycleIndex is that grid index; firstPayment.cycleStartDate may be before today but after startDate); earlier cycles are not generated. Replacing an active plan voids only the replaced plan's pending charges starting on or after the new first cycle start (a same-day replace leaves exactly one pending cycle); every older charge stays billable at full price, and for a future-dated start the old plan's missing cycles before the new start are created at replacement time so it keeps billing until then. No proration. The trainer-student link is re-checked on assign (403 SUBSCRIPTION_STUDENT_NOT_LINKED). discountPercent accepts at most 2 decimal places; more returns 400 SUBSCRIPTION_INVALID_AMOUNT. Optional billingDay (integer 1-31) overrides the plan's billingDay and is stored on the subscription; when omitted, the plan's billingDay is used, falling back to the day of startDate. The subscription response always returns the effective billingDay (never null). When billingDay is set and cycle 0 starts before startDate, firstPayment.dueDate may be after firstPayment.cycleStartDate.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"planId\": \"{{subscriptionPlanId}}\",\n  \"startDate\": \"2026-06-01\"\n}",
+              "raw": "{\n  \"planId\": \"{{subscriptionPlanId}}\",\n  \"startDate\": \"2026-06-01\",\n  \"billingDay\": 10\n}",
               "options": {
                 "raw": {
                   "language": "json"

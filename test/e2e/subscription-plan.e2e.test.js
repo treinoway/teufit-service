@@ -442,4 +442,122 @@ e2eDescribe('e2e: subscription plans', () => {
       expect(res.json().isArchived).toBe(false);
     });
   });
+  describe('billingDay', () => {
+    const INVALID_BILLING_DAYS = [0, 32, 1.5];
+
+    function patchPlan(accessToken, planId, payload) {
+      return app.inject({
+        method: 'PATCH',
+        url: `/trainer/subscription-plans/${planId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload,
+      });
+    }
+
+    function expectValidationError(res) {
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
+      expect(Array.isArray(res.json().details)).toBe(true);
+    }
+
+    it.each([1, 15, 31])('creates a plan with billingDay %i and returns it', async (billingDay) => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken, { billingDay });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().billingDay).toBe(billingDay);
+    });
+
+    it('returns billingDay null when the plan is created without it', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().billingDay).toBeNull();
+    });
+
+    it('accepts an explicit null billingDay on create', async () => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken, { billingDay: null });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json().billingDay).toBeNull();
+    });
+
+    it.each(INVALID_BILLING_DAYS)('rejects billingDay %j on create with 400 VALIDATION_ERROR', async (billingDay) => {
+      const { accessToken } = await createTrainerWithToken();
+
+      const res = await createPlan(accessToken, { billingDay });
+
+      expectValidationError(res);
+    });
+
+    it('returns billingDay on GET by id and on the list', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const withDay = (await createPlan(accessToken, { name: 'Com dia', billingDay: 10 })).json();
+      await createPlan(accessToken, { name: 'Sem dia' });
+
+      const byId = await app.inject({
+        method: 'GET',
+        url: `/trainer/subscription-plans/${withDay.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      const list = await app.inject({
+        method: 'GET',
+        url: '/trainer/subscription-plans',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(byId.json().billingDay).toBe(10);
+      const dayByName = Object.fromEntries(list.json().map((plan) => [plan.name, plan.billingDay]));
+      expect(dayByName).toEqual({ 'Com dia': 10, 'Sem dia': null });
+    });
+
+    it('PATCH sets billingDay', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const planId = (await createPlan(accessToken)).json().id;
+
+      const res = await patchPlan(accessToken, planId, { billingDay: 28 });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().billingDay).toBe(28);
+    });
+
+    it('PATCH omitting billingDay keeps the current value', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const planId = (await createPlan(accessToken, { billingDay: 12 })).json().id;
+
+      const res = await patchPlan(accessToken, planId, { name: 'Outro nome' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().billingDay).toBe(12);
+    });
+
+    it('PATCH with null clears billingDay', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const planId = (await createPlan(accessToken, { billingDay: 12 })).json().id;
+
+      const res = await patchPlan(accessToken, planId, { billingDay: null });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().billingDay).toBeNull();
+      const stored = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+      expect(stored.billingDay).toBeNull();
+    });
+
+    it.each(INVALID_BILLING_DAYS)('rejects billingDay %j on PATCH with 400 VALIDATION_ERROR', async (billingDay) => {
+      const { accessToken } = await createTrainerWithToken();
+      const planId = (await createPlan(accessToken, { billingDay: 12 })).json().id;
+
+      const res = await patchPlan(accessToken, planId, { billingDay });
+
+      expectValidationError(res);
+      const stored = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+      expect(stored.billingDay).toBe(12);
+    });
+  });
+
 });

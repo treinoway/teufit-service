@@ -13,6 +13,7 @@ import {
   assertValidPercentage,
   buildAssignmentLockKey,
   computeAmount,
+  computeEffectiveStart,
   computeNextCycle,
   formatPayment,
 } from '../helpers/subscription-helpers.js';
@@ -71,6 +72,7 @@ function formatSubscription(sub) {
     price: sub.price.toString(),
     discountPercent: sub.discountPercent != null ? sub.discountPercent.toString() : null,
     discountAmount: sub.discountAmount != null ? sub.discountAmount.toString() : null,
+    billingDay: sub.billingDay ?? sub.startDate.getUTCDate(),
     startDate: formatDateOnly(sub.startDate),
     status: sub.status,
     cancelledAt: sub.cancelledAt ?? null,
@@ -151,7 +153,9 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
   const today = todayInBusinessTz(now);
   // First billed cycle: grid cycle 0 for a present/future start; for a backdated
   // start, the grid cycle that contains today — a stale past cycle is never billed.
-  const firstCycle = computeNextCycle({ startDate, recurrence: plan.recurrence }, null, today);
+  const billingDay = data.billingDay ?? plan.billingDay ?? null;
+  const firstCycle = computeNextCycle({ startDate, recurrence: plan.recurrence, billingDay }, null, today);
+  const effectiveStart = computeEffectiveStart(firstCycle.cycleStartDate, startDate);
   const netAmount = computeAmount(plan.price, effectiveDiscountPercent, effectiveDiscountAmount);
 
   let result;
@@ -171,6 +175,7 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
           price: true,
           discountPercent: true,
           discountAmount: true,
+          billingDay: true,
         },
       });
       const replacedIds = replaced.map((subscription) => subscription.id);
@@ -178,8 +183,8 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
         // Future-dated replacement: the old plan keeps billing until the new one
         // starts, so its cycles starting in [today+1, newStart) must exist before
         // it is cancelled (the conditional insert only writes for active subscriptions).
-        if (firstCycle.cycleStartDate > today) {
-          await materializeCycles(tx, replaced, addDaysMs(firstCycle.cycleStartDate, -1), today, today);
+        if (effectiveStart > today) {
+          await materializeCycles(tx, replaced, addDaysMs(effectiveStart, -1), today, today);
         }
 
         await tx.studentSubscription.updateMany({
@@ -195,7 +200,7 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
         // at full price, even if they overlap the new start — no proration.
         await cancelUpcomingPayments(tx, { id: { in: replacedIds } }, today, {
           now,
-          replacementCycleStart: firstCycle.cycleStartDate,
+          replacementCycleStart: effectiveStart,
         });
       }
 
@@ -210,6 +215,7 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
             effectiveDiscountPercent != null ? new Decimal(effectiveDiscountPercent) : null,
           discountAmount:
             effectiveDiscountAmount != null ? new Decimal(effectiveDiscountAmount) : null,
+          billingDay,
           startDate,
           status: SubscriptionStatus.ACTIVE,
         },
@@ -221,7 +227,7 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
           cycleIndex: firstCycle.cycleIndex,
           cycleStartDate: firstCycle.cycleStartDate,
           cycleEndDate: firstCycle.cycleEndDate,
-          dueDate: firstCycle.cycleStartDate,
+          dueDate: effectiveStart,
           amount: netAmount,
           status: PaymentStatus.PENDING,
         },

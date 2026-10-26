@@ -29,6 +29,7 @@ const subscriptionPlanSchema = {
     price: moneyString,
     discountPercent: moneyStringNullable,
     discountAmount: moneyStringNullable,
+    billingDay: { type: 'integer', nullable: true, description: 'Day of month charges fall due (1-31); null = day of the subscription start' },
     isArchived: { type: 'boolean' },
     activeSubscriptionCount: { type: 'integer', description: 'Active subscriptions on this plan (list endpoint only)' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -54,6 +55,7 @@ export const createPlanSchema = {
       price: { type: 'number', exclusiveMinimum: 0, maximum: MAX_MONEY_AMOUNT },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
       discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
+      billingDay: { type: 'integer', minimum: 1, maximum: 31, nullable: true },
     },
   },
   response: {
@@ -128,6 +130,7 @@ export const updatePlanSchema = {
       price: { type: 'number', exclusiveMinimum: 0, maximum: MAX_MONEY_AMOUNT },
       discountPercent: { type: 'number', minimum: 0, maximum: 100, nullable: true },
       discountAmount: { type: 'number', minimum: 0, maximum: MAX_MONEY_AMOUNT, nullable: true },
+      billingDay: { type: 'integer', minimum: 1, maximum: 31, nullable: true },
     },
   },
   response: {

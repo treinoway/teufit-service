@@ -44,6 +44,7 @@ function makePlanRecord(overrides = {}) {
     price: new Decimal('100.00'),
     discountPercent: null,
     discountAmount: null,
+    billingDay: null,
     deletedAt: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: null,
@@ -418,5 +419,102 @@ describe('unarchivePlan', () => {
     await expect(
       unarchivePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID),
     ).rejects.toMatchObject({ httpStatus: 404 });
+  });
+});
+
+// ─── billingDay ───────────────────────────────────────────────────────────────
+
+describe('plan billingDay', () => {
+  const BASE_PLAN_INPUT = { name: 'Plano Mensal', recurrence: 'monthly', price: 100 };
+
+  describe('createPlan', () => {
+    it('persists the given billingDay and returns it', async () => {
+      mockPrisma.subscriptionPlan.create.mockResolvedValue(makePlanRecord({ billingDay: 31 }));
+
+      const result = await createPlan(mockPrisma, TRAINER_USER_ID, { ...BASE_PLAN_INPUT, billingDay: 31 });
+
+      expect(mockPrisma.subscriptionPlan.create.mock.calls[0][0].data.billingDay).toBe(31);
+      expect(result.billingDay).toBe(31);
+    });
+
+    it('persists null when billingDay is omitted and returns null', async () => {
+      mockPrisma.subscriptionPlan.create.mockResolvedValue(makePlanRecord());
+
+      const result = await createPlan(mockPrisma, TRAINER_USER_ID, BASE_PLAN_INPUT);
+
+      expect(mockPrisma.subscriptionPlan.create.mock.calls[0][0].data.billingDay).toBeNull();
+      expect(result.billingDay).toBeNull();
+    });
+
+    it('persists null when billingDay is explicitly null', async () => {
+      mockPrisma.subscriptionPlan.create.mockResolvedValue(makePlanRecord());
+
+      await createPlan(mockPrisma, TRAINER_USER_ID, { ...BASE_PLAN_INPUT, billingDay: null });
+
+      expect(mockPrisma.subscriptionPlan.create.mock.calls[0][0].data.billingDay).toBeNull();
+    });
+  });
+
+  describe('getPlanById / listPlans', () => {
+    it('getPlanById returns the billingDay', async () => {
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 10 }));
+
+      const result = await getPlanById(mockPrisma, TRAINER_USER_ID, PLAN_ID);
+
+      expect(result.billingDay).toBe(10);
+    });
+
+    it('listPlans returns the billingDay of each plan, null when unset', async () => {
+      mockPrisma.subscriptionPlan.findMany.mockResolvedValue([
+        makePlanRecord({ id: 'with-day', billingDay: 15 }),
+        makePlanRecord({ id: 'without-day', billingDay: null }),
+      ]);
+      mockPrisma.studentSubscription.groupBy.mockResolvedValue([]);
+
+      const result = await listPlans(mockPrisma, TRAINER_USER_ID);
+
+      expect(result.map((plan) => plan.billingDay)).toEqual([15, null]);
+    });
+  });
+
+  describe('updatePlan', () => {
+    beforeEach(() => {
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 7 }));
+      mockPrisma.subscriptionPlan.update.mockImplementation(async ({ data }) => makePlanRecord(data));
+    });
+
+    it('sets a new billingDay', async () => {
+      const result = await updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { billingDay: 20 });
+
+      expect(mockPrisma.subscriptionPlan.update.mock.calls[0][0].data.billingDay).toBe(20);
+      expect(result.billingDay).toBe(20);
+    });
+
+    it('keeps the current billingDay when the patch omits it', async () => {
+      const result = await updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { name: 'Novo Nome' });
+
+      expect(mockPrisma.subscriptionPlan.update.mock.calls[0][0].data.billingDay).toBe(7);
+      expect(result.billingDay).toBe(7);
+    });
+
+    it('clears the billingDay when the patch sends null', async () => {
+      const result = await updatePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID, { billingDay: null });
+
+      expect(mockPrisma.subscriptionPlan.update.mock.calls[0][0].data.billingDay).toBeNull();
+      expect(result.billingDay).toBeNull();
+    });
+  });
+
+  describe('archive / unarchive', () => {
+    it('archivePlan keeps returning the billingDay', async () => {
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlanRecord({ billingDay: 12 }));
+      mockPrisma.subscriptionPlan.update.mockResolvedValue(
+        makePlanRecord({ billingDay: 12, deletedAt: new Date() }),
+      );
+
+      const result = await archivePlan(mockPrisma, TRAINER_USER_ID, PLAN_ID);
+
+      expect(result.billingDay).toBe(12);
+    });
   });
 });
