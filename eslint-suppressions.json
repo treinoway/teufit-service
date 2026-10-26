@@ -1,0 +1,1863 @@
+{
+  "api/hooks/auth-hook.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "api/hooks/i18n-hook.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "api/middleware/auth.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "api/routes/address-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "api/routes/admin-anamnesis-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "api/routes/admin-video-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/ai-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "api/routes/anamnesis-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 57
+    }
+  },
+  "api/routes/asaas-webhook-route.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "api/routes/auth-route.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 49
+    }
+  },
+  "api/routes/challenge-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "api/routes/diet-food-item-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "api/routes/diet-meal-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "api/routes/diet-protocol-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "api/routes/diet-protocol-template-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "api/routes/exercise-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 16
+    }
+  },
+  "api/routes/exercise-template-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "api/routes/food-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "api/routes/gamification-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "api/routes/health-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "api/routes/nutritionist-patient-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "api/routes/nutritionist-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/platform-plan-route.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "api/routes/student-dashboard-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "api/routes/student-invite-route.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "api/routes/student-subscription-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/subscription-payment-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/subscription-plan-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/trainer-branding-route.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "api/routes/trainer-briefing-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/trainer-dashboard-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/trainer-finance-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/trainer-invite-route.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "api/routes/trainer-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/training-protocol-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 20
+    }
+  },
+  "api/routes/training-protocol-template-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "api/routes/training-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 10
+    }
+  },
+  "api/routes/training-template-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "api/routes/user-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 16
+    }
+  },
+  "api/routes/video-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "api/routes/workout-session-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 26
+    }
+  },
+  "api/routes/workouts-today-route.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "api/server.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 65
+    }
+  },
+  "config/environments/default.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "config/index.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "prisma/seed.js": {
+    "local/function-header-comment": {
+      "count": 5
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "prisma/seeds/dev-seed.js": {
+    "local/function-header-comment": {
+      "count": 11
+    },
+    "local/no-comments-in-function": {
+      "count": 36
+    }
+  },
+  "prisma/seeds/food-seed.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "prisma/seeds/generate-caveira-migration.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "prisma/seeds/taco-converter.js": {
+    "local/function-header-comment": {
+      "count": 6
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "prisma/seeds/tbca-scraper.js": {
+    "local/function-header-comment": {
+      "count": 12
+    },
+    "local/no-comments-in-function": {
+      "count": 16
+    }
+  },
+  "scripts/backfill-training-duration.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "scripts/measure-memory.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "src/billing/asaas-client.js": {
+    "local/function-header-comment": {
+      "count": 12
+    }
+  },
+  "src/config/email-handler.js": {
+    "local/function-header-comment": {
+      "count": 15
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "src/config/s3-bucket-handler.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 14
+    }
+  },
+  "src/constants/anamnesis.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "src/constants/platform-plan.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/errors/app-error.js": {
+    "local/function-header-comment": {
+      "count": 6
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "src/errors/normalize-error.js": {
+    "local/function-header-comment": {
+      "count": 12
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "src/helpers/adherence-helpers.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "src/helpers/asaas-webhook-helpers.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "src/helpers/auth.js": {
+    "local/function-header-comment": {
+      "count": 5
+    },
+    "local/no-comments-in-function": {
+      "count": 35
+    }
+  },
+  "src/helpers/beta-access.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "src/helpers/date-helpers.js": {
+    "local/function-header-comment": {
+      "count": 8
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "src/helpers/db-retry.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "src/helpers/email-lookup.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/env.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/error-serializer-cache.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "src/helpers/exercise-name-normalize.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "src/helpers/exercise-type-infer.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/password.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "src/helpers/payment-status-helpers.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/query-parser.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "src/helpers/rate-limit-key.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/row-locks.js": {
+    "local/function-header-comment": {
+      "count": 4
+    }
+  },
+  "src/helpers/run-after-response.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/subscription-helpers.js": {
+    "local/function-header-comment": {
+      "count": 6
+    }
+  },
+  "src/helpers/timezone.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/helpers/training-validators.js": {
+    "local/function-header-comment": {
+      "count": 17
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "src/helpers/user-query-builder.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "src/helpers/workout-duration.js": {
+    "local/function-header-comment": {
+      "count": 4
+    }
+  },
+  "src/i18n/i18n-service.js": {
+    "local/function-header-comment": {
+      "count": 5
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "src/i18n/label-walker.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "src/i18n/schema-helpers.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/jobs/subscription-cycle-cron.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/llm/anthropic-provider.js": {
+    "local/function-header-comment": {
+      "count": 10
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "src/llm/gemini-provider.js": {
+    "local/function-header-comment": {
+      "count": 11
+    },
+    "local/no-comments-in-function": {
+      "count": 10
+    }
+  },
+  "src/llm/index.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/llm/llm-provider.js": {
+    "local/disable-requires-reason": {
+      "count": 3
+    },
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/services/account-deletion-service.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/address-service.js": {
+    "local/no-comments-in-function": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/services/admin-anamnesis-service.js": {
+    "local/function-header-comment": {
+      "count": 7
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/admin-video-service.js": {
+    "local/function-header-comment": {
+      "count": 16
+    }
+  },
+  "src/services/ai-interaction-log-service.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 9
+    }
+  },
+  "src/services/ai-training-service.js": {
+    "local/function-header-comment": {
+      "count": 32
+    },
+    "local/no-comments-in-function": {
+      "count": 108
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/services/anamnesis-service.js": {
+    "local/function-header-comment": {
+      "count": 37
+    },
+    "local/no-comments-in-function": {
+      "count": 27
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/services/anamnesis-shared.js": {
+    "local/function-header-comment": {
+      "count": 9
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/apple-id-token-service.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/services/asaas-subscription-service.js": {
+    "local/function-header-comment": {
+      "count": 11
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "src/services/asaas-webhook-service.js": {
+    "local/function-header-comment": {
+      "count": 11
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "src/services/auth-service.js": {
+    "local/function-header-comment": {
+      "count": 18
+    },
+    "local/no-comments-in-function": {
+      "count": 23
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 17
+    }
+  },
+  "src/services/avatar-service.js": {
+    "local/no-comments-in-function": {
+      "count": 15
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "src/services/briefing-service.js": {
+    "local/function-header-comment": {
+      "count": 14
+    },
+    "local/no-comments-in-function": {
+      "count": 41
+    }
+  },
+  "src/services/challenge-ranking-service.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 12
+    }
+  },
+  "src/services/challenge-service.js": {
+    "local/function-header-comment": {
+      "count": 9
+    },
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "src/services/diet-food-item-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    }
+  },
+  "src/services/diet-meal-service.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "src/services/diet-protocol-service.js": {
+    "local/function-header-comment": {
+      "count": 4
+    }
+  },
+  "src/services/diet-protocol-template-service.js": {
+    "local/function-header-comment": {
+      "count": 4
+    }
+  },
+  "src/services/email-verification-service.js": {
+    "local/function-header-comment": {
+      "count": 21
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "src/services/exercise-service.js": {
+    "local/function-header-comment": {
+      "count": 15
+    },
+    "local/no-comments-in-function": {
+      "count": 52
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/exercise-template-service.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/firebase-id-token-service.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/services/gamification-config-service.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "src/services/gamification-service.js": {
+    "local/function-header-comment": {
+      "count": 9
+    },
+    "local/no-comments-in-function": {
+      "count": 9
+    }
+  },
+  "src/services/google-id-token-service.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/services/health-service.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "src/services/nutritionist-patient-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    }
+  },
+  "src/services/nutritionist-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/platform-plan-service.js": {
+    "local/function-header-comment": {
+      "count": 10
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "src/services/signup-service.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "src/services/signup-verification-service.js": {
+    "local/function-header-comment": {
+      "count": 15
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "src/services/student-dashboard-service.js": {
+    "local/function-header-comment": {
+      "count": 12
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/student-invite-service.js": {
+    "local/function-header-comment": {
+      "count": 30
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "src/services/student-subscription-service.js": {
+    "local/function-header-comment": {
+      "count": 11
+    },
+    "local/no-comments-in-function": {
+      "count": 19
+    }
+  },
+  "src/services/subscription-cycle-service.js": {
+    "local/function-header-comment": {
+      "count": 7
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "src/services/subscription-payment-service.js": {
+    "local/function-header-comment": {
+      "count": 21
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "src/services/subscription-plan-service.js": {
+    "local/function-header-comment": {
+      "count": 9
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "src/services/tmb-calculator-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    }
+  },
+  "src/services/token-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    },
+    "local/no-comments-in-function": {
+      "count": 10
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 10
+    }
+  },
+  "src/services/trainer-branding-service.js": {
+    "local/function-header-comment": {
+      "count": 10
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/trainer-dashboard-service.js": {
+    "local/function-header-comment": {
+      "count": 9
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "src/services/trainer-finance-service.js": {
+    "local/function-header-comment": {
+      "count": 5
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "src/services/trainer-invite-service.js": {
+    "local/function-header-comment": {
+      "count": 25
+    },
+    "local/no-comments-in-function": {
+      "count": 29
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/trainer-onboarding-service.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/trainer-service.js": {
+    "local/function-header-comment": {
+      "count": 13
+    },
+    "local/no-comments-in-function": {
+      "count": 39
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/services/training-protocol-service.js": {
+    "local/function-header-comment": {
+      "count": 6
+    },
+    "local/no-comments-in-function": {
+      "count": 12
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/training-protocol-template-service.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/training-service.js": {
+    "local/no-comments-in-function": {
+      "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/training-template-service.js": {
+    "local/function-header-comment": {
+      "count": 8
+    },
+    "local/no-comments-in-function": {
+      "count": 33
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/user-service.js": {
+    "local/function-header-comment": {
+      "count": 5
+    },
+    "local/no-comments-in-function": {
+      "count": 25
+    },
+    "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 8
+    }
+  },
+  "src/services/workout-session-service.js": {
+    "local/function-header-comment": {
+      "count": 18
+    },
+    "local/no-comments-in-function": {
+      "count": 30
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "src/services/workouts-today-service.js": {
+    "local/function-header-comment": {
+      "count": 8
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    },
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
+  "test/e2e/address.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "test/e2e/admin-anamnesis.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 31
+    }
+  },
+  "test/e2e/ai.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 73
+    }
+  },
+  "test/e2e/anamnesis-trainer-fill.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 33
+    }
+  },
+  "test/e2e/anamnesis.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 96
+    }
+  },
+  "test/e2e/apple-auth.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 22
+    }
+  },
+  "test/e2e/asaas-webhook-security.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 28
+    }
+  },
+  "test/e2e/asaas-webhook.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "test/e2e/auth-and-user.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 56
+    }
+  },
+  "test/e2e/auth.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 50
+    }
+  },
+  "test/e2e/avatar.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 14
+    }
+  },
+  "test/e2e/briefing.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 12
+    }
+  },
+  "test/e2e/challenge.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 22
+    }
+  },
+  "test/e2e/default-anamnesis-migration.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 7
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/e2e/email-verification-hardening.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/e2e/exercise-template.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/e2e/exercise.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 25
+    }
+  },
+  "test/e2e/gamification.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 25
+    }
+  },
+  "test/e2e/global-setup.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/e2e/google-mobile-auth.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "test/e2e/google-web-auth.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "test/e2e/health.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/e2e/i18n.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 22
+    }
+  },
+  "test/e2e/nutritionist-patient.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "test/e2e/platform-plan.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 15
+    }
+  },
+  "test/e2e/signup-verification.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 9
+    }
+  },
+  "test/e2e/student-dashboard.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 65
+    }
+  },
+  "test/e2e/student-invite.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "test/e2e/student-subscription.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 15
+    }
+  },
+  "test/e2e/subscription-payment.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "test/e2e/subscription-plan.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/e2e/trainer-branding.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 10
+    }
+  },
+  "test/e2e/trainer-dashboard.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 27
+    }
+  },
+  "test/e2e/trainer-finance.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 15
+    }
+  },
+  "test/e2e/trainer-invite-signup.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/e2e/trainer-invite.e2e.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 54
+    }
+  },
+  "test/e2e/trainer-onboarding.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "test/e2e/trainer-student-billing-status.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/e2e/trainer-student.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 32
+    }
+  },
+  "test/e2e/trainers.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "test/e2e/training-protocol-template.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 13
+    }
+  },
+  "test/e2e/training-protocol-with-trainings.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 12
+    }
+  },
+  "test/e2e/training-protocol.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/e2e/training-template.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 31
+    }
+  },
+  "test/e2e/user.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 19
+    }
+  },
+  "test/e2e/workout-session.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 75
+    }
+  },
+  "test/e2e/workouts-today.e2e.test.js": {
+    "local/no-comments-in-function": {
+      "count": 24
+    }
+  },
+  "test/helpers/adherence-helpers.test.js": {
+    "local/no-comments-in-function": {
+      "count": 89
+    }
+  },
+  "test/helpers/beta-access.test.js": {
+    "local/no-comments-in-function": {
+      "count": 15
+    }
+  },
+  "test/helpers/billing-fixtures.js": {
+    "local/function-header-comment": {
+      "count": 8
+    }
+  },
+  "test/helpers/date-helpers.test.js": {
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/helpers/db-cleanup.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/helpers/email-lookup.test.js": {
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/helpers/error-serializer-cache.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/helpers/exercise-name-normalize.test.js": {
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/helpers/find-or-create-oauth-verified.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/helpers/legacy-user.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/helpers/payment-status-helpers.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "test/helpers/platform-plan.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/helpers/run-after-response.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "test/helpers/setup-app.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/helpers/signup-user.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "test/helpers/subscription-helpers.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    }
+  },
+  "test/helpers/user-query-builder.test.js": {
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/helpers/workout-duration.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/i18n/i18n-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "test/i18n/label-walker.test.js": {
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "test/jobs/subscription-cycle-cron.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/llm/anthropic-provider.test.js": {
+    "local/no-comments-in-function": {
+      "count": 12
+    }
+  },
+  "test/llm/gemini-provider.test.js": {
+    "local/no-comments-in-function": {
+      "count": 13
+    }
+  },
+  "test/middleware/auth-middleware.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/middleware/session-persistence.test.js": {
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "test/services/address-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/admin-anamnesis-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 18
+    }
+  },
+  "test/services/admin-video-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/services/ai-interaction-log-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "test/services/ai-training-service.empty-response-retry.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "test/services/ai-training-service.history-truncation.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 36
+    }
+  },
+  "test/services/ai-training-service.sanitize.test.js": {
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "test/services/ai-training-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 145
+    }
+  },
+  "test/services/ai-training-service.update-tools.test.js": {
+    "local/no-comments-in-function": {
+      "count": 36
+    }
+  },
+  "test/services/anamnesis-service.test.js": {
+    "local/function-header-comment": {
+      "count": 7
+    },
+    "local/no-comments-in-function": {
+      "count": 92
+    }
+  },
+  "test/services/apple-id-token-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 19
+    }
+  },
+  "test/services/asaas-client.test.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/asaas-subscription-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 2
+    }
+  },
+  "test/services/asaas-webhook-service.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "test/services/auth-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "test/services/avatar-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 13
+    }
+  },
+  "test/services/briefing-service.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 61
+    }
+  },
+  "test/services/challenge-ranking-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "test/services/challenge-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 16
+    }
+  },
+  "test/services/diet-food-item-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 9
+    }
+  },
+  "test/services/email-verification-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    }
+  },
+  "test/services/exercise-service.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 45
+    }
+  },
+  "test/services/exercise-template-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/services/food-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/gamification-config-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 4
+    }
+  },
+  "test/services/gamification-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "test/services/health-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/platform-plan-service.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 16
+    }
+  },
+  "test/services/signup-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    }
+  },
+  "test/services/signup-verification-service.test.js": {
+    "local/function-header-comment": {
+      "count": 4
+    }
+  },
+  "test/services/student-dashboard-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 85
+    }
+  },
+  "test/services/student-invite-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/student-subscription-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/services/subscription-cycle-service.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/services/subscription-payment-service.test.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 9
+    }
+  },
+  "test/services/subscription-plan-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/tmb-calculator-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 12
+    }
+  },
+  "test/services/token-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 11
+    }
+  },
+  "test/services/trainer-branding-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "test/services/trainer-dashboard-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 31
+    }
+  },
+  "test/services/trainer-finance-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 3
+    }
+  },
+  "test/services/trainer-invite-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/services/trainer-invite-signup.test.js": {
+    "local/function-header-comment": {
+      "count": 2
+    },
+    "local/no-comments-in-function": {
+      "count": 5
+    }
+  },
+  "test/services/trainer-onboarding-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 1
+    }
+  },
+  "test/services/trainer-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 41
+    }
+  },
+  "test/services/training-protocol-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "test/services/training-protocol-template-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 7
+    }
+  },
+  "test/services/training-protocol-with-trainings.test.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 8
+    }
+  },
+  "test/services/training-service.test.js": {
+    "local/function-header-comment": {
+      "count": 1
+    },
+    "local/no-comments-in-function": {
+      "count": 6
+    }
+  },
+  "test/services/training-template-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 25
+    }
+  },
+  "test/services/user-service.test.js": {
+    "local/no-comments-in-function": {
+      "count": 23
+    }
+  },
+  "test/services/workout-session-service.test.js": {
+    "local/function-header-comment": {
+      "count": 4
+    },
+    "local/no-comments-in-function": {
+      "count": 57
+    }
+  },
+  "test/services/workouts-today-service.test.js": {
+    "local/function-header-comment": {
+      "count": 3
+    },
+    "local/no-comments-in-function": {
+      "count": 45
+    }
+  }
+}

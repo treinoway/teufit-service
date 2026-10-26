@@ -18,6 +18,28 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop-verify.sh",
+            "timeout": 180
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "g=\"$CLAUDE_PROJECT_DIR/../.claude/hooks/test-lock-guard.sh\"; [ -x \"$g\" ] && exec \"$g\"; exit 0"
+          }
+        ]
+      }
     ]
   }
 }

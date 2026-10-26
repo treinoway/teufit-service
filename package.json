@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node --optimize-for-size --import ./instrument.js api/index.js",
     "dev": "node --watch --import ./instrument.js api/index.js",
-    "lint": "eslint .",
+    "lint": "eslint . --pass-on-unpruned-suppressions",
     "lint:fix": "eslint . --fix",
     "prepare": "husky",
     "postinstall": "prisma generate",
@@ -42,7 +42,7 @@
     "seed": "node prisma/seed.js"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": "eslint --cache --fix"
+    "*.{js,jsx,ts,tsx}": "eslint --cache --fix --pass-on-unpruned-suppressions"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.0.4",
