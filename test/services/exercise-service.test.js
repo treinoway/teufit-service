@@ -2211,4 +2211,186 @@ describe('exercise-service', () => {
       });
     });
   });
+
+  describe('gifUrl', () => {
+    const GIF_URL = 'https://example.com/squat.gif';
+    const TEMPLATE_GIF_URL = 'https://example.com/template.gif';
+    const makeTrainingRow = () => ({
+      id: 'tr1',
+      deletedAt: null,
+      trainingProtocol: { id: 'p1', trainerId: 't1', deletedAt: null },
+    });
+    const makeCreateTx = (created, tplFindFirst = null) => ({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      exercise: {
+        create: vi.fn().mockResolvedValue(created),
+        findMany: vi.fn().mockResolvedValue([created]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        aggregate: vi.fn().mockResolvedValue({ _max: { order: null } }),
+      },
+      exerciseTemplate: {
+        findFirst: vi.fn().mockResolvedValue(tplFindFirst),
+        create: vi.fn().mockResolvedValue({ id: 'tpl1' }),
+      },
+      training: { update: vi.fn().mockResolvedValue({}) },
+    });
+    const makeLibraryTemplate = (overrides = {}) => ({
+      id: 'tmpl-1',
+      trainerId: 't1',
+      name: 'Squat',
+      type: 'strength',
+      isPublic: false,
+      deletedAt: null,
+      videoUrl: null,
+      gifUrl: TEMPLATE_GIF_URL,
+      ...overrides,
+    });
+
+    it('createExercise persists gifUrl on the exercise and the auto-created library template', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingRow());
+      const txMock = makeCreateTx({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength', gifUrl: GIF_URL });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+      });
+      expect(txMock.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+        select: { id: true },
+      });
+    });
+
+    it('createExercise sets gifUrl to null when not provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingRow());
+      const txMock = makeCreateTx({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createExercise('u1', 'tr1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: null }),
+      });
+    });
+
+    it('createFromTemplate falls back to the template gifUrl when the caller omits it', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingRow());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeLibraryTemplate());
+      const txMock = makeCreateTx({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createFromTemplate('u1', 'tr1', 'tmpl-1');
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: TEMPLATE_GIF_URL }),
+      });
+    });
+
+    it('createFromTemplate prefers the caller gifUrl over the template value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingRow());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeLibraryTemplate());
+      const txMock = makeCreateTx({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createFromTemplate('u1', 'tr1', 'tmpl-1', { gifUrl: GIF_URL });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+      });
+    });
+
+    it('createFromTemplate honours an explicit null gifUrl instead of the template value', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.training.findUnique.mockResolvedValue(makeTrainingRow());
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeLibraryTemplate());
+      const txMock = makeCreateTx({ id: 'ex1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await createFromTemplate('u1', 'tr1', 'tmpl-1', { gifUrl: null });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: null }),
+      });
+    });
+
+    it('updateExercise writes gifUrl when provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({ id: 'ex1' }), findMany: vi.fn().mockResolvedValue([]) },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await updateExercise('u1', 'ex1', { gifUrl: GIF_URL });
+
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+      });
+    });
+
+    it('updateExercise clears gifUrl when null is sent', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({ id: 'ex1' }), findMany: vi.fn().mockResolvedValue([]) },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await updateExercise('u1', 'ex1', { gifUrl: null });
+
+      expect(txMock.exercise.update).toHaveBeenCalledWith({
+        where: { id: 'ex1' },
+        data: expect.objectContaining({ gifUrl: null }),
+      });
+    });
+
+    it('updateExercise leaves gifUrl out of the update payload when not provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue(makeExercise());
+      const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exercise: { update: vi.fn().mockResolvedValue({ id: 'ex1' }), findMany: vi.fn().mockResolvedValue([]) },
+        training: { update: vi.fn().mockResolvedValue({}) },
+      };
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await updateExercise('u1', 'ex1', { name: 'Lunge' });
+
+      expect(txMock.exercise.update.mock.calls[0][0].data).not.toHaveProperty('gifUrl');
+    });
+
+    it('addSubstitute persists gifUrl on the substitute and its library template', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exercise.findUnique.mockResolvedValue({
+        id: 'principal-1',
+        trainingId: 'tr1',
+        deletedAt: null,
+        substituteForExerciseId: null,
+        supersetGroupId: null,
+        training: { deletedAt: null, trainingProtocol: { trainerId: 't1', deletedAt: null } },
+      });
+      const txMock = makeCreateTx({ id: 'sub-1', prescriptionMode: 'reps' });
+      prisma.$transaction.mockImplementation(async (fn) => fn(txMock));
+
+      await addSubstitute('u1', 'principal-1', { name: 'Alt', type: 'strength', gifUrl: GIF_URL });
+
+      expect(txMock.exercise.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+      });
+      expect(txMock.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: GIF_URL }),
+        select: { id: true },
+      });
+    });
+  });
 });

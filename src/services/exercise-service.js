@@ -95,6 +95,7 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
     name: data.name,
     type: data.type,
     videoUrl: data.videoUrl || null,
+    gifUrl: data.gifUrl || null,
     order: data.order !== undefined ? data.order : 0,
     supersetGroupId: data.supersetGroupId ?? null,
     supersetOrder: data.supersetOrder ?? 0,
@@ -147,6 +148,7 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
       name: data.name,
       type: data.type,
       videoUrl: data.videoUrl || null,
+      gifUrl: data.gifUrl || null,
       isPublic: false,
     },
     select: { id: true },
@@ -357,6 +359,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     name: data.name || template.name,
     type: effectiveType,
     videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
+    gifUrl: data.gifUrl !== undefined ? data.gifUrl : template.gifUrl,
     order: data.order !== undefined ? data.order : 0,
     sets: data.sets ?? null,
     repetitions: data.repetitions ?? null,
@@ -448,7 +451,7 @@ export async function getExerciseById(userId, exerciseId, context) {
     where: { id: exerciseId },
     include: {
       training: { include: { trainingProtocol: true } },
-      exerciseTemplate: { select: { id: true, name: true, type: true, videoUrl: true } },
+      exerciseTemplate: { select: { id: true, name: true, type: true, videoUrl: true, gifUrl: true } },
       substitutes: {
         where: { deletedAt: null },
         orderBy: { substituteOrder: 'asc' },
@@ -567,6 +570,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
+  if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
   if (data.order !== undefined) updateData.order = data.order;
   if (data.sets !== undefined) updateData.sets = data.sets;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;

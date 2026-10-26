@@ -535,6 +535,38 @@ e2eDescribe('e2e: training templates', () => {
       expect(body.exerciseTemplate.id).toBe(body.exerciseTemplateId);
     });
 
+    it('stores and returns gifUrl on the new junction row and its library template', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Ad-hoc Squat', type: 'strength', gifUrl: 'https://example.com/squat.gif' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body).toHaveProperty('gifUrl', 'https://example.com/squat.gif');
+      expect(body.exerciseTemplate).toHaveProperty('gifUrl', 'https://example.com/squat.gif');
+    });
+
+    it('returns 400 VALIDATION_ERROR when gifUrl is not an http(s) URL', async () => {
+      const { accessToken } = await createTrainerWithToken();
+      const template = await createTrainingTemplate(accessToken, {});
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/trainer/training-templates/${template.id}/exercises`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { name: 'Ad-hoc Squat', type: 'strength', gifUrl: 'not-a-url' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toHaveProperty('error', 'VALIDATION_ERROR');
+    });
+
     it('assigns order = (max + 1) when existing exercises are present', async () => {
       const { accessToken } = await createTrainerWithToken();
       const exerciseTemplate = await createExerciseTemplate(accessToken, { name: 'Existing', type: 'strength' });

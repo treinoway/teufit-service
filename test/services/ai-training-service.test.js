@@ -992,6 +992,54 @@ describe('ai-training-service', () => {
         })
       })
 
+      it('copies gifUrl from the created exercise template snapshot onto the junction row', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.create.mockResolvedValue({
+          id: 'ex-created-1',
+          name: 'Supino reto',
+          type: 'strength',
+          videoUrl: null,
+          gifUrl: 'https://example.com/supino.gif',
+        })
+        prisma.trainingTemplate.create.mockResolvedValue({
+          id: 'tt-1',
+          name: 'Treino A',
+          category: 'strength',
+          trainingTemplateExerciseTemplates: [],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+          name: 'Treino A',
+          category: 'strength',
+          exercises: [EXERCISE_INPUT],
+        })
+
+        const junctionRows = prisma.trainingTemplate.create.mock.calls[0][0].data.trainingTemplateExerciseTemplates.create
+        expect(junctionRows[0]).toMatchObject({ gifUrl: 'https://example.com/supino.gif' })
+      })
+
+      it('copies gifUrl from an existing library template onto the junction row when linked by id', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
+        prisma.exerciseTemplate.findMany.mockResolvedValue([
+          { id: 'ex-existing-1', name: 'Agachamento', type: 'strength', videoUrl: null, gifUrl: 'https://example.com/agacha.gif' },
+        ])
+        prisma.trainingTemplate.create.mockResolvedValue({
+          id: 'tt-1',
+          name: 'Treino A',
+          category: 'strength',
+          trainingTemplateExerciseTemplates: [],
+        })
+
+        await executeTool('user-1', AI_TOOLS.CREATE_TRAINING_TEMPLATE, {
+          name: 'Treino A',
+          category: 'strength',
+          exerciseTemplateIds: ['ex-existing-1'],
+        })
+
+        const junctionRows = prisma.trainingTemplate.create.mock.calls[0][0].data.trainingTemplateExerciseTemplates.create
+        expect(junctionRows[0]).toMatchObject({ gifUrl: 'https://example.com/agacha.gif' })
+      })
+
       it('the exerciseTemplate select in the follow-up read contains only { id, name, type } — no prescription fields', async () => {
         prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
         prisma.exerciseTemplate.create.mockResolvedValue({ id: 'ex-created-1', name: 'Supino reto', type: 'strength', videoUrl: null })

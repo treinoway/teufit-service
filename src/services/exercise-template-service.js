@@ -11,6 +11,7 @@ function buildTemplateData(data, trainerId) {
     name: data.name,
     type: data.type,
     videoUrl: data.videoUrl || null,
+    gifUrl: data.gifUrl || null,
     isPublic: data.isPublic !== undefined ? data.isPublic : false,
   };
 }
@@ -212,6 +213,7 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
+  if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
   return prisma.exerciseTemplate.update({
