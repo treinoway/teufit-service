@@ -3,14 +3,12 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
 import * as service from '../../src/services/diet-food-item-service.js';
 import * as schema from '../schemas/diet-food-item-route.schema.js';
-import config from '../../config/index.js';
 
 export async function dietFoodItemRoutes(fastify) {
   // POST /nutritionist/meals/:mealId/food-items
   fastify.post(
     '/nutritionist/meals/:mealId/food-items',
     {
-      config: { rateLimit: config.rateLimit.dietFoodItem.create },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.createFoodItemSchema,
     },
@@ -24,7 +22,6 @@ export async function dietFoodItemRoutes(fastify) {
   fastify.patch(
     '/nutritionist/food-items/:foodItemId',
     {
-      config: { rateLimit: config.rateLimit.dietFoodItem.update },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.updateFoodItemSchema,
     },
@@ -38,7 +35,6 @@ export async function dietFoodItemRoutes(fastify) {
   fastify.delete(
     '/nutritionist/food-items/:foodItemId',
     {
-      config: { rateLimit: config.rateLimit.dietFoodItem.delete },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.deleteFoodItemSchema,
     },

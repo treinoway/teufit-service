@@ -21,7 +21,6 @@ import {
   listPaymentsByStudentSchema,
 } from '../schemas/subscription-payment-route.schema.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import config from '../../config/index.js';
 
 export async function subscriptionPaymentRoutes(fastify) {
   fastify.post(
@@ -29,7 +28,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: createPaymentSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.create },
     },
     async (request, reply) => {
       const payment = await createPayment(
@@ -47,7 +45,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: listPaymentsBySubscriptionSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.list },
     },
     async (request, reply) => {
       const payments = await listPaymentsBySubscription(
@@ -64,7 +61,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: updatePaymentSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.update },
     },
     async (request, reply) => {
       const payment = await updatePayment(
@@ -82,7 +78,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: markPaymentPaidSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.markPaid },
     },
     async (request, reply) => {
       const payment = await markPaymentPaid(
@@ -100,7 +95,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: markPaymentPendingSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.markPending },
     },
     async (request, reply) => {
       const payment = await markPaymentPending(prisma, request.user.id, request.params.id);
@@ -113,7 +107,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: deletePaymentSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.delete },
     },
     async (request, reply) => {
       await voidPayment(prisma, request.user.id, request.params.id);
@@ -126,7 +119,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: voidPaymentSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.void },
     },
     async (request, reply) => {
       const payment = await voidPayment(prisma, request.user.id, request.params.id);
@@ -139,7 +131,6 @@ export async function subscriptionPaymentRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: listPaymentsByStudentSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPayment.listByStudent },
     },
     async (request, reply) => {
       const history = await listPaymentsByStudent(

@@ -49,6 +49,7 @@ import {
 import { prisma } from '../../src/db.js';
 import { verifyEmailCode, resendVerificationCode } from '../../src/services/email-verification-service.js';
 import { userRateLimitKey } from '../../src/helpers/rate-limit-key.js';
+import { perEmailRateLimiter } from '../../src/helpers/per-email-rate-limiter.js';
 import {
   processSignupRequest,
   processSignupResendRequest,
@@ -60,35 +61,6 @@ import { acceptPendingInvitesForUser } from '../../src/services/student-invite-s
 import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 import { runAfterResponse } from '../../src/helpers/run-after-response.js';
 import { SignupStatus } from '../../src/constants/signup-verification.js';
-
-/**
- * Per-email limiter for POST /auth/signup/verify (on top of the per-IP one), so
- * rotating IPs does not multiply guesses against one address. Built with
- * `createRateLimit` because a second route-level limiter would be skipped (the
- * plugin runs once per request), and run as a preHandler because the key comes
- * from the validated body. The plugin is not registered in the test env.
- */
-function signupVerifyPerEmailLimiter(fastify) {
-  if (!fastify.hasDecorator('createRateLimit')) return [];
-  const checkLimit = fastify.createRateLimit({
-    ...config.rateLimit.auth.signupVerifyPerEmail,
-    keyGenerator: (request) => `signup-verify-email:${String(request.body?.email ?? '').trim().toLowerCase()}`,
-  });
-  return [
-    async (request, reply) => {
-      const limit = await checkLimit(request);
-      if (!limit.isExceeded) return;
-      reply.header('retry-after', limit.ttlInSeconds);
-      throw new AppError({
-        httpStatus: 429,
-        error: 'TOO_MANY_REQUESTS',
-        messageCode: 'request.rateLimitExceeded',
-        message: 'Too many requests. Try again later.',
-        details: { retryAfterSeconds: limit.ttlInSeconds },
-      });
-    },
-  ];
-}
 
 export async function authRoutes(fastify) {
   // Configure Google OAuth2 plugin.
@@ -137,7 +109,7 @@ export async function authRoutes(fastify) {
     {
       config: { rateLimit: config.rateLimit.auth.signupVerify },
       schema: signupVerifySchema,
-      preHandler: signupVerifyPerEmailLimiter(fastify),
+      preHandler: perEmailRateLimiter(fastify, 'signup-verify-email', config.rateLimit.auth.signupVerifyPerEmail),
     },
     async (request, reply) => {
       const { email, code, password } = request.body;
@@ -233,6 +205,7 @@ export async function authRoutes(fastify) {
     {
       config: { rateLimit: config.rateLimit.auth.login },
       schema: loginSchema,
+      preHandler: perEmailRateLimiter(fastify, 'login-email', config.rateLimit.auth.loginPerEmail),
     },
     async (request, reply) => {
       try {
@@ -282,6 +255,7 @@ export async function authRoutes(fastify) {
     {
       config: { rateLimit: config.rateLimit.auth.forgotPassword },
       schema: forgotPasswordSchema,
+      preHandler: perEmailRateLimiter(fastify, 'forgot-password-email', config.rateLimit.auth.forgotPasswordPerEmail),
     },
     async (request, reply) => {
       try {

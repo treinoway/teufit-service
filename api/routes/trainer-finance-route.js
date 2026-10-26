@@ -13,13 +13,11 @@ import { getFinanceOverview } from '../../src/services/trainer-finance-service.j
 import { getFinanceOverviewSchema } from '../schemas/trainer-finance-route.schema.js';
 import { prisma } from '../../src/db.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
-import config from '../../config/index.js';
 
 export async function trainerFinanceRoutes(fastify) {
   fastify.get(
     '/trainer/finance/overview',
     {
-      config: { rateLimit: config.rateLimit.trainerFinance.overview },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getFinanceOverviewSchema,
     },

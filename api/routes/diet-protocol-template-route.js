@@ -3,14 +3,12 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
 import * as service from '../../src/services/diet-protocol-template-service.js';
 import * as schema from '../schemas/diet-protocol-template-route.schema.js';
-import config from '../../config/index.js';
 
 export async function dietProtocolTemplateRoutes(fastify) {
   // POST /nutritionist/diet-protocol-templates
   fastify.post(
     '/nutritionist/diet-protocol-templates',
     {
-      config: { rateLimit: config.rateLimit.dietProtocolTemplate.create },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.createTemplateSchema,
     },
@@ -24,7 +22,6 @@ export async function dietProtocolTemplateRoutes(fastify) {
   fastify.get(
     '/nutritionist/diet-protocol-templates',
     {
-      config: { rateLimit: config.rateLimit.dietProtocolTemplate.list },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.listTemplatesSchema,
     },
@@ -38,7 +35,6 @@ export async function dietProtocolTemplateRoutes(fastify) {
   fastify.get(
     '/nutritionist/diet-protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocolTemplate.getById },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.getTemplateByIdSchema,
     },
@@ -52,7 +48,6 @@ export async function dietProtocolTemplateRoutes(fastify) {
   fastify.patch(
     '/nutritionist/diet-protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocolTemplate.update },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.updateTemplateSchema,
     },
@@ -66,7 +61,6 @@ export async function dietProtocolTemplateRoutes(fastify) {
   fastify.delete(
     '/nutritionist/diet-protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocolTemplate.delete },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.deleteTemplateSchema,
     },

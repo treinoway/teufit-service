@@ -2,7 +2,6 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-protocol-service.js';
 import * as schema from '../schemas/training-protocol-route.schema.js';
-import config from '../../config/index.js';
 
 export async function trainingProtocolRoutes(fastify) {
   // ========== TRAINER ROUTES ==========
@@ -12,7 +11,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.post(
     '/trainer/protocols',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.create },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.createProtocolSchema,
     },
@@ -38,7 +36,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.post(
     '/trainer/protocols/with-trainings',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.createWithTrainings },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.createProtocolWithTrainingsSchema,
     },
@@ -53,7 +50,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.get(
     '/trainer/protocols',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.list },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getTrainerProtocolsSchema,
     },
@@ -79,7 +75,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.get(
     '/trainer/protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.getById },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolByIdSchema,
     },
@@ -105,7 +100,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.patch(
     '/trainer/protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.update },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.updateProtocolSchema,
     },
@@ -134,7 +128,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.delete(
     '/trainer/protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.delete },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.deleteProtocolSchema,
     },
@@ -163,7 +156,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.post(
     '/trainer/protocols/import-from-template',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.importFromTemplate },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.importFromTemplateSchema,
     },
@@ -192,7 +184,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.get(
     '/my/protocols',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.list },
       preHandler: [authenticate],
       schema: schema.getMyProtocolsSchema,
     },
@@ -215,7 +206,6 @@ export async function trainingProtocolRoutes(fastify) {
   fastify.get(
     '/my/protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocol.getById },
       preHandler: [authenticate],
       schema: schema.getMyProtocolByIdSchema,
     },

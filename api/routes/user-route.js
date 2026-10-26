@@ -11,14 +11,9 @@ import { POSTAL_CODE_ERROR_CODES } from '../../src/constants/address.js';
 
 export async function userRoutes(fastify) {
 
-  // Rate limit configured in config/environments/*.js
-  // Default: 30 req/min (disabled in test environment)
   fastify.get(
     '/me',
     {
-      config: {
-        rateLimit: config.rateLimit.user.getMe,
-      },
       preHandler: [authenticate],
       schema: getMeSchema,
     },
@@ -131,12 +126,8 @@ export async function userRoutes(fastify) {
     },
   );
 
-  // Rate limit: 10 req/min (disabled in test environment)
   fastify.patch('/me/profile',
     {
-      config: {
-        rateLimit: config.rateLimit.user.updateProfile,
-      },
       preHandler: [authenticate],
       schema: updateProfileSchema
     },
