@@ -71,6 +71,7 @@ describe('exercise-template-service', () => {
           name: 'Squat',
           type: 'strength',
           videoUrl: null,
+          gifUrl: null,
           isPublic: false,
         },
       });
@@ -106,6 +107,28 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ videoUrl: null }),
+      });
+    });
+
+    it('persists gifUrl when provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.create.mockResolvedValue({ id: 'et1' });
+
+      await createExerciseTemplate('u1', { name: 'Squat', type: 'strength', gifUrl: 'https://example.com/squat.gif' });
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: 'https://example.com/squat.gif' }),
+      });
+    });
+
+    it('sets gifUrl to null when not provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.create.mockResolvedValue({ id: 'et1' });
+
+      await createExerciseTemplate('u1', { name: 'Squat', type: 'strength' });
+
+      expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ gifUrl: null }),
       });
     });
 
@@ -169,7 +192,7 @@ describe('exercise-template-service', () => {
       await createExerciseTemplate('u1', { name: 'Squat', type: 'strength' });
 
       const createData = prisma.exerciseTemplate.create.mock.calls[0][0].data;
-      expect(Object.keys(createData).sort()).toEqual(['isPublic', 'name', 'trainerId', 'type', 'videoUrl'].sort());
+      expect(Object.keys(createData).sort()).toEqual(['gifUrl', 'isPublic', 'name', 'trainerId', 'type', 'videoUrl'].sort());
     });
   });
 
@@ -468,6 +491,32 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { videoUrl: 'https://example.com/video.mp4' },
+      });
+    });
+
+    it('updates gifUrl when provided', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
+      prisma.exerciseTemplate.update.mockResolvedValue({ id: 'et1' });
+
+      await updateExerciseTemplate('u1', 'et1', { gifUrl: 'https://example.com/squat.gif' });
+
+      expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
+        where: { id: 'et1' },
+        data: { gifUrl: 'https://example.com/squat.gif' },
+      });
+    });
+
+    it('clears gifUrl when null is sent', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findUnique.mockResolvedValue(makeTemplate());
+      prisma.exerciseTemplate.update.mockResolvedValue({ id: 'et1' });
+
+      await updateExerciseTemplate('u1', 'et1', { gifUrl: null });
+
+      expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
+        where: { id: 'et1' },
+        data: { gifUrl: null },
       });
     });
 

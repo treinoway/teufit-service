@@ -3867,7 +3867,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
           },
           "response": []
         },
@@ -4004,7 +4004,7 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
           },
           "response": []
         },
@@ -4253,7 +4253,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false\n}",
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"isPublic\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4270,7 +4270,7 @@
                 "exercise-templates"
               ]
             },
-            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
+            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
           },
           "response": []
         },
@@ -4376,7 +4376,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"isPublic\": true\n}"
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"isPublic\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -4396,7 +4396,7 @@
                 }
               ]
             },
-            "description": "Update exercise template identity fields (name, type, videoUrl, isPublic). All fields are optional. Only accessible by owner."
+            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner."
           },
           "response": []
         },

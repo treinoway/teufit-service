@@ -1,6 +1,7 @@
 import { exerciseTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
+import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
 
 // Library exercise templates carry only the exercise identity. Prescription
 // ("how it's done") lives on the TrainingTemplateExerciseTemplate junction and the Exercise.
@@ -12,6 +13,7 @@ const exerciseTemplateResponseSchema = {
     name: { type: 'string' },
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
+    gifUrl: gifUrlResponseSchema,
     isPublic: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -29,6 +31,7 @@ export const createExerciseTemplateSchema = {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
       videoUrl: { type: 'string' },
+      gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
     },
     additionalProperties: false,
@@ -155,6 +158,7 @@ export const updateExerciseTemplateSchema = {
       name: { type: 'string', minLength: 1 },
       type: { type: 'string', enum: exerciseTypeValues },
       videoUrl: { type: 'string' },
+      gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
     },
     additionalProperties: false,

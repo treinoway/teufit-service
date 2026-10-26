@@ -309,6 +309,87 @@ describe('training-template-service', () => {
     });
   });
 
+  describe('gifUrl', () => {
+    const GIF_URL = 'https://example.com/squat.gif';
+    const CALLER_GIF_URL = 'https://example.com/caller.gif';
+
+    function mockOwnership() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue(null);
+    }
+
+    async function createWithLibraryTemplate(exerciseInput = {}) {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([
+        { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: GIF_URL },
+      ]);
+      prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt1', trainingTemplateExerciseTemplates: [] });
+
+      await createTrainingTemplate('u1', {
+        name: 'Leg Day',
+        category: 'strength',
+        exerciseTemplates: [{ exerciseTemplateId: 'et1', ...exerciseInput }],
+      });
+
+      return prisma.trainingTemplate.create.mock.calls[0][0].data.trainingTemplateExerciseTemplates.create[0];
+    }
+
+    it('createTrainingTemplate junction rows inherit gifUrl from the library template', async () => {
+      const junctionRow = await createWithLibraryTemplate();
+
+      expect(junctionRow.gifUrl).toBe(GIF_URL);
+    });
+
+    it('createTrainingTemplate junction rows prefer a caller-supplied gifUrl', async () => {
+      const junctionRow = await createWithLibraryTemplate({ gifUrl: CALLER_GIF_URL });
+
+      expect(junctionRow.gifUrl).toBe(CALLER_GIF_URL);
+    });
+
+    it('createTrainingTemplateExerciseFromTemplate snapshots the library gifUrl onto the junction row', async () => {
+      mockOwnership();
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({
+        id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: GIF_URL,
+        trainerId: 't1', isPublic: false, deletedAt: null,
+      });
+      prisma.trainingTemplateExerciseTemplate.create.mockResolvedValue({ id: 'jte1' });
+
+      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', { exerciseTemplateId: 'et1' });
+
+      expect(prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0].data.gifUrl).toBe(GIF_URL);
+    });
+
+    it('createTrainingTemplateExercise persists gifUrl on both the library template and the junction row', async () => {
+      mockOwnership();
+      const createdTemplate = { id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: GIF_URL };
+      const txMock = {
+        exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
+        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue({ id: 'jte1' }) },
+      };
+      prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
+
+      await createTrainingTemplateExercise('u1', 'tt1', { name: 'Squat', type: 'strength', gifUrl: GIF_URL });
+
+      expect(txMock.exerciseTemplate.create.mock.calls[0][0].data.gifUrl).toBe(GIF_URL);
+      expect(txMock.trainingTemplateExerciseTemplate.create.mock.calls[0][0].data.gifUrl).toBe(GIF_URL);
+    });
+
+    it('createTrainingTemplateExercise stores gifUrl null when not provided', async () => {
+      mockOwnership();
+      const createdTemplate = { id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null };
+      const txMock = {
+        exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
+        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue({ id: 'jte1' }) },
+      };
+      prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
+
+      await createTrainingTemplateExercise('u1', 'tt1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exerciseTemplate.create.mock.calls[0][0].data.gifUrl).toBeNull();
+    });
+  });
+
   describe('getTrainingTemplatesByTrainer', () => {
     it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
       prisma.trainer.findUnique.mockResolvedValue(null);
@@ -593,6 +674,20 @@ describe('training-template-service', () => {
       const updateCall = prisma.trainingTemplateExerciseTemplate.update.mock.calls[0][0];
       expect(updateCall.data).toEqual({ order: 2, notes: 'Keep back straight' });
       expect(Object.keys(updateCall.data)).toHaveLength(2);
+    });
+
+    it('writes gifUrl on the junction row, including null to clear it', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue({ id: 'jt1', trainingTemplateId: 'tt1' });
+      prisma.trainingTemplateExerciseTemplate.update.mockResolvedValue({ id: 'jt1' });
+
+      await updateTrainingTemplateExercise('u1', 'tt1', 'jt1', { gifUrl: 'https://example.com/squat.gif' });
+      await updateTrainingTemplateExercise('u1', 'tt1', 'jt1', { gifUrl: null });
+
+      const calls = prisma.trainingTemplateExerciseTemplate.update.mock.calls;
+      expect(calls[0][0].data).toEqual({ gifUrl: 'https://example.com/squat.gif' });
+      expect(calls[1][0].data).toEqual({ gifUrl: null });
     });
 
     it('throws TRAINING_TEMPLATE_EXERCISE_NOT_FOUND when junction row does not belong to template', async () => {

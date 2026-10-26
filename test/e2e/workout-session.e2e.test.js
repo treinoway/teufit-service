@@ -353,6 +353,29 @@ e2eDescribe('e2e: workout-sessions', () => {
       expect(body.exerciseLogs[0].exercise).toMatchObject({ name: 'Bench Press' });
     });
 
+    it('includes gifUrl in exerciseLogs[].exercise', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { userId: studentId, accessToken: studentToken } = await createStudentWithToken();
+      const { trainingId } = await createProtocolAndTraining(trainerToken, studentId);
+      const exerciseResponse = await app.inject({
+        method: 'POST',
+        url: `/trainer/trainings/${trainingId}/exercises`,
+        headers: { authorization: `Bearer ${trainerToken}` },
+        payload: { name: 'Bench Press', type: 'strength', gifUrl: 'https://example.com/bench.gif' },
+      });
+      expect(exerciseResponse.statusCode).toBe(201);
+      const sessionId = (await startSession(studentToken, trainingId)).json().id;
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/my/workout-sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().exerciseLogs[0].exercise).toHaveProperty('gifUrl', 'https://example.com/bench.gif');
+    });
+
     it('returns 404 for unknown sessionId', async () => {
       const { accessToken: studentToken } = await createStudentWithToken();
 

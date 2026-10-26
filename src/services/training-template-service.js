@@ -34,6 +34,7 @@ function buildJunctionCreateData(e, index, template) {
     name: e.name !== undefined ? e.name : template.name,
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
+    gifUrl: e.gifUrl !== undefined ? e.gifUrl : template.gifUrl,
     sets: e.sets ?? null,
     repetitions,
     duration,
@@ -493,6 +494,7 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
+  if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
   if (data.sets !== undefined) updateData.sets = data.sets;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
@@ -593,6 +595,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         name: data.name,
         type: data.type,
         videoUrl: data.videoUrl ?? null,
+        gifUrl: data.gifUrl ?? null,
         isPublic: data.isPublic !== undefined ? data.isPublic : false,
       },
     });
@@ -607,6 +610,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         name: exerciseTemplate.name,
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
+        gifUrl: exerciseTemplate.gifUrl,
         sets: data.sets ?? null,
         repetitions,
         duration,
@@ -668,6 +672,7 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
       name: exerciseTemplate.name,
       type: exerciseTemplate.type,
       videoUrl: exerciseTemplate.videoUrl,
+      gifUrl: exerciseTemplate.gifUrl,
       sets: data.sets ?? null,
       repetitions,
       duration,

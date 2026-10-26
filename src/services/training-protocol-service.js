@@ -553,6 +553,7 @@ function buildNestedExerciseCreateData(exercise, index) {
     name: exercise.name,
     type: exercise.type,
     videoUrl: exercise.videoUrl ?? null,
+    gifUrl: exercise.gifUrl ?? null,
     // Fall back to array position when the client omits `order`; otherwise every
     // exercise inherits Prisma's @default(0) and the training is created with a
     // duplicated/zeroed order, which breaks execution ordering (orderBy order asc).
