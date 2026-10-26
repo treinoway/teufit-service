@@ -36,6 +36,11 @@ import {
 describe('training-template-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      exerciseTemplate: prisma.exerciseTemplate,
+      trainingTemplateExerciseTemplate: prisma.trainingTemplateExerciseTemplate,
+    }));
   });
 
   describe('createTrainingTemplate', () => {
@@ -364,8 +369,12 @@ describe('training-template-service', () => {
       mockOwnership();
       const createdTemplate = { id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: GIF_URL };
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
-        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue({ id: 'jte1' }) },
+        trainingTemplateExerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'jte1' }),
+        },
       };
       prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
 
@@ -379,8 +388,12 @@ describe('training-template-service', () => {
       mockOwnership();
       const createdTemplate = { id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null };
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
-        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue({ id: 'jte1' }) },
+        trainingTemplateExerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'jte1' }),
+        },
       };
       prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
 
@@ -1019,8 +1032,12 @@ describe('training-template-service', () => {
 
       prisma.$transaction = vi.fn().mockImplementation(async (fn) => {
         const tx = {
+          $queryRaw: vi.fn().mockResolvedValue([]),
           exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
-          trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue(createdJunction) },
+          trainingTemplateExerciseTemplate: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn().mockResolvedValue(createdJunction),
+          },
         };
         return fn(tx);
       });
@@ -1038,8 +1055,12 @@ describe('training-template-service', () => {
       const txFn = prisma.$transaction.mock.calls[0][0];
       // Retrieve the tx mock to check calls
       const txMock = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
-        trainingTemplateExerciseTemplate: { create: vi.fn().mockResolvedValue(createdJunction) },
+        trainingTemplateExerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue(createdJunction),
+        },
       };
       await txFn(txMock);
 

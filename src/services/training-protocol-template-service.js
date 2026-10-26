@@ -1,7 +1,7 @@
 import { prisma } from '../db.js';
 import { buildError, validateWeekDay, validateGenderOrdination, validateTrainingLevel, validateProtocolType } from '../helpers/training-validators.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
-import { protocolTypeValues, trainingLevelValues } from '../constants/training.js';
+import { protocolTypeValues, trainingLevelValues, ExerciseOrderBy } from '../constants/training.js';
 
 /**
  * Shared Prisma include for a protocol template's trainings relation. Hydrates
@@ -16,7 +16,7 @@ const protocolTemplateTrainingsInclude = {
       trainingTemplate: {
         include: {
           trainingTemplateExerciseTemplates: {
-            orderBy: { order: 'asc' },
+            orderBy: ExerciseOrderBy,
             include: { exerciseTemplate: true },
           },
         },

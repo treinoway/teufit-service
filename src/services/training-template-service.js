@@ -1,4 +1,6 @@
 import { prisma } from '../db.js';
+import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { lockTrainingTemplateForUpdate } from '../helpers/row-locks.js';
 import {
   buildError,
   validateCategory,
@@ -8,7 +10,7 @@ import {
   validatePrescriptionMode,
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
-import { PrescriptionMode, trainingCategoryValues, bodySegmentValues } from '../constants/training.js';
+import { PrescriptionMode, ExerciseOrderBy, trainingCategoryValues, bodySegmentValues } from '../constants/training.js';
 
 /**
  * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
@@ -49,7 +51,7 @@ function buildJunctionCreateData(e, index, template) {
 
 const exerciseTemplatesInclude = {
   trainingTemplateExerciseTemplates: {
-    orderBy: { order: 'asc' },
+    orderBy: ExerciseOrderBy,
     include: {
       exerciseTemplate: true,
     },
@@ -554,17 +556,20 @@ async function assertTrainerOwnsTemplate(userId, templateId) {
   return { trainer, template };
 }
 
-/**
- * Returns the next `order` value for a junction row in the given training template.
- * Walks the whole relation to find max + 1 — safe because the row count stays small.
- */
-async function nextExerciseOrder(templateId) {
-  const last = await prisma.trainingTemplateExerciseTemplate.findFirst({
+// Returns max junction order + 1 for the template; must run inside a tx holding the template lock.
+async function nextExerciseOrder(tx, templateId) {
+  const last = await tx.trainingTemplateExerciseTemplate.findFirst({
     where: { trainingTemplateId: templateId },
     orderBy: { order: 'desc' },
     select: { order: true },
   });
   return last ? last.order + 1 : 0;
+}
+
+// Locks the training template, then returns the explicit order or max + 1 so concurrent appends serialize.
+async function resolveJunctionOrder(tx, templateId, explicitOrder) {
+  await lockTrainingTemplateForUpdate(tx, templateId);
+  return explicitOrder !== undefined ? explicitOrder : nextExerciseOrder(tx, templateId);
 }
 
 /**
@@ -585,9 +590,9 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
 
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
-  const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
 
-  const junction = await prisma.$transaction(async (tx) => {
+  const junction = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    const order = await resolveJunctionOrder(tx, templateId, data.order);
     // Library template holds identity only — prescription stays on the junction.
     const exerciseTemplate = await tx.exerciseTemplate.create({
       data: {
@@ -623,7 +628,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
       },
       include: { exerciseTemplate: true },
     });
-  });
+  }));
 
   return junction;
 }
@@ -656,35 +661,37 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
 
-  const order = data.order !== undefined ? data.order : await nextExerciseOrder(templateId);
   // Identity comes from the library template; prescription is set by the trainer at link
   // time (the workout's direction) — the library template no longer carries prescription.
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
 
-  const junction = await prisma.trainingTemplateExerciseTemplate.create({
-    data: {
-      trainingTemplateId: templateId,
-      exerciseTemplateId: exerciseTemplate.id,
-      order,
-      supersetGroupId: data.supersetGroupId ?? null,
-      supersetOrder: data.supersetOrder ?? 0,
-      name: exerciseTemplate.name,
-      type: exerciseTemplate.type,
-      videoUrl: exerciseTemplate.videoUrl,
-      gifUrl: exerciseTemplate.gifUrl,
-      sets: data.sets ?? null,
-      repetitions,
-      duration,
-      prescriptionMode: resolvedMode,
-      hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
-      suggestedLoad: data.suggestedLoad ?? null,
-      restInterval: data.restInterval ?? null,
-      notes: data.notes ?? null,
-      intensity: data.intensity ?? null,
-    },
-    include: { exerciseTemplate: true },
-  });
+  const junction = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    const order = await resolveJunctionOrder(tx, templateId, data.order);
+    return tx.trainingTemplateExerciseTemplate.create({
+      data: {
+        trainingTemplateId: templateId,
+        exerciseTemplateId: exerciseTemplate.id,
+        order,
+        supersetGroupId: data.supersetGroupId ?? null,
+        supersetOrder: data.supersetOrder ?? 0,
+        name: exerciseTemplate.name,
+        type: exerciseTemplate.type,
+        videoUrl: exerciseTemplate.videoUrl,
+        gifUrl: exerciseTemplate.gifUrl,
+        sets: data.sets ?? null,
+        repetitions,
+        duration,
+        prescriptionMode: resolvedMode,
+        hasLoad: data.hasLoad !== undefined ? data.hasLoad : false,
+        suggestedLoad: data.suggestedLoad ?? null,
+        restInterval: data.restInterval ?? null,
+        notes: data.notes ?? null,
+        intensity: data.intensity ?? null,
+      },
+      include: { exerciseTemplate: true },
+    });
+  }));
 
   return junction;
 }

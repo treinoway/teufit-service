@@ -17,6 +17,7 @@ import {
   SupersetConstraints,
   SupersetMessageCode,
   SubstituteMessageCode,
+  ExerciseOrderBy,
 } from '../constants/training.js';
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
@@ -65,7 +66,7 @@ async function verifyTrainingOwnership(trainingId, trainerId) {
 async function loadActiveExercises(trainingId) {
   return prisma.exercise.findMany({
     where: { trainingId, deletedAt: null },
-    orderBy: { order: 'asc' },
+    orderBy: ExerciseOrderBy,
   });
 }
 
@@ -245,7 +246,7 @@ async function createSupersetMemberAtomically(trainingId, data, trainerId) {
     await lockTrainingForUpdate(tx, trainingId);
     const allActive = await tx.exercise.findMany({
       where: { trainingId, deletedAt: null },
-      orderBy: { order: 'asc' },
+      orderBy: ExerciseOrderBy,
     });
 
     const existingMembers = allActive.filter(
@@ -437,7 +438,7 @@ export async function getExercisesByTraining(userId, trainingId, context) {
         },
       },
     },
-    orderBy: { order: 'asc' },
+    orderBy: ExerciseOrderBy,
   });
 
   return principals.map(normalizeExerciseWithSubstitutes);
@@ -1172,7 +1173,7 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
     await lockTrainingForUpdate(tx, trainingId);
     const allActive = await tx.exercise.findMany({
       where: { trainingId, deletedAt: null },
-      orderBy: { order: 'asc' },
+      orderBy: ExerciseOrderBy,
     });
 
     // Validate each exercise ID exists in this training and is a principal
