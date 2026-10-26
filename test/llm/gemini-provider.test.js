@@ -159,4 +159,92 @@ describe('GeminiProvider', () => {
       expect(callArgs.config.systemInstruction).toBe('plain string')
     })
   })
+
+  describe('usage normalization', () => {
+    const baseParams = {
+      system: 'sys',
+      tools: [],
+      messages: [{ role: 'user', content: 'Hello' }],
+      maxTokens: 256,
+    }
+
+    const usageMetadata = {
+      promptTokenCount: 120,
+      candidatesTokenCount: 40,
+      thoughtsTokenCount: 10,
+      cachedContentTokenCount: 20,
+    }
+
+    const normalizedUsage = {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 20,
+      cacheWriteTokens: 0,
+    }
+
+    it('chat() maps usageMetadata to the normalized usage object', async () => {
+      geminiGenerateContent.mockResolvedValue({ ...makeGeminiResponse(), usageMetadata })
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toEqual(normalizedUsage)
+    })
+
+    it('chat() treats absent cache and thoughts counters as 0', async () => {
+      geminiGenerateContent.mockResolvedValue({
+        ...makeGeminiResponse(),
+        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 5 },
+      })
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toEqual({
+        inputTokens: 15,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      })
+    })
+
+    it('chat() returns usage null when usageMetadata is absent', async () => {
+      geminiGenerateContent.mockResolvedValue(makeGeminiResponse())
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toBeNull()
+    })
+
+    it('chatStream() complete event carries usage from the last chunk', async () => {
+      const mockStream = {
+        [Symbol.asyncIterator]: async function* () {
+          yield makeGeminiResponse('hel')
+          yield { ...makeGeminiResponse('lo'), usageMetadata }
+        },
+      }
+      geminiGenerateContentStream.mockResolvedValue(mockStream)
+
+      let complete = null
+      for await (const chunk of provider.chatStream(baseParams)) {
+        if (chunk.type === 'complete') complete = chunk
+      }
+
+      expect(complete.response.usage).toEqual(normalizedUsage)
+    })
+
+    it('chatStream() complete event has usage null when no chunk carries usageMetadata', async () => {
+      const mockStream = {
+        [Symbol.asyncIterator]: async function* () {
+          yield makeGeminiResponse('hello')
+        },
+      }
+      geminiGenerateContentStream.mockResolvedValue(mockStream)
+
+      let complete = null
+      for await (const chunk of provider.chatStream(baseParams)) {
+        if (chunk.type === 'complete') complete = chunk
+      }
+
+      expect(complete.response.usage).toBeNull()
+    })
+  })
 })

@@ -55,6 +55,7 @@ model User {
   videosCreated              Video[]
   studentSubscriptions       StudentSubscription[]
   aiUsageEventsAsStudent     AiUsageEvent[]        @relation("aiUsageStudent")
+  aiTokenUsagesAsStudent     AiTokenUsage[]        @relation("aiTokenUsageStudent")
   aiInteractionLogsAsStudent AiInteractionLog[]    @relation("aiInteractionLogStudent")
   invitesSent                TrainerInvite[]       @relation("InvitesSent")
   invitesRedeemed            TrainerInvite[]       @relation("InvitesRedeemed")
@@ -132,6 +133,7 @@ model Trainer {
   briefingSnapshot          TrainerBriefingSnapshot?
   platformSubscription      PlatformSubscription?
   aiUsageEvents             AiUsageEvent[]
+  aiTokenUsages             AiTokenUsage[]
   aiInteractionLogs         AiInteractionLog[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -1412,6 +1414,31 @@ model AiUsageEvent {
   @@index([trainerId, billingMonth])
   @@index([trainerId, studentId, billingMonth])
   @@map("ai_usage_events")
+}
+
+// ─── AI Token Usage (admin visibility, no PII) ────────────────────────────────
+
+model AiTokenUsage {
+  id               String   @id @default(uuid()) @db.Uuid
+  trainerId        String   @map("trainer_id") @db.Uuid
+  studentId        String?  @map("student_id") @db.Uuid
+  conversationId   String?  @map("conversation_id")
+  provider         String
+  model            String
+  inputTokens      Int      @default(0) @map("input_tokens")
+  outputTokens     Int      @default(0) @map("output_tokens")
+  cacheReadTokens  Int      @default(0) @map("cache_read_tokens")
+  cacheWriteTokens Int      @default(0) @map("cache_write_tokens")
+  llmCalls         Int      @default(1) @map("llm_calls")
+  billingMonth     String   @map("billing_month") // format "YYYY-MM" in UTC
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User?   @relation("aiTokenUsageStudent", fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([billingMonth, trainerId])
+  @@index([trainerId, createdAt])
+  @@map("ai_token_usage")
 }
 
 // ─── Trainer Invite (closed beta) ─────────────────────────────────────────────

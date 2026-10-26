@@ -52,18 +52,6 @@ export class AnthropicProvider extends LlmProvider {
     ]
   }
 
-  _logUsage(usage) {
-    if (!usage) return
-    console.info(
-      `[AI][anthropic][usage] ${JSON.stringify({
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
-        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
-      })}`,
-    )
-  }
-
   async chat({ system, tools, messages, maxTokens }) {
     const client = this._getClient()
 
@@ -80,7 +68,6 @@ export class AnthropicProvider extends LlmProvider {
       this._normalizeProviderError(err)
     }
 
-    this._logUsage(response.usage)
     return this._normalizeResponse(response)
   }
 
@@ -104,7 +91,6 @@ export class AnthropicProvider extends LlmProvider {
       }
 
       const finalMessage = await stream.finalMessage()
-      this._logUsage(finalMessage.usage)
       yield { type: 'complete', response: this._normalizeResponse(finalMessage) }
     } catch (err) {
       this._normalizeProviderError(err)
@@ -128,6 +114,18 @@ export class AnthropicProvider extends LlmProvider {
       text: textBlock?.text ?? null,
       toolCalls,
       rawContent: response.content,
+      usage: this._normalizeUsage(response.usage),
+    }
+  }
+
+  // Maps Anthropic usage to the normalized usage shape, or null when absent.
+  _normalizeUsage(usage) {
+    if (!usage) return null
+    return {
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
     }
   }
 

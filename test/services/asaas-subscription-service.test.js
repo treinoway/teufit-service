@@ -18,14 +18,20 @@ vi.mock('../../src/billing/asaas-client.js', () => ({
 vi.mock('../../src/services/platform-plan-service.js', () => ({
   getTrainerPlan: vi.fn(),
   enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  reactivateStudentsUpToCap: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as asaasClient from '../../src/billing/asaas-client.js';
-import { getTrainerPlan } from '../../src/services/platform-plan-service.js';
+import {
+  getTrainerPlan,
+  enforceStudentCapAfterDowngrade,
+  reactivateStudentsUpToCap,
+} from '../../src/services/platform-plan-service.js';
 import {
   createOrGetAsaasCustomer,
   createCheckout,
   getTrainerSubscription,
+  changeTier,
 } from '../../src/services/asaas-subscription-service.js';
 
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
@@ -394,5 +400,52 @@ describe('getTrainerSubscription', () => {
     const result = await getTrainerSubscription(mockPrisma, TRAINER_ID);
 
     expect(result).toBeNull();
+  });
+});
+
+// ─── changeTier — student reactivation ────────────────────────────────────────
+
+describe('changeTier — student reactivation on tier change', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue({
+      trainerId: TRAINER_ID,
+      tier: PLATFORM_PLAN_TIERS.FREE,
+      asaasSubscriptionId: null,
+    });
+    mockPrisma.platformSubscription.update.mockResolvedValue({});
+  });
+
+  it('reactivates blocked students after an upgrade', async () => {
+    getTrainerPlan.mockResolvedValue({ tier: PLATFORM_PLAN_TIERS.FREE });
+
+    await changeTier(mockPrisma, mockAsaasConfig, mockHttpClient, TRAINER_ID, PLATFORM_PLAN_TIERS.PRO);
+
+    expect(reactivateStudentsUpToCap).toHaveBeenCalledOnce();
+    expect(reactivateStudentsUpToCap).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
+  });
+
+  it('reactivates only after the new tier is persisted', async () => {
+    getTrainerPlan.mockResolvedValue({ tier: PLATFORM_PLAN_TIERS.FREE });
+    const order = [];
+    mockPrisma.platformSubscription.update.mockImplementation(async () => {
+      order.push('update');
+    });
+    reactivateStudentsUpToCap.mockImplementation(async () => {
+      order.push('reactivate');
+    });
+
+    await changeTier(mockPrisma, mockAsaasConfig, mockHttpClient, TRAINER_ID, PLATFORM_PLAN_TIERS.PRO);
+
+    expect(order).toEqual(['update', 'reactivate']);
+  });
+
+  it('does not reactivate students on a downgrade', async () => {
+    getTrainerPlan.mockResolvedValue({ tier: PLATFORM_PLAN_TIERS.PLATINUM });
+
+    await changeTier(mockPrisma, mockAsaasConfig, mockHttpClient, TRAINER_ID, PLATFORM_PLAN_TIERS.PRO);
+
+    expect(enforceStudentCapAfterDowngrade).toHaveBeenCalledOnce();
+    expect(reactivateStudentsUpToCap).not.toHaveBeenCalled();
   });
 });

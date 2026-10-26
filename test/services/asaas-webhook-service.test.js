@@ -8,9 +8,13 @@ import {
 
 vi.mock('../../src/services/platform-plan-service.js', () => ({
   enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  reactivateStudentsUpToCap: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { enforceStudentCapAfterDowngrade } from '../../src/services/platform-plan-service.js';
+import {
+  enforceStudentCapAfterDowngrade,
+  reactivateStudentsUpToCap,
+} from '../../src/services/platform-plan-service.js';
 import { handleWebhookEvent } from '../../src/services/asaas-webhook-service.js';
 
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
@@ -445,5 +449,43 @@ describe('Unknown event type', () => {
 
     expect(result).toBe(false);
     expect(silentLogger.warn).toHaveBeenCalled();
+  });
+});
+
+// ─── PAYMENT_CONFIRMED — student reactivation ─────────────────────────────────
+
+describe('PAYMENT_CONFIRMED — student reactivation on upgrade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.platformSubscriptionPayment.findUnique.mockResolvedValue(null);
+    mockPrisma.platformSubscriptionPayment.upsert.mockResolvedValue({});
+    mockPrisma.platformSubscription.update.mockResolvedValue({});
+  });
+
+  it('reactivates blocked students after the tier is raised', async () => {
+    mockPrisma.platformSubscription.findFirst.mockResolvedValue(
+      makePlatformSubscription({ tier: 'FREE' })
+    );
+
+    await handleWebhookEvent(mockPrisma, {
+      event: 'PAYMENT_CONFIRMED',
+      payment: makePaymentPayload({ externalReference: 'tier:PRO:trainer:trainer-uuid-1' }),
+    }, silentLogger);
+
+    expect(reactivateStudentsUpToCap).toHaveBeenCalledOnce();
+    expect(reactivateStudentsUpToCap).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
+  });
+
+  it('does not reactivate when the payment was already processed (idempotency)', async () => {
+    mockPrisma.platformSubscriptionPayment.findUnique.mockResolvedValue({
+      status: ASAAS_PAYMENT_STATUSES.CONFIRMED,
+    });
+
+    await handleWebhookEvent(mockPrisma, {
+      event: 'PAYMENT_CONFIRMED',
+      payment: makePaymentPayload(),
+    }, silentLogger);
+
+    expect(reactivateStudentsUpToCap).not.toHaveBeenCalled();
   });
 });

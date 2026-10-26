@@ -104,10 +104,12 @@ export class GeminiProvider extends LlmProvider {
 
     // The last chunk contains the full candidates array including any tool calls.
     let lastChunk = null;
+    let lastUsageMetadata = null;
 
     try {
       for await (const chunk of stream) {
         lastChunk = chunk;
+        if (chunk.usageMetadata) lastUsageMetadata = chunk.usageMetadata;
 
         const text = chunk.candidates?.[0]?.content?.parts
           ?.filter((p) => p.text != null)
@@ -128,7 +130,9 @@ export class GeminiProvider extends LlmProvider {
       throw normalized;
     }
 
-    yield { type: 'complete', response: this._normalizeResponse(lastChunk) };
+    const response = this._normalizeResponse(lastChunk);
+    response.usage = this._normalizeUsage(lastUsageMetadata);
+    yield { type: 'complete', response };
   }
 
   _convertTools(tools) {
@@ -195,6 +199,19 @@ export class GeminiProvider extends LlmProvider {
       text,
       toolCalls,
       rawContent,
+      usage: this._normalizeUsage(response.usageMetadata),
+    };
+  }
+
+  // Maps Gemini usageMetadata to the normalized usage shape, or null when absent.
+  _normalizeUsage(metadata) {
+    if (!metadata) return null;
+    const cached = metadata.cachedContentTokenCount ?? 0;
+    return {
+      inputTokens: (metadata.promptTokenCount ?? 0) - cached,
+      outputTokens: (metadata.candidatesTokenCount ?? 0) + (metadata.thoughtsTokenCount ?? 0),
+      cacheReadTokens: cached,
+      cacheWriteTokens: 0,
     };
   }
 

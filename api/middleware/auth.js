@@ -1,6 +1,7 @@
 import config from '../../config/index.js';
 import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 import { ForbiddenAppError, UnauthorizedAppError } from '../../src/errors/app-error.js';
+import { Roles } from '../../src/constants/roles.js';
 import { UserStatus } from '../../src/constants/user-status.js';
 import { InviteMessageCode } from '../../src/constants/trainer-invite.js';
 
@@ -84,6 +85,21 @@ export function requireRole(allowedRoles) {
     }
     
     request.user = user;
+  };
+}
+
+// Middleware requiring the admin role; rejects with the unified AppError contract (error/messageCode/message/details)
+export function requireAdmin() {
+  return async function (request) {
+    const user = request.user;
+    const userRoles = Array.isArray(user?.roles) ? user.roles : [];
+
+    if (!userRoles.includes(Roles.ADMIN)) {
+      throw new ForbiddenAppError({
+        message: 'This resource requires the admin role',
+        details: {},
+      });
+    }
   };
 }
 

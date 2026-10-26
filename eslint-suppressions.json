@@ -70,7 +70,7 @@
   },
   "api/routes/auth-route.js": {
     "local/function-header-comment": {
-      "count": 2
+      "count": 1
     },
     "local/no-comments-in-function": {
       "count": 49
@@ -275,7 +275,7 @@
       "count": 1
     },
     "local/no-comments-in-function": {
-      "count": 16
+      "count": 13
     }
   },
   "api/routes/video-route.js": {
@@ -304,7 +304,7 @@
       "count": 2
     },
     "local/no-comments-in-function": {
-      "count": 65
+      "count": 64
     }
   },
   "config/environments/default.js": {
@@ -513,11 +513,6 @@
       "count": 4
     }
   },
-  "src/helpers/rate-limit-key.js": {
-    "local/function-header-comment": {
-      "count": 1
-    }
-  },
   "src/helpers/row-locks.js": {
     "local/function-header-comment": {
       "count": 4
@@ -587,7 +582,7 @@
   },
   "src/llm/anthropic-provider.js": {
     "local/function-header-comment": {
-      "count": 10
+      "count": 9
     },
     "local/no-comments-in-function": {
       "count": 3
@@ -662,7 +657,7 @@
       "count": 32
     },
     "local/no-comments-in-function": {
-      "count": 108
+      "count": 106
     },
     "no-restricted-imports": {
       "count": 1
