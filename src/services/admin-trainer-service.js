@@ -1,6 +1,7 @@
-import { NotFoundAppError } from '../errors/app-error.js';
+import { ConflictAppError, NotFoundAppError } from '../errors/app-error.js';
 import {
   PLAN_LIMITS,
+  PLATFORM_PLAN_ERRORS,
   PLATFORM_PLAN_TIERS,
   PLATFORM_SUBSCRIPTION_STATUSES,
   isTierUpgrade,
@@ -129,6 +130,18 @@ async function buildChangeResult(prisma, { trainerId, previousTier, tier, subscr
   };
 }
 
+// Rejects BETA for trainers that still pay through Asaas, which would keep billing them.
+function assertBetaAllowed(tier, subscription) {
+  if (tier !== PLATFORM_PLAN_TIERS.BETA || !subscription?.asaasSubscriptionId) return;
+  const { code, messageCode } = PLATFORM_PLAN_ERRORS.BETA_WITH_PAID_SUBSCRIPTION;
+  throw new ConflictAppError({
+    error: code,
+    messageCode,
+    message: 'Cannot set BETA on a trainer with an active paid subscription.',
+    details: {},
+  });
+}
+
 // Admin override of a trainer's plan tier (DB only, no billing provider call).
 export async function setTrainerTier(prisma, { trainerId, tier }) {
   const trainer = await prisma.trainer.findUnique({
@@ -149,6 +162,8 @@ export async function setTrainerTier(prisma, { trainerId, tier }) {
       changed: false,
     });
   }
+
+  assertBetaAllowed(tier, currentSubscription);
 
   const subscription = await upsertTier(prisma, trainerId, tier);
   await applyCapSideEffects(prisma, trainerId, previousTier, tier);

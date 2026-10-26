@@ -15,7 +15,7 @@ import { prisma } from '../../src/db.js';
  *
  * @param {string} trainerId - Trainer.id (NOT User.id) — the value returned as
  *   `trainerId` by the `createTrainerWithToken()` helpers used across E2E files.
- * @param {'FREE'|'PRO'|'PLATINUM'|'DIAMOND'} [tier='DIAMOND']
+ * @param {'FREE'|'PRO'|'PLATINUM'|'DIAMOND'|'BETA'} [tier='DIAMOND']
  * @returns {Promise<object>} the upserted PlatformSubscription row
  */
 export async function provisionTrainerPlan(trainerId, tier = 'DIAMOND') {

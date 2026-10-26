@@ -15,6 +15,9 @@ import {
   ASAAS_PAYMENT_STATUSES,
   PLATFORM_SUBSCRIPTION_STATUSES,
   PLATFORM_PLAN_TIERS,
+  PURCHASABLE_TIERS,
+  ASAAS_UNLINK_DATA,
+  isPurchasableTier,
   isTierUpgrade,
 } from '../constants/platform-plan.js';
 import { enforceStudentCapAfterDowngrade, reactivateStudentsUpToCap } from './platform-plan-service.js';
@@ -113,6 +116,11 @@ async function handlePaymentConfirmed(prisma, payment, logger) {
     return;
   }
 
+  if (isBetaReference(payment.externalReference)) {
+    logger.warn({ paymentId: payment.id }, '[asaas-webhook] PAYMENT_CONFIRMED — BETA reference is never billed; ignoring');
+    return;
+  }
+
   const platformSubscription = await findSubscriptionByAsaasId(prisma, payment.subscription);
   if (!platformSubscription) {
     logger.warn({ asaasSubscriptionId: payment.subscription }, '[asaas-webhook] PAYMENT_CONFIRMED — subscription not found in DB');
@@ -162,14 +170,13 @@ async function handlePaymentConfirmed(prisma, payment, logger) {
       ...(resolvedTier !== null && { tier: resolvedTier }),
       status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
       pastDueSince: null,
+      checkoutPendingSince: null,
       currentPeriodEnd,
       cancelAtPeriodEnd: false,
     },
   });
 
-  if (resolvedTier !== null && isTierUpgrade(platformSubscription.tier, resolvedTier)) {
-    await reactivateStudentsUpToCap(prisma, platformSubscription.trainerId);
-  }
+  await syncStudentsAfterTierChange(prisma, platformSubscription, resolvedTier);
 
   logger.info(
     { paymentId: payment.id, tier: resolvedTier ?? platformSubscription.tier },
@@ -207,10 +214,9 @@ async function handlePaymentOverdue(prisma, payment, logger) {
 
   await prisma.platformSubscription.update({
     where: { id: platformSubscription.id },
-    data: {
-      status: PLATFORM_SUBSCRIPTION_STATUSES.PAST_DUE,
-      pastDueSince,
-    },
+    data: isPurchasableTier(platformSubscription.tier)
+      ? { status: PLATFORM_SUBSCRIPTION_STATUSES.PAST_DUE, pastDueSince }
+      : ASAAS_UNLINK_DATA,
   });
 
   logger.info({ paymentId: payment.id }, '[asaas-webhook] PAYMENT_OVERDUE — marked PAST_DUE');
@@ -236,12 +242,25 @@ async function handleSubscriptionDeleted(prisma, subscription, logger) {
     return;
   }
 
+  if (!isPurchasableTier(platformSubscription.tier)) {
+    await prisma.platformSubscription.update({
+      where: { id: platformSubscription.id },
+      data: ASAAS_UNLINK_DATA,
+    });
+    logger.info(
+      { asaasSubscriptionId: subscription.id, trainerId: platformSubscription.trainerId },
+      '[asaas-webhook] SUBSCRIPTION_DELETED — non-purchasable tier kept, Asaas link dropped',
+    );
+    return;
+  }
+
   await prisma.platformSubscription.update({
     where: { id: platformSubscription.id },
     data: {
       tier: FREE_TIER,
       status: PLATFORM_SUBSCRIPTION_STATUSES.CANCELED,
       asaasSubscriptionId: null,
+      checkoutPendingSince: null,
     },
   });
 
@@ -254,6 +273,16 @@ async function handleSubscriptionDeleted(prisma, subscription, logger) {
 }
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
+
+// Unblocks students on an upgrade and re-applies the student cap on any other tier change.
+async function syncStudentsAfterTierChange(prisma, platformSubscription, resolvedTier) {
+  if (resolvedTier === null || resolvedTier === platformSubscription.tier) return;
+  if (isTierUpgrade(platformSubscription.tier, resolvedTier)) {
+    await reactivateStudentsUpToCap(prisma, platformSubscription.trainerId);
+    return;
+  }
+  await enforceStudentCapAfterDowngrade(prisma, platformSubscription.trainerId);
+}
 
 const VALID_BILLING_TYPES = new Set(['PIX', 'CREDIT_CARD', 'BOLETO']);
 
@@ -278,6 +307,11 @@ async function findSubscriptionByAsaasId(prisma, asaasSubscriptionId) {
   });
 }
 
+// Whether the payment reference targets the invite-only BETA tier.
+function isBetaReference(externalReference) {
+  return parseTierFromExternalReference(externalReference) === PLATFORM_PLAN_TIERS.BETA;
+}
+
 /**
  * Parses the intended tier from the payment's externalReference.
  * Returns the tier string on success, or null if externalReference is
@@ -286,14 +320,14 @@ async function findSubscriptionByAsaasId(prisma, asaasSubscriptionId) {
  */
 function resolveTierFromPayment(payment, platformSubscription) {
   const refTier = parseTierFromExternalReference(payment.externalReference);
-  if (refTier && PLATFORM_PLAN_TIERS[refTier] && refTier !== FREE_TIER) {
+  if (PURCHASABLE_TIERS.includes(refTier)) {
     return refTier;
   }
   // externalReference is missing or unparseable — fall back to the existing
   // DB tier only when it is already a paid tier (safe: we know from previous
   // payment/checkout what tier was set). If the current tier is FREE we cannot
   // verify what was purchased, so return null to block any upgrade.
-  if (platformSubscription.tier !== FREE_TIER) {
+  if (PURCHASABLE_TIERS.includes(platformSubscription.tier)) {
     return platformSubscription.tier;
   }
   return null;

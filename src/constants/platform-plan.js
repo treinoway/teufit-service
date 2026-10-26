@@ -3,6 +3,7 @@ export const PLATFORM_PLAN_TIERS = Object.freeze({
   PRO: 'PRO',
   PLATINUM: 'PLATINUM',
   DIAMOND: 'DIAMOND',
+  BETA: 'BETA',
 });
 
 export const PLATFORM_PLAN_TIER_ORDER = Object.freeze([
@@ -10,12 +11,41 @@ export const PLATFORM_PLAN_TIER_ORDER = Object.freeze([
   PLATFORM_PLAN_TIERS.PRO,
   PLATFORM_PLAN_TIERS.PLATINUM,
   PLATFORM_PLAN_TIERS.DIAMOND,
+  PLATFORM_PLAN_TIERS.BETA,
 ]);
+
+// Tiers a trainer can buy through Asaas checkout (BETA is granted by invite or admin only).
+export const PURCHASABLE_TIERS = Object.freeze([
+  PLATFORM_PLAN_TIERS.PRO,
+  PLATFORM_PLAN_TIERS.PLATINUM,
+  PLATFORM_PLAN_TIERS.DIAMOND,
+]);
+
+// Whether the tier can be bought through Asaas checkout.
+export function isPurchasableTier(tier) {
+  return PURCHASABLE_TIERS.includes(tier);
+}
+
+// Row data that detaches a subscription from Asaas while keeping its tier (invite-granted tiers are never billed).
+export const ASAAS_UNLINK_DATA = Object.freeze({
+  asaasSubscriptionId: null,
+  checkoutPendingSince: null,
+  pastDueSince: null,
+  status: 'ACTIVE',
+});
 
 // Whether `nextTier` ranks above `currentTier` in the plan ladder.
 export function isTierUpgrade(currentTier, nextTier) {
   return PLATFORM_PLAN_TIER_ORDER.indexOf(nextTier) > PLATFORM_PLAN_TIER_ORDER.indexOf(currentTier);
 }
+
+const DIAMOND_LIMITS = Object.freeze({
+  studentCap: Infinity,
+  aiActionsPerStudent: Infinity,
+  aiActionsTrainerCap: 1000,
+  branding: true,
+  championships: true,
+});
 
 export const PLAN_LIMITS = Object.freeze({
   FREE: {
@@ -39,13 +69,8 @@ export const PLAN_LIMITS = Object.freeze({
     branding: true,
     championships: true,
   },
-  DIAMOND: {
-    studentCap: Infinity,
-    aiActionsPerStudent: Infinity,
-    aiActionsTrainerCap: 1000,
-    branding: true,
-    championships: true,
-  },
+  DIAMOND: DIAMOND_LIMITS,
+  BETA: { ...DIAMOND_LIMITS },
 });
 
 export const PLATFORM_PLAN_ERRORS = Object.freeze({
@@ -78,6 +103,16 @@ export const PLATFORM_PLAN_ERRORS = Object.freeze({
     code: 'STUDENT_BLOCKED_ON_PLAN',
     messageCode: 'platformPlan.studentBlockedOnPlan',
     status: 403,
+  },
+  NO_PAID_SUBSCRIPTION: {
+    code: 'PLATFORM_PLAN_NO_PAID_SUBSCRIPTION',
+    messageCode: 'resource.conflict',
+    status: 409,
+  },
+  BETA_WITH_PAID_SUBSCRIPTION: {
+    code: 'PLATFORM_PLAN_BETA_WITH_PAID_SUBSCRIPTION',
+    messageCode: 'resource.conflict',
+    status: 409,
   },
 });
 

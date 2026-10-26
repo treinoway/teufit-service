@@ -4,6 +4,8 @@ import {
   PLATFORM_PLAN_ERRORS,
   PAST_DUE_GRACE_DAYS,
   PLATFORM_SUBSCRIPTION_STATUSES,
+  ASAAS_UNLINK_DATA,
+  isPurchasableTier,
   getBillingMonth,
 } from '../constants/platform-plan.js';
 
@@ -22,6 +24,42 @@ function throwPlanError(errorDef, details) {
       .join(' '),
     details,
   });
+}
+
+// Detaches an invite-granted tier from the unpaid Asaas link; the tier is kept.
+async function detachUnbilledTier(prisma, trainerId, subscription) {
+  await prisma.platformSubscription.update({ where: { trainerId }, data: ASAAS_UNLINK_DATA });
+  return {
+    tier: subscription.tier,
+    status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+    limits: PLAN_LIMITS[subscription.tier] ?? FREE_LIMITS,
+    subscription: { ...subscription, ...ASAAS_UNLINK_DATA },
+  };
+}
+
+// Downgrades a paid tier to FREE once the past-due grace period has run out.
+async function downgradeToFree(prisma, trainerId, subscription) {
+  await prisma.platformSubscription.update({
+    where: { trainerId },
+    data: {
+      tier: FREE_TIER,
+      status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+      asaasSubscriptionId: null,
+    },
+  });
+  await enforceStudentCapAfterDowngrade(prisma, trainerId);
+  return {
+    tier: FREE_TIER,
+    status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
+    limits: FREE_LIMITS,
+    subscription: { ...subscription, tier: FREE_TIER, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
+  };
+}
+
+// Resolves an expired grace period: paid tiers fall to FREE, invite-granted tiers just lose the Asaas link.
+function expireGracePeriod(prisma, trainerId, subscription) {
+  if (isPurchasableTier(subscription.tier)) return downgradeToFree(prisma, trainerId, subscription);
+  return detachUnbilledTier(prisma, trainerId, subscription);
 }
 
 export async function getTrainerPlan(prisma, trainerId) {
@@ -46,21 +84,7 @@ export async function getTrainerPlan(prisma, trainerId) {
   ) {
     const daysPastDue = (Date.now() - subscription.pastDueSince.getTime()) / MS_PER_DAY;
     if (daysPastDue >= PAST_DUE_GRACE_DAYS) {
-      await prisma.platformSubscription.update({
-        where: { trainerId },
-        data: {
-          tier: FREE_TIER,
-          status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
-          asaasSubscriptionId: null,
-        },
-      });
-      await enforceStudentCapAfterDowngrade(prisma, trainerId);
-      return {
-        tier: FREE_TIER,
-        status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
-        limits: FREE_LIMITS,
-        subscription: { ...subscription, tier: FREE_TIER, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
-      };
+      return expireGracePeriod(prisma, trainerId, subscription);
     }
   }
 

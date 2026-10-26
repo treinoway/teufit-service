@@ -17,6 +17,8 @@ vi.mock('../../src/db.js', () => {
         findUnique: vi.fn(),
         findFirst: vi.fn(),
       },
+      trainer: { findUnique: vi.fn() },
+      platformSubscription: { findUnique: vi.fn(), upsert: vi.fn() },
       $queryRaw: vi.fn(),
       $transaction: vi.fn(async (ops) => {
         if (Array.isArray(ops)) {
@@ -36,6 +38,10 @@ vi.mock('../../src/services/user-service.js', () => {
     setActiveProfileToTrainer: vi.fn(),
   };
 });
+
+vi.mock('../../src/services/platform-plan-service.js', () => ({
+  reactivateStudentsUpToCap: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('../../src/services/email-verification-service.js', () => ({
   markEmailVerifiedFromInboxProof: vi.fn(),
@@ -306,6 +312,9 @@ describe('redeemInvite', () => {
     vi.clearAllMocks();
     setActiveProfileToTrainer.mockResolvedValue({ userId: USER_ID, activeProfile: 'trainer' });
     markEmailVerifiedFromInboxProof.mockResolvedValue(true);
+    prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+    prisma.platformSubscription.findUnique.mockResolvedValue(null);
+    prisma.platformSubscription.upsert.mockResolvedValue({});
   });
 
   it('throws ValidationAppError when code is missing', async () => {

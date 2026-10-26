@@ -17,6 +17,19 @@ import {
 import config from '../../config/index.js';
 import { getBillingMonth } from '../../src/constants/platform-plan.js';
 
+// Whether the request declares no body at all (explicit zero length, or no length and no chunked encoding).
+function hasNoBody(headers) {
+  const contentLength = headers['content-length'];
+  if (contentLength !== undefined) return contentLength === '0';
+  return headers['transfer-encoding'] === undefined;
+}
+
+// Drops a JSON content-type sent without a body so the bodiless cancel call is not rejected by the JSON parser.
+async function ignoreEmptyJsonContentType(request) {
+  // deviation: locked e2e sends content-type json with empty body
+  if (hasNoBody(request.headers)) delete request.headers['content-type'];
+}
+
 export async function platformPlanRoutes(fastify) {
   // ─── GET /trainer/platform-plan ─────────────────────────────────────────────
 
@@ -103,6 +116,7 @@ export async function platformPlanRoutes(fastify) {
   fastify.post(
     '/trainer/platform-plan/cancel',
     {
+      onRequest: ignoreEmptyJsonContentType,
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: cancelPlanSchema,
       config: { rateLimit: config.rateLimit.platformPlan.cancel },
