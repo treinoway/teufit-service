@@ -76,18 +76,30 @@ export default {
     },
     auth: {
       waitlist: {
-        max: 3,
+        max: 20,
         timeWindow: '1 hour',
       },
+      // Per IP, loose enough for carrier-grade NAT / gym wifi; the per-account
+      // bound is loginPerEmail.
       login: {
-        max: 5,
+        max: 30,
         timeWindow: '1 minute',
+      },
+      // Keyed by the (normalized) email in the body, on top of login.
+      loginPerEmail: {
+        max: 10,
+        timeWindow: '15 minutes',
       },
       changePassword: {
         max: 5,
         timeWindow: '1 minute',
       },
       forgotPassword: {
+        max: 20,
+        timeWindow: '1 hour',
+      },
+      // Keyed by the (normalized) email in the body, on top of forgotPassword.
+      forgotPasswordPerEmail: {
         max: 3,
         timeWindow: '1 hour',
       },
@@ -143,14 +155,6 @@ export default {
       },
     },
     user: {
-      getMe: {
-        max: 30,
-        timeWindow: '1 minute',
-      },
-      updateProfile: {
-        max: 10,
-        timeWindow: '1 minute',
-      },
       becomeTrainer: {
         max: 3,
         timeWindow: '1 hour',
@@ -173,10 +177,6 @@ export default {
       },
     },
     trainer: {
-      searchStudents: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
       inviteStudent: {
         max: 20,
         timeWindow: '1 minute',
@@ -186,130 +186,10 @@ export default {
         timeWindow: '1 minute',
       },
     },
-    trainingProtocol: {
-      create: {
-        max: 20,
-        timeWindow: '1 minute',
-      },
-      list: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
-      getById: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
-      update: {
-        max: 20,
-        timeWindow: '1 minute',
-      },
-      delete: {
-        max: 10,
-        timeWindow: '1 minute',
-      },
-      importFromTemplate: {
-        max: 10,
-        timeWindow: '1 minute',
-      },
-      createWithTrainings: {
-        max: 10,
-        timeWindow: '1 minute',
-      },
-    },
-    trainingProtocolTemplate: {
-      create: {
-        max: 20,
-        timeWindow: '1 minute',
-      },
-      list: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
-      getById: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
-      update: {
-        max: 20,
-        timeWindow: '1 minute',
-      },
-      delete: {
-        max: 10,
-        timeWindow: '1 minute',
-      },
-    },
-    dietProtocol: {
-      create: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      getById: { max: 60, timeWindow: '1 minute' },
-      update: { max: 20, timeWindow: '1 minute' },
-      delete: { max: 10, timeWindow: '1 minute' },
-      importFromTemplate: { max: 10, timeWindow: '1 minute' },
-    },
-    dietProtocolTemplate: {
-      create: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      getById: { max: 60, timeWindow: '1 minute' },
-      update: { max: 20, timeWindow: '1 minute' },
-      delete: { max: 10, timeWindow: '1 minute' },
-    },
-    nutritionistPatient: {
-      link: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      unlink: { max: 10, timeWindow: '1 minute' },
-      metabolicProfile: { max: 20, timeWindow: '1 minute' },
-    },
-    food: {
-      search: { max: 60, timeWindow: '1 minute' },
-      getById: { max: 60, timeWindow: '1 minute' },
-      groups: { max: 60, timeWindow: '1 minute' },
-    },
-    dietMeal: {
-      create: { max: 30, timeWindow: '1 minute' },
-      update: { max: 30, timeWindow: '1 minute' },
-      delete: { max: 20, timeWindow: '1 minute' },
-    },
-    dietFoodItem: {
-      create: { max: 30, timeWindow: '1 minute' },
-      update: { max: 30, timeWindow: '1 minute' },
-      delete: { max: 20, timeWindow: '1 minute' },
-    },
-    subscriptionPlan: {
-      create: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      getById: { max: 60, timeWindow: '1 minute' },
-      update: { max: 20, timeWindow: '1 minute' },
-      archive: { max: 10, timeWindow: '1 minute' },
-      unarchive: { max: 10, timeWindow: '1 minute' },
-    },
-    studentSubscription: {
-      assign: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      getActive: { max: 60, timeWindow: '1 minute' },
-      getById: { max: 60, timeWindow: '1 minute' },
-      cancel: { max: 10, timeWindow: '1 minute' },
-    },
-    subscriptionPayment: {
-      create: { max: 20, timeWindow: '1 minute' },
-      list: { max: 60, timeWindow: '1 minute' },
-      update: { max: 20, timeWindow: '1 minute' },
-      markPaid: { max: 30, timeWindow: '1 minute' },
-      markPending: { max: 30, timeWindow: '1 minute' },
-      delete: { max: 10, timeWindow: '1 minute' },
-      void: { max: 10, timeWindow: '1 minute' },
-      listByStudent: { max: 60, timeWindow: '1 minute' },
-    },
     platformPlan: {
-      get: { max: 30, timeWindow: '1 minute' },
       checkout: { max: 5, timeWindow: '1 minute' },
       cancel: { max: 5, timeWindow: '1 minute' },
       change: { max: 5, timeWindow: '1 minute' },
-    },
-    trainerDashboard: {
-      get: { max: 60, timeWindow: '1 minute' },
-    },
-    trainerFinance: {
-      overview: { max: 60, timeWindow: '1 minute' },
     },
   },
 };

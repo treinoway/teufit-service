@@ -17,7 +17,6 @@ import {
   archivePlanSchema,
   unarchivePlanSchema,
 } from '../schemas/subscription-plan-route.schema.js';
-import config from '../../config/index.js';
 
 export async function subscriptionPlanRoutes(fastify) {
   fastify.post(
@@ -25,7 +24,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: createPlanSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.create },
     },
     async (request, reply) => {
       const plan = await createPlan(prisma, request.user.id, request.body);
@@ -38,7 +36,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: listPlansSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.list },
     },
     async (request, reply) => {
       const plans = await listPlans(prisma, request.user.id, {
@@ -53,7 +50,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getPlanByIdSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.getById },
     },
     async (request, reply) => {
       const plan = await getPlanById(prisma, request.user.id, request.params.id);
@@ -66,7 +62,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: updatePlanSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.update },
     },
     async (request, reply) => {
       const plan = await updatePlan(prisma, request.user.id, request.params.id, request.body);
@@ -79,7 +74,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: archivePlanSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.archive },
     },
     async (request, reply) => {
       const plan = await archivePlan(prisma, request.user.id, request.params.id);
@@ -92,7 +86,6 @@ export async function subscriptionPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: unarchivePlanSchema,
-      config: { rateLimit: config.rateLimit.subscriptionPlan.unarchive },
     },
     async (request, reply) => {
       const plan = await unarchivePlan(prisma, request.user.id, request.params.id);

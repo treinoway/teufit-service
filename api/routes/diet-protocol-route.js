@@ -3,7 +3,6 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
 import * as service from '../../src/services/diet-protocol-service.js';
 import * as schema from '../schemas/diet-protocol-route.schema.js';
-import config from '../../config/index.js';
 
 export async function dietProtocolRoutes(fastify) {
   // ========== NUTRITIONIST ROUTES ==========
@@ -12,7 +11,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.post(
     '/nutritionist/diet-protocols',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.create },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.createProtocolSchema,
     },
@@ -27,7 +25,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.post(
     '/nutritionist/diet-protocols/import-from-template',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.importFromTemplate },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.importFromTemplateSchema,
     },
@@ -42,7 +39,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.get(
     '/nutritionist/diet-protocols',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.list },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.listProtocolsSchema,
     },
@@ -56,7 +52,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.get(
     '/nutritionist/diet-protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.getById },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.getProtocolByIdSchema,
     },
@@ -70,7 +65,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.patch(
     '/nutritionist/diet-protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.update },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.updateProtocolSchema,
     },
@@ -84,7 +78,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.delete(
     '/nutritionist/diet-protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.delete },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.deleteProtocolSchema,
     },
@@ -100,7 +93,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.get(
     '/my/diet-protocols',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.list },
       preHandler: [authenticate],
       schema: schema.getMyProtocolsSchema,
     },
@@ -114,7 +106,6 @@ export async function dietProtocolRoutes(fastify) {
   fastify.get(
     '/my/diet-protocols/:id',
     {
-      config: { rateLimit: config.rateLimit.dietProtocol.getById },
       preHandler: [authenticate],
       schema: schema.getMyProtocolByIdSchema,
     },

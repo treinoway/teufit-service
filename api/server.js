@@ -8,7 +8,7 @@ import fastifyCors from '@fastify/cors';
 import fastifySession from '@fastify/session';
 import fastifyJwt from '@fastify/jwt';
 import fastifyMultipart from '@fastify/multipart';
-import fastifyRateLimit from '@fastify/rate-limit';
+import { registerRateLimit } from '../src/helpers/register-rate-limit.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
@@ -313,7 +313,7 @@ export async function buildServer(options = {}) {
 
   // Register Rate Limiting (disabled in test environment)
   if (process.env.NODE_ENV !== 'test') {
-    await fastify.register(fastifyRateLimit, config.rateLimit.global);
+    await registerRateLimit(fastify, config.rateLimit);
   }
   
   // Register Multipart support for file uploads
@@ -344,18 +344,10 @@ export async function buildServer(options = {}) {
     return { message: "i'm alive" };
   });
 
-  // Register protected routes with authentication and per-user rate limiting
+  // Register protected routes with authentication (the root rate limiter then keys by user)
   await fastify.register(async (fastify) => {
     // Add authentication hook to all routes in this context
     fastify.addHook('onRequest', authenticate);
-
-    // Configure per-user rate limit for this context (disabled in test environment)
-    if (process.env.NODE_ENV !== 'test') {
-      await fastify.register(fastifyRateLimit, {
-        ...config.rateLimit.globalPerUser,
-        keyGenerator: (request) => `user:${request.user.id}`,
-      });
-    }
 
     // Register all protected routes
     await fastify.register(trainerRoutes);

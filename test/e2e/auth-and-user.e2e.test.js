@@ -4,6 +4,7 @@ import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import config from '../../config/index.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -244,7 +245,7 @@ e2eDescribe('e2e: auth and user flows', () => {
       expect([400, 429]).toContain(response.statusCode);
     });
 
-    it('respects rate limiting after 3 requests', async () => {
+    it('respects the per-IP waitlist rate limit', async () => {
       // Use a new app instance with rate limiting enabled
       const originalNodeEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'development'; // Enable rate limiting
@@ -254,8 +255,8 @@ e2eDescribe('e2e: auth and user flows', () => {
       try {
         const baseEmail = `rate-limit-${Date.now()}`;
 
-        // Make 3 successful requests (max allowed per hour)
-        for (let i = 0; i < 3; i++) {
+        // Exhaust the configured per-window maximum
+        for (let i = 0; i < config.rateLimit.auth.waitlist.max; i++) {
           const response = await freshApp.inject({
             method: 'POST',
             url: '/auth/signup/waitlist',
@@ -264,11 +265,11 @@ e2eDescribe('e2e: auth and user flows', () => {
           expect(response.statusCode).toBe(201);
         }
 
-        // 4th request should be rate limited
+        // the next request should be rate limited
         const response = await freshApp.inject({
           method: 'POST',
           url: '/auth/signup/waitlist',
-          payload: { email: `${baseEmail}-4@example.com` },
+          payload: { email: `${baseEmail}-over-limit@example.com` },
         });
 
         expect(response.statusCode).toBe(429);
