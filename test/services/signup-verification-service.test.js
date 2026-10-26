@@ -427,7 +427,7 @@ describe('signup-verification-service', () => {
         await verify();
 
         const { data } = prisma.user.create.mock.calls[0][0];
-        expect(data).toMatchObject({ email: EMAIL, roles: [], status: 'pending' });
+        expect(data).toMatchObject({ email: EMAIL, roles: [], status: 'active' });
         expect(verifyPassword(PASSWORD, data.passwordHash)).toBe(true);
       });
 

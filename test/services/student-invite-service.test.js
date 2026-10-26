@@ -80,7 +80,7 @@ const ISSUED = {
 
 function makePrisma() {
   const prisma = {
-    user: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     account: { findFirst: vi.fn() },
     studentInvite: {
       create: vi.fn(),
@@ -120,6 +120,13 @@ function capExceededError() {
     messageCode: PLATFORM_PLAN_ERRORS.STUDENT_CAP_EXCEEDED.messageCode,
     message: 'cap',
   });
+}
+
+const ACTIVE_USER_STATUS = 'active';
+
+// Collects the argument objects of every user update/updateMany call made on the mock.
+function userStatusWrites(prisma) {
+  return [...prisma.user.update.mock.calls, ...prisma.user.updateMany.mock.calls].map(([args]) => args);
 }
 
 describe('student-invite-service', () => {
@@ -1167,6 +1174,47 @@ describe('student-invite-service', () => {
       });
       expect(maybeMarkFirstStudentLinked).toHaveBeenCalledWith({ trainerId: TRAINER_ID, tx: prisma });
       expect(markBriefingDirty).toHaveBeenCalledWith(prisma, TRAINER_ID);
+    });
+
+    it('should mark the student user active when the invite is accepted', async () => {
+      prisma.studentInvite.findMany.mockResolvedValue([pending()]);
+      prisma.user.update.mockResolvedValue({});
+      prisma.user.updateMany.mockResolvedValue({ count: 1 });
+
+      await acceptPendingInvitesForUser(prisma, user);
+
+      expect(userStatusWrites(prisma)).toEqual([
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'student-1' }),
+          data: { status: ACTIVE_USER_STATUS },
+        }),
+      ]);
+    });
+
+    it('should not mark the user active when the invite was no longer pending (claim lost)', async () => {
+      prisma.studentInvite.findMany.mockResolvedValue([pending()]);
+      prisma.studentInvite.updateMany.mockResolvedValue({ count: 0 });
+
+      await acceptPendingInvitesForUser(prisma, user);
+
+      expect(userStatusWrites(prisma)).toEqual([]);
+    });
+
+    it('should still mark the user active when the link is created inactive over the plan cap', async () => {
+      prisma.studentInvite.findMany.mockResolvedValue([pending()]);
+      prisma.user.update.mockResolvedValue({});
+      prisma.user.updateMany.mockResolvedValue({ count: 1 });
+      assertStudentCap.mockRejectedValue(capExceededError());
+
+      await acceptPendingInvitesForUser(prisma, user);
+
+      expect(prisma.trainerStudent.createMany).toHaveBeenCalledWith({
+        data: [{ trainerId: TRAINER_ID, studentId: 'student-1', activeOnPlan: false }],
+        skipDuplicates: true,
+      });
+      expect(userStatusWrites(prisma)).toEqual([
+        expect.objectContaining({ data: { status: ACTIVE_USER_STATUS } }),
+      ]);
     });
 
     it('should accept invites from multiple trainers independently', async () => {

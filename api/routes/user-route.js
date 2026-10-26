@@ -7,6 +7,7 @@ import { deleteOwnAccount } from '../../src/services/account-deletion-service.js
 import { issueAccessToken, issueRefreshToken } from '../../src/services/token-service.js';
 import { getMeSchema, becomeTrainerSchema, becomeNutritionistSchema, updateProfileSchema, uploadAvatarSchema, deleteMeSchema } from '../schemas/user-route.schema.js';
 import config from '../../config/index.js';
+import { POSTAL_CODE_ERROR_CODES } from '../../src/constants/address.js';
 
 export async function userRoutes(fastify) {
 
@@ -159,6 +160,9 @@ export async function userRoutes(fastify) {
         }
         if (error?.code === 'USER_NOT_FOUND') {
           return reply.status(404).send({ error: 'User not found' });
+        }
+        if (POSTAL_CODE_ERROR_CODES.has(error?.code)) {
+          throw error;
         }
 
         return reply.status(500).send({ error: 'Internal server error' });

@@ -25,6 +25,7 @@ import {
 import { todayInBusinessTz } from '../helpers/date-helpers.js';
 import { cancelUpcomingPayments } from './subscription-cycle-service.js';
 import { buildAssignmentLockKey } from '../helpers/subscription-helpers.js';
+import { UserStatus } from '../constants/user-status.js';
 import { StudentBlocker } from '../constants/student-blocker.js';
 
 function buildUserUpdateData(trainer) {
@@ -141,7 +142,7 @@ export async function patch({ userId, trainer, address, socials }) {
 
     const userRow = await tx.user.update({
       where: { id: userId },
-      data: { status: 'active', ...userUpdateData },
+      data: { status: UserStatus.ACTIVE, ...userUpdateData },
     });
 
     await maybeMarkProfileComplete({ userId, tx });
@@ -222,9 +223,10 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
 
   await assertStudentCap(prisma, trainerId);
 
-  await prisma.trainerStudent.create({
-    data: { trainerId, studentId: student.id },
-  });
+  await prisma.$transaction([
+    prisma.trainerStudent.create({ data: { trainerId, studentId: student.id } }),
+    prisma.user.update({ where: { id: student.id }, data: { status: UserStatus.ACTIVE } }),
+  ]);
 
   await maybeMarkFirstStudentLinked({ trainerId });
 

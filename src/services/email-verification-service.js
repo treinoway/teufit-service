@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { UserStatus } from '../constants/user-status.js';
 import emailHandler from '../config/email-handler.js';
 import { AppError, ConflictAppError, NotFoundAppError } from '../errors/app-error.js';
 import {
@@ -285,9 +286,15 @@ export async function verifyEmailCode(prisma, { userId, code }) {
     where: { userId, provider: EMAIL_PROVIDER, verifiedAt: null },
     data: { verifiedAt: now },
   });
+  await markUserActive(prisma, user.id);
 
   const linkedTrainers = await acceptPendingInvitesForUser(prisma, user);
   return { verified: true, linkedTrainers };
+}
+
+// Marks the user active once their email ownership is proven.
+async function markUserActive(prisma, userId) {
+  await prisma.user.update({ where: { id: userId }, data: { status: UserStatus.ACTIVE } });
 }
 
 async function assertResendCooldownElapsed(prisma, userId) {
@@ -375,7 +382,10 @@ export async function markEmailVerifiedFromInboxProof(prisma, user) {
       }
     }
 
-    if (becameVerified) await acceptPendingInvitesForUser(prisma, user);
+    if (becameVerified) {
+      await acceptPendingInvitesForUser(prisma, user);
+      await markUserActive(prisma, user.id);
+    }
     return becameVerified;
   } catch (error) {
     console.error('Failed to mark email verified from inbox proof', error);

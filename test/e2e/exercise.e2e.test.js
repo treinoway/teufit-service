@@ -227,6 +227,52 @@ e2eDescribe('e2e: exercises', () => {
         expect(body).toHaveProperty('isPublic', false);
       });
 
+      it('creates template with gifUrl and returns it', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Pull-Up', type: 'strength', gifUrl: 'https://example.com/pullup.gif' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('gifUrl', 'https://example.com/pullup.gif');
+      });
+
+      it('returns gifUrl null when template is created without gifUrl (old clients)', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Pull-Up', type: 'strength' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('gifUrl', null);
+      });
+
+      it('returns 400 VALIDATION_ERROR when gifUrl is not an http(s) URL', async () => {
+        const { accessToken } = await createTrainerWithToken();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Pull-Up', type: 'strength', gifUrl: 'javascript:alert(1)' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = response.json();
+        expect(body).toHaveProperty('error', 'VALIDATION_ERROR');
+        expect(body).toHaveProperty('messageCode', 'validation.failed');
+        expect(body).toHaveProperty('message');
+        expect(body).toHaveProperty('details');
+      });
+
       it('returns 400 for invalid exercise type', async () => {
         const { accessToken } = await createTrainerWithToken();
 
@@ -410,6 +456,170 @@ e2eDescribe('e2e: exercises', () => {
         expect(response.statusCode).toBe(400);
         const body = response.json();
         expect(body).toHaveProperty('messageCode', 'exercise.intensityRequiresCardio');
+      });
+    });
+
+    describe('gifUrl on training exercises', () => {
+      async function createTrainingForTrainer() {
+        const { accessToken: trainerToken } = await createTrainerWithToken();
+        const { userId: assigneeId, accessToken: assigneeToken } = await createAssigneeWithToken();
+        const { trainingId } = await createProtocolAndTraining(trainerToken, assigneeId);
+        return { trainerToken, assigneeToken, trainingId };
+      }
+
+      it('creates exercise with gifUrl and returns it', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', gifUrl: 'https://example.com/bench.gif' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('gifUrl', 'https://example.com/bench.gif');
+      });
+
+      it('stores gifUrl as null when an old client omits it', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        const body = response.json();
+        expect(body).toHaveProperty('gifUrl', null);
+        const stored = await prisma.exercise.findUnique({ where: { id: body.id } });
+        expect(stored.gifUrl).toBeNull();
+      });
+
+      it('returns 400 VALIDATION_ERROR when gifUrl is not an http(s) URL', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength', gifUrl: 'not-a-url' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toHaveProperty('error', 'VALIDATION_ERROR');
+      });
+
+      it('updates gifUrl via PATCH and clears it with null', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength' },
+        });
+        const { id: exerciseId } = createResponse.json();
+
+        const setResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { gifUrl: 'https://example.com/bench.gif' },
+        });
+        const clearResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { gifUrl: null },
+        });
+
+        expect(setResponse.statusCode).toBe(200);
+        expect(setResponse.json()).toHaveProperty('gifUrl', 'https://example.com/bench.gif');
+        expect(clearResponse.statusCode).toBe(200);
+        expect(clearResponse.json()).toHaveProperty('gifUrl', null);
+      });
+
+      it('creates exercise from template inheriting the template gifUrl', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+        const templateResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Template Squat', type: 'strength', gifUrl: 'https://example.com/squat.gif' },
+        });
+        const { id: templateId } = templateResponse.json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercises/from-template',
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { trainingId, templateId },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('gifUrl', 'https://example.com/squat.gif');
+      });
+
+      it('creates a substitute exercise with gifUrl', async () => {
+        const { trainerToken, trainingId } = await createTrainingForTrainer();
+        const principalResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Bench Press', type: 'strength' },
+        });
+        const { id: principalId } = principalResponse.json();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/trainer/exercises/${principalId}/substitutes`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Dumbbell Press', type: 'strength', gifUrl: 'https://example.com/db.gif' },
+        });
+
+        expect(response.statusCode).toBe(201);
+        expect(response.json()).toHaveProperty('gifUrl', 'https://example.com/db.gif');
+      });
+
+      it('returns gifUrl on GET /my/trainings/:trainingId/exercises', async () => {
+        const { trainerToken, assigneeToken, trainingId } = await createTrainingForTrainer();
+        await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Squat', type: 'strength', gifUrl: 'https://example.com/squat.gif' },
+        });
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/my/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${assigneeToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()[0]).toHaveProperty('gifUrl', 'https://example.com/squat.gif');
+      });
+
+      it('returns gifUrl on GET /my/exercises/:id', async () => {
+        const { trainerToken, assigneeToken, trainingId } = await createTrainingForTrainer();
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: `/trainer/trainings/${trainingId}/exercises`,
+          headers: { authorization: `Bearer ${trainerToken}` },
+          payload: { name: 'Squat', type: 'strength', gifUrl: 'https://example.com/squat.gif' },
+        });
+        const { id: exerciseId } = createResponse.json();
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/my/exercises/${exerciseId}`,
+          headers: { authorization: `Bearer ${assigneeToken}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toHaveProperty('gifUrl', 'https://example.com/squat.gif');
       });
     });
 
@@ -931,6 +1141,71 @@ e2eDescribe('e2e: exercises', () => {
 
         expect(updateResponse.statusCode).toBe(200);
         expect(updateResponse.json()).toHaveProperty('videoUrl', 'https://example.com/overhead.mp4');
+      });
+
+      it('updates gifUrl on an exercise template', async () => {
+        const { accessToken } = await createTrainerWithToken();
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Overhead Press', type: 'strength' },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { gifUrl: 'https://example.com/overhead.gif' },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('gifUrl', 'https://example.com/overhead.gif');
+      });
+
+      it('clears gifUrl on an exercise template when null is sent', async () => {
+        const { accessToken } = await createTrainerWithToken();
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Overhead Press', type: 'strength', gifUrl: 'https://example.com/overhead.gif' },
+        });
+        expect(createResponse.statusCode).toBe(201);
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { gifUrl: null },
+        });
+
+        expect(updateResponse.statusCode).toBe(200);
+        expect(updateResponse.json()).toHaveProperty('gifUrl', null);
+      });
+
+      it('returns 400 VALIDATION_ERROR when updating gifUrl to a non-http(s) string', async () => {
+        const { accessToken } = await createTrainerWithToken();
+        const createResponse = await app.inject({
+          method: 'POST',
+          url: '/trainer/exercise-templates',
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { name: 'Overhead Press', type: 'strength' },
+        });
+        const { id: templateId } = createResponse.json();
+
+        const updateResponse = await app.inject({
+          method: 'PATCH',
+          url: `/trainer/exercise-templates/${templateId}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { gifUrl: 'ftp://example.com/overhead.gif' },
+        });
+
+        expect(updateResponse.statusCode).toBe(400);
+        expect(updateResponse.json()).toHaveProperty('error', 'VALIDATION_ERROR');
       });
 
       it('strips prescription fields silently on PATCH /trainer/exercise-templates/:id — response contains no prescription', async () => {

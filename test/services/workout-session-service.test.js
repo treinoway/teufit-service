@@ -322,6 +322,24 @@ describe('workout-session-service', () => {
 
       expect(result).toEqual(session);
     });
+
+    it('selects gifUrl on the exercise of each exercise log', async () => {
+      prisma.workoutSession.findUnique.mockResolvedValue(makeSession());
+
+      await getSession('user-1', 'session-1');
+
+      expect(prisma.workoutSession.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            exerciseLogs: expect.objectContaining({
+              include: expect.objectContaining({
+                exercise: { select: expect.objectContaining({ gifUrl: true }) },
+              }),
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   // ── updateSession ─────────────────────────────────────────────────────────

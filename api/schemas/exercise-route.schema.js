@@ -1,6 +1,7 @@
 import { exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
+import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
 
 const exerciseBaseProperties = {
   id: { type: 'string', format: 'uuid' },
@@ -9,6 +10,7 @@ const exerciseBaseProperties = {
   name: { type: 'string' },
   ...i18nField('type', 'exerciseType'),
   videoUrl: { type: 'string', nullable: true },
+  gifUrl: gifUrlResponseSchema,
   order: { type: 'integer' },
   supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
   supersetOrder: { type: 'integer' },
@@ -56,6 +58,7 @@ const exerciseBodyProperties = {
   type: { type: 'string', enum: exerciseTypeValues },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
   videoUrl: { type: 'string', nullable: true },
+  gifUrl: gifUrlRequestSchema,
   order: { type: 'integer', minimum: 0 },
   supersetGroupId: { type: 'string', format: 'uuid' },
   supersetOrder: { type: 'integer', minimum: 0 },
@@ -174,6 +177,7 @@ const exerciseUpdateBodyProperties = {
   type: { type: 'string', enum: exerciseTypeValues },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
   videoUrl: { type: 'string' },
+  gifUrl: gifUrlRequestSchema,
   order: { type: 'integer', minimum: 0 },
   sets: { type: ['integer', 'null'], minimum: 1 },
   repetitions: {
@@ -249,6 +253,7 @@ const substituteBodyProperties = {
   type: exerciseBodyProperties.type,
   prescriptionMode: exerciseBodyProperties.prescriptionMode,
   videoUrl: exerciseBodyProperties.videoUrl,
+  gifUrl: exerciseBodyProperties.gifUrl,
   sets: exerciseBodyProperties.sets,
   repetitions: exerciseBodyProperties.repetitions,
   duration: exerciseBodyProperties.duration,

@@ -1,6 +1,7 @@
 import { trainingStatusValues, genderOrdinationValues, trainingLevelValues, protocolTypeValues, exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues, trainingCategoryValues, bodySegmentValues, weekDayValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
+import { gifUrlRequestSchema } from './gif-url.schema.js';
 
 const statusEnum = trainingStatusValues;
 const genderOrdinationEnum = genderOrdinationValues;
@@ -398,6 +399,7 @@ const exerciseInputSchema = {
     name: { type: 'string', minLength: 1 },
     type: { type: 'string', enum: exerciseTypeValues },
     videoUrl: { type: 'string' },
+    gifUrl: gifUrlRequestSchema,
     order: { type: 'integer', minimum: 0 },
     sets: { type: 'integer', minimum: 1, nullable: true },
     repetitions: {

@@ -101,6 +101,7 @@ const exerciseSelectWithSubstitutes = {
     suggestedLoad: true,
     restInterval: true,
     videoUrl: true,
+    gifUrl: true,
     notes: true,
     intensity: true,
     substitutes: {

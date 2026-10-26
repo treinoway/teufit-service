@@ -1,6 +1,7 @@
 import { trainingCategoryValues, bodySegmentValues, weekDayValues, prescriptionModeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
+import { gifUrlResponseSchema } from './gif-url.schema.js';
 
 export const trainingResponseSchema = {
   type: 'object',
@@ -164,6 +165,7 @@ export const importedExerciseResponseSchema = {
     name: { type: 'string' },
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
+    gifUrl: gifUrlResponseSchema,
     order: { type: 'integer' },
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },

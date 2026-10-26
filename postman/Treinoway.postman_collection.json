@@ -1798,7 +1798,7 @@
                 "profile"
               ]
             },
-            "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional."
+            "description": "Update user profile information including personal details, address, socials, and preferences. All fields are optional. When address.postalCode is provided it is looked up (ViaCEP): unknown CEP returns 404 (legacy.POSTAL_CODE_NOT_FOUND), lookup provider failure returns 502 (legacy.POSTAL_CODE_API_ERROR)."
           },
           "response": [
             {
@@ -1832,6 +1832,70 @@
                 }
               ],
               "body": "{\n  \"id\": \"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\n  \"email\": \"user@example.com\",\n  \"roles\": [\"student\"],\n  \"rolesLabel\": [\"Aluno\"],\n  \"status\": \"active\",\n  \"statusLabel\": \"Ativo\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"gender\": null,\n  \"genderLabel\": null,\n  \"birthDate\": \"1990-01-15\",\n  \"avatarUrl\": null,\n  \"hasActiveTrainer\": false,\n  \"emailVerified\": true,\n  \"betaAccess\": false,\n  \"address\": null,\n  \"socials\": null,\n  \"preferences\": null\n}"
+            },
+            {
+              "name": "Update Profile - 404 Not Found",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/profile",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "profile"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"POSTAL_CODE_NOT_FOUND\",\n  \"messageCode\": \"legacy.POSTAL_CODE_NOT_FOUND\",\n  \"message\": \"CEP não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Update Profile - 502 Bad Gateway",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/profile",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "profile"
+                  ]
+                }
+              },
+              "status": "Bad Gateway",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"POSTAL_CODE_API_ERROR\",\n  \"messageCode\": \"legacy.POSTAL_CODE_API_ERROR\",\n  \"message\": \"Não foi possível consultar o CEP agora. Tente novamente em instantes.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -3803,7 +3867,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
           },
           "response": []
         },
@@ -3940,7 +4004,7 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
           },
           "response": []
         },
@@ -4189,7 +4253,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"isPublic\": false\n}",
+              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"isPublic\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4206,7 +4270,7 @@
                 "exercise-templates"
               ]
             },
-            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
+            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
           },
           "response": []
         },
@@ -4312,7 +4376,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"isPublic\": true\n}"
+              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"isPublic\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -4332,7 +4396,7 @@
                 }
               ]
             },
-            "description": "Update exercise template identity fields (name, type, videoUrl, isPublic). All fields are optional. Only accessible by owner."
+            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner."
           },
           "response": []
         },

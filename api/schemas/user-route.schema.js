@@ -330,6 +330,7 @@ export const updateProfileSchema = {
     401: errorResponseSchema,
     404: errorResponseSchema,
     429: errorResponseSchema,
+    502: errorResponseSchema,
     500: errorResponseSchema,
   },
 };

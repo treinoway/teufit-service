@@ -201,7 +201,7 @@ describe('e2e: address flows', () => {
 			const body = response.json();
 			expect(body).toMatchObject({
 				error: 'POSTAL_CODE_NOT_FOUND',
-				message: 'Postal code not found',
+				message: 'CEP não encontrado.',
 			});
 		});
 

@@ -4,6 +4,7 @@
 
 import { prisma } from '../../src/db.js';
 import { roleValues } from '../constants/roles.js';
+import { UserStatus } from '../constants/user-status.js';
 import { findUserIdByEmailCaseInsensitive } from './email-lookup.js';
 import { acceptPendingInvitesForUser } from '../services/student-invite-service.js';
 import { AppError } from '../errors/app-error.js';
@@ -44,6 +45,14 @@ export function assertOAuthEmailVerified({ provider, email, emailVerified }) {
   if (!email) return;
   logSecurityEvent(SecurityEvent.UNVERIFIED_EMAIL_REJECTED, { provider });
   throwOAuthEmailNotVerified();
+}
+
+// Marks the user active (email proven by the provider) and syncs the caller's row so tokens carry the new status.
+async function activateUser(user) {
+  if (user.status === UserStatus.ACTIVE) return user;
+  await prisma.user.update({ where: { id: user.id }, data: { status: UserStatus.ACTIVE } });
+  if ('status' in user) user.status = UserStatus.ACTIVE;
+  return user;
 }
 
 /**
@@ -205,6 +214,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
   // True when this call is the one that proves the user owns the email (new
   // verified account, or an existing account that just became verified).
   let becameVerified = false;
+  let shouldActivate = false;
 
   if (account) {
     // User already exists, update tokens
@@ -227,6 +237,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
       },
     });
     becameVerified = Boolean(verifiedAt && !account.verifiedAt);
+    shouldActivate = becameVerified;
   } else {
     if (!normalizedEmail) {
       // No linked account and no email to prove: same rejection as unverified.
@@ -245,7 +256,9 @@ export async function findOrCreateUserFromOAuth(providerData) {
     }
 
     if (user) {
-      await neutralizeUnverifiedPasswordCredential(user, provider);
+      const neutralized = await neutralizeUnverifiedPasswordCredential(user, provider);
+      // why: a password kept after neutralization belongs to an already verified email account, so the user is already active.
+      shouldActivate = Boolean(verifiedAt) && (neutralized || !user.passwordHash);
     } else {
       // Create new user with personal data populated from OAuth profile
       const rawName = typeof name === 'string' ? name.trim() : '';
@@ -261,7 +274,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
           lastName: inferredLast,
           avatarUrl: avatar,
           roles: rolesArray,
-          status: 'pending',
+          status: verifiedAt ? UserStatus.ACTIVE : UserStatus.PENDING,
         },
       });
     }
@@ -290,7 +303,7 @@ export async function findOrCreateUserFromOAuth(providerData) {
     await acceptPendingInvitesForUser(prisma, user);
   }
 
-  return user;
+  return shouldActivate ? activateUser(user) : user;
 }
 
 /**
