@@ -94,6 +94,12 @@ export function extractTokenCounts(usage) {
   if (!usage || typeof usage !== 'object') {
     return { inputTokens: null, outputTokens: null }
   }
+  if ('inputTokens' in usage || 'outputTokens' in usage) {
+    return {
+      inputTokens: usage.inputTokens ?? null,
+      outputTokens: usage.outputTokens ?? null,
+    }
+  }
   // Anthropic shape
   if ('input_tokens' in usage || 'output_tokens' in usage) {
     return {

@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { AppError } from "../errors/app-error.js";
 import { AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY, AI_MODELS, LLM_PROVIDERS, AI_INTERACTION_LOG } from "../constants/ai.js";
+import { createTurnUsageMeter } from "./ai-token-usage-service.js";
 import { writeInteractionLog } from "./ai-interaction-log-service.js";
 import * as studentDashboardService from "./student-dashboard-service.js";
 import { assertCanUseAi, recordAiAction } from "./platform-plan-service.js";
@@ -39,6 +40,11 @@ function resolveActiveModelId() {
     return process.env.GEMINI_MODEL || AI_MODELS.GEMINI;
   }
   return process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC;
+}
+
+// Resolves the active LLM provider name (defaults to Anthropic).
+function resolveActiveProviderName() {
+  return process.env.LLM_PROVIDER || LLM_PROVIDERS.ANTHROPIC;
 }
 
 // --- Context builder ---
@@ -2189,7 +2195,17 @@ function resolveToolStudentId(toolInput) {
 
 // --- Main agentic loop ---
 
-export async function processAiChat(userId, { message, conversationId }) {
+// Runs one chat turn and records its summed token usage, even when the turn fails.
+export async function processAiChat(userId, args) {
+  const meter = createTurnUsageMeter();
+  try {
+    return await runAiChat(userId, args, meter);
+  } finally {
+    await meter.flush(prisma, { provider: resolveActiveProviderName(), model: resolveActiveModelId() });
+  }
+}
+
+async function runAiChat(userId, { message, conversationId }, meter) {
   const turnStart = Date.now();
 
   const {
@@ -2200,6 +2216,7 @@ export async function processAiChat(userId, { message, conversationId }) {
   } = await setupConversation(userId, { message, conversationId });
 
   await assertCanUseAi(prisma, context.trainerId, null);
+  meter.setContext({ trainerId: context.trainerId, conversationId: resolvedConversationId });
 
   const provider = getLlmProvider();
   const chatParams = {
@@ -2214,7 +2231,7 @@ export async function processAiChat(userId, { message, conversationId }) {
 
   let response;
   for (let emptyAttempt = 1; emptyAttempt <= AI_RETRY.MAX_ATTEMPTS; emptyAttempt++) {
-    response = await withLlmRetry(() => provider.chat(chatParams));
+    response = meter.track(await withLlmRetry(() => provider.chat(chatParams)));
 
     const isEmpty =
       response.stopReason === "end_turn" &&
@@ -2258,7 +2275,7 @@ export async function processAiChat(userId, { message, conversationId }) {
         toolCall: null,
         responseText: blockedText,
         model: resolveActiveModelId(),
-        usage: null,
+        usage: meter.usage(),
         latencyMs: Date.now() - turnStart,
         status: AI_INTERACTION_LOG.STATUS_SUCCESS,
         errorCode: null,
@@ -2328,9 +2345,9 @@ export async function processAiChat(userId, { message, conversationId }) {
 
       let followUpResponse;
       for (let emptyAttempt = 1; emptyAttempt <= AI_RETRY.MAX_ATTEMPTS; emptyAttempt++) {
-        followUpResponse = await withLlmRetry(() =>
+        followUpResponse = meter.track(await withLlmRetry(() =>
           provider.chat({ ...chatParams, messages: followUpMessages }),
-        );
+        ));
 
         const isEmpty =
           followUpResponse.stopReason === "end_turn" &&
@@ -2374,7 +2391,7 @@ export async function processAiChat(userId, { message, conversationId }) {
       toolCall,
       responseText: finalText,
       model: resolveActiveModelId(),
-      usage: null, // provider usage not forwarded through normalized facade
+      usage: meter.usage(),
       latencyMs: Date.now() - turnStart,
       status: toolResult.success ? AI_INTERACTION_LOG.STATUS_SUCCESS : AI_INTERACTION_LOG.STATUS_ERROR,
       errorCode: toolResult.success ? null : (toolResult.error ?? null),
@@ -2407,7 +2424,7 @@ export async function processAiChat(userId, { message, conversationId }) {
     toolCall: null,
     responseText,
     model: resolveActiveModelId(),
-    usage: null,
+    usage: meter.usage(),
     latencyMs: Date.now() - turnStart,
     status: AI_INTERACTION_LOG.STATUS_SUCCESS,
     errorCode: null,
@@ -2422,9 +2439,20 @@ export async function processAiChat(userId, { message, conversationId }) {
 
 // --- Streaming agentic loop ---
 
-export async function* processAiChatStream(
+// Runs one streaming turn and records its summed token usage, even when the client aborts.
+export async function* processAiChatStream(userId, args) {
+  const meter = createTurnUsageMeter();
+  try {
+    yield* runAiChatStream(userId, args, meter);
+  } finally {
+    await meter.flush(prisma, { provider: resolveActiveProviderName(), model: resolveActiveModelId() });
+  }
+}
+
+async function* runAiChatStream(
   userId,
   { message, conversationId },
+  meter,
 ) {
   const turnStart = Date.now();
 
@@ -2436,6 +2464,8 @@ export async function* processAiChatStream(
   } = await setupConversation(userId, { message, conversationId });
 
   await assertCanUseAi(prisma, context.trainerId, null);
+
+  meter.setContext({ trainerId: context.trainerId, conversationId: resolvedConversationId });
 
   yield { event: "status", data: { message: "Analisando seu pedido..." } };
 
@@ -2464,7 +2494,7 @@ export async function* processAiChatStream(
           yield { event: "text_delta", data: { content: chunk.content } };
         }
         if (chunk.type === "complete") {
-          firstResponse = chunk.response;
+          firstResponse = meter.track(chunk.response);
         }
       }
       // Stream completed without error — check for empty response before breaking.
@@ -2545,7 +2575,7 @@ export async function* processAiChatStream(
         toolCall: null,
         responseText: blockedText,
         model: resolveActiveModelId(),
-        usage: null,
+        usage: meter.usage(),
         latencyMs: Date.now() - turnStart,
         status: AI_INTERACTION_LOG.STATUS_SUCCESS,
         errorCode: null,
@@ -2638,7 +2668,7 @@ export async function* processAiChatStream(
               yield { event: "text_delta", data: { content: chunk.content } };
             }
             if (chunk.type === "complete") {
-              followUpResponse = chunk.response;
+              followUpResponse = meter.track(chunk.response);
             }
           }
 
@@ -2721,7 +2751,7 @@ export async function* processAiChatStream(
       toolCall,
       responseText: finalText,
       model: resolveActiveModelId(),
-      usage: null, // provider usage not forwarded through normalized facade
+      usage: meter.usage(),
       latencyMs: Date.now() - turnStart,
       status: toolResult.success ? AI_INTERACTION_LOG.STATUS_SUCCESS : AI_INTERACTION_LOG.STATUS_ERROR,
       errorCode: toolResult.success ? null : (toolResult.error ?? null),
@@ -2757,7 +2787,7 @@ export async function* processAiChatStream(
     toolCall: null,
     responseText,
     model: resolveActiveModelId(),
-    usage: null,
+    usage: meter.usage(),
     latencyMs: Date.now() - turnStart,
     status: AI_INTERACTION_LOG.STATUS_SUCCESS,
     errorCode: null,

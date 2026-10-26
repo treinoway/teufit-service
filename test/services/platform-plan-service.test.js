@@ -23,6 +23,7 @@ import {
   recordAiAction,
   assertStudentActiveOnPlan,
   enforceStudentCapAfterDowngrade,
+  reactivateStudentsUpToCap,
   buildPlatformPlanForMe,
 } from '../../src/services/platform-plan-service.js';
 
@@ -673,6 +674,106 @@ describe('enforceStudentCapAfterDowngrade', () => {
     mockPrisma.trainerStudent.findMany.mockResolvedValue(tenStudents);
 
     await enforceStudentCapAfterDowngrade(mockPrisma, TRAINER_ID);
+
+    expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ─── reactivateStudentsUpToCap ─────────────────────────────────────────────────
+
+describe('reactivateStudentsUpToCap', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function stubStudentLinks({ activeIds = [], blockedIds = [] }) {
+    const toLink = (studentId, activeOnPlan, index) => ({
+      trainerId: TRAINER_ID,
+      studentId,
+      activeOnPlan,
+      createdAt: new Date(2026, 0, index + 1),
+    });
+    const active = activeIds.map((id, i) => toLink(id, true, i));
+    const blocked = blockedIds.map((id, i) => toLink(id, false, i));
+
+    mockPrisma.trainerStudent.findMany.mockImplementation(async ({ where } = {}) => {
+      if (where?.activeOnPlan === true) return active;
+      if (where?.activeOnPlan === false) return blocked;
+      return [...active, ...blocked];
+    });
+    mockPrisma.trainerStudent.count.mockImplementation(async ({ where } = {}) => {
+      if (where?.activeOnPlan === true) return active.length;
+      if (where?.activeOnPlan === false) return blocked.length;
+      return active.length + blocked.length;
+    });
+    mockPrisma.trainerStudent.updateMany.mockResolvedValue({ count: 0 });
+  }
+
+  function ids(prefix, count) {
+    return Array.from({ length: count }, (_, i) => `${prefix}-${i + 1}`);
+  }
+
+  it('reactivates the oldest blocked students first, up to the free slots under the cap', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+    const activeIds = ids('active', PLAN_LIMITS.PRO.studentCap - 2);
+    stubStudentLinks({ activeIds, blockedIds: ['blocked-oldest', 'blocked-middle', 'blocked-newest'] });
+
+    await reactivateStudentsUpToCap(mockPrisma, TRAINER_ID);
+
+    expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledOnce();
+    expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trainerId: TRAINER_ID,
+          studentId: { in: ['blocked-oldest', 'blocked-middle'] },
+        }),
+        data: { activeOnPlan: true },
+      })
+    );
+  });
+
+  it('queries blocked students ordered by createdAt ascending', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+    stubStudentLinks({ activeIds: [], blockedIds: ['blocked-1'] });
+
+    await reactivateStudentsUpToCap(mockPrisma, TRAINER_ID);
+
+    const blockedQuery = mockPrisma.trainerStudent.findMany.mock.calls
+      .map(([args]) => args)
+      .find((args) => args?.where?.activeOnPlan === false);
+    expect(blockedQuery.orderBy).toEqual({ createdAt: 'asc' });
+  });
+
+  it('reactivates every blocked student on DIAMOND (unlimited cap)', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('DIAMOND'));
+    const blockedIds = ids('blocked', PLAN_LIMITS.PLATINUM.studentCap + 5);
+    stubStudentLinks({ activeIds: ids('active', 10), blockedIds });
+
+    await reactivateStudentsUpToCap(mockPrisma, TRAINER_ID);
+
+    expect(mockPrisma.trainerStudent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ studentId: { in: blockedIds } }),
+        data: { activeOnPlan: true },
+      })
+    );
+  });
+
+  it('does nothing when the trainer is already at the cap', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+    stubStudentLinks({
+      activeIds: ids('active', PLAN_LIMITS.PRO.studentCap),
+      blockedIds: ['blocked-1', 'blocked-2'],
+    });
+
+    await reactivateStudentsUpToCap(mockPrisma, TRAINER_ID);
+
+    expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when there are no blocked students', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+    stubStudentLinks({ activeIds: ids('active', 3), blockedIds: [] });
+
+    await reactivateStudentsUpToCap(mockPrisma, TRAINER_ID);
 
     expect(mockPrisma.trainerStudent.updateMany).not.toHaveBeenCalled();
   });

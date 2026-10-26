@@ -252,3 +252,28 @@ export async function enforceStudentCapAfterDowngrade(prisma, trainerId) {
     data: { activeOnPlan: false },
   });
 }
+
+// Reactivates the oldest blocked students until the trainer's active count reaches the plan cap.
+export async function reactivateStudentsUpToCap(prisma, trainerId) {
+  const { limits } = await getTrainerPlan(prisma, trainerId);
+
+  const activeCount = await prisma.trainerStudent.count({
+    where: { trainerId, activeOnPlan: true },
+  });
+  const freeSlots = limits.studentCap === Infinity ? Infinity : limits.studentCap - activeCount;
+  if (freeSlots <= 0) return;
+
+  const blockedStudents = await prisma.trainerStudent.findMany({
+    where: { trainerId, activeOnPlan: false },
+    orderBy: { createdAt: 'asc' },
+    select: { studentId: true },
+    ...(freeSlots === Infinity ? {} : { take: freeSlots }),
+  });
+  const toReactivate = blockedStudents.slice(0, freeSlots);
+  if (toReactivate.length === 0) return;
+
+  await prisma.trainerStudent.updateMany({
+    where: { trainerId, studentId: { in: toReactivate.map((link) => link.studentId) } },
+    data: { activeOnPlan: true },
+  });
+}

@@ -5,6 +5,18 @@ export const PLATFORM_PLAN_TIERS = Object.freeze({
   DIAMOND: 'DIAMOND',
 });
 
+export const PLATFORM_PLAN_TIER_ORDER = Object.freeze([
+  PLATFORM_PLAN_TIERS.FREE,
+  PLATFORM_PLAN_TIERS.PRO,
+  PLATFORM_PLAN_TIERS.PLATINUM,
+  PLATFORM_PLAN_TIERS.DIAMOND,
+]);
+
+// Whether `nextTier` ranks above `currentTier` in the plan ladder.
+export function isTierUpgrade(currentTier, nextTier) {
+  return PLATFORM_PLAN_TIER_ORDER.indexOf(nextTier) > PLATFORM_PLAN_TIER_ORDER.indexOf(currentTier);
+}
+
 export const PLAN_LIMITS = Object.freeze({
   FREE: {
     studentCap: 3,

@@ -53,6 +53,8 @@ import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
+import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
+import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
@@ -386,6 +388,8 @@ export async function buildServer(options = {}) {
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);
+    await fastify.register(adminTrainerRoutes);
+    await fastify.register(adminAiUsageRoutes);
   });
 
   // Daily briefing cron — enabled only in production or when ENABLE_BRIEFING_CRON=true.

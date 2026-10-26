@@ -167,4 +167,108 @@ describe('AnthropicProvider', () => {
       expect(sentTools[0].cache_control).toBeUndefined()
     })
   })
+
+  describe('usage normalization', () => {
+    const baseParams = {
+      system: 'sys',
+      tools: [],
+      messages: [{ role: 'user', content: 'Hello' }],
+      maxTokens: 256,
+    }
+
+    const rawUsage = {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_input_tokens: 30,
+      cache_creation_input_tokens: 10,
+    }
+
+    const normalizedUsage = {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 30,
+      cacheWriteTokens: 10,
+    }
+
+    function makeStream(finalMessage) {
+      return {
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } }
+        },
+        finalMessage: vi.fn().mockResolvedValue(finalMessage),
+      }
+    }
+
+    async function collectComplete(params) {
+      let complete = null
+      for await (const chunk of provider.chatStream(params)) {
+        if (chunk.type === 'complete') complete = chunk
+      }
+      return complete
+    }
+
+    it('chat() maps Anthropic usage fields to the normalized usage object', async () => {
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Hi' }],
+        usage: rawUsage,
+      })
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toEqual(normalizedUsage)
+    })
+
+    it('chat() defaults missing cache counters to 0', async () => {
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Hi' }],
+        usage: { input_tokens: 7, output_tokens: 3 },
+      })
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toEqual({
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      })
+    })
+
+    it('chat() returns usage null when the provider sent none', async () => {
+      anthropicCreate.mockResolvedValue({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Hi' }],
+      })
+
+      const response = await provider.chat(baseParams)
+
+      expect(response.usage).toBeNull()
+    })
+
+    it('chatStream() complete event carries the normalized usage', async () => {
+      anthropicStream.mockReturnValue(
+        makeStream({
+          stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'hi' }],
+          usage: rawUsage,
+        }),
+      )
+
+      const complete = await collectComplete(baseParams)
+
+      expect(complete.response.usage).toEqual(normalizedUsage)
+    })
+
+    it('chatStream() complete event has usage null when the provider sent none', async () => {
+      anthropicStream.mockReturnValue(
+        makeStream({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'hi' }] }),
+      )
+
+      const complete = await collectComplete(baseParams)
+
+      expect(complete.response.usage).toBeNull()
+    })
+  })
 })

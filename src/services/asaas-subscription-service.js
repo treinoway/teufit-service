@@ -16,7 +16,11 @@ import {
   ASAAS_CYCLES,
   PLATFORM_PLAN_TIERS,
 } from '../constants/platform-plan.js';
-import { getTrainerPlan, enforceStudentCapAfterDowngrade } from './platform-plan-service.js';
+import {
+  getTrainerPlan,
+  enforceStudentCapAfterDowngrade,
+  reactivateStudentsUpToCap,
+} from './platform-plan-service.js';
 import * as asaasClient from '../billing/asaas-client.js';
 
 const FREE_TIER = PLATFORM_PLAN_TIERS.FREE;
@@ -179,6 +183,8 @@ export async function changeTier(prisma, asaasConfig, httpClient, trainerId, new
 
   if (isDowngrade) {
     await enforceStudentCapAfterDowngrade(prisma, trainerId);
+  } else {
+    await reactivateStudentsUpToCap(prisma, trainerId);
   }
 
   return { tier: newTier };

@@ -15,8 +15,9 @@ import {
   ASAAS_PAYMENT_STATUSES,
   PLATFORM_SUBSCRIPTION_STATUSES,
   PLATFORM_PLAN_TIERS,
+  isTierUpgrade,
 } from '../constants/platform-plan.js';
-import { enforceStudentCapAfterDowngrade } from './platform-plan-service.js';
+import { enforceStudentCapAfterDowngrade, reactivateStudentsUpToCap } from './platform-plan-service.js';
 import { parseTierFromExternalReference } from './asaas-subscription-service.js';
 
 const FREE_TIER = PLATFORM_PLAN_TIERS.FREE;
@@ -165,6 +166,10 @@ async function handlePaymentConfirmed(prisma, payment, logger) {
       cancelAtPeriodEnd: false,
     },
   });
+
+  if (resolvedTier !== null && isTierUpgrade(platformSubscription.tier, resolvedTier)) {
+    await reactivateStudentsUpToCap(prisma, platformSubscription.trainerId);
+  }
 
   logger.info(
     { paymentId: payment.id, tier: resolvedTier ?? platformSubscription.tier },
