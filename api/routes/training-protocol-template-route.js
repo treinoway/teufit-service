@@ -2,7 +2,6 @@ import { Roles } from '../../src/constants/roles.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/training-protocol-template-service.js';
 import * as schema from '../schemas/training-protocol-template-route.schema.js';
-import config from '../../config/index.js';
 import { AppError } from '../../src/errors/app-error.js';
 
 export async function trainingProtocolTemplateRoutes(fastify) {
@@ -11,7 +10,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.post(
     '/trainer/protocol-templates',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.create },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.createProtocolTemplateSchema,
     },
@@ -40,7 +38,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.get(
     '/trainer/protocol-templates',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.list },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolTemplatesSchema,
     },
@@ -62,7 +59,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.post(
     '/trainer/protocol-templates/batch-delete',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.list },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.batchDeleteProtocolTemplatesSchema,
     },
@@ -83,7 +79,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.get(
     '/trainer/protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.getById },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.getProtocolTemplateByIdSchema,
     },
@@ -109,7 +104,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.patch(
     '/trainer/protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.update },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.updateProtocolTemplateSchema,
     },
@@ -138,7 +132,6 @@ export async function trainingProtocolTemplateRoutes(fastify) {
   fastify.delete(
     '/trainer/protocol-templates/:id',
     {
-      config: { rateLimit: config.rateLimit.trainingProtocolTemplate.delete },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: schema.deleteProtocolTemplateSchema,
     },

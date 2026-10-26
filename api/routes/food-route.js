@@ -2,14 +2,12 @@ import { authenticate } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
 import * as service from '../../src/services/food-service.js';
 import * as schema from '../schemas/food-route.schema.js';
-import config from '../../config/index.js';
 
 export async function foodRoutes(fastify) {
   // GET /foods — search foods
   fastify.get(
     '/foods',
     {
-      config: { rateLimit: config.rateLimit.food.search },
       preHandler: [authenticate],
       schema: schema.searchFoodsSchema,
     },
@@ -30,7 +28,6 @@ export async function foodRoutes(fastify) {
   fastify.get(
     '/foods/:id',
     {
-      config: { rateLimit: config.rateLimit.food.getById },
       preHandler: [authenticate],
       schema: schema.getFoodByIdSchema,
     },
@@ -44,7 +41,6 @@ export async function foodRoutes(fastify) {
   fastify.get(
     '/food-groups',
     {
-      config: { rateLimit: config.rateLimit.food.groups },
       preHandler: [authenticate],
       schema: schema.listFoodGroupsSchema,
     },

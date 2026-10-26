@@ -12,7 +12,6 @@ import {
   unlinkStudentSchema,
 } from '../schemas/trainer-route.schema.js';
 import { prisma } from '../../src/db.js';
-import config from '../../config/index.js';
 
 /**
  * Rest-ish trainer resource routes.
@@ -109,7 +108,6 @@ export async function trainerRoutes(fastify) {
   fastify.get(
     '/trainer/students/search',
     {
-      config: { rateLimit: config.rateLimit.trainer.searchStudents },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: searchStudentsSchema,
     },

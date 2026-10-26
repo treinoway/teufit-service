@@ -23,8 +23,10 @@ export default {
         auth: {
           waitlist: { max: 1000, timeWindow: '1 minute' },
           login: { max: 1000, timeWindow: '1 minute' },
+          loginPerEmail: { max: 1000, timeWindow: '1 minute' },
           changePassword: { max: 1000, timeWindow: '1 minute' },
           forgotPassword: { max: 1000, timeWindow: '1 minute' },
+          forgotPasswordPerEmail: { max: 1000, timeWindow: '1 minute' },
           resetPassword: { max: 1000, timeWindow: '1 minute' },
           verifyEmail: { max: 1000, timeWindow: '1 minute' },
           resendEmailVerification: { max: 1000, timeWindow: '1 minute' },
@@ -45,14 +47,6 @@ export default {
           },
         },
         user: {
-            getMe: {
-              max: 1000,
-              timeWindow: '1 minute',
-            },
-            updateProfile: {
-              max: 1000,
-              timeWindow: '1 minute',
-            },
             becomeTrainer: {
               max: 1000,
               timeWindow: '1 hour',
@@ -71,24 +65,8 @@ export default {
             },
           },
         trainer: {
-          searchStudents: { max: 1000, timeWindow: '1 minute' },
           inviteStudent: { max: 1000, timeWindow: '1 minute' },
           resendStudentInvite: { max: 1000, timeWindow: '1 minute' },
-        },
-        trainingProtocol: {
-          create: { max: 1000, timeWindow: '1 minute' },
-          list: { max: 1000, timeWindow: '1 minute' },
-          getById: { max: 1000, timeWindow: '1 minute' },
-          update: { max: 1000, timeWindow: '1 minute' },
-          delete: { max: 1000, timeWindow: '1 minute' },
-          importFromTemplate: { max: 1000, timeWindow: '1 minute' },
-        },
-        trainingProtocolTemplate: {
-          create: { max: 1000, timeWindow: '1 minute' },
-          list: { max: 1000, timeWindow: '1 minute' },
-          getById: { max: 1000, timeWindow: '1 minute' },
-          update: { max: 1000, timeWindow: '1 minute' },
-          delete: { max: 1000, timeWindow: '1 minute' },
         },
         exerciseTemplate: {
           create: { max: 1000, timeWindow: '1 minute' },

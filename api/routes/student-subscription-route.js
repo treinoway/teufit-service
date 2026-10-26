@@ -17,7 +17,6 @@ import {
   getSubscriptionByIdSchema,
   cancelSubscriptionSchema,
 } from '../schemas/student-subscription-route.schema.js';
-import config from '../../config/index.js';
 
 export async function studentSubscriptionRoutes(fastify) {
   fastify.post(
@@ -25,7 +24,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: assignPlanSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.assign },
     },
     async (request, reply) => {
       const result = await assignPlanToStudent(
@@ -43,7 +41,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: listSubscriptionsByStudentSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.list },
     },
     async (request, reply) => {
       const subscriptions = await listSubscriptionsByStudent(
@@ -60,7 +57,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getActiveSubscriptionByStudentSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.getActive },
     },
     async (request, reply) => {
       const subscription = await getActiveSubscriptionByStudent(
@@ -77,7 +73,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: listSubscriptionsSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.list },
     },
     async (request, reply) => {
       const subscriptions = await listSubscriptions(prisma, request.user.id, {
@@ -93,7 +88,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getSubscriptionByIdSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.getById },
     },
     async (request, reply) => {
       const subscription = await getSubscriptionById(
@@ -110,7 +104,6 @@ export async function studentSubscriptionRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: cancelSubscriptionSchema,
-      config: { rateLimit: config.rateLimit.studentSubscription.cancel },
     },
     async (request, reply) => {
       const subscription = await cancelSubscription(

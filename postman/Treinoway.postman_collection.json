@@ -278,7 +278,7 @@
                 "waitlist"
               ]
             },
-            "description": "Join the waitlist with an email address. Rate limited to 3 requests per hour."
+            "description": "Join the waitlist with an email address. Rate limited to 20 requests per hour per IP."
           },
           "response": []
         },
@@ -324,7 +324,7 @@
                 "login"
               ]
             },
-            "description": "Log in with email and password. Rate limited to 5 requests per minute. No account enumeration: unknown email, OAuth-only account (no password) and wrong password all answer 401 { error: 'INVALID_CREDENTIALS', messageCode: 'auth.invalidCredentials' } with the same scrypt cost (PASSWORD_NOT_SET / 409 is no longer returned). A soft-deleted account (see DELETE /me) answers 403 { error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: <translated>, details: {} } only when the password matches."
+            "description": "Log in with email and password. Rate limited to 30 requests per minute per IP and 10 per 15 minutes per email (429 request.rateLimitExceeded with Retry-After). No account enumeration: unknown email, OAuth-only account (no password) and wrong password all answer 401 { error: 'INVALID_CREDENTIALS', messageCode: 'auth.invalidCredentials' } with the same scrypt cost (PASSWORD_NOT_SET / 409 is no longer returned). A soft-deleted account (see DELETE /me) answers 403 { error: 'USER_DELETED', messageCode: 'auth.user.deleted', message: <translated>, details: {} } only when the password matches."
           },
           "response": [
             {
@@ -392,7 +392,7 @@
                 "forgot-password"
               ]
             },
-            "description": "Request a password reset email containing a 6-digit code (use it as `code` in POST /auth/reset-password together with the same email). The `resetToken` field (the 6-digit code) is returned in the 200 body ONLY in development/test (config.auth.exposeResetTokenInResponse); it is never present in staging or production."
+            "description": "Request a password reset email containing a 6-digit code (use it as `code` in POST /auth/reset-password together with the same email). The `resetToken` field (the 6-digit code) is returned in the 200 body ONLY in development/test (config.auth.exposeResetTokenInResponse); it is never present in staging or production. Always answers the same 200 whether or not the email has an account. Rate limited to 20 requests per hour per IP and 3 per hour per email (429 request.rateLimitExceeded with Retry-After)."
           },
           "response": [
             {

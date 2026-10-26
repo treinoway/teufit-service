@@ -3,14 +3,12 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
 import * as service from '../../src/services/nutritionist-patient-service.js';
 import * as schema from '../schemas/nutritionist-patient-route.schema.js';
-import config from '../../config/index.js';
 
 export async function nutritionistPatientRoutes(fastify) {
   // POST /nutritionist/patients — link a patient
   fastify.post(
     '/nutritionist/patients',
     {
-      config: { rateLimit: config.rateLimit.nutritionistPatient.link },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.linkPatientSchema,
     },
@@ -24,7 +22,6 @@ export async function nutritionistPatientRoutes(fastify) {
   fastify.get(
     '/nutritionist/patients',
     {
-      config: { rateLimit: config.rateLimit.nutritionistPatient.list },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.listPatientsSchema,
     },
@@ -38,7 +35,6 @@ export async function nutritionistPatientRoutes(fastify) {
   fastify.delete(
     '/nutritionist/patients/:patientId',
     {
-      config: { rateLimit: config.rateLimit.nutritionistPatient.unlink },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.unlinkPatientSchema,
     },
@@ -52,7 +48,6 @@ export async function nutritionistPatientRoutes(fastify) {
   fastify.put(
     '/nutritionist/patients/:patientId/metabolic-profile',
     {
-      config: { rateLimit: config.rateLimit.nutritionistPatient.metabolicProfile },
       preHandler: [authenticate, requireRole(Roles.NUTRITIONIST)],
       schema: schema.upsertMetabolicProfileSchema,
     },

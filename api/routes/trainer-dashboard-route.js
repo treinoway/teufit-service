@@ -12,13 +12,11 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { getTrainerDashboard } from '../../src/services/trainer-dashboard-service.js';
 import { getTrainerDashboardSchema } from '../schemas/trainer-dashboard-route.schema.js';
 import { prisma } from '../../src/db.js';
-import config from '../../config/index.js';
 
 export async function trainerDashboardRoutes(fastify) {
   fastify.get(
     '/trainer/dashboard',
     {
-      config: { rateLimit: config.rateLimit.trainerDashboard.get },
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getTrainerDashboardSchema,
     },

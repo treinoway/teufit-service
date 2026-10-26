@@ -25,7 +25,6 @@ export async function platformPlanRoutes(fastify) {
     {
       preHandler: [authenticate, requireRole(Roles.TRAINER)],
       schema: getPlatformPlanSchema,
-      config: { rateLimit: config.rateLimit.platformPlan.get },
     },
     async (request, reply) => {
       const trainer = await resolveTrainer(prisma, request.user.id);
