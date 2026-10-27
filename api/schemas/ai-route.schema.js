@@ -19,6 +19,11 @@ export const aiChatSchema = {
         format: 'uuid',
         description: 'ID of an existing conversation to continue. If omitted, a new conversation is created.',
       },
+      studentId: {
+        type: 'string',
+        format: 'uuid',
+        description: 'Optional student the request is about. Must be linked to the trainer; the per-student AI quota applies to it.',
+      },
     },
   },
   response: {
@@ -44,9 +49,13 @@ export const aiChatSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    422: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
     502: errorResponseSchema,
+    503: errorResponseSchema,
+    504: errorResponseSchema,
+    529: errorResponseSchema,
   },
 }
 
@@ -69,9 +78,25 @@ export const aiChatStreamSchema = {
         format: 'uuid',
         description: 'ID of an existing conversation to continue. If omitted, a new conversation is created.',
       },
+      studentId: {
+        type: 'string',
+        format: 'uuid',
+        description: 'Optional student the request is about. Must be linked to the trainer; the per-student AI quota applies to it.',
+      },
     },
   },
-  // No response schema — SSE is a raw stream that bypasses Fastify serialization
+  // Only pre-stream failures (sent as JSON before the SSE headers) are described here;
+  // the 200 SSE body bypasses Fastify serialization. Failures after the stream starts arrive
+  // as an `error` event: { error, messageCode, message } translated per `app-language`.
+  response: {
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+    503: errorResponseSchema,
+  },
 }
 
 export const listConversationsSchema = {

@@ -1,24 +1,23 @@
 import { LLM_PROVIDERS } from '../constants/ai.js'
 import { AnthropicProvider } from './anthropic-provider.js'
-import { GeminiProvider } from './gemini-provider.js'
+import { resolveProviderName } from './config.js'
+
+export { checkLlmConfiguration, isLlmConfigured } from './config.js'
 
 /**
  * Factory function that returns the configured LLM provider instance.
  *
- * Reads LLM_PROVIDER env var (default: 'anthropic').
- * Throws if an unknown provider is specified — fail fast at startup.
+ * Reads LLM_PROVIDER env var (default: 'anthropic'). Fails fast on anything else.
  *
  * @returns {import('./llm-provider.js').LlmProvider}
  */
 export function getLlmProvider() {
-  const provider = process.env.LLM_PROVIDER || LLM_PROVIDERS.ANTHROPIC
+  const provider = resolveProviderName()
 
-  switch (provider) {
-    case LLM_PROVIDERS.ANTHROPIC:
-      return new AnthropicProvider()
-    case LLM_PROVIDERS.GEMINI:
-      return new GeminiProvider()
-    default:
-      throw new Error(`Unknown LLM provider: "${provider}". Valid options: ${Object.values(LLM_PROVIDERS).join(', ')}`)
+  if (provider === LLM_PROVIDERS.ANTHROPIC) return new AnthropicProvider()
+
+  if (provider.toLowerCase() === 'gemini') {
+    throw new Error(`LLM provider "gemini" is no longer supported. Set LLM_PROVIDER=${LLM_PROVIDERS.ANTHROPIC} (the only supported provider).`)
   }
+  throw new Error(`Unknown LLM provider: "${provider}". Valid options: ${Object.values(LLM_PROVIDERS).join(', ')}`)
 }

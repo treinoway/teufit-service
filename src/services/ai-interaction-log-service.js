@@ -81,11 +81,10 @@ function buildToolsUsedSummary(toolCall) {
  * Extract token counts from the normalized LLM response object.
  * AnthropicProvider attaches usage via the raw response (logged in _logUsage),
  * but does not forward it through the normalized facade. We attach it ourselves
- * by reading the usage object off the raw Anthropic/Gemini response when available.
+ * by reading the usage object off the raw Anthropic response when available.
  *
  * Callers pass a `usage` object that may come from different shapes:
  *   Anthropic: { input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens }
- *   Gemini:    { promptTokenCount, candidatesTokenCount }
  *
  * @param {object | null | undefined} usage
  * @returns {{ inputTokens: number | null, outputTokens: number | null }}
@@ -105,13 +104,6 @@ export function extractTokenCounts(usage) {
     return {
       inputTokens: usage.input_tokens ?? null,
       outputTokens: usage.output_tokens ?? null,
-    }
-  }
-  // Gemini shape
-  if ('promptTokenCount' in usage || 'candidatesTokenCount' in usage) {
-    return {
-      inputTokens: usage.promptTokenCount ?? null,
-      outputTokens: usage.candidatesTokenCount ?? null,
     }
   }
   return { inputTokens: null, outputTokens: null }

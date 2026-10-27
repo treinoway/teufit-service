@@ -204,18 +204,6 @@ describe('processAiChat — token usage recording', () => {
     expect(result.message).toBe(FINAL_TEXT)
   })
 
-  it('records the active provider and model for Gemini', async () => {
-    process.env.LLM_PROVIDER = LLM_PROVIDERS.GEMINI
-    mockChat.mockResolvedValueOnce({ ...FINAL_RESPONSE, usage: FIRST_CALL_USAGE })
-
-    await processAiChat('user-1', { message: 'Oi' })
-
-    await vi.waitFor(() => expect(prisma.aiTokenUsage.create).toHaveBeenCalledOnce())
-    expect(prisma.aiTokenUsage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ provider: LLM_PROVIDERS.GEMINI }),
-    })
-  })
-
   it('passes the summed usage (non-null) to writeInteractionLog', async () => {
     mockChat
       .mockResolvedValueOnce({ ...TOOL_USE_RESPONSE, usage: FIRST_CALL_USAGE })

@@ -154,8 +154,7 @@ describe('processAiChat — token usage across an empty-response retry', () => {
     expect(writeInteractionLog.mock.calls[0][1].usage).toEqual(SUMMED_USAGE)
   })
 
-  it('records the Gemini provider and model for a retried turn', async () => {
-    process.env.LLM_PROVIDER = LLM_PROVIDERS.GEMINI
+  it('records the Anthropic provider and model for a retried turn', async () => {
     stubEmptyThenGoodChat()
 
     await runWithFakeTimers(() => processAiChat('user-1', { message: 'Olá' }))
@@ -163,8 +162,8 @@ describe('processAiChat — token usage across an empty-response retry', () => {
     await vi.waitFor(() => expect(prisma.aiTokenUsage.create).toHaveBeenCalledOnce())
     expect(prisma.aiTokenUsage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        provider: LLM_PROVIDERS.GEMINI,
-        model: process.env.GEMINI_MODEL || AI_MODELS.GEMINI,
+        provider: LLM_PROVIDERS.ANTHROPIC,
+        model: process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC,
         llmCalls: 2,
       }),
     })
@@ -196,8 +195,7 @@ describe('processAiChatStream — token usage across an empty-response retry', (
     expect(writeInteractionLog.mock.calls[0][1].usage).toEqual(SUMMED_USAGE)
   })
 
-  it('records the Gemini provider and model for a retried turn', async () => {
-    process.env.LLM_PROVIDER = LLM_PROVIDERS.GEMINI
+  it('records the Anthropic provider and model for a retried turn', async () => {
     stubEmptyThenGoodStream()
 
     await runWithFakeTimers(() => drain(processAiChatStream('user-1', { message: 'Olá' })))
@@ -205,8 +203,8 @@ describe('processAiChatStream — token usage across an empty-response retry', (
     await vi.waitFor(() => expect(prisma.aiTokenUsage.create).toHaveBeenCalledOnce())
     expect(prisma.aiTokenUsage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        provider: LLM_PROVIDERS.GEMINI,
-        model: process.env.GEMINI_MODEL || AI_MODELS.GEMINI,
+        provider: LLM_PROVIDERS.ANTHROPIC,
+        model: process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC,
         llmCalls: 2,
       }),
     })

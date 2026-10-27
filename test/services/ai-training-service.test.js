@@ -9,7 +9,7 @@ vi.mock('../../src/db.js', () => ({
     trainingProtocolTemplate: { findMany: vi.fn(), create: vi.fn() },
     trainingTemplate: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     exerciseTemplate: { findMany: vi.fn(), create: vi.fn() },
-    training: { create: vi.fn() },
+    training: { create: vi.fn(), aggregate: vi.fn() },
     exercise: { create: vi.fn() },
     aiConversation: {
       create: vi.fn(),
@@ -188,19 +188,23 @@ describe('ai-training-service', () => {
       })
     })
 
-    it('re-throws generic (non-AppError) errors — does not swallow them', async () => {
+    it('returns success:false with a generic message for generic (non-AppError) errors instead of throwing', async () => {
       const networkError = new Error('Unexpected database timeout')
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       importFromTemplate.mockRejectedValue(networkError)
 
-      await expect(
-        executeTool('user-1', AI_TOOLS.IMPORT_FROM_TEMPLATE, {
-          templateId: 'tmpl-1',
-          assigneeId: 'student-1',
-          startDate: '2026-01-01',
-          expirationDate: '2026-06-01',
-        }),
-      ).rejects.toThrow('Unexpected database timeout')
+      const result = await executeTool('user-1', AI_TOOLS.IMPORT_FROM_TEMPLATE, {
+        templateId: 'tmpl-1',
+        assigneeId: 'student-1',
+        startDate: '2026-01-01',
+        expirationDate: '2026-06-01',
+      })
+
+      expect(result).toMatchObject({ success: false, error: AI_ERRORS.TOOL_EXECUTION_FAILED })
+      expect(JSON.stringify(result)).not.toContain('Unexpected database timeout')
+      expect(logged).toHaveBeenCalled()
+      logged.mockRestore()
     })
 
     describe(`${AI_TOOLS.ADD_TRAINING_TO_PROTOCOL}`, () => {
@@ -271,6 +275,7 @@ describe('ai-training-service', () => {
           deletedAt: null,
         })
         prisma.training.create.mockResolvedValue({ id: 'training-new-1' })
+        prisma.training.aggregate.mockResolvedValue({ _max: { order: null } })
 
         const result = await executeTool('user-1', AI_TOOLS.ADD_TRAINING_TO_PROTOCOL, {
           protocolId: 'protocol-1',
@@ -357,6 +362,7 @@ describe('ai-training-service', () => {
     })
 
     it('throws 404 when conversationId is not found or belongs to another user', async () => {
+      stubTrainerContext()
       prisma.aiConversation.findUnique.mockResolvedValue(null)
 
       await expect(
@@ -511,7 +517,7 @@ describe('ai-training-service', () => {
 
       expect(prisma.aiConversation.update).toHaveBeenCalledWith({
         where: { id: 'new-conv-title-test' },
-        data: { title: 'A'.repeat(100) },
+        data: { title: 'A'.repeat(100), updatedAt: expect.any(Date) },
       })
     })
 
@@ -2151,13 +2157,17 @@ describe('ai-training-service', () => {
       })
     })
 
-    it('re-throws non-AppError errors (does not swallow unexpected failures)', async () => {
+    it('returns success:false and logs non-AppError errors instead of throwing', async () => {
       const dbError = new Error('Database connection failed')
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       buildAiPerformanceSnapshot.mockRejectedValue(dbError)
 
-      await expect(
-        executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, { studentId: STUDENT_ID }),
-      ).rejects.toThrow('Database connection failed')
+      const result = await executeTool('trainer-user-1', AI_TOOLS.GET_STUDENT_PERFORMANCE, { studentId: STUDENT_ID })
+
+      expect(result).toMatchObject({ success: false, error: AI_ERRORS.TOOL_EXECUTION_FAILED })
+      expect(JSON.stringify(result)).not.toContain('Database connection failed')
+      expect(logged).toHaveBeenCalled()
+      logged.mockRestore()
     })
   })
 

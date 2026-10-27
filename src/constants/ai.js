@@ -5,7 +5,6 @@
 
 export const LLM_PROVIDERS = Object.freeze({
   ANTHROPIC: 'anthropic',
-  GEMINI: 'gemini',
 })
 
 export const AI_TOOLS = Object.freeze({
@@ -34,6 +33,26 @@ export const AI_ERRORS = Object.freeze({
   OVERLOADED: 'AI_OVERLOADED',
   EXERCISE_TEMPLATE_NOT_OWNED: 'AI_EXERCISE_TEMPLATE_NOT_OWNED',
   TRAINING_TEMPLATE_NOT_OWNED: 'AI_TRAINING_TEMPLATE_NOT_OWNED',
+  UNAVAILABLE: 'AI_UNAVAILABLE',
+  RESPONSE_TOO_LONG: 'AI_RESPONSE_TOO_LONG',
+  TOOL_DISABLED: 'AI_TOOL_DISABLED',
+  TIMEOUT: 'AI_TIMEOUT',
+})
+
+// Stable i18n keys for AI errors. Never change an existing value (client contract).
+export const AI_MESSAGE_CODES = Object.freeze({
+  TRAINER_NOT_FOUND: 'ai.trainerNotFound',
+  CONVERSATION_NOT_FOUND: 'ai.conversationNotFound',
+  RATE_LIMITED: 'ai.rateLimited',
+  MODEL_ERROR: 'ai.modelError',
+  OVERLOADED: 'ai.overloaded',
+  EXERCISE_TEMPLATE_NOT_OWNED: 'ai.exerciseTemplateNotOwned',
+  TRAINING_TEMPLATE_NOT_OWNED: 'ai.trainingTemplateNotOwned',
+  UNAVAILABLE: 'ai.unavailable',
+  RESPONSE_TOO_LONG: 'ai.responseTooLong',
+  CONFIRMATION_REQUIRED: 'ai.confirmationRequired',
+  TOOL_DISABLED: 'ai.toolDisabled',
+  TIMEOUT: 'ai.timeout',
 })
 
 export const AI_LIMITS = Object.freeze({
@@ -45,11 +64,21 @@ export const AI_LIMITS = Object.freeze({
   MAX_CONTEXT_TRAINING_TEMPLATES: 30,
   MAX_CONTEXT_ACTIVE_PROTOCOLS: 30,
   MAX_CONTEXT_EXERCISE_TEMPLATES: 20,
-  MAX_CONTEXT_TRAININGS_PER_PROTOCOL: 6,
-  MAX_CONTEXT_EXERCISES_PER_TRAINING: 6,
-  MAX_TOKENS: 2500,
+  MAX_CONTEXT_TRAININGS_PER_PROTOCOL: 10,
+  MAX_CONTEXT_EXERCISES_PER_TRAINING: 20,
+  // Character budget for the active-protocols block (~4 chars per token); the rest is cut with a note.
+  MAX_CONTEXT_PROTOCOLS_CHARS: 40_000,
+  // Student focus (anamnesis) limits, per studentId request.
+  MAX_CONTEXT_ANAMNESIS_ANSWERS: 30,
+  MAX_CONTEXT_ANAMNESIS_VALUE_CHARS: 200,
+  MAX_CONTEXT_NAME_CHARS: 80,
+  CONTEXT_PERFORMANCE_WINDOW_DAYS: 90,
+  // why: Sonnet 5.5 thinks adaptively and thinking tokens count against max_tokens; 2500 truncated tool calls.
+  MAX_TOKENS: 8000,
   RATE_LIMIT_MAX: 10,
   RATE_LIMIT_WINDOW: '1 minute',
+  // Upper bound for a single model call; SDK retries are disabled so withLlmRetry is the only retry layer.
+  LLM_TIMEOUT_MS: 60_000,
 })
 
 export const AI_RETRY = Object.freeze({
@@ -59,9 +88,11 @@ export const AI_RETRY = Object.freeze({
 })
 
 export const AI_MODELS = Object.freeze({
-  ANTHROPIC: 'claude-sonnet-4-6',
-  GEMINI: 'gemini-2.5-flash',
+  ANTHROPIC: 'claude-sonnet-5-5',
 })
+
+// Timezone used for "today" in the prompt and for relative dates (trainers are in Brazil).
+export const TRAINER_TIME_ZONE = 'America/Sao_Paulo'
 
 export const AI_INTERACTION_LOG = Object.freeze({
   // Gate: set AI_INTERACTION_LOG_ENABLED=false in env to disable (default ON for beta)

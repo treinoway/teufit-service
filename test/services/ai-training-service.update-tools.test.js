@@ -75,7 +75,7 @@ import { updateProtocol } from '../../src/services/training-protocol-service.js'
 import { updateTraining } from '../../src/services/training-service.js'
 import { updateExercise } from '../../src/services/exercise-service.js'
 import { buildTrainerContext, executeTool } from '../../src/services/ai-training-service.js'
-import { AI_TOOLS, AI_LIMITS } from '../../src/constants/ai.js'
+import { AI_TOOLS, AI_ERRORS, AI_LIMITS } from '../../src/constants/ai.js'
 import { assertCanUseAi, recordAiAction } from '../../src/services/platform-plan-service.js'
 
 describe('ai-training-service — update tools & enriched context', () => {
@@ -537,15 +537,18 @@ describe('ai-training-service — update tools & enriched context', () => {
       })
     })
 
-    it('re-throws generic (non-AppError) errors', async () => {
+    it('returns success:false with a generic message for generic (non-AppError) errors', async () => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       updateExercise.mockRejectedValue(new Error('DB connection lost'))
 
-      await expect(
-        executeTool('user-1', AI_TOOLS.UPDATE_EXERCISE, {
-          exerciseId: 'ex-1',
-          sets: 3,
-        }),
-      ).rejects.toThrow('DB connection lost')
+      const result = await executeTool('user-1', AI_TOOLS.UPDATE_EXERCISE, {
+        exerciseId: 'ex-1',
+        sets: 3,
+      })
+
+      expect(result).toMatchObject({ success: false, error: AI_ERRORS.TOOL_EXECUTION_FAILED })
+      expect(JSON.stringify(result)).not.toContain('DB connection lost')
+      logged.mockRestore()
     })
   })
 
@@ -570,11 +573,11 @@ describe('ai-training-service — update tools & enriched context', () => {
 
   describe('AI_LIMITS', () => {
     it('exports MAX_CONTEXT_TRAININGS_PER_PROTOCOL', () => {
-      expect(AI_LIMITS.MAX_CONTEXT_TRAININGS_PER_PROTOCOL).toBe(6)
+      expect(AI_LIMITS.MAX_CONTEXT_TRAININGS_PER_PROTOCOL).toBe(10)
     })
 
     it('exports MAX_CONTEXT_EXERCISES_PER_TRAINING', () => {
-      expect(AI_LIMITS.MAX_CONTEXT_EXERCISES_PER_TRAINING).toBe(6)
+      expect(AI_LIMITS.MAX_CONTEXT_EXERCISES_PER_TRAINING).toBe(20)
     })
   })
 })
