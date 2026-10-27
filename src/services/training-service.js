@@ -11,6 +11,12 @@ import {
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { ExerciseOrderBy } from '../constants/training.js';
+import {
+  advancedTechniqueLinksInclude,
+  toLinkCreateInput,
+  withTrainingExerciseTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
+import { inheritSelectionBatch } from './advanced-technique-service.js';
 
 /**
  * Verify protocol ownership (trainer context)
@@ -318,6 +324,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
     include: {
       trainingTemplateExerciseTemplates: {
         orderBy: ExerciseOrderBy,
+        include: { advancedTechniqueLinks: true },
       },
     },
   });
@@ -333,6 +340,13 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
   if (data.weekDay) {
     validateWeekDay(data.weekDay);
   }
+
+  const junctionRows = template.trainingTemplateExerciseTemplates;
+  const selections = await inheritSelectionBatch(
+    prisma,
+    trainer.id,
+    junctionRows.map((junctionRow) => junctionRow.advancedTechniqueLinks),
+  );
 
   const training = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     const createdTraining = await tx.training.create({
@@ -358,9 +372,10 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
       }
     }
 
-    for (const junctionRow of template.trainingTemplateExerciseTemplates) {
+    for (const [junctionIndex, junctionRow] of junctionRows.entries()) {
       const resolvedMode = resolvePrescriptionMode(junctionRow.prescriptionMode, junctionRow);
       const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, junctionRow);
+      const techniqueSelection = selections[junctionIndex];
 
       await tx.exercise.create({
         data: {
@@ -384,6 +399,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
           restInterval: junctionRow.restInterval ?? null,
           notes: junctionRow.notes ?? null,
           intensity: junctionRow.intensity ?? null,
+          ...toLinkCreateInput(techniqueSelection),
         },
       });
     }
@@ -396,10 +412,11 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
         exercises: {
           where: { deletedAt: null },
           orderBy: ExerciseOrderBy,
+          include: advancedTechniqueLinksInclude,
         },
       },
     });
   }));
 
-  return training;
+  return withTrainingExerciseTechniqueRefs(training);
 }

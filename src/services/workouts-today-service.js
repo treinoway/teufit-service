@@ -9,6 +9,10 @@ import {
   ExerciseOrderBy,
 } from '../constants/training.js';
 import { translate } from '../i18n/index.js';
+import {
+  advancedTechniqueLinksInclude,
+  withTrainingExerciseTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
 
 // ─── Error factories ─────────────────────────────────────────────────────────
 
@@ -210,7 +214,7 @@ async function resolveProtocolWorkout(protocol, userId, todayWeekday, today, tim
  * @returns {Promise<{ workouts: Array<object>, pendingTraining: object|null }>}
  */
 export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', logger } = {}) {
-  const protocols = await prisma.trainingProtocol.findMany({
+  const loadedProtocols = await prisma.trainingProtocol.findMany({
     where: { assigneeId: userId, status: 'active', deletedAt: null },
     orderBy: { startDate: 'desc' },
     include: {
@@ -218,11 +222,20 @@ export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', lo
         where: { deletedAt: null },
         orderBy: { order: 'asc' },
         include: {
-          exercises: { where: { deletedAt: null }, orderBy: ExerciseOrderBy },
+          exercises: {
+            where: { deletedAt: null },
+            orderBy: ExerciseOrderBy,
+            include: advancedTechniqueLinksInclude,
+          },
         },
       },
     },
   });
+
+  const protocols = loadedProtocols.map((protocol) => ({
+    ...protocol,
+    trainings: protocol.trainings.map(withTrainingExerciseTechniqueRefs),
+  }));
 
   if (protocols.length === 0) throw noActiveProtocolError();
 

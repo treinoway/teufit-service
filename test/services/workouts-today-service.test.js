@@ -63,6 +63,63 @@ describe('workouts-today-service', () => {
     vi.useRealTimers();
   });
 
+  describe('advanced techniques', () => {
+    const makeLink = (id, order) => ({
+      advancedTechniqueId: id,
+      order,
+      advancedTechnique: {
+        id,
+        key: `key-${id}`,
+        name: `Technique ${id}`,
+        description: 'desc',
+        videoUrl: null,
+        gifUrl: null,
+      },
+    });
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date('2025-04-16T12:00:00Z'));
+    });
+
+    it('includes ordered technique links on the exercises query', async () => {
+      prisma.trainingProtocol.findMany.mockResolvedValue([]);
+
+      await expect(getTodayWorkout('user-1', defaultOptions)).rejects.toBeDefined();
+
+      const exercisesInclude = prisma.trainingProtocol.findMany.mock.calls[0][0].include.trainings.include.exercises;
+      expect(exercisesInclude.include.advancedTechniqueLinks).toMatchObject({ orderBy: { order: 'asc' } });
+    });
+
+    it('maps targetTraining exercises links to advancedTechniques refs', async () => {
+      const exercise = {
+        id: 'ex-1',
+        name: 'Squat',
+        advancedTechniqueLinks: [makeLink('t-1', 0), makeLink('t-2', 1)],
+      };
+      const training = makeTraining({ id: 'tr-wed', weekDay: 'wednesday', exercises: [exercise] });
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocol([training])]);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      const [mapped] = result.workouts[0].targetTraining.exercises;
+      expect(mapped.advancedTechniques).toEqual([
+        { id: 't-1', key: 'key-t-1', name: 'Technique t-1', description: 'desc', videoUrl: null, gifUrl: null, isDeleted: false, order: 0 },
+        { id: 't-2', key: 'key-t-2', name: 'Technique t-2', description: 'desc', videoUrl: null, gifUrl: null, isDeleted: false, order: 1 },
+      ]);
+      expect(mapped).not.toHaveProperty('advancedTechniqueLinks');
+    });
+
+    it('returns an empty advancedTechniques array for exercises without links', async () => {
+      const exercise = { id: 'ex-1', name: 'Squat', advancedTechniqueLinks: [] };
+      const training = makeTraining({ id: 'tr-wed', weekDay: 'wednesday', exercises: [exercise] });
+      prisma.trainingProtocol.findMany.mockResolvedValue([makeProtocol([training])]);
+
+      const result = await getTodayWorkout('user-1', defaultOptions);
+
+      expect(result.workouts[0].targetTraining.exercises[0].advancedTechniques).toEqual([]);
+    });
+  });
+
   // ── weekDay mode ─────────────────────────────────────────────────────────
 
   describe('weekDay mode', () => {

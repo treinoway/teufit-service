@@ -7,6 +7,11 @@ import { markBriefingDirty } from './briefing-service.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 import { estimateWorkoutDuration } from '../helpers/workout-duration.js';
 import { AppError } from '../errors/app-error.js';
+import { toLinkCreateInput } from '../helpers/advanced-technique-refs.js';
+import {
+  inheritSelectionBatch,
+  resolveAdvancedTechniqueSelectionBatch,
+} from './advanced-technique-service.js';
 
 /**
  * Validate status
@@ -448,6 +453,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
               trainingTemplateExerciseTemplates: {
                 include: {
                   exerciseTemplate: true,
+                  advancedTechniqueLinks: true,
                 },
                 orderBy: ExerciseOrderBy,
               },
@@ -478,10 +484,20 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
 
   await assertStudentActiveOnPlan(prisma, trainer.id, assigneeId);
 
+  const junctionRows = template.trainings.flatMap(
+    (templateTraining) => templateTraining.trainingTemplate.trainingTemplateExerciseTemplates,
+  );
+  const selections = await inheritSelectionBatch(
+    prisma,
+    trainer.id,
+    junctionRows.map((junctionRow) => junctionRow.advancedTechniqueLinks),
+  );
+  const selectionByJunctionId = new Map(junctionRows.map((junctionRow, index) => [junctionRow.id, selections[index]]));
+
   const trainingsData = template.trainings.map((templateTraining) => {
     const { trainingTemplate } = templateTraining;
     const exerciseCreateData = trainingTemplate.trainingTemplateExerciseTemplates.map(
-      (exercise, index) => buildNestedExerciseCreateData(exercise, index),
+      (exercise, index) => buildNestedExerciseCreateData(exercise, index, selectionByJunctionId.get(exercise.id)),
     );
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
@@ -544,7 +560,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
  * Used by both importFromTemplate and createProtocolWithTrainings so that any
  * new exercise field only needs to be added here.
  */
-function buildNestedExerciseCreateData(exercise, index) {
+function buildNestedExerciseCreateData(exercise, index, techniqueSelection = []) {
   const resolvedMode = resolvePrescriptionMode(exercise.prescriptionMode, exercise);
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exercise);
 
@@ -567,6 +583,7 @@ function buildNestedExerciseCreateData(exercise, index) {
     restInterval: exercise.restInterval ?? null,
     notes: exercise.notes ?? null,
     intensity: exercise.intensity ?? null,
+    ...toLinkCreateInput(techniqueSelection),
   };
 }
 
@@ -576,8 +593,10 @@ function buildNestedExerciseCreateData(exercise, index) {
  *
  * Throws TRAINING_TEMPLATE_NOT_OWNED or EXERCISE_TEMPLATE_NOT_OWNED if any FK
  * references a template that does not belong to the trainer and is not public.
+ * Returns the technique links of the verified exercise templates, keyed by template id.
  */
 async function verifyTemplateOwnership(prismaClient, trainerId, trainingTemplateIds, exerciseTemplateIds) {
+  const exerciseTemplateLinksById = new Map();
   if (trainingTemplateIds.size > 0) {
     const ownedTrainingTemplates = await prismaClient.trainingTemplate.findMany({
       where: {
@@ -605,7 +624,11 @@ async function verifyTemplateOwnership(prismaClient, trainerId, trainingTemplate
         OR: [{ trainerId }, { isPublic: true }],
         deletedAt: null,
       },
-      select: { id: true },
+      select: { id: true, advancedTechniqueLinks: true },
+    });
+
+    ownedExerciseTemplates.forEach((template) => {
+      exerciseTemplateLinksById.set(template.id, template.advancedTechniqueLinks ?? []);
     });
 
     if (ownedExerciseTemplates.length !== exerciseTemplateIds.size) {
@@ -617,6 +640,8 @@ async function verifyTemplateOwnership(prismaClient, trainerId, trainingTemplate
       });
     }
   }
+
+  return exerciseTemplateLinksById;
 }
 
 /**
@@ -641,15 +666,48 @@ function collectTemplateIds(trainings) {
   return { trainingTemplateIds, exerciseTemplateIds };
 }
 
+// True when the exercise omitted advancedTechniqueIds but points at a library template to inherit from.
+function shouldInheritTechniques(exercise) {
+  return exercise.advancedTechniqueIds === undefined && Boolean(exercise.exerciseTemplateId);
+}
+
+// Resolves every exercise's technique selection: explicit ids are validated, omitted ids inherit the template's (batched).
+async function resolveExerciseSelections(db, trainerId, exercises, linksByTemplateId) {
+  const explicit = exercises.filter((exercise) => !shouldInheritTechniques(exercise));
+  const inheriting = exercises.filter(shouldInheritTechniques);
+  const [explicitSelections, inheritedSelections] = await Promise.all([
+    resolveAdvancedTechniqueSelectionBatch(db, trainerId, explicit.map((exercise) => exercise.advancedTechniqueIds)),
+    inheritSelectionBatch(db, trainerId, inheriting.map((exercise) => linksByTemplateId.get(exercise.exerciseTemplateId) ?? [])),
+  ]);
+  const selectionByExercise = new Map([
+    ...explicit.map((exercise, index) => [exercise, explicitSelections[index]]),
+    ...inheriting.map((exercise, index) => [exercise, inheritedSelections[index]]),
+  ]);
+  return exercises.map((exercise) => selectionByExercise.get(exercise));
+}
+
+// Validates or inherits every exercise's techniques; returns selections grouped [training][exercise].
+async function resolveTechniqueSelectionsByTraining(db, trainerId, trainings, linksByTemplateId) {
+  const exercises = trainings.flatMap((training) => training.exercises ?? []);
+  const flatSelections = await resolveExerciseSelections(db, trainerId, exercises, linksByTemplateId);
+  let cursor = 0;
+  return trainings.map((training) => {
+    const count = (training.exercises ?? []).length;
+    const group = flatSelections.slice(cursor, cursor + count);
+    cursor += count;
+    return group;
+  });
+}
+
 /**
  * Map an array of incoming training payloads to Prisma nested create shape.
  * Computes estimatedDurationSeconds in-memory — no extra DB queries.
  */
-function buildTrainingsData(trainings) {
-  return trainings.map((training) => {
+function buildTrainingsData(trainings, selectionsByTraining) {
+  return trainings.map((training, trainingIndex) => {
     const exercises = training.exercises ?? [];
     const exerciseCreateData = exercises.map((exercise, index) =>
-      buildNestedExerciseCreateData(exercise, index),
+      buildNestedExerciseCreateData(exercise, index, selectionsByTraining[trainingIndex][index]),
     );
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
@@ -722,10 +780,21 @@ export async function createProtocolWithTrainings(userId, data) {
   // 5. Verify template ownership in 2 batched queries (skipped when no IDs are provided)
   const trainings = data.trainings ?? [];
   const { trainingTemplateIds, exerciseTemplateIds } = collectTemplateIds(trainings);
-  await verifyTemplateOwnership(prisma, trainer.id, trainingTemplateIds, exerciseTemplateIds);
+  const exerciseTemplateLinksById = await verifyTemplateOwnership(
+    prisma,
+    trainer.id,
+    trainingTemplateIds,
+    exerciseTemplateIds,
+  );
 
   // 6. Build in-memory nested create payload
-  const trainingsData = buildTrainingsData(trainings);
+  const selectionsByTraining = await resolveTechniqueSelectionsByTraining(
+    prisma,
+    trainer.id,
+    trainings,
+    exerciseTemplateLinksById,
+  );
+  const trainingsData = buildTrainingsData(trainings, selectionsByTraining);
 
   // 7. Single atomic write: protocol + all trainings + all exercises
   const created = await prisma.trainingProtocol.create({

@@ -2,6 +2,7 @@ import { trainingCategoryValues, bodySegmentValues, weekDayValues, prescriptionM
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlResponseSchema } from './gif-url.schema.js';
+import { advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
 
 export const trainingResponseSchema = {
   type: 'object',
@@ -183,6 +184,7 @@ export const importedExerciseResponseSchema = {
     restInterval: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
     ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
+    advancedTechniques: advancedTechniquesResponseSchema,
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },

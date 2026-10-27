@@ -15,6 +15,10 @@ import { awardWorkoutCompletionPoints } from './gamification-service.js';
 import { markBriefingDirty } from './briefing-service.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockWorkoutSessionForUpdate } from '../helpers/row-locks.js';
+import {
+  advancedTechniqueLinksInclude,
+  withSessionTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
 
 // ─── Briefing invalidation helper ────────────────────────────────────────────
 
@@ -105,6 +109,7 @@ const exerciseSelectWithSubstitutes = {
     gifUrl: true,
     notes: true,
     intensity: true,
+    ...advancedTechniqueLinksInclude,
     substitutes: {
       where: { deletedAt: null },
       orderBy: { substituteOrder: 'asc' },
@@ -327,7 +332,7 @@ export async function startSession(userId, trainingId, data = null) {
   // Starting a session changes the adherence denominator — mark dirty after tx
   invalidateBriefingForTraining(trainingId).catch(() => {});
 
-  return session;
+  return withSessionTechniqueRefs(session);
 }
 
 /**
@@ -568,7 +573,7 @@ export async function getSession(userId, sessionId) {
 
   await attachPreviousLogs(session);
 
-  return session;
+  return withSessionTechniqueRefs(session);
 }
 
 /**
@@ -645,7 +650,7 @@ export async function updateSession(userId, sessionId, data) {
     invalidateBriefingForTraining(updated.trainingId).catch(() => {});
   }
 
-  return updated;
+  return withSessionTechniqueRefs(updated);
 }
 
 /**
@@ -1152,5 +1157,5 @@ export async function getStudentSession(trainerId, studentId, sessionId) {
     throw buildError('FORBIDDEN_NOT_YOUR_SESSION', 'This session does not belong to this student', 403);
   }
 
-  return session;
+  return withSessionTechniqueRefs(session);
 }

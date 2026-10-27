@@ -15,6 +15,7 @@ vi.mock('../../src/db.js', () => ({
 }));
 
 import { prisma } from '../../src/db.js';
+import { advancedTechniqueLinksInclude } from '../../src/helpers/advanced-technique-refs.js';
 import {
   createExerciseTemplate,
   getExerciseTemplatesByTrainer,
@@ -74,6 +75,7 @@ describe('exercise-template-service', () => {
           gifUrl: null,
           isPublic: false,
         },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -96,6 +98,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ videoUrl: 'https://example.com/video.mp4' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -107,6 +110,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ videoUrl: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -118,6 +122,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: 'https://example.com/squat.gif' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -129,6 +134,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -140,6 +146,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ isPublic: true }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -151,6 +158,7 @@ describe('exercise-template-service', () => {
 
       expect(prisma.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ isPublic: false }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -449,6 +457,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { name: 'Deadlift' },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -464,6 +473,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { type: 'cardio' },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -491,6 +501,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { videoUrl: 'https://example.com/video.mp4' },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -504,6 +515,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { gifUrl: 'https://example.com/squat.gif' },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -517,6 +529,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { gifUrl: null },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -532,6 +545,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: { isPublic: true },
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -585,6 +599,7 @@ describe('exercise-template-service', () => {
       expect(prisma.exerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'et1' },
         data: {},
+        include: advancedTechniqueLinksInclude,
       });
     });
   });

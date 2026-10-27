@@ -18,6 +18,7 @@ vi.mock('../../src/db.js', () => ({
 }));
 
 import { prisma } from '../../src/db.js';
+import { advancedTechniqueLinksInclude } from '../../src/helpers/advanced-technique-refs.js';
 import {
   createExercise,
   createFromTemplate,
@@ -116,6 +117,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ repetitions: { min: 8, max: 12 }, prescriptionMode: 'reps' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
   });
@@ -241,6 +243,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ notes: 'Keep back straight', prescriptionMode: 'reps' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -255,6 +258,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ notes: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -274,6 +278,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ restInterval: 90, prescriptionMode: 'reps' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -288,6 +293,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ restInterval: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -302,6 +308,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ prescriptionMode: 'duration', duration: 45, repetitions: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -321,6 +328,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ prescriptionMode: 'reps', repetitions: { min: 8, max: 12 }, duration: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -335,6 +343,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ prescriptionMode: 'reps' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -363,6 +372,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 2 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -377,6 +387,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 0 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -392,6 +403,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.aggregate).not.toHaveBeenCalled();
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 5 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
   });
@@ -438,6 +450,7 @@ describe('exercise-service', () => {
       });
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ exerciseTemplateId: 'tpl1' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -453,6 +466,7 @@ describe('exercise-service', () => {
       expect(txMock.exerciseTemplate.create).not.toHaveBeenCalled();
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ exerciseTemplateId: 'existing-tpl' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -518,6 +532,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ type: 'cardio', intensity: 'moderate' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -592,6 +607,7 @@ describe('exercise-service', () => {
       });
       expect(txCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ exerciseTemplateId: 'tpl1', substituteForExerciseId: 'principal-1' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
   });
@@ -633,6 +649,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ notes: 'Exhale on the way up' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -648,6 +665,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ notes: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -676,6 +694,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ restInterval: 60 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -691,6 +710,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ restInterval: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -717,6 +737,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ prescriptionMode: 'duration', duration: 60, repetitions: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -731,6 +752,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ prescriptionMode: 'reps', repetitions: { min: 6, max: 10 }, duration: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -862,6 +884,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ intensity: 'vigorous' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -908,6 +931,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ intensity: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
   });
@@ -976,6 +1000,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ order: 4 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
   });
@@ -1024,6 +1049,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ intensity: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -1040,6 +1066,7 @@ describe('exercise-service', () => {
       expect(result).toEqual(created);
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ intensity: 'vigorous' }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -1629,6 +1656,7 @@ describe('exercise-service', () => {
           substituteOrder: 0,
           trainingId: 'tr1',
         }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -1658,6 +1686,7 @@ describe('exercise-service', () => {
 
       expect(txCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ substituteOrder: 1 }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2256,6 +2285,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: GIF_URL }),
+        include: advancedTechniqueLinksInclude,
       });
       expect(txMock.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: GIF_URL }),
@@ -2273,6 +2303,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2287,6 +2318,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: TEMPLATE_GIF_URL }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2301,6 +2333,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: GIF_URL }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2315,6 +2348,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2333,6 +2367,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ gifUrl: GIF_URL }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2351,6 +2386,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.update).toHaveBeenCalledWith({
         where: { id: 'ex1' },
         data: expect.objectContaining({ gifUrl: null }),
+        include: advancedTechniqueLinksInclude,
       });
     });
 
@@ -2386,6 +2422,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: GIF_URL }),
+        include: advancedTechniqueLinksInclude,
       });
       expect(txMock.exerciseTemplate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ gifUrl: GIF_URL }),

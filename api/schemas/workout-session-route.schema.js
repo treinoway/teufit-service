@@ -2,6 +2,7 @@ import { workoutSessionStatusValues, exerciseLogStatusValues, prescriptionModeVa
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlResponseSchema } from './gif-url.schema.js';
+import { advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
 
 // ─── Shared sub-schemas ───────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ const exerciseLogSchema = {
         gifUrl: gifUrlResponseSchema,
         notes: { type: 'string', nullable: true },
         ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
+        advancedTechniques: advancedTechniquesResponseSchema,
         // swap options available to the student for this exercise
         substitutes: { type: 'array', items: substituteExerciseMinimalSchema },
       },

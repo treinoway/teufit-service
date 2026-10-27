@@ -1,6 +1,13 @@
 import { prisma } from '../db.js';
 import { buildError, validateExerciseType } from '../helpers/training-validators.js';
 import { exerciseTypeValues } from '../constants/training.js';
+import {
+  advancedTechniqueLinksInclude,
+  replaceAdvancedTechniqueLinks,
+  toLinkCreateInput,
+  withAdvancedTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
+import { resolveAdvancedTechniqueSelection } from './advanced-technique-service.js';
 
 // Library exercise templates carry only the exercise identity (name, type, video).
 // Prescription ("how it's done": sets/reps/load/rest/intensity) lives where a workout
@@ -34,10 +41,17 @@ export async function createExerciseTemplate(userId, data) {
   }
 
   validateExerciseType(data.type);
+  const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
-  return prisma.exerciseTemplate.create({
-    data: buildTemplateData(data, trainer.id),
+  const created = await prisma.exerciseTemplate.create({
+    data: {
+      ...buildTemplateData(data, trainer.id),
+      ...toLinkCreateInput(techniqueSelection),
+    },
+    include: advancedTechniqueLinksInclude,
   });
+
+  return withAdvancedTechniqueRefs(created);
 }
 
 /**
@@ -71,6 +85,7 @@ export async function getExerciseTemplatesByTrainer(userId, filters = {}) {
   const [data, total] = await Promise.all([
     prisma.exerciseTemplate.findMany({
       where,
+      include: advancedTechniqueLinksInclude,
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
@@ -78,7 +93,7 @@ export async function getExerciseTemplatesByTrainer(userId, filters = {}) {
     prisma.exerciseTemplate.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  return { data: data.map((template) => withAdvancedTechniqueRefs(template, trainer.id)), total, page, limit };
 }
 
 /**
@@ -112,14 +127,21 @@ export async function batchDeleteExerciseTemplates(userId, ids) {
 }
 
 /**
- * Get public exercise templates only
+ * Get public exercise templates only, hiding other trainers' private techniques
  *
+ * @param {string} userId - User ID of the requesting trainer
  * @returns {Promise<object[]>} List of public templates
  */
-export async function getPublicExerciseTemplates() {
+export async function getPublicExerciseTemplates(userId) {
+  const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
   const templates = await prisma.exerciseTemplate.findMany({
     where: { isPublic: true, deletedAt: null },
     include: {
+      ...advancedTechniqueLinksInclude,
       trainer: {
         include: {
           user: {
@@ -131,7 +153,7 @@ export async function getPublicExerciseTemplates() {
     orderBy: { createdAt: 'desc' },
   });
 
-  return templates;
+  return templates.map((template) => withAdvancedTechniqueRefs(template, trainer.id));
 }
 
 /**
@@ -154,6 +176,7 @@ export async function getExerciseTemplateById(userId, templateId) {
   const template = await prisma.exerciseTemplate.findUnique({
     where: { id: templateId },
     include: {
+      ...advancedTechniqueLinksInclude,
       trainer: {
         include: {
           user: {
@@ -172,7 +195,24 @@ export async function getExerciseTemplateById(userId, templateId) {
     throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
   }
 
-  return template;
+  return withAdvancedTechniqueRefs(template, trainer.id);
+}
+
+// Updates a template and replaces its technique links atomically.
+function updateTemplateWithTechniques(templateId, updateData, techniqueSelection) {
+  return prisma.$transaction(async (tx) => {
+    await replaceAdvancedTechniqueLinks(
+      tx.exerciseTemplateAdvancedTechnique,
+      'exerciseTemplateId',
+      templateId,
+      techniqueSelection,
+    );
+    return tx.exerciseTemplate.update({
+      where: { id: templateId },
+      data: updateData,
+      include: advancedTechniqueLinksInclude,
+    });
+  });
 }
 
 /**
@@ -216,10 +256,19 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
-  return prisma.exerciseTemplate.update({
-    where: { id: templateId },
-    data: updateData,
-  });
+  const techniqueSelection = data.advancedTechniqueIds === undefined
+    ? undefined
+    : await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
+
+  const updated = techniqueSelection
+    ? await updateTemplateWithTechniques(templateId, updateData, techniqueSelection)
+    : await prisma.exerciseTemplate.update({
+      where: { id: templateId },
+      data: updateData,
+      include: advancedTechniqueLinksInclude,
+    });
+
+  return withAdvancedTechniqueRefs(updated);
 }
 
 /**

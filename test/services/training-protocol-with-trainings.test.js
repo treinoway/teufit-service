@@ -14,6 +14,7 @@ vi.mock('../../src/db.js', () => ({
     user: { findUnique: vi.fn() },
     trainingTemplate: { findMany: vi.fn() },
     exerciseTemplate: { findMany: vi.fn() },
+    advancedTechnique: { findMany: vi.fn() },
     trainingProtocol: { create: vi.fn() },
   },
 }));
@@ -22,6 +23,7 @@ import { prisma } from '../../src/db.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
 import { maybeMarkFirstProtocolCreated } from '../../src/services/trainer-onboarding-service.js';
 import { createProtocolWithTrainings } from '../../src/services/training-protocol-service.js';
+import { AdvancedTechniqueErrorCode } from '../../src/constants/advanced-technique.js';
 import { BulkProtocolErrorCode, BulkProtocolMessageCode } from '../../src/constants/training.js';
 
 const TRAINER_USER_ID = 'user-trainer-1';
@@ -74,6 +76,7 @@ beforeEach(() => {
   prisma.user.findUnique.mockResolvedValue(makeAssignee());
   prisma.trainingTemplate.findMany.mockResolvedValue([]);
   prisma.exerciseTemplate.findMany.mockResolvedValue([]);
+  prisma.advancedTechnique.findMany.mockResolvedValue([]);
   prisma.trainingProtocol.create.mockResolvedValue(makeCreatedProtocol());
 });
 
@@ -733,5 +736,167 @@ describe('createProtocolWithTrainings', () => {
       expect(emptyTraining.estimatedDurationSeconds).toBe(0);
       expect(filledTraining.estimatedDurationSeconds).toBeGreaterThan(0);
     });
+  });
+});
+
+
+describe('createProtocolWithTrainings — advancedTechniqueIds', () => {
+  const makeTrainings = () => [
+    {
+      name: 'Treino A',
+      category: 'strength',
+      order: 0,
+      exercises: [
+        { name: 'Squat', type: 'strength', order: 0, advancedTechniqueIds: ['tech-b', 'tech-a'] },
+        { name: 'Lunge', type: 'strength', order: 1 },
+      ],
+    },
+    {
+      name: 'Treino B',
+      category: 'strength',
+      order: 1,
+      exercises: [{ name: 'Press', type: 'strength', order: 0, advancedTechniqueIds: ['tech-a'] }],
+    },
+  ];
+
+  const createdTrainings = () => prisma.trainingProtocol.create.mock.calls[0][0].data.trainings.create;
+
+  it('passes ordered advancedTechniqueIds through as nested link creates', async () => {
+    prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() }));
+
+    const [first, second] = createdTrainings();
+    expect(first.exercises.create[0].advancedTechniqueLinks).toEqual({
+      create: [
+        { advancedTechniqueId: 'tech-b', order: 0 },
+        { advancedTechniqueId: 'tech-a', order: 1 },
+      ],
+    });
+    expect(second.exercises.create[0].advancedTechniqueLinks).toEqual({
+      create: [{ advancedTechniqueId: 'tech-a', order: 0 }],
+    });
+  });
+
+  it('omits advancedTechniqueLinks for exercises without advancedTechniqueIds', async () => {
+    prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() }));
+
+    expect(createdTrainings()[0].exercises.create[1]).not.toHaveProperty('advancedTechniqueLinks');
+  });
+
+  it('validates all technique ids of all exercises in one deduplicated query', async () => {
+    prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() }));
+
+    expect(prisma.advancedTechnique.findMany).toHaveBeenCalledTimes(1);
+    expect([...prisma.advancedTechnique.findMany.mock.calls[0][0].where.id.in].sort()).toEqual(['tech-a', 'tech-b']);
+  });
+
+  it('skips the technique query when no exercise sends advancedTechniqueIds', async () => {
+    const trainings = [
+      { name: 'A', category: 'strength', order: 0, exercises: [{ name: 'Squat', type: 'strength', order: 0 }] },
+    ];
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings }));
+
+    expect(prisma.advancedTechnique.findMany).not.toHaveBeenCalled();
+  });
+
+  it('throws INVALID_SELECTION and writes nothing when a technique is not visible', async () => {
+    prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }]);
+
+    await expect(
+      createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() })),
+    ).rejects.toMatchObject({ httpStatus: 400, error: AdvancedTechniqueErrorCode.INVALID_SELECTION });
+
+    expect(prisma.trainingProtocol.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('createProtocolWithTrainings — technique inheritance from exercise templates', () => {
+  const TEMPLATE_ID = 'et-1';
+  const link = (advancedTechniqueId, order) => ({ advancedTechniqueId, order });
+
+  const makeTrainings = (exerciseExtra = {}) => [
+    {
+      name: 'Treino A',
+      category: 'strength',
+      order: 0,
+      exercises: [{ name: 'Squat', type: 'strength', order: 0, exerciseTemplateId: TEMPLATE_ID, ...exerciseExtra }],
+    },
+  ];
+
+  const createdExercise = () => prisma.trainingProtocol.create.mock.calls[0][0].data.trainings.create[0].exercises.create[0];
+
+  beforeEach(() => {
+    prisma.exerciseTemplate.findMany.mockResolvedValue([
+      { id: TEMPLATE_ID, advancedTechniqueLinks: [link('tech-b', 5), link('tech-gone', 6), link('tech-a', 9)] },
+    ]);
+    prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+  });
+
+  it('inherits the template links, filtered to visible and reindexed, when advancedTechniqueIds is omitted', async () => {
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() }));
+
+    expect(createdExercise().advancedTechniqueLinks).toEqual({
+      create: [
+        { advancedTechniqueId: 'tech-b', order: 0 },
+        { advancedTechniqueId: 'tech-a', order: 1 },
+      ],
+    });
+  });
+
+  it('creates no links when advancedTechniqueIds is an explicit empty array', async () => {
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings({ advancedTechniqueIds: [] }) }));
+
+    expect(createdExercise()).not.toHaveProperty('advancedTechniqueLinks');
+  });
+
+  it('uses explicit ids instead of the template links when provided', async () => {
+    await createProtocolWithTrainings(
+      TRAINER_USER_ID,
+      makeBasePayload({ trainings: makeTrainings({ advancedTechniqueIds: ['tech-a'] }) }),
+    );
+
+    expect(createdExercise().advancedTechniqueLinks).toEqual({ create: [{ advancedTechniqueId: 'tech-a', order: 0 }] });
+  });
+
+  it('rejects explicit ids that are not visible', async () => {
+    prisma.advancedTechnique.findMany.mockResolvedValue([]);
+
+    await expect(
+      createProtocolWithTrainings(
+        TRAINER_USER_ID,
+        makeBasePayload({ trainings: makeTrainings({ advancedTechniqueIds: ['tech-x'] }) }),
+      ),
+    ).rejects.toMatchObject({ httpStatus: 400, error: AdvancedTechniqueErrorCode.INVALID_SELECTION });
+  });
+
+  it('loads template links through a single exerciseTemplate.findMany selecting advancedTechniqueLinks', async () => {
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings: makeTrainings() }));
+
+    expect(prisma.exerciseTemplate.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.exerciseTemplate.findMany.mock.calls[0][0].select).toEqual({ id: true, advancedTechniqueLinks: true });
+  });
+
+  it('visibility-checks techniques with one batched query per kind (explicit, inherited), not per exercise', async () => {
+    const trainings = makeTrainings();
+    trainings[0].exercises.push({ name: 'Press', type: 'strength', order: 1, advancedTechniqueIds: ['tech-a'] });
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings }));
+
+    expect(prisma.exerciseTemplate.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.advancedTechnique.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('inherits nothing when the exercise has no exerciseTemplateId and no ids', async () => {
+    const trainings = [{ name: 'A', category: 'strength', order: 0, exercises: [{ name: 'Squat', type: 'strength', order: 0 }] }];
+
+    await createProtocolWithTrainings(TRAINER_USER_ID, makeBasePayload({ trainings }));
+
+    expect(createdExercise()).not.toHaveProperty('advancedTechniqueLinks');
   });
 });

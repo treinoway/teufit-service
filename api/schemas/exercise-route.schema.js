@@ -2,6 +2,7 @@ import { exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } f
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
+import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
 
 const exerciseBaseProperties = {
   id: { type: 'string', format: 'uuid' },
@@ -32,6 +33,7 @@ const exerciseBaseProperties = {
   restInterval: { type: 'integer', nullable: true },
   notes: { type: 'string', nullable: true },
   ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
+  advancedTechniques: advancedTechniquesResponseSchema,
   createdAt: { type: 'string', format: 'date-time' },
   updatedAt: { type: 'string', format: 'date-time', nullable: true },
 };
@@ -78,6 +80,7 @@ const exerciseBodyProperties = {
   restInterval: { type: 'integer', minimum: 0 },
   notes: { type: 'string' },
   intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+  advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
 };
 
 export const createExerciseSchema = {
@@ -194,6 +197,7 @@ const exerciseUpdateBodyProperties = {
   restInterval: { type: ['integer', 'null'], minimum: 0 },
   notes: { type: 'string' },
   intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+  advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
 };
 
 export const updateExerciseSchema = {
@@ -262,6 +266,7 @@ const substituteBodyProperties = {
   restInterval: exerciseBodyProperties.restInterval,
   notes: exerciseBodyProperties.notes,
   intensity: exerciseBodyProperties.intensity,
+  advancedTechniqueIds: exerciseBodyProperties.advancedTechniqueIds,
 };
 
 export const addSubstituteSchema = {

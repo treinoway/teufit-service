@@ -22,6 +22,7 @@ vi.mock('../../src/db.js', () => ({
 }));
 
 import { prisma } from '../../src/db.js';
+import { advancedTechniqueLinksInclude } from '../../src/helpers/advanced-technique-refs.js';
 import {
   createTrainingTemplate,
   createTrainingTemplateExercise,
@@ -130,6 +131,7 @@ describe('training-template-service', () => {
           deletedAt: null,
           OR: [{ trainerId: 't1' }, { isPublic: true }],
         },
+        include: { advancedTechniqueLinks: true },
       });
       expect(prisma.trainingTemplate.create).not.toHaveBeenCalled();
     });
@@ -177,6 +179,7 @@ describe('training-template-service', () => {
           deletedAt: null,
           OR: [{ trainerId: 't1' }, { isPublic: true }],
         },
+        include: { advancedTechniqueLinks: true },
       });
 
       // Junction row identity must be snapshotted from the public template
@@ -672,7 +675,7 @@ describe('training-template-service', () => {
       expect(prisma.trainingTemplateExerciseTemplate.update).toHaveBeenCalledWith({
         where: { id: 'jt1' },
         data: { sets: 5 },
-        include: { exerciseTemplate: true },
+        include: { exerciseTemplate: true, ...advancedTechniqueLinksInclude },
       });
     });
 
