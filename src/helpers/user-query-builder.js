@@ -58,6 +58,9 @@ export function buildUserSelect(includeRelations = []) {
         profileCompletedAt: true,
         firstStudentLinkedAt: true,
         firstProtocolCreatedAt: true,
+        firstStudentInvitedAt: true,
+        firstAnamnesisSentAt: true,
+        brandingConfiguredAt: true,
       },
     };
   }

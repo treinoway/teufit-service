@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { runNonCritical } from '../helpers/non-critical.js';
 import emailHandler from '../config/email-handler.js';
 import { AppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
@@ -23,6 +24,7 @@ import {
   normalizeChoiceAnswersForVisibility,
 } from './anamnesis-shared.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
+import { maybeMarkFirstAnamnesisSent } from './trainer-onboarding-service.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -740,6 +742,9 @@ export async function linkAnamnesisToStudent(userId, studentId, data) {
       },
     });
 
+    await runNonCritical('First-anamnesis-sent milestone', () =>
+      maybeMarkFirstAnamnesisSent({ trainerId: trainer.id }),
+    );
     return link;
   } catch (error) {
     if (error.code === 'P2002') {

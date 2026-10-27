@@ -18,6 +18,9 @@ import {
   maybeMarkProfileComplete,
   maybeMarkFirstStudentLinked,
   maybeMarkFirstProtocolCreated,
+  maybeMarkFirstStudentInvited,
+  maybeMarkFirstAnamnesisSent,
+  maybeMarkBrandingConfigured,
 } from '../../src/services/trainer-onboarding-service.js';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -25,79 +28,37 @@ import {
 const completeUser = {
   firstName: 'Ana',
   lastName: 'Silva',
-  birthDate: new Date('1990-01-15'),
-  gender: 'female',
+  avatarUrl: 'avatars/user-1.jpg',
 };
 
-const completeAddress = {
-  line1: 'Rua das Flores, 100',
-  city: 'São Paulo',
-  state: 'SP',
-  postalCode: '01310-100',
-  country: 'Brazil',
-};
-
-// ─── isProfileDataComplete ────────────────────────────────────────────────────
 
 describe('isProfileDataComplete', () => {
-  it('returns true when all 9 required fields are present and non-empty', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: completeAddress })).toBe(true);
+  it('returns true when firstName, lastName and avatarUrl are present', () => {
+    expect(isProfileDataComplete({ user: completeUser })).toBe(true);
+  });
+
+  it('returns true without birthDate, gender or address', () => {
+    expect(isProfileDataComplete({ user: completeUser, address: null })).toBe(true);
   });
 
   it('returns false when user is null', () => {
-    expect(isProfileDataComplete({ user: null, address: completeAddress })).toBe(false);
+    expect(isProfileDataComplete({ user: null })).toBe(false);
   });
 
-  it('returns false when address is null', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: null })).toBe(false);
+  it.each([
+    ['firstName', null],
+    ['lastName', undefined],
+    ['avatarUrl', null],
+  ])('returns false when %s is missing', (field, value) => {
+    expect(isProfileDataComplete({ user: { ...completeUser, [field]: value } })).toBe(false);
   });
 
-  it('returns false when firstName is missing', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, firstName: null }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when lastName is missing', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, lastName: undefined }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when birthDate is missing', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, birthDate: null }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when gender is missing', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, gender: null }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when address line1 is missing', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, line1: null } })).toBe(false);
-  });
-
-  it('returns false when address city is missing', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, city: null } })).toBe(false);
-  });
-
-  it('returns false when address state is missing', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, state: null } })).toBe(false);
-  });
-
-  it('returns false when address postalCode is missing', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, postalCode: null } })).toBe(false);
-  });
-
-  it('returns false when address country is missing', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, country: null } })).toBe(false);
-  });
-
-  it('returns false when a string field is an empty string', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, firstName: '' }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when a string field is whitespace-only', () => {
-    expect(isProfileDataComplete({ user: { ...completeUser, firstName: '   ' }, address: completeAddress })).toBe(false);
-  });
-
-  it('returns false when an address field is an empty string', () => {
-    expect(isProfileDataComplete({ user: completeUser, address: { ...completeAddress, city: '' } })).toBe(false);
+  it.each([
+    ['firstName', ''],
+    ['lastName', '   '],
+    ['avatarUrl', ''],
+  ])('returns false when %s is blank', (field, value) => {
+    expect(isProfileDataComplete({ user: { ...completeUser, [field]: value } })).toBe(false);
   });
 });
 
@@ -125,22 +86,14 @@ describe('maybeMarkProfileComplete', () => {
 
     await maybeMarkProfileComplete({ userId: 'u1' });
 
-    expect(prisma.address.findUnique).not.toHaveBeenCalled();
     expect(prisma.trainer.updateMany).not.toHaveBeenCalled();
   });
 
-  it('is a no-op when address is missing required fields', async () => {
+  it('is a no-op when avatarUrl is missing', async () => {
     prisma.trainer.findUnique.mockResolvedValue({
       id: 't1',
       profileCompletedAt: null,
-      user: completeUser,
-    });
-    prisma.address.findUnique.mockResolvedValue({
-      line1: 'Rua das Flores',
-      city: null,
-      state: 'SP',
-      postalCode: '01310-100',
-      country: 'Brazil',
+      user: { ...completeUser, avatarUrl: null },
     });
 
     await maybeMarkProfileComplete({ userId: 'u1' });
@@ -148,17 +101,31 @@ describe('maybeMarkProfileComplete', () => {
     expect(prisma.trainer.updateMany).not.toHaveBeenCalled();
   });
 
-  it('calls trainer.updateMany with where-null guard when profile is complete', async () => {
+  it('selects avatarUrl on the trainer user lookup', async () => {
+    prisma.trainer.findUnique.mockResolvedValue(null);
+
+    await maybeMarkProfileComplete({ userId: 'u1' });
+
+    expect(prisma.trainer.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          user: { select: expect.objectContaining({ avatarUrl: true }) },
+        }),
+      }),
+    );
+  });
+
+  it('marks the profile complete without reading the address when name and avatar are set', async () => {
     prisma.trainer.findUnique.mockResolvedValue({
       id: 't1',
       profileCompletedAt: null,
       user: completeUser,
     });
-    prisma.address.findUnique.mockResolvedValue(completeAddress);
     prisma.trainer.updateMany.mockResolvedValue({ count: 1 });
 
     await maybeMarkProfileComplete({ userId: 'u1' });
 
+    expect(prisma.address.findUnique).not.toHaveBeenCalled();
     expect(prisma.trainer.updateMany).toHaveBeenCalledWith({
       where: { id: 't1', profileCompletedAt: null },
       data: { profileCompletedAt: expect.any(Date) },
@@ -175,20 +142,57 @@ describe('maybeMarkProfileComplete', () => {
         }),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      address: {
-        findUnique: vi.fn().mockResolvedValue(completeAddress),
-      },
     };
 
     await maybeMarkProfileComplete({ userId: 'u1', tx });
 
-    expect(tx.trainer.findUnique).toHaveBeenCalled();
-    expect(tx.address.findUnique).toHaveBeenCalled();
     expect(tx.trainer.updateMany).toHaveBeenCalledWith({
       where: { id: 't1', profileCompletedAt: null },
       data: { profileCompletedAt: expect.any(Date) },
     });
-    // Global prisma must not be touched
+    expect(prisma.trainer.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+
+describe.each([
+  ['maybeMarkFirstStudentInvited', maybeMarkFirstStudentInvited, 'firstStudentInvitedAt'],
+  ['maybeMarkFirstAnamnesisSent', maybeMarkFirstAnamnesisSent, 'firstAnamnesisSentAt'],
+  ['maybeMarkBrandingConfigured', maybeMarkBrandingConfigured, 'brandingConfiguredAt'],
+])('%s', (_name, setter, column) => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.trainer.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it(`calls trainer.updateMany with a where-null guard on ${column}`, async () => {
+    await setter({ trainerId: 't1' });
+
+    expect(prisma.trainer.updateMany).toHaveBeenCalledWith({
+      where: { id: 't1', [column]: null },
+      data: { [column]: expect.any(Date) },
+    });
+  });
+
+  it('is idempotent: repeated calls always carry the null guard', async () => {
+    await setter({ trainerId: 't1' });
+    await setter({ trainerId: 't1' });
+
+    expect(prisma.trainer.updateMany).toHaveBeenCalledTimes(2);
+    for (const [args] of prisma.trainer.updateMany.mock.calls) {
+      expect(args.where).toEqual({ id: 't1', [column]: null });
+    }
+  });
+
+  it('uses the provided tx instead of the global prisma client', async () => {
+    const tx = { trainer: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+
+    await setter({ trainerId: 't1', tx });
+
+    expect(tx.trainer.updateMany).toHaveBeenCalledWith({
+      where: { id: 't1', [column]: null },
+      data: { [column]: expect.any(Date) },
+    });
     expect(prisma.trainer.updateMany).not.toHaveBeenCalled();
   });
 });

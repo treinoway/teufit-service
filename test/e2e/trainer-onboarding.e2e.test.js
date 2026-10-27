@@ -81,6 +81,28 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     });
   }
 
+  async function uploadAvatar(accessToken) {
+    const boundary = '----OnboardingAvatarBoundary';
+    const payload = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="file"; filename="avatar.jpg"',
+      'Content-Type: image/jpeg',
+      '',
+      Buffer.from('fake-jpeg-data').toString('binary'),
+      `--${boundary}--`,
+    ].join('\r\n');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/me/avatar',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      payload,
+    });
+    expect(res.statusCode).toBe(200);
+  }
+
   // ─── Tests ───────────────────────────────────────────────────────────────
 
   it('returns trainerOnboarding: null for a user who is not a trainer', async () => {
@@ -152,6 +174,8 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     });
     expect(profileRes.statusCode).toBe(200);
 
+    await uploadAvatar(accessToken);
+
     const onboarding = await getOnboardingStatus(accessToken);
     expect(onboarding.profileCompleted).toBe(true);
     expect(onboarding.profileCompletedAt).not.toBeNull();
@@ -178,6 +202,8 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
       headers: { authorization: `Bearer ${accessToken}` },
       payload: { gender: 'female' },
     });
+
+    await uploadAvatar(accessToken);
 
     const firstCheck = await getOnboardingStatus(accessToken);
     const firstTimestamp = firstCheck.profileCompletedAt;
@@ -361,7 +387,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
   });
 
   it('sets profileCompleted=true immediately when a student who already has all required fields calls PATCH /become-trainer', async () => {
-    // Create a user as a student and fill all 9 required profile fields
+    // Create a user as a student with name, surname and avatar set
     const { accessToken: studentToken } = await createUserWithToken();
 
     const profileRes = await patchUserProfile(studentToken, {
@@ -378,6 +404,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
       },
     });
     expect(profileRes.statusCode).toBe(200);
+    await uploadAvatar(studentToken);
 
     // Upgrade the student to trainer — the milestone should be set immediately
     const becomeRes = await app.inject({

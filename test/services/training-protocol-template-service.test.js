@@ -11,7 +11,7 @@ vi.mock('../../src/db.js', () => ({
       updateMany: vi.fn(),
       count: vi.fn(),
     },
-    trainingTemplate: { findMany: vi.fn() },
+    trainingTemplate: { findMany: vi.fn(), updateMany: vi.fn() },
     protocolTemplateTraining: {
       createMany: vi.fn(),
       deleteMany: vi.fn(),
@@ -618,6 +618,59 @@ describe('training-protocol-template-service', () => {
         where: { protocolTemplateId: 'tmpl-1' },
       });
       expect(prisma.protocolTemplateTraining.createMany).not.toHaveBeenCalled();
+    });
+
+    describe('when the template is the seeded example routine', () => {
+      const arrangeExampleTemplate = () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+        prisma.trainingProtocolTemplate.findUnique
+          .mockResolvedValueOnce({ ...baseTemplate, isExample: true })
+          .mockResolvedValueOnce({ ...baseTemplate, isExample: false, name: 'Edited' });
+        prisma.trainingProtocolTemplate.update.mockResolvedValue({});
+        prisma.trainingTemplate.updateMany.mockResolvedValue({ count: 2 });
+      };
+
+      it('should flip isExample to false on the routine update data', async () => {
+        arrangeExampleTemplate();
+
+        await updateProtocolTemplate('u1', 'tmpl-1', { name: 'Edited' });
+
+        expect(prisma.trainingProtocolTemplate.update).toHaveBeenCalledWith({
+          where: { id: 'tmpl-1' },
+          data: { name: 'Edited', isExample: false },
+        });
+      });
+
+      it('should clear isExample on the example trainings linked to the routine inside the transaction', async () => {
+        arrangeExampleTemplate();
+
+        await updateProtocolTemplate('u1', 'tmpl-1', { name: 'Edited' });
+
+        expect(prisma.trainingTemplate.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.trainingTemplate.updateMany).toHaveBeenCalledWith({
+          where: { isExample: true, protocolTemplateTrainings: { some: { protocolTemplateId: 'tmpl-1' } } },
+          data: { isExample: false },
+        });
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('when the template is a regular routine', () => {
+      it('should neither set isExample nor touch the linked trainings', async () => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' });
+        prisma.trainingProtocolTemplate.findUnique
+          .mockResolvedValueOnce({ ...baseTemplate, isExample: false })
+          .mockResolvedValueOnce({ ...baseTemplate, name: 'Edited' });
+        prisma.trainingProtocolTemplate.update.mockResolvedValue({});
+
+        await updateProtocolTemplate('u1', 'tmpl-1', { name: 'Edited' });
+
+        expect(prisma.trainingProtocolTemplate.update).toHaveBeenCalledWith({
+          where: { id: 'tmpl-1' },
+          data: { name: 'Edited' },
+        });
+        expect(prisma.trainingTemplate.updateMany).not.toHaveBeenCalled();
+      });
     });
   });
 

@@ -5,6 +5,10 @@ vi.mock('../../src/services/platform-plan-service.js', () => ({
   assertStudentActiveOnPlan: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkFirstAnamnesisSent: vi.fn(),
+}));
+
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainer: { findUnique: vi.fn() },
@@ -103,6 +107,7 @@ import {
 } from '../../src/services/anamnesis-shared.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
+import { maybeMarkFirstAnamnesisSent } from '../../src/services/trainer-onboarding-service.js';
 
 // ─── Factories ────────────────────────────────────────────────────────────────
 
@@ -929,6 +934,54 @@ describe('anamnesis-service', () => {
 
       expect(prisma.studentAnamnesis.create).toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+  });
+
+
+  describe('linkAnamnesisToStudent first-anamnesis milestone', () => {
+    const arrangeLinkable = () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: 'trainer-1', studentId: 'student-1' });
+      prisma.anamnesis.findUnique.mockResolvedValue(makeAnamnesis());
+      maybeMarkFirstAnamnesisSent.mockResolvedValue(undefined);
+    };
+
+    it('marks firstAnamnesisSentAt for the trainer after the StudentAnamnesis is created', async () => {
+      arrangeLinkable();
+      prisma.studentAnamnesis.create.mockResolvedValue({
+        ...makeStudentAnamnesisLink(),
+        anamnesis: { id: 'anamnesis-1', title: 'Health Questionnaire', isGeneral: false },
+      });
+
+      await linkAnamnesisToStudent('user-1', 'student-1', { anamnesisId: 'anamnesis-1' });
+
+      expect(maybeMarkFirstAnamnesisSent).toHaveBeenCalledTimes(1);
+      expect(maybeMarkFirstAnamnesisSent).toHaveBeenCalledWith(expect.objectContaining({ trainerId: 'trainer-1' }));
+      expect(maybeMarkFirstAnamnesisSent.mock.invocationCallOrder[0]).toBeGreaterThan(
+        prisma.studentAnamnesis.create.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not mark the milestone when the link already exists (P2002)', async () => {
+      arrangeLinkable();
+      prisma.studentAnamnesis.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+
+      await expect(
+        linkAnamnesisToStudent('user-1', 'student-1', { anamnesisId: 'anamnesis-1' }),
+      ).rejects.toMatchObject({ httpStatus: 409 });
+
+      expect(maybeMarkFirstAnamnesisSent).not.toHaveBeenCalled();
+    });
+
+    it('does not mark the milestone when the student is not linked to the trainer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue(makeTrainer());
+      prisma.trainerStudent.findUnique.mockResolvedValue(null);
+
+      await expect(
+        linkAnamnesisToStudent('user-1', 'student-1', { anamnesisId: 'anamnesis-1' }),
+      ).rejects.toMatchObject({ httpStatus: 404 });
+
+      expect(maybeMarkFirstAnamnesisSent).not.toHaveBeenCalled();
     });
   });
 

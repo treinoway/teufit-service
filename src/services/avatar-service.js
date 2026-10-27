@@ -1,7 +1,9 @@
 'use strict'
 
+import { runNonCritical } from '../helpers/non-critical.js';
 import { prisma } from '../db.js';
 import s3BucketHandler from '../config/s3-bucket-handler.js';
+import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
 
 /**
  * Map MIME types to file extensions
@@ -116,6 +118,8 @@ export async function uploadAvatar(userId, file) {
         console.error(`Failed to delete old avatar (non-critical): ${error.message}`);
       });
     }
+
+    await runNonCritical('Profile-complete milestone', () => maybeMarkProfileComplete({ userId }));
 
     // Return signed URL for the new avatar
     const avatarUrl = await s3BucketHandler.resolveUrl(newS3Key);

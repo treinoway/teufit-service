@@ -187,4 +187,19 @@ describe('buildUserSelect', () => {
       expect(typeof select.socials.select).toBe('object');
     });
   });
+
+  describe('trainerOnboarding milestones', () => {
+    it.each([
+      'profileCompletedAt',
+      'firstStudentLinkedAt',
+      'firstProtocolCreatedAt',
+      'firstStudentInvitedAt',
+      'firstAnamnesisSentAt',
+      'brandingConfiguredAt',
+    ])('selects %s on the trainer row', (column) => {
+      const select = buildUserSelect(['trainerOnboarding']);
+
+      expect(select.trainer.select).toHaveProperty(column, true);
+    });
+  });
 });

@@ -1793,11 +1793,6 @@
       "count": 5
     }
   },
-  "test/services/trainer-onboarding-service.test.js": {
-    "local/no-comments-in-function": {
-      "count": 1
-    }
-  },
   "test/services/trainer-service.test.js": {
     "local/no-comments-in-function": {
       "count": 41

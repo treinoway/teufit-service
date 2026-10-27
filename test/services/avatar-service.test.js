@@ -21,7 +21,12 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => {
   };
 });
 
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkProfileComplete: vi.fn(),
+}));
+
 import { prisma } from '../../src/db.js';
+import { maybeMarkProfileComplete } from '../../src/services/trainer-onboarding-service.js';
 import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import { uploadAvatar } from '../../src/services/avatar-service.js';
 
@@ -371,5 +376,50 @@ describe('avatar-service', () => {
 
       expect(result).toEqual({ avatarUrl: 'https://signed-url.example.com/avatars/user-123.png' });
     });
+  });
+});
+
+describe('avatar-service trainer onboarding milestone', () => {
+  const USER_ID = 'user-123';
+  const validFile = {
+    filename: 'avatar.jpg',
+    mimetype: 'image/jpeg',
+    buffer: Buffer.from('fake-image-data'),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    maybeMarkProfileComplete.mockResolvedValue(undefined);
+    prisma.user.findUnique.mockResolvedValue({ id: USER_ID, avatarUrl: null });
+    s3BucketHandler.uploadFile.mockResolvedValue('avatars/user-123.jpg');
+    prisma.user.update.mockResolvedValue({ id: USER_ID, avatarUrl: 'avatars/user-123.jpg' });
+    s3BucketHandler.resolveUrl.mockResolvedValue('https://signed-url.example.com/avatars/user-123.jpg');
+  });
+
+  it('should re-evaluate the profile milestone for the user after the avatar is stored', async () => {
+    await uploadAvatar(USER_ID, validFile);
+
+    expect(maybeMarkProfileComplete).toHaveBeenCalledTimes(1);
+    expect(maybeMarkProfileComplete).toHaveBeenCalledWith(expect.objectContaining({ userId: USER_ID }));
+    expect(maybeMarkProfileComplete.mock.invocationCallOrder[0]).toBeGreaterThan(
+      prisma.user.update.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('should not evaluate the milestone when the upload is rejected', async () => {
+    await expect(
+      uploadAvatar(USER_ID, { ...validFile, mimetype: 'application/pdf' }),
+    ).rejects.toMatchObject({ code: 'INVALID_FILE_TYPE' });
+
+    expect(maybeMarkProfileComplete).not.toHaveBeenCalled();
+  });
+
+  it('should not evaluate the milestone when the S3 upload fails', async () => {
+    const s3Error = Object.assign(new Error('s3 down'), { code: 'S3_UPLOAD_FAILED' });
+    s3BucketHandler.uploadFile.mockRejectedValue(s3Error);
+
+    await expect(uploadAvatar(USER_ID, validFile)).rejects.toBe(s3Error);
+
+    expect(maybeMarkProfileComplete).not.toHaveBeenCalled();
   });
 });

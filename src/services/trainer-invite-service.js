@@ -505,7 +505,8 @@ function createAccountExistsError() {
 
 async function createTrainerAccountFromInvite(invite, passwordHash) {
   const normalizedEmail = normalizeEmail(invite.email);
-  return prisma.$transaction(async (tx) => {
+  const afterCommitTasks = [];
+  const created = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: { email: normalizedEmail, passwordHash, roles: [Roles.TRAINER], status: NEW_USER_STATUS },
     });
@@ -522,7 +523,10 @@ async function createTrainerAccountFromInvite(invite, passwordHash) {
 
     // Same grant as /become-trainer and redeemInvite, on the tx client: the
     // global client cannot see the uncommitted user.
-    const preferences = await setActiveProfileToTrainer(user.id, { tx });
+    const preferences = await setActiveProfileToTrainer(user.id, {
+      tx,
+      onCommit: (task) => afterCommitTasks.push(task),
+    });
     const trainerId = await findTrainerIdByUserId(tx, user.id);
     await tx.platformSubscription.create({
       data: { trainerId, tier: PLATFORM_PLAN_TIERS.BETA, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
@@ -531,6 +535,8 @@ async function createTrainerAccountFromInvite(invite, passwordHash) {
     await tx.pendingSignup.deleteMany({ where: { email: normalizedEmail } });
     return { user, preferences };
   });
+  afterCommitTasks.forEach((task) => task());
+  return created;
 }
 
 /**

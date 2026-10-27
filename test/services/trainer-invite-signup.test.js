@@ -201,7 +201,7 @@ describe('signupWithInvite', () => {
       await signupWithInvite({ code: CODE, password: PASSWORD });
 
       expect(setActiveProfileToTrainer).toHaveBeenCalledTimes(1);
-      expect(setActiveProfileToTrainer).toHaveBeenCalledWith(NEW_USER_ID, { tx: prisma });
+      expect(setActiveProfileToTrainer).toHaveBeenCalledWith(NEW_USER_ID, { tx: prisma, onCommit: expect.any(Function) });
     });
 
     it('should delete the pending signup for the normalized email', async () => {
@@ -220,6 +220,79 @@ describe('signupWithInvite', () => {
       await signupWithInvite({ code: CODE, password: PASSWORD });
 
       expect(emailHandler.sendEmailVerificationEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deferred welcome email tasks', () => {
+    it('should not run a task handed to onCommit while the transaction is still open', async () => {
+      const task = vi.fn();
+      let ranDuringTransaction = true;
+      setActiveProfileToTrainer.mockImplementation(async (userId, { onCommit }) => {
+        onCommit(task);
+        ranDuringTransaction = task.mock.calls.length > 0;
+        return { userId, activeProfile: 'trainer' };
+      });
+
+      await signupWithInvite({ code: CODE, password: PASSWORD });
+
+      expect(ranDuringTransaction).toBe(false);
+    });
+
+    it('should run each task handed to onCommit once the transaction resolves', async () => {
+      const task = vi.fn();
+      setActiveProfileToTrainer.mockImplementation(async (userId, { onCommit }) => {
+        onCommit(task);
+        return { userId, activeProfile: 'trainer' };
+      });
+
+      await signupWithInvite({ code: CODE, password: PASSWORD });
+
+      expect(task).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not run the task when the transaction rejects after it was queued', async () => {
+      const task = vi.fn();
+      const dbError = new Error('commit failed');
+      setActiveProfileToTrainer.mockImplementation(async (userId, { onCommit }) => {
+        onCommit(task);
+        return { userId, activeProfile: 'trainer' };
+      });
+      prisma.pendingSignup.deleteMany.mockRejectedValue(dbError);
+
+      await expect(signupWithInvite({ code: CODE, password: PASSWORD })).rejects.toBe(dbError);
+
+      expect(task).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deferred example-routine seed and welcome email tasks', () => {
+    it('should run the seed task before the email task, in queue order, once the transaction resolves', async () => {
+      const order = [];
+      setActiveProfileToTrainer.mockImplementation(async (userId, { onCommit }) => {
+        onCommit(() => order.push('seed'));
+        onCommit(() => order.push('email'));
+        return { userId, activeProfile: 'trainer' };
+      });
+
+      await signupWithInvite({ code: CODE, password: PASSWORD });
+
+      expect(order).toEqual(['seed', 'email']);
+    });
+
+    it('should skip both the seed and the email tasks when the transaction rejects', async () => {
+      const seedTask = vi.fn();
+      const emailTask = vi.fn();
+      setActiveProfileToTrainer.mockImplementation(async (userId, { onCommit }) => {
+        onCommit(seedTask);
+        onCommit(emailTask);
+        return { userId, activeProfile: 'trainer' };
+      });
+      prisma.pendingSignup.deleteMany.mockRejectedValue(new Error('commit failed'));
+
+      await expect(signupWithInvite({ code: CODE, password: PASSWORD })).rejects.toThrow('commit failed');
+
+      expect(seedTask).not.toHaveBeenCalled();
+      expect(emailTask).not.toHaveBeenCalled();
     });
   });
 
