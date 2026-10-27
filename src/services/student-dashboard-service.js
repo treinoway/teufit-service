@@ -657,7 +657,7 @@ export async function getDailyActivity(trainerUserId, studentId, { dateFrom, dat
  * @param {object} options - { windowDays, includeExerciseProgression }
  */
 export async function buildAiPerformanceSnapshot(trainerUserId, studentId, { windowDays = DASHBOARD_DEFAULTS.WINDOW_DAYS_DEFAULT, includeExerciseProgression = true } = {}) {
-  await resolveTrainerStudent(trainerUserId, studentId);
+  const trainer = await resolveTrainerStudent(trainerUserId, studentId);
 
   const to = new Date();
   const from = addDaysMs(to, -windowDays);
@@ -678,7 +678,7 @@ export async function buildAiPerformanceSnapshot(trainerUserId, studentId, { win
       select: { startedAt: true },
     }),
     prisma.trainingProtocol.findFirst({
-      where: { assigneeId: studentId, status: 'active', deletedAt: null },
+      where: { assigneeId: studentId, trainerId: trainer.id, status: 'active', deletedAt: null },
       orderBy: { startDate: 'desc' },
       select: { id: true, name: true },
     }),

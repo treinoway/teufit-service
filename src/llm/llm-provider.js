@@ -3,12 +3,12 @@
  *
  * All concrete provider implementations must implement:
  *
- *   chat({ system, tools, messages, maxTokens }) → NormalizedResponse
+ *   chat({ system, tools, messages, maxTokens, signal }) → NormalizedResponse
  *   buildToolResultMessages(previousAssistantContent, toolResults) → messages array
  *
  * Normalized response shape:
  *   {
- *     stopReason: 'end_turn' | 'tool_use',
+ *     stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal',
  *     text: string | null,
  *     toolCalls: [{ id: string, name: string, input: object }],
  *     rawContent: any,   // provider-specific content preserved for multi-turn
@@ -37,10 +37,11 @@ export class LlmProvider {
    * @param {object[]} params.tools - Tool definitions in facade format
    * @param {object[]} params.messages - Conversation messages
    * @param {number} params.maxTokens - Maximum tokens to generate
+   * @param {AbortSignal} [params.signal] - Aborts the in-flight model call
    * @returns {Promise<NormalizedResponse>}
    */
   // eslint-disable-next-line no-unused-vars
-  async chat({ system, tools, messages, maxTokens }) {
+  async chat({ system, tools, messages, maxTokens, signal }) {
     throw new Error('LlmProvider.chat() must be implemented by subclass')
   }
 
@@ -59,10 +60,11 @@ export class LlmProvider {
    * @param {object[]} params.tools - Tool definitions in facade format
    * @param {object[]} params.messages - Conversation messages
    * @param {number} params.maxTokens - Maximum tokens to generate
+   * @param {AbortSignal} [params.signal] - Aborts the in-flight model call
    * @returns {AsyncGenerator}
    */
   // eslint-disable-next-line no-unused-vars
-  async *chatStream({ system, tools, messages, maxTokens }) {
+  async *chatStream({ system, tools, messages, maxTokens, signal }) {
     throw new Error('LlmProvider.chatStream() must be implemented by subclass')
   }
 

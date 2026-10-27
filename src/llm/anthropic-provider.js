@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { LlmProvider } from './llm-provider.js'
-import { AI_MODELS } from '../constants/ai.js'
+import { AI_MODELS, AI_LIMITS } from '../constants/ai.js'
+
+// Maps Anthropic stop reasons to the facade's; anything unlisted is a normal end of turn.
+const STOP_REASONS = {
+  tool_use: 'tool_use',
+  max_tokens: 'max_tokens',
+  refusal: 'refusal',
+}
 
 /**
  * Anthropic adapter for the LLM facade.
@@ -18,21 +25,38 @@ export class AnthropicProvider extends LlmProvider {
 
   _getClient() {
     if (!this._client) {
-      this._client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      // why: maxRetries 0 keeps the service's callModel as the single retry layer.
+      this._client = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        maxRetries: 0,
+        timeout: AI_LIMITS.LLM_TIMEOUT_MS,
+      })
     }
     return this._client
+  }
+
+  // Detects an aborted request; the SDK error classes do not set `name`, so the constructor name is used.
+  _isAbortError(err) {
+    return err?.constructor?.name === 'APIUserAbortError' || err?.name === 'AbortError'
+  }
+
+  // Detects the SDK's request-timeout error (the client timeout is AI_LIMITS.LLM_TIMEOUT_MS).
+  _isTimeoutError(err) {
+    return err?.constructor?.name === 'APIConnectionTimeoutError' || err?.name === 'TimeoutError'
   }
 
   _resolveModel() {
     return process.env.ANTHROPIC_MODEL || AI_MODELS.ANTHROPIC
   }
 
-  _normalizeProviderError(err) {
+  _normalizeProviderError(err, signal) {
     // Re-throw with a normalized `status` property so the caller can detect 429s
     const normalized = new Error(err.message)
     normalized.status = err.status
     normalized.type = err.type
     normalized.code = err.code
+    normalized.aborted = Boolean(signal?.aborted) || this._isAbortError(err)
+    normalized.timedOut = !normalized.aborted && this._isTimeoutError(err)
     throw normalized
   }
 
@@ -52,7 +76,13 @@ export class AnthropicProvider extends LlmProvider {
     ]
   }
 
-  async chat({ system, tools, messages, maxTokens }) {
+  // Keeps the model to one tool call per response: a second unanswered tool_use would break the conversation.
+  _toolChoice(tools) {
+    if (!tools || tools.length === 0) return {}
+    return { tool_choice: { type: 'auto', disable_parallel_tool_use: true } }
+  }
+
+  async chat({ system, tools, messages, maxTokens, signal }) {
     const client = this._getClient()
 
     let response
@@ -62,16 +92,17 @@ export class AnthropicProvider extends LlmProvider {
         max_tokens: maxTokens,
         system,
         tools: this._applyToolCache(tools),
+        ...this._toolChoice(tools),
         messages,
-      })
+      }, { signal })
     } catch (err) {
-      this._normalizeProviderError(err)
+      this._normalizeProviderError(err, signal)
     }
 
     return this._normalizeResponse(response)
   }
 
-  async *chatStream({ system, tools, messages, maxTokens }) {
+  async *chatStream({ system, tools, messages, maxTokens, signal }) {
     const client = this._getClient()
 
     // .stream() is synchronous — errors only surface during async iteration
@@ -80,8 +111,9 @@ export class AnthropicProvider extends LlmProvider {
       max_tokens: maxTokens,
       system,
       tools: this._applyToolCache(tools),
+      ...this._toolChoice(tools),
       messages,
-    })
+    }, { signal })
 
     try {
       for await (const event of stream) {
@@ -93,15 +125,15 @@ export class AnthropicProvider extends LlmProvider {
       const finalMessage = await stream.finalMessage()
       yield { type: 'complete', response: this._normalizeResponse(finalMessage) }
     } catch (err) {
-      this._normalizeProviderError(err)
+      this._normalizeProviderError(err, signal)
     }
   }
 
   _normalizeResponse(response) {
-    const textBlock = response.content.find(block => block.type === 'text')
+    const text = response.content.filter(block => block.type === 'text').map(block => block.text).join('')
     const toolUseBlocks = response.content.filter(block => block.type === 'tool_use')
 
-    const stopReason = response.stop_reason === 'tool_use' ? 'tool_use' : 'end_turn'
+    const stopReason = STOP_REASONS[response.stop_reason] ?? 'end_turn'
 
     const toolCalls = toolUseBlocks.map(block => ({
       id: block.id,
@@ -111,7 +143,7 @@ export class AnthropicProvider extends LlmProvider {
 
     return {
       stopReason,
-      text: textBlock?.text ?? null,
+      text: text || null,
       toolCalls,
       rawContent: response.content,
       usage: this._normalizeUsage(response.usage),

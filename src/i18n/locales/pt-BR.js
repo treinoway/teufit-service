@@ -277,6 +277,11 @@ export default {
     'ai.overloaded': 'O assistente está sobrecarregado no momento. Tente novamente em instantes.',
     'ai.exerciseTemplateNotOwned': 'Modelo de exercício não pertence a você.',
     'ai.trainingTemplateNotOwned': 'Modelo de treino não pertence a você.',
+    'ai.unavailable': 'O assistente não está disponível no momento. Tente novamente mais tarde.',
+    'ai.responseTooLong': 'A resposta ficou muito longa. Tente dividir o pedido em partes menores.',
+    'ai.confirmationRequired': 'Confirme a ação antes de eu executá-la.',
+    'ai.timeout': 'O assistente demorou demais para responder. Tente novamente ou divida o pedido em partes menores.',
+    'ai.toolDisabled': 'Esta ação está temporariamente desativada. Faça a alteração manualmente.',
 
     // Gamification
     'gamification.config.notFound': 'Configuração de gamificação não encontrada.',
@@ -435,6 +440,30 @@ export default {
     'legacy.INVALID_POSTAL_CODE_FORMAT': 'CEP inválido. O CEP deve ter 8 dígitos.',
     'legacy.POSTAL_CODE_NOT_FOUND': 'CEP não encontrado.',
     'legacy.POSTAL_CODE_API_ERROR': 'Não foi possível consultar o CEP agora. Tente novamente em instantes.',
+  },
+
+  // iArnold progress texts streamed to the client (SSE `status` events)
+  ai: {
+    status: {
+      analyzing: 'Analisando seu pedido',
+      executing: 'Executando ação',
+    },
+    toolStatus: {
+      import_from_template: 'Importando protocolo do template',
+      add_training_to_protocol: 'Adicionando treino ao protocolo',
+      create_exercise_template: 'Criando exercício',
+      create_training_template: 'Criando treino',
+      create_protocol_template: 'Criando rotina',
+      update_protocol_template: 'Editando template de protocolo',
+      update_training_template: 'Editando template de treino',
+      update_exercise_template: 'Editando template de exercício',
+      update_protocol: 'Editando protocolo',
+      update_training: 'Editando treino',
+      update_exercise: 'Editando exercício',
+      add_exercises_to_training: 'Adicionando exercícios ao treino',
+      reorder_exercises_in_training: 'Reordenando exercícios',
+      get_student_performance: 'Consultando desempenho do aluno',
+    },
   },
 
   notes: {

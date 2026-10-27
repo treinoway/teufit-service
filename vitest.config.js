@@ -21,6 +21,8 @@ export default defineConfig({
       // beforeAll — config/index.js reads process.env once at top-level import time,
       // so setting this later has no effect on the cached config snapshot.
       ASAAS_WEBHOOK_SECRET: 'test-webhook-secret-123',
+      // AI tests mock the Anthropic SDK; a placeholder key keeps the AI availability check satisfied.
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
     },
   },
 });

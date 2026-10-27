@@ -7,15 +7,14 @@ type: project
 Core files:
 - `src/llm/llm-provider.js` — abstract base class (chat, chatStream, buildToolResultMessages)
 - `src/llm/anthropic-provider.js` — Anthropic adapter; DEFAULT_MODEL hardcoded as `claude-sonnet-4-6` (not in constants)
-- `src/llm/gemini-provider.js` — Gemini adapter; DEFAULT_MODEL hardcoded as `gemini-2.5-flash` (not in constants)
-- `src/llm/index.js` — factory `getLlmProvider()` reads LLM_PROVIDER env var; supports 'anthropic' | 'gemini'
+- `src/llm/index.js` — factory `getLlmProvider()` reads LLM_PROVIDER env var; anthropic only (gemini throws 'no longer supported'); availability/boot check in `src/llm/config.js`
 - `src/constants/ai.js` — LLM_PROVIDERS, AI_TOOLS, AI_ERRORS, AI_LIMITS, AI_RETRY
 - `src/services/ai-training-service.js` — main service; ~1576 lines; contains buildTrainerContext, buildSystemPrompt, TOOLS, executeTool, processAiChat, processAiChatStream, conversation CRUD
 - `api/routes/ai-route.js` — 5 endpoints: POST /trainer/ai/chat, POST /trainer/ai/chat/stream (SSE), GET/DELETE /trainer/ai/conversations[/:id]
 - `api/schemas/ai-route.schema.js` — Fastify JSON schema validation
 
 Provider selection: env LLM_PROVIDER, default 'anthropic'
-Model selection: env ANTHROPIC_MODEL / GEMINI_MODEL, defaults hardcoded in provider files
+Model selection: env ANTHROPIC_MODEL, default AI_MODELS.ANTHROPIC (claude-sonnet-5-5)
 
 DB models: AiConversation, AiMessage (role: user | assistant | tool_result)
 Multi-turn history: rawContent stored on assistant messages with tool calls, rebuilt via buildToolResultMessages on load
@@ -33,7 +32,6 @@ Prompt caching (added in token-optimization PR):
   - Block 0: static rules (STATIC_SYSTEM_PROMPT module-level const) with `cache_control: { type: "ephemeral" }`
   - Block 1: dynamic context (date + trainer data) with no cache_control
 - `AnthropicProvider._applyToolCache()` marks the last tool in the array with `cache_control: { type: "ephemeral" }` before passing to SDK; applied in both chat() and chatStream()
-- `GeminiProvider._resolveSystemInstruction()` flattens array-of-blocks to concatenated string (Gemini has no caching equivalent)
 - `LlmProvider` JSDoc updated: `system` param is `string | Array<{type, text, cache_control?}>`
 - 2 cache breakpoints used (tools + system prefix); Anthropic allows max 4
 
@@ -47,3 +45,10 @@ Read-only tools (READ_ONLY_TOOLS Set, line ~817):
 
 **Why:** Feature added in commit 4693263 to support natural-language training management.
 **How to apply:** All AI changes must touch these files; audit security on any changes to buildSystemPrompt or executeTool. When buildSystemPrompt returns an array, downstream test assertions must use `.system[0].text` not `.system` directly for string contains checks. When adding new read-only tools, add to READ_ONLY_TOOLS set AND add a fallback case in buildToolResultMessage.
+
+
+## Current layout (after iarnold-reenable, 2026-10)
+- One turn engine `runTurn` in `src/services/ai-training-service.js` serves both `processAiChat` and `processAiChatStream` (order: availability 503 -> trainer -> student ownership -> plan gate/quota -> setup -> model). Stream route awaits the first generator event before `reply.hijack()` so refusals are JSON.
+- Prompt/context live in `src/services/ai-prompt.js` (static cached prompt, `dataText` escaping, `<dados_*>` delimiters); tool schemas in `src/services/ai-tool-definitions.js`; confirmation heuristic `src/helpers/ai-confirmation.js`.
+- Eval: `test/ai-eval/{context,cases}.json` + replay test (CI); `npm run ai:eval` = real model (loads .env, costs money).
+- Sonnet 5.5 thinks adaptively and thinking counts against max_tokens: AI_LIMITS.MAX_TOKENS is 8000 (2500 truncated tool calls -> 422 ai.responseTooLong).

@@ -52,7 +52,7 @@ DATABASE_URL="${{treinoway-service-db-prod.DATABASE_URL}}"
 
 ### Copy literal from staging (env-agnostic)
 `HOST`, `PORT`, `LLM_PROVIDER`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-`OTEL_EXPORTER_OTLP_HEADERS`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+`OTEL_EXPORTER_OTLP_HEADERS`, `ANTHROPIC_API_KEY`,
 `RESEND_API_KEY`.
 (AI/Resend keys: reuse works; separate prod keys better for quota isolation — optional.)
 

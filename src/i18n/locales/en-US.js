@@ -273,6 +273,11 @@ export default {
     'ai.overloaded': 'The assistant is currently overloaded. Please try again in a moment.',
     'ai.exerciseTemplateNotOwned': 'Exercise template does not belong to you.',
     'ai.trainingTemplateNotOwned': 'Training template does not belong to you.',
+    'ai.unavailable': 'The assistant is not available right now. Please try again later.',
+    'ai.responseTooLong': 'The response was too long. Try splitting your request into smaller parts.',
+    'ai.confirmationRequired': 'Please confirm the action before I run it.',
+    'ai.timeout': 'The assistant took too long to respond. Try again or split your request into smaller parts.',
+    'ai.toolDisabled': 'This action is temporarily disabled. Please make the change manually.',
 
     // Gamification
     'gamification.config.notFound': 'Gamification configuration not found.',
@@ -431,6 +436,30 @@ export default {
     'legacy.INVALID_POSTAL_CODE_FORMAT': 'Invalid postal code. It must have 8 digits.',
     'legacy.POSTAL_CODE_NOT_FOUND': 'Postal code not found.',
     'legacy.POSTAL_CODE_API_ERROR': 'Could not look up the postal code right now. Please try again shortly.',
+  },
+
+  // iArnold progress texts streamed to the client (SSE `status` events)
+  ai: {
+    status: {
+      analyzing: 'Analyzing your request',
+      executing: 'Running action',
+    },
+    toolStatus: {
+      import_from_template: 'Importing protocol from template',
+      add_training_to_protocol: 'Adding training to protocol',
+      create_exercise_template: 'Creating exercise',
+      create_training_template: 'Creating training',
+      create_protocol_template: 'Creating routine',
+      update_protocol_template: 'Editing protocol template',
+      update_training_template: 'Editing training template',
+      update_exercise_template: 'Editing exercise template',
+      update_protocol: 'Editing protocol',
+      update_training: 'Editing training',
+      update_exercise: 'Editing exercise',
+      add_exercises_to_training: 'Adding exercises to training',
+      reorder_exercises_in_training: 'Reordering exercises',
+      get_student_performance: 'Checking student performance',
+    },
   },
 
   notes: {

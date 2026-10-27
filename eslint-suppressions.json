@@ -49,7 +49,7 @@
       "count": 1
     },
     "local/no-comments-in-function": {
-      "count": 5
+      "count": 1
     }
   },
   "api/routes/anamnesis-route.js": {
@@ -588,14 +588,6 @@
       "count": 3
     }
   },
-  "src/llm/gemini-provider.js": {
-    "local/function-header-comment": {
-      "count": 11
-    },
-    "local/no-comments-in-function": {
-      "count": 10
-    }
-  },
   "src/llm/index.js": {
     "local/function-header-comment": {
       "count": 1
@@ -649,15 +641,15 @@
       "count": 4
     },
     "local/no-comments-in-function": {
-      "count": 9
+      "count": 8
     }
   },
   "src/services/ai-training-service.js": {
     "local/function-header-comment": {
-      "count": 32
+      "count": 26
     },
     "local/no-comments-in-function": {
-      "count": 106
+      "count": 64
     },
     "no-restricted-imports": {
       "count": 1
@@ -1474,11 +1466,6 @@
   "test/llm/anthropic-provider.test.js": {
     "local/no-comments-in-function": {
       "count": 12
-    }
-  },
-  "test/llm/gemini-provider.test.js": {
-    "local/no-comments-in-function": {
-      "count": 13
     }
   },
   "test/middleware/auth-middleware.test.js": {

@@ -126,8 +126,8 @@ describe('loadConversationHistory — truncation window', () => {
     const historyMessages = llmCall.messages.slice(0, -1)
 
     expect(historyMessages).toHaveLength(4)
-    // After reversing DESC→ASC, first message must be the oldest user message
-    expect(historyMessages[0]).toMatchObject({ role: 'user', content: 'user message 0' })
+    // After reversing DESC→ASC, first message must be the oldest user message (replayed wrapped as untrusted input)
+    expect(historyMessages[0]).toMatchObject({ role: 'user', content: '<user_input>user message 0</user_input>' })
     expect(historyMessages[3]).toMatchObject({ role: 'assistant', content: 'assistant message 1' })
   })
 
@@ -168,7 +168,7 @@ describe('loadConversationHistory — truncation window', () => {
     const historyMessages = llmCall.messages.slice(0, -1)
 
     expect(historyMessages).toHaveLength(WINDOW_SIZE)
-    expect(historyMessages[0]).toMatchObject({ role: 'user', content: 'user message 0' })
+    expect(historyMessages[0]).toMatchObject({ role: 'user', content: '<user_input>user message 0</user_input>' })
     expect(historyMessages[WINDOW_SIZE - 1]).toMatchObject({
       role: 'assistant',
       content: `assistant message ${WINDOW_SIZE / 2 - 1}`,
@@ -216,7 +216,7 @@ describe('loadConversationHistory — truncation window', () => {
 
     // The remaining 6 messages from the normal pairs must all be present
     expect(historyMessages).toHaveLength(6)
-    expect(historyMessages[0]).toMatchObject({ role: 'user', content: 'user message 0' })
+    expect(historyMessages[0]).toMatchObject({ role: 'user', content: '<user_input>user message 0</user_input>' })
     expect(historyMessages[5]).toMatchObject({ role: 'assistant', content: 'assistant message 2' })
   })
 })

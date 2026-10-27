@@ -24,6 +24,8 @@ export default defineConfig({
       DISABLE_POSTAL_CODE_VALIDATION: 'true',
       NODE_ENV: 'test',
       ASAAS_WEBHOOK_SECRET: 'test-webhook-secret-123',
+      // AI e2e tests mock the Anthropic SDK; a placeholder key keeps the AI availability check satisfied.
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
     },
   },
 });

@@ -32,11 +32,11 @@ Auditoria realizada em 2026-03-31 pelo `ai-flow-engineer` agent.
 - **Correcao:** Adicionada funcao `sanitizeToolInput()` que redact campos PII (`assigneeId`, `name`, `notes`, `description`, `email`) com `[REDACTED]` e colapsa arrays em `[array:N]`. `logAiAction` agora usa o input sanitizado.
 
 ### HIGH-2 — `DEFAULT_MODEL` hardcoded nos providers, sem model tiering
-- **Arquivos:** `src/llm/anthropic-provider.js`, `src/llm/gemini-provider.js`
+- **Arquivos:** `src/llm/anthropic-provider.js`
 - **Problema:** Model names hardcoded fora de `src/constants/ai.js`. Todas as chamadas usam o mesmo modelo independente da complexidade.
 - **Impacto:** Viola padrao de constants do projeto. Custo desnecessario para tarefas simples.
 - **Status:** Corrigido (constants centralizados, model tiering pendente)
-- **Correcao:** Adicionado `AI_MODELS` em `src/constants/ai.js` com `ANTHROPIC` e `GEMINI`. Providers agora importam de la.
+- **Correcao:** Adicionado `AI_MODELS` em `src/constants/ai.js` com `ANTHROPIC`. O provider importa de la.
 
 ### HIGH-3 — Rate limit do AI route pode nao estar usando keyGenerator por userId
 - **Arquivo:** `api/routes/ai-route.js`

@@ -61,6 +61,7 @@ import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { healthRoutes } from './routes/health-route.js';
+import { checkLlmConfiguration } from '../src/llm/config.js';
 import { assertAsaasWebhookSecretConfigured } from '../src/helpers/asaas-webhook-helpers.js';
 
 // Sentry is initialised in the `./instrument.js` preload (loaded via
@@ -96,14 +97,6 @@ export async function buildServer(options = {}) {
     webhookSecret: config.asaas.webhookSecret,
   });
 
-  const llmProvider = process.env.LLM_PROVIDER || 'anthropic';
-  if (llmProvider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
-    console.warn('ANTHROPIC_API_KEY not set — AI assistant feature will be unavailable');
-  }
-  if (llmProvider === 'gemini' && !process.env.GEMINI_API_KEY) {
-    console.warn('GEMINI_API_KEY not set — AI assistant feature will be unavailable');
-  }
-
   const fastify = Fastify({
     logger: options.logger ?? true,
     // Railway runs behind a reverse proxy. Trust it so Fastify correctly detects HTTPS,
@@ -117,6 +110,8 @@ export async function buildServer(options = {}) {
       },
     },
   });
+
+  checkLlmConfiguration(fastify.log);
 
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
@@ -247,8 +242,7 @@ export async function buildServer(options = {}) {
       const normalizedOrigin = normalizeUrl(origin);
       
       // Check if origin is in allowed list
-      if (allowedOrigins.includes(normalizedOrigin) || 
-          allowedOrigins.some(allowed => normalizedOrigin === allowed || normalizedOrigin.startsWith(allowed))) {
+      if (allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
         fastify.log.warn(`CORS blocked origin: ${origin}. Allowed: ${allowedOrigins.join(', ')}`);

@@ -72,11 +72,6 @@ describe('extractTokenCounts', () => {
     expect(extractTokenCounts(usage)).toEqual({ inputTokens: 150, outputTokens: 300 })
   })
 
-  it('parses Gemini usage shape (promptTokenCount / candidatesTokenCount)', () => {
-    const usage = { promptTokenCount: 200, candidatesTokenCount: 400 }
-    expect(extractTokenCounts(usage)).toEqual({ inputTokens: 200, outputTokens: 400 })
-  })
-
   it('returns nulls for an empty object (unknown shape)', () => {
     expect(extractTokenCounts({})).toEqual({ inputTokens: null, outputTokens: null })
   })
@@ -188,7 +183,7 @@ describe('writeInteractionLog — success path (flag ON)', () => {
       userMessage: longText,
       toolCall: null,
       responseText: longText,
-      model: 'gemini-2.5-flash',
+      model: 'claude-sonnet-5-5',
       usage: null,
       latencyMs: 800,
       status: AI_INTERACTION_LOG.STATUS_SUCCESS,

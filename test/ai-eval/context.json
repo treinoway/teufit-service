@@ -1,0 +1,113 @@
+{
+  "trainerId": "trainer-eval",
+  "students": [
+    { "student": { "id": "student-ana", "firstName": "Ana", "lastName": "Lima" } },
+    { "student": { "id": "student-joao", "firstName": "João", "lastName": "Souza" } },
+    { "student": { "id": "student-maria-clara", "firstName": "Maria", "lastName": "Clara" } },
+    { "student": { "id": "student-maria-eduarda", "firstName": "Maria", "lastName": "Eduarda" } }
+  ],
+  "protocolTemplates": [
+    { "id": "pt-fullbody", "name": "Full Body", "description": null },
+    { "id": "pt-abc", "name": "Hipertrofia ABC", "description": null }
+  ],
+  "trainingTemplates": [
+    { "id": "tt-peito", "name": "Peito e Tríceps", "category": "strength" },
+    { "id": "tt-pernas", "name": "Pernas completo", "category": "strength" }
+  ],
+  "exerciseTemplates": [
+    { "id": "et-supino", "name": "Supino reto", "type": "strength" },
+    { "id": "et-agachamento", "name": "Agachamento livre", "type": "strength" }
+  ],
+  "activeProtocols": [
+    {
+      "id": "pr-ana",
+      "name": "Hipertrofia A",
+      "assigneeId": "student-ana",
+      "assignee": { "firstName": "Ana", "lastName": "Lima" },
+      "trainings": [
+        {
+          "id": "tr-peito-ana",
+          "name": "Peito",
+          "weekDay": "monday",
+          "exercises": [
+            { "id": "ex-supino-ana", "name": "Supino reto", "sets": 4, "repetitions": { "min": 8, "max": 12 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 40, "restInterval": 90 },
+            { "id": "ex-crucifixo-ana", "name": "Crucifixo", "sets": 3, "repetitions": { "min": 10, "max": 12 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 12, "restInterval": 60 }
+          ]
+        },
+        {
+          "id": "tr-costas-ana",
+          "name": "Costas",
+          "weekDay": "wednesday",
+          "exercises": [
+            { "id": "ex-puxada-ana", "name": "Puxada frontal", "sets": 4, "repetitions": { "min": 8, "max": 12 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 45, "restInterval": 90 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-joao-a",
+      "name": "Força A",
+      "assigneeId": "student-joao",
+      "assignee": { "firstName": "João", "lastName": "Souza" },
+      "trainings": [
+        {
+          "id": "tr-pernas-joao",
+          "name": "Pernas",
+          "weekDay": "tuesday",
+          "exercises": [
+            { "id": "ex-agachamento-joao", "name": "Agachamento livre", "sets": 5, "repetitions": { "min": 5, "max": 5 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 100, "restInterval": 150 },
+            { "id": "ex-legpress-joao", "name": "Leg press", "sets": 3, "repetitions": { "min": 10, "max": 12 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 200, "restInterval": 90 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-joao-b",
+      "name": "Hipertrofia B",
+      "assigneeId": "student-joao",
+      "assignee": { "firstName": "João", "lastName": "Souza" },
+      "trainings": [
+        {
+          "id": "tr-ombro-joao",
+          "name": "Ombros",
+          "weekDay": "thursday",
+          "exercises": [
+            { "id": "ex-desenvolvimento-joao", "name": "Desenvolvimento", "sets": 4, "repetitions": { "min": 8, "max": 10 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 30, "restInterval": 75 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-maria-clara",
+      "name": "Emagrecimento",
+      "assigneeId": "student-maria-clara",
+      "assignee": { "firstName": "Maria", "lastName": "Clara" },
+      "trainings": [
+        {
+          "id": "tr-full-clara",
+          "name": "Full Body",
+          "weekDay": "friday",
+          "exercises": [
+            { "id": "ex-supino-clara", "name": "Supino reto", "sets": 3, "repetitions": { "min": 12, "max": 15 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 20, "restInterval": 60 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pr-maria-eduarda",
+      "name": "Condicionamento",
+      "assigneeId": "student-maria-eduarda",
+      "assignee": { "firstName": "Maria", "lastName": "Eduarda" },
+      "trainings": [
+        {
+          "id": "tr-full-eduarda",
+          "name": "Full Body",
+          "weekDay": "monday",
+          "exercises": [
+            { "id": "ex-supino-eduarda", "name": "Supino reto", "sets": 3, "repetitions": { "min": 10, "max": 12 }, "duration": null, "prescriptionMode": "reps", "hasLoad": true, "suggestedLoad": 25, "restInterval": 60 }
+          ]
+        }
+      ]
+    }
+  ]
+}
