@@ -80,7 +80,7 @@ export async function exerciseTemplateRoutes(fastify) {
     },
     async (request, reply) => {
       try {
-        const templates = await service.getPublicExerciseTemplates();
+        const templates = await service.getPublicExerciseTemplates(request.user.id);
         return reply.send(templates);
       } catch (error) {
         fastify.log.error(error);

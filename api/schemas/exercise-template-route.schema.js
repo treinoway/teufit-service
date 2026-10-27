@@ -2,6 +2,7 @@ import { exerciseTypeValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
+import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
 
 // Library exercise templates carry only the exercise identity. Prescription
 // ("how it's done") lives on the TrainingTemplateExerciseTemplate junction and the Exercise.
@@ -15,6 +16,7 @@ const exerciseTemplateResponseSchema = {
     videoUrl: { type: 'string', nullable: true },
     gifUrl: gifUrlResponseSchema,
     isPublic: { type: 'boolean' },
+    advancedTechniques: advancedTechniquesResponseSchema,
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
   },
@@ -33,6 +35,7 @@ export const createExerciseTemplateSchema = {
       videoUrl: { type: 'string' },
       gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
+      advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
     },
     additionalProperties: false,
   },
@@ -160,6 +163,7 @@ export const updateExerciseTemplateSchema = {
       videoUrl: { type: 'string' },
       gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
+      advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
     },
     additionalProperties: false,
   },

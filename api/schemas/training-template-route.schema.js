@@ -2,6 +2,7 @@ import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescrip
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
+import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
 
 // The linked library template carries only the exercise identity. Prescription lives on
 // the junction (trainingTemplateExerciseTemplateSchema), not here.
@@ -49,6 +50,7 @@ const trainingTemplateExerciseTemplateSchema = {
     restInterval: { type: 'integer', nullable: true },
     notes: { type: 'string', nullable: true },
     intensity: { type: 'string', nullable: true },
+    advancedTechniques: advancedTechniquesResponseSchema,
     exerciseTemplate: exerciseTemplateRefSchema,
   },
 };
@@ -157,6 +159,7 @@ export const createTrainingTemplateSchema = {
             restInterval: { type: 'integer', nullable: true },
             notes: { type: 'string', nullable: true },
             intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+            advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
           },
           additionalProperties: false,
         },
@@ -325,6 +328,7 @@ export const updateTrainingTemplateSchema = {
             suggestedLoad: { type: 'number', nullable: true },
             restInterval: { type: 'integer', nullable: true },
             notes: { type: 'string', nullable: true },
+            advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
           },
           additionalProperties: false,
         },
@@ -402,6 +406,7 @@ export const createTrainingTemplateExerciseSchema = {
       restInterval: { type: 'integer', nullable: true, minimum: 0 },
       notes: { type: 'string', nullable: true },
       intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+      advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
       order: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -455,6 +460,7 @@ export const createTrainingTemplateExerciseFromTemplateSchema = {
       restInterval: { type: 'integer', nullable: true, minimum: 0 },
       notes: { type: 'string', nullable: true },
       intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+      advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
     },
     additionalProperties: false,
   },
@@ -530,6 +536,7 @@ export const updateTrainingTemplateExerciseSchema = {
       restInterval: { type: 'integer', nullable: true },
       notes: { type: 'string', nullable: true },
       intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+      advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
       order: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,

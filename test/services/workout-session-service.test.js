@@ -342,6 +342,72 @@ describe('workout-session-service', () => {
     });
   });
 
+  describe('getSession — advanced technique refs', () => {
+    const makeTechniqueLink = (id, order) => ({
+      advancedTechniqueId: id,
+      order,
+      advancedTechnique: {
+        id,
+        key: `key-${id}`,
+        name: `Technique ${id}`,
+        description: null,
+        videoUrl: null,
+        gifUrl: null,
+      },
+    });
+
+    beforeEach(() => {
+      prisma.$queryRaw.mockResolvedValue([]);
+    });
+
+    it('selects the exercise technique links ordered by order', async () => {
+      prisma.workoutSession.findUnique.mockResolvedValue(makeSession());
+
+      await getSession('user-1', 'session-1');
+
+      const exerciseSelect =
+        prisma.workoutSession.findUnique.mock.calls[0][0].include.exerciseLogs.include.exercise.select;
+      expect(exerciseSelect.advancedTechniqueLinks).toMatchObject({
+        orderBy: { order: 'asc' },
+        include: { advancedTechnique: { select: expect.objectContaining({ id: true, name: true }) } },
+      });
+    });
+
+    it('maps exerciseLogs[].exercise links to ordered advancedTechniques refs', async () => {
+      const exercise = {
+        id: 'ex-1',
+        name: 'Squat',
+        advancedTechniqueLinks: [makeTechniqueLink('t-1', 0), makeTechniqueLink('t-2', 1)],
+      };
+      prisma.workoutSession.findUnique.mockResolvedValue(
+        makeSession({ exerciseLogs: [makeExerciseLog({ exercise })] }),
+      );
+
+      const result = await getSession('user-1', 'session-1');
+
+      expect(result.exerciseLogs[0].exercise).toEqual({
+        id: 'ex-1',
+        name: 'Squat',
+        advancedTechniques: [
+          { id: 't-1', key: 'key-t-1', name: 'Technique t-1', description: null, videoUrl: null, gifUrl: null, isDeleted: false, order: 0 },
+          { id: 't-2', key: 'key-t-2', name: 'Technique t-2', description: null, videoUrl: null, gifUrl: null, isDeleted: false, order: 1 },
+        ],
+      });
+    });
+
+    it('does not leak the internal advancedTechniqueLinks relation', async () => {
+      const exercise = { id: 'ex-1', advancedTechniqueLinks: [] };
+      prisma.workoutSession.findUnique.mockResolvedValue(
+        makeSession({ exerciseLogs: [makeExerciseLog({ exercise })] }),
+      );
+
+      const result = await getSession('user-1', 'session-1');
+
+      expect(result.exerciseLogs[0].exercise).not.toHaveProperty('advancedTechniqueLinks');
+      expect(result.exerciseLogs[0].exercise.advancedTechniques).toEqual([]);
+    });
+  });
+
   // ── updateSession ─────────────────────────────────────────────────────────
 
   describe('updateSession', () => {

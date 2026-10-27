@@ -64,6 +64,11 @@
       "value": "",
       "type": "string",
       "description": "Plain trainer invite code (e.g. TF-XXXX-XXXX-XX) returned by POST /admin/trainer-invites — used to test POST /invite/redeem"
+    },
+    {
+      "key": "advancedTechniqueId",
+      "value": "b1c2d3e4-0000-0000-0000-000000000001",
+      "type": "string"
     }
   ],
   "auth": {
@@ -3094,7 +3099,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tr\\u00edceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\"\n        },\n        {\n          \"name\": \"Tr\\u00edceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tríceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\",\n          \"advancedTechniqueIds\": [\n            \"{{advancedTechniqueId}}\"\n          ]\n        },\n        {\n          \"name\": \"Tríceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60,\n          \"advancedTechniqueIds\": []\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3112,7 +3117,7 @@
                 "with-trainings"
               ]
             },
-            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute."
+            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3670,7 +3675,7 @@
                 }
               ]
             },
-            "description": "Get a specific training by ID. Requires protocol ownership."
+            "description": "Get a specific training by ID. Requires protocol ownership. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3829,7 +3834,7 @@
                 }
               ]
             },
-            "description": "Get a specific training by ID. Only accessible if the training belongs to a protocol assigned to this user."
+            "description": "Get a specific training by ID. Only accessible if the training belongs to a protocol assigned to this user. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         }
@@ -3850,7 +3855,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\"compound\", \"strength\", \"upper body\"],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"name\": \"Bench Press\",\n      \"type\": \"strength\",\n      \"sets\": 4,\n      \"repetitions\": { \"min\": 8, \"max\": 12 },\n      \"hasLoad\": true,\n      \"suggestedLoad\": 80,\n      \"restInterval\": 90,\n      \"notes\": \"Keep elbows at 45 degrees\"\n    },\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid-2>\",\n      \"order\": 1\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\n    \"compound\",\n    \"strength\",\n    \"upper body\"\n  ],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"name\": \"Bench Press\",\n      \"type\": \"strength\",\n      \"sets\": 4,\n      \"repetitions\": {\n        \"min\": 8,\n        \"max\": 12\n      },\n      \"hasLoad\": true,\n      \"suggestedLoad\": 80,\n      \"restInterval\": 90,\n      \"notes\": \"Keep elbows at 45 degrees\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ]\n    },\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid-2>\",\n      \"order\": 1\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3867,7 +3872,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3916,7 +3921,7 @@
                 }
               ]
             },
-            "description": "Get paginated training templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), category (strength | cardio | flexibility | rest | functional | mobility), bodySegment (upper | lower | core | full_body)."
+            "description": "Get paginated training templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), category (strength | cardio | flexibility | rest | functional | mobility), bodySegment (upper | lower | core | full_body). Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3936,7 +3941,7 @@
                 "public"
               ]
             },
-            "description": "Get only public training templates available to all trainers."
+            "description": "Get only public training templates available to all trainers. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3963,7 +3968,7 @@
                 }
               ]
             },
-            "description": "Get a specific training template by ID. Accessible if it's your own or if it's public."
+            "description": "Get a specific training template by ID. Accessible if it's your own or if it's public. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -3979,7 +3984,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\"cardio\", \"endurance\"],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"sets\": 3,\n      \"repetitions\": { \"min\": 12, \"max\": 15 },\n      \"restInterval\": 60,\n      \"notes\": \"Controlled tempo\"\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\n    \"cardio\",\n    \"endurance\"\n  ],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"sets\": 3,\n      \"repetitions\": {\n        \"min\": 12,\n        \"max\": 15\n      },\n      \"restInterval\": 60,\n      \"notes\": \"Controlled tempo\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4004,7 +4009,7 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4020,7 +4025,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\",\n  \"intensity\": \"moderate\"\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\",\n  \"intensity\": \"moderate\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4046,7 +4051,7 @@
                 }
               ]
             },
-            "description": "Create a brand-new ExerciseTemplate and attach it to the training template via a junction row. Runs in a transaction. The junction row snapshot mirrors the new ExerciseTemplate. Requires TRAINER role and template ownership."
+            "description": "Create a brand-new ExerciseTemplate and attach it to the training template via a junction row. Runs in a transaction. The junction row snapshot mirrors the new ExerciseTemplate. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4062,7 +4067,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"exerciseTemplateId\": \"\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Keep core tight\",\n  \"intensity\": \"moderate\"\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"exerciseTemplateId\": \"\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"duration\": null,\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Keep core tight\",\n  \"intensity\": \"moderate\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4089,7 +4094,7 @@
                 }
               ]
             },
-            "description": "Attach an existing ExerciseTemplate from the trainer's library to the training template by creating a junction row. Prescription fields (prescriptionMode, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes, intensity) are set here at link time — the library template no longer carries them. Requires TRAINER role and template ownership."
+            "description": "Attach an existing ExerciseTemplate from the trainer's library to the training template by creating a junction row. Prescription fields (prescriptionMode, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes, intensity) are set here at link time — the library template no longer carries them. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4139,7 +4144,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 80,\n  \"restInterval\": 90,\n  \"notes\": \"Keep elbows tucked\"\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 80,\n  \"restInterval\": 90,\n  \"notes\": \"Keep elbows tucked\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4171,7 +4176,7 @@
                 }
               ]
             },
-            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership."
+            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4253,7 +4258,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"isPublic\": false\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"isPublic\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4270,7 +4275,7 @@
                 "exercise-templates"
               ]
             },
-            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role."
+            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4313,7 +4318,7 @@
                 }
               ]
             },
-            "description": "Get paginated exercise templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), type (strength | cardio | mobility | stretching)."
+            "description": "Get paginated exercise templates (own + public). Returns { data, total, page, limit }. Supports filters: q (name search), type (strength | cardio | mobility | stretching). Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4333,7 +4338,7 @@
                 "public"
               ]
             },
-            "description": "Get only public exercise templates."
+            "description": "Get only public exercise templates. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4360,7 +4365,7 @@
                 }
               ]
             },
-            "description": "Get exercise template by ID. Accessible if own or public."
+            "description": "Get exercise template by ID. Accessible if own or public. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4376,7 +4381,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"isPublic\": true\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"isPublic\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -4396,7 +4401,7 @@
                 }
               ]
             },
-            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner."
+            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4464,6 +4469,537 @@
       ]
     },
     {
+      "name": "Advanced Techniques - Trainer",
+      "item": [
+        {
+          "name": "List Advanced Techniques",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/advanced-techniques?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "advanced-techniques"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "drop",
+                  "disabled": true,
+                  "description": "Case-insensitive search on name"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Page number (min: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true,
+                  "description": "Items per page"
+                }
+              ]
+            },
+            "description": "List advanced techniques available to the trainer (system techniques plus the trainer's own custom ones). Trainer only. Optional query q (search by name), page, limit. Response: { data: [item], total, page, limit }."
+          },
+          "response": [
+            {
+              "name": "200 — List",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques?",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "drop",
+                      "disabled": true,
+                      "description": "Case-insensitive search on name"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": true,
+                      "description": "Page number (min: 1)"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "disabled": true,
+                      "description": "Items per page"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"b1c2d3e4-0000-0000-0000-000000000001\",\n      \"key\": \"custom_drop_set_amrap\",\n      \"name\": \"Drop set controlado\",\n      \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n      \"videoUrl\": \"https://example.com/drop-set\",\n      \"gifUrl\": \"https://example.com/drop-set.gif\",\n      \"isSystem\": false,\n      \"trainerId\": \"b1c2d3e4-0000-0000-0000-0000000000aa\",\n      \"createdAt\": \"2026-10-27T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-27T12:00:00.000Z\"\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"limit\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Advanced Technique",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/advanced-techniques",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "advanced-techniques"
+              ]
+            },
+            "description": "Create a custom advanced technique owned by the trainer. Trainer only. name: 1-80 chars, description: 1-600 chars, videoUrl and gifUrl optional. Returns 201 with the created item.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Drop set controlado\",\n  \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n  \"videoUrl\": \"https://example.com/drop-set\",\n  \"gifUrl\": \"https://example.com/drop-set.gif\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 — Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"id\": \"b1c2d3e4-0000-0000-0000-000000000001\",\n  \"key\": \"custom_drop_set_amrap\",\n  \"name\": \"Drop set controlado\",\n  \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n  \"videoUrl\": \"https://example.com/drop-set\",\n  \"gifUrl\": \"https://example.com/drop-set.gif\",\n  \"isSystem\": false,\n  \"trainerId\": \"b1c2d3e4-0000-0000-0000-0000000000aa\",\n  \"createdAt\": \"2026-10-27T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-27T12:00:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Advanced Technique by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "advanced-techniques",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{advancedTechniqueId}}",
+                  "description": "Advanced technique UUID"
+                }
+              ]
+            },
+            "description": "Get a single advanced technique (system or own). Trainer only. Errors: 404 advancedTechnique.notFound."
+          },
+          "response": [
+            {
+              "name": "200 — OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"id\": \"b1c2d3e4-0000-0000-0000-000000000001\",\n  \"key\": \"custom_drop_set_amrap\",\n  \"name\": \"Drop set controlado\",\n  \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n  \"videoUrl\": \"https://example.com/drop-set\",\n  \"gifUrl\": \"https://example.com/drop-set.gif\",\n  \"isSystem\": false,\n  \"trainerId\": \"b1c2d3e4-0000-0000-0000-0000000000aa\",\n  \"createdAt\": \"2026-10-27T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-27T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "404 — Not found",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"advancedTechnique.notFound\",\n  \"message\": \"Advanced technique not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Advanced Technique",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "advanced-techniques",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{advancedTechniqueId}}",
+                  "description": "Advanced technique UUID"
+                }
+              ]
+            },
+            "description": "Partially update a custom advanced technique. Trainer only. Errors: 404 advancedTechnique.notFound; 403 advancedTechnique.forbidden when the technique is a system technique.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Drop set duplo\",\n  \"description\": \"Duas reducoes consecutivas de 20% da carga apos a falha.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 — OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"id\": \"b1c2d3e4-0000-0000-0000-000000000001\",\n  \"key\": \"custom_drop_set_amrap\",\n  \"name\": \"Drop set duplo\",\n  \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n  \"videoUrl\": \"https://example.com/drop-set\",\n  \"gifUrl\": \"https://example.com/drop-set.gif\",\n  \"isSystem\": false,\n  \"trainerId\": \"b1c2d3e4-0000-0000-0000-0000000000aa\",\n  \"createdAt\": \"2026-10-27T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-27T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "404 — Not found",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"advancedTechnique.notFound\",\n  \"message\": \"Advanced technique not found.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 — System technique is read-only",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"FORBIDDEN\",\n  \"messageCode\": \"advancedTechnique.forbidden\",\n  \"message\": \"System advanced techniques cannot be modified or deleted.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Advanced Technique",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "advanced-techniques",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{advancedTechniqueId}}",
+                  "description": "Advanced technique UUID"
+                }
+              ]
+            },
+            "description": "Soft-delete a custom advanced technique. Returns 200 with the deleted item. Trainer only. Errors: 404 advancedTechnique.notFound; 403 advancedTechnique.forbidden for system techniques."
+          },
+          "response": [
+            {
+              "name": "200 — Deleted item",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"id\": \"b1c2d3e4-0000-0000-0000-000000000001\",\n  \"key\": \"custom_drop_set_amrap\",\n  \"name\": \"Drop set controlado\",\n  \"description\": \"Apos a falha, reduza 20% da carga e continue ate nova falha tecnica.\",\n  \"videoUrl\": \"https://example.com/drop-set\",\n  \"gifUrl\": \"https://example.com/drop-set.gif\",\n  \"isSystem\": false,\n  \"trainerId\": \"b1c2d3e4-0000-0000-0000-0000000000aa\",\n  \"createdAt\": \"2026-10-27T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-27T12:00:00.000Z\"\n}"
+            },
+            {
+              "name": "404 — Not found",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"advancedTechnique.notFound\",\n  \"message\": \"Advanced technique not found.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 — System technique is read-only",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/advanced-techniques/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "advanced-techniques",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{advancedTechniqueId}}",
+                      "description": "Advanced technique UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"FORBIDDEN\",\n  \"messageCode\": \"advancedTechnique.forbidden\",\n  \"message\": \"System advanced techniques cannot be modified or deleted.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Exercises - Trainer",
       "item": [
         {
@@ -4478,7 +5014,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
@@ -4499,9 +5035,46 @@
                 }
               ]
             },
-            "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching."
+            "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
-          "response": []
+          "response": [
+            {
+              "name": "400 — Invalid advanced technique selection",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "trainings",
+                    ":trainingId",
+                    "exercises"
+                  ],
+                  "variable": [
+                    {
+                      "key": "trainingId",
+                      "value": "",
+                      "description": "Training UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"ADVANCED_TECHNIQUE_INVALID_SELECTION\",\n  \"messageCode\": \"advancedTechnique.invalidSelection\",\n  \"message\": \"One or more advanced techniques are invalid.\",\n  \"details\": {}\n}"
+            }
+          ]
         },
         {
           "name": "Create Exercise from Template",
@@ -4515,7 +5088,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\"\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/from-template",
@@ -4528,7 +5101,7 @@
                 "from-template"
               ]
             },
-            "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc."
+            "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4556,7 +5129,7 @@
                 }
               ]
             },
-            "description": "Get all exercises for a training. Requires protocol ownership."
+            "description": "Get all exercises for a training. Requires protocol ownership. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4583,7 +5156,7 @@
                 }
               ]
             },
-            "description": "Get exercise by ID. Requires protocol ownership."
+            "description": "Get exercise by ID. Requires protocol ownership. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4599,7 +5172,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Front Squat\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Front Squat\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
@@ -4619,7 +5192,7 @@
                 }
               ]
             },
-            "description": "Update exercise. Requires protocol ownership. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value."
+            "description": "Update exercise. Requires protocol ownership. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4666,7 +5239,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dumbbell Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12}\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Dumbbell Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12}\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id/substitutes",
@@ -4687,7 +5260,7 @@
                 }
               ]
             },
-            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes)."
+            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes). Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4810,7 +5383,7 @@
                 }
               ]
             },
-            "description": "Get exercises for a training assigned to the authenticated user."
+            "description": "Get exercises for a training assigned to the authenticated user. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -4837,7 +5410,7 @@
                 }
               ]
             },
-            "description": "Get exercise by ID. Only if training is in user's assigned protocol."
+            "description": "Get exercise by ID. Only if training is in user's assigned protocol. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         }
@@ -4878,7 +5451,7 @@
                 "today"
               ]
             },
-            "description": "Returns the training(s) the student should do today — one entry per active protocol.\n\n- weekDay mode: if any training in a protocol has a weekDay set, picks the one matching today's weekday in the given timezone. Returns isRestDay: true and nextScheduledDate when no match.\n- order mode: if no training has a weekDay, picks the next training after the last completed session, cycling back to the first.\n\nThe in_progress WorkoutSession (if any) is returned once as `pendingTraining` at the envelope root — not inside each workout entry.\n\n**Errors**:\n- 404 workoutsToday.noActiveProtocol — student has no active protocol\n- 404 workoutsToday.emptyProtocol — all active protocols have no trainings"
+            "description": "Returns the training(s) the student should do today — one entry per active protocol.\n\n- weekDay mode: if any training in a protocol has a weekDay set, picks the one matching today's weekday in the given timezone. Returns isRestDay: true and nextScheduledDate when no match.\n- order mode: if no training has a weekDay, picks the next training after the last completed session, cycling back to the first.\n\nThe in_progress WorkoutSession (if any) is returned once as `pendingTraining` at the envelope root — not inside each workout entry.\n\n**Errors**:\n- 404 workoutsToday.noActiveProtocol — student has no active protocol\n- 404 workoutsToday.emptyProtocol — all active protocols have no trainings Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": [
             {
@@ -5132,7 +5705,7 @@
                 }
               ]
             },
-            "description": "Get full detail for a workout session including all exercise logs and set logs."
+            "description": "Get full detail for a workout session including all exercise logs and set logs. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -5651,7 +6224,7 @@
                 }
               ]
             },
-            "description": "Get full detail of a student's workout session including exercise logs and set logs."
+            "description": "Get full detail of a student's workout session including exercise logs and set logs. Response exercise payloads now include advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         }

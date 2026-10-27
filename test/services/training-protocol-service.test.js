@@ -16,6 +16,7 @@ vi.mock('../../src/db.js', () => ({
       update: vi.fn(),
     },
     trainingProtocolTemplate: { findUnique: vi.fn() },
+    advancedTechnique: { findMany: vi.fn() },
     training: { create: vi.fn() },
     exercise: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -716,6 +717,130 @@ describe('training-protocol-service', () => {
         }),
       );
       expect(result.trainings).toHaveLength(1);
+    });
+
+    describe('advanced technique links', () => {
+      const makeJunction = (id, order, links) => ({
+        id,
+        exerciseTemplateId: `et-${id}`,
+        order,
+        name: `Exercise ${id}`,
+        type: 'strength',
+        videoUrl: null,
+        sets: 3,
+        repetitions: 10,
+        duration: null,
+        hasLoad: false,
+        suggestedLoad: null,
+        notes: null,
+        exerciseTemplate: { id: `et-${id}`, name: `Exercise ${id}`, type: 'strength' },
+        advancedTechniqueLinks: links,
+      });
+
+      const arrangeTemplate = (junctions) => {
+        prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+        prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+          id: 'tmpl-1',
+          trainerId: 't1',
+          name: 'Template A',
+          deletedAt: null,
+          trainings: [
+            {
+              id: 'pt-1',
+              weekDay: 'monday',
+              order: 0,
+              trainingTemplate: {
+                id: 'tt-1',
+                name: 'Training',
+                description: null,
+                category: 'strength',
+                bodySegment: 'upper',
+                trainingTemplateExerciseTemplates: junctions,
+              },
+            },
+          ],
+        });
+        prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+        prisma.trainingProtocol.create.mockResolvedValue({ id: 'p1', trainings: [], assignee: {} });
+      };
+
+      const createdExercises = () =>
+        prisma.trainingProtocol.create.mock.calls[0][0].data.trainings.create[0].exercises.create;
+
+      it('loads the junction technique links with the template', async () => {
+        arrangeTemplate([]);
+
+        await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+        const junctionInclude =
+          prisma.trainingProtocolTemplate.findUnique.mock.calls[0][0].include.trainings.include.trainingTemplate
+            .include.trainingTemplateExerciseTemplates.include;
+        expect(junctionInclude.advancedTechniqueLinks).toBe(true);
+      });
+
+      it('copies the links as an ordered snapshot onto each new exercise', async () => {
+        arrangeTemplate([
+          makeJunction('jt-1', 0, [
+            { advancedTechniqueId: 'tech-b', order: 1 },
+            { advancedTechniqueId: 'tech-a', order: 0 },
+          ]),
+        ]);
+        prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+
+        await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+        expect(createdExercises()[0].advancedTechniqueLinks).toEqual({
+          create: [
+            { advancedTechniqueId: 'tech-a', order: 0 },
+            { advancedTechniqueId: 'tech-b', order: 1 },
+          ],
+        });
+      });
+
+      it('drops deleted or foreign-private techniques and re-indexes the order', async () => {
+        arrangeTemplate([
+          makeJunction('jt-1', 0, [
+            { advancedTechniqueId: 'tech-gone', order: 0 },
+            { advancedTechniqueId: 'tech-ok', order: 1 },
+          ]),
+        ]);
+        prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-ok' }]);
+
+        await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+        expect(createdExercises()[0].advancedTechniqueLinks).toEqual({
+          create: [{ advancedTechniqueId: 'tech-ok', order: 0 }],
+        });
+      });
+
+      it('omits advancedTechniqueLinks when no link survives', async () => {
+        arrangeTemplate([makeJunction('jt-1', 0, [{ advancedTechniqueId: 'tech-gone', order: 0 }])]);
+        prisma.advancedTechnique.findMany.mockResolvedValue([]);
+
+        await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+        expect(createdExercises()[0]).not.toHaveProperty('advancedTechniqueLinks');
+      });
+
+      it('validates visibility of all linked techniques in a single query', async () => {
+        arrangeTemplate([
+          makeJunction('jt-1', 0, [{ advancedTechniqueId: 'tech-a', order: 0 }]),
+          makeJunction('jt-2', 1, [
+            { advancedTechniqueId: 'tech-a', order: 0 },
+            { advancedTechniqueId: 'tech-b', order: 1 },
+          ]),
+        ]);
+        prisma.advancedTechnique.findMany.mockResolvedValue([{ id: 'tech-a' }, { id: 'tech-b' }]);
+
+        await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+        expect(prisma.advancedTechnique.findMany).toHaveBeenCalledTimes(1);
+        expect([...prisma.advancedTechnique.findMany.mock.calls[0][0].where.id.in].sort()).toEqual([
+          'tech-a',
+          'tech-b',
+        ]);
+        expect(createdExercises()[1].advancedTechniqueLinks.create).toHaveLength(2);
+      });
     });
 
     it('creates exercises from training template exercise templates', async () => {

@@ -319,6 +319,11 @@ export default {
     'diet.mealNotFound': 'Meal not found.',
     'diet.foodItemNotFound': 'Food item not found.',
 
+    // Advanced techniques
+    'advancedTechnique.notFound': 'Advanced technique not found.',
+    'advancedTechnique.forbidden': 'System advanced techniques cannot be changed.',
+    'advancedTechnique.invalidSelection': 'One or more selected advanced techniques are invalid.',
+
     // Dashboard
     'dashboard.invalidDateRange': 'Invalid date range (dateFrom must be before dateTo).',
     'dashboard.windowTooLarge': 'Date window exceeds the 365-day maximum.',

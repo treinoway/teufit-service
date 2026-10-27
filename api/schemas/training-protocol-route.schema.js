@@ -2,6 +2,7 @@ import { trainingStatusValues, genderOrdinationValues, trainingLevelValues, prot
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema } from './gif-url.schema.js';
+import { advancedTechniqueIdsRequestSchema } from './advanced-technique.schema.js';
 
 const statusEnum = trainingStatusValues;
 const genderOrdinationEnum = genderOrdinationValues;
@@ -423,6 +424,7 @@ const exerciseInputSchema = {
     restInterval: { type: 'integer', minimum: 0, nullable: true },
     notes: { type: 'string', nullable: true },
     intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+    advancedTechniqueIds: advancedTechniqueIdsRequestSchema,
   },
 };
 

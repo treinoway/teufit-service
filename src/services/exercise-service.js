@@ -23,6 +23,16 @@ import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockTrainingForUpdate } from '../helpers/row-locks.js';
 import { randomUUID } from 'crypto';
+import {
+  advancedTechniqueLinksInclude,
+  toLinkCreateInput,
+  replaceAdvancedTechniqueLinks,
+  withAdvancedTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
+import {
+  resolveAdvancedTechniqueSelection,
+  resolveSelectionOrInherit,
+} from './advanced-technique-service.js';
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
@@ -86,7 +96,7 @@ async function resolveAppendOrder(tx, trainingId) {
 }
 
 
-function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
+function buildExerciseData(data, trainingId, exerciseTemplateId = null, techniqueSelection = []) {
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
 
@@ -111,6 +121,7 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null) {
     restInterval: data.restInterval ?? null,
     notes: data.notes ?? null,
     intensity: data.intensity !== undefined ? data.intensity : null,
+    ...toLinkCreateInput(techniqueSelection),
   };
 }
 
@@ -161,7 +172,7 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
 function normalizeExercisePrescriptionMode(exercise) {
   if (!exercise) return exercise;
   return {
-    ...exercise,
+    ...withAdvancedTechniqueRefs(exercise),
     prescriptionMode: resolvePrescriptionMode(exercise.prescriptionMode, exercise),
   };
 }
@@ -202,12 +213,13 @@ export async function createExercise(userId, trainingId, data) {
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
   validateIntensityRequiresCardio(data.intensity, data.type);
+  const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
   // Substitutes are only added via POST /trainer/exercises/:id/substitutes — not via this endpoint.
   // createExerciseSchema strips substituteForExerciseId via additionalProperties: false.
   if (data.supersetGroupId) {
     // Resolve order and shift downstream exercises atomically so group stays contiguous
-    const exercise = await createSupersetMemberAtomically(trainingId, data, trainer.id);
+    const exercise = await createSupersetMemberAtomically(trainingId, data, trainer.id, techniqueSelection);
     return normalizeExercisePrescriptionMode(exercise);
   }
 
@@ -218,7 +230,8 @@ export async function createExercise(userId, trainingId, data) {
       : await resolveAppendOrder(tx, trainingId);
     const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainer.id, data);
     const created = await tx.exercise.create({
-      data: buildExerciseData({ ...data, order }, trainingId, exerciseTemplateId),
+      data: buildExerciseData({ ...data, order }, trainingId, exerciseTemplateId, techniqueSelection),
+      include: advancedTechniqueLinksInclude,
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -241,7 +254,7 @@ export async function createExercise(userId, trainingId, data) {
  *
  * All queries and mutations run inside a single $transaction.
  */
-async function createSupersetMemberAtomically(trainingId, data, trainerId) {
+async function createSupersetMemberAtomically(trainingId, data, trainerId, techniqueSelection) {
   return withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     await lockTrainingForUpdate(tx, trainingId);
     const allActive = await tx.exercise.findMany({
@@ -314,7 +327,8 @@ async function createSupersetMemberAtomically(trainingId, data, trainerId) {
 
     const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainerId, data);
     const created = await tx.exercise.create({
-      data: buildExerciseData({ ...data, order: resolvedOrder }, trainingId, exerciseTemplateId),
+      data: buildExerciseData({ ...data, order: resolvedOrder }, trainingId, exerciseTemplateId, techniqueSelection),
+      include: advancedTechniqueLinksInclude,
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -338,6 +352,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
 
   const template = await prisma.exerciseTemplate.findUnique({
     where: { id: templateId },
+    include: advancedTechniqueLinksInclude,
   });
 
   if (!template || template.deletedAt) {
@@ -353,6 +368,12 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
   // caller — the library template no longer carries prescription, so an import has no preset.
   const effectiveIntensity = data.intensity ?? null;
   validateIntensityRequiresCardio(effectiveIntensity, effectiveType);
+  const techniqueSelection = await resolveSelectionOrInherit(
+    prisma,
+    trainer.id,
+    data.advancedTechniqueIds,
+    template.advancedTechniqueLinks,
+  );
 
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
 
@@ -380,9 +401,10 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
       : await resolveAppendOrder(tx, trainingId);
     const created = await tx.exercise.create({
       data: {
-        ...buildExerciseData({ ...exerciseData, order }, trainingId, template.id),
+        ...buildExerciseData({ ...exerciseData, order }, trainingId, template.id, techniqueSelection),
         exerciseTemplateId: template.id,
       },
+      include: advancedTechniqueLinksInclude,
     });
     await recomputeTrainingDuration(tx, trainingId);
     return created;
@@ -430,11 +452,13 @@ export async function getExercisesByTraining(userId, trainingId, context) {
     where: { trainingId, deletedAt: null, substituteForExerciseId: null },
     include: {
       exerciseTemplate: { select: { id: true, name: true } },
+      ...advancedTechniqueLinksInclude,
       substitutes: {
         where: { deletedAt: null },
         orderBy: { substituteOrder: 'asc' },
         include: {
           exerciseTemplate: { select: { id: true, name: true } },
+          ...advancedTechniqueLinksInclude,
         },
       },
     },
@@ -453,11 +477,13 @@ export async function getExerciseById(userId, exerciseId, context) {
     include: {
       training: { include: { trainingProtocol: true } },
       exerciseTemplate: { select: { id: true, name: true, type: true, videoUrl: true, gifUrl: true } },
+      ...advancedTechniqueLinksInclude,
       substitutes: {
         where: { deletedAt: null },
         orderBy: { substituteOrder: 'asc' },
         include: {
           exerciseTemplate: { select: { id: true, name: true } },
+          ...advancedTechniqueLinksInclude,
         },
       },
     },
@@ -552,6 +578,10 @@ export async function updateExercise(userId, exerciseId, data) {
     validateIntensityRequiresCardio(effectiveIntensity, data.type);
   }
 
+  const techniqueSelection = data.advancedTechniqueIds === undefined
+    ? undefined
+    : await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
+
   // If order is being changed and the exercise belongs to a superset, verify contiguity
   if (data.order !== undefined && data.order !== exercise.order && exercise.supersetGroupId) {
     const allActive = await loadActiveExercises(exercise.trainingId);
@@ -595,9 +625,13 @@ export async function updateExercise(userId, exerciseId, data) {
 
   const updated = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     await lockTrainingForUpdate(tx, exercise.trainingId);
+    if (techniqueSelection) {
+      await replaceAdvancedTechniqueLinks(tx.exerciseAdvancedTechnique, 'exerciseId', exerciseId, techniqueSelection);
+    }
     const result = await tx.exercise.update({
       where: { id: exerciseId },
       data: updateData,
+      include: advancedTechniqueLinksInclude,
     });
     if (shouldRecompute) {
       await recomputeTrainingDuration(tx, exercise.trainingId);
@@ -917,6 +951,7 @@ export async function addSubstitute(userId, principalId, data) {
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
   validateIntensityRequiresCardio(data.intensity, data.type);
+  const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
   // The substitute schema blocks supersetGroupId, so the candidate always has null here.
   validateSubstituteConstraint(principal, {
@@ -941,9 +976,10 @@ export async function addSubstitute(userId, principalId, data) {
       { ...data, substituteForExerciseId: principalId, substituteOrder: nextSubstituteOrder },
       principal.trainingId,
       exerciseTemplateId,
+      techniqueSelection,
     );
 
-    return tx.exercise.create({ data: substituteData });
+    return tx.exercise.create({ data: substituteData, include: advancedTechniqueLinksInclude });
   }));
 
   return normalizeExercisePrescriptionMode(substitute);

@@ -11,6 +11,19 @@ import {
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
 import { PrescriptionMode, ExerciseOrderBy, trainingCategoryValues, bodySegmentValues } from '../constants/training.js';
+import {
+  advancedTechniqueLinksInclude,
+  replaceAdvancedTechniqueLinks,
+  toLinkCreateInput,
+  withAdvancedTechniqueRefs,
+  withJunctionTechniqueRefs,
+} from '../helpers/advanced-technique-refs.js';
+import {
+  inheritSelectionBatch,
+  resolveAdvancedTechniqueSelection,
+  resolveAdvancedTechniqueSelectionBatch,
+  resolveSelectionOrInherit,
+} from './advanced-technique-service.js';
 
 /**
  * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
@@ -21,9 +34,10 @@ import { PrescriptionMode, ExerciseOrderBy, trainingCategoryValues, bodySegmentV
  * @param {object} e - Input item (exerciseTemplateId, order?, identity + prescription fields)
  * @param {number} index - Fallback order when e.order is not set
  * @param {object} template - Library ExerciseTemplate row (name/type/videoUrl source)
+ * @param {object[]} techniqueSelection - Ordered technique links ({ advancedTechniqueId, order })
  * @returns {object} Junction row create data
  */
-function buildJunctionCreateData(e, index, template) {
+function buildJunctionCreateData(e, index, template, techniqueSelection = []) {
   const resolvedMode = e.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, e);
 
@@ -46,17 +60,36 @@ function buildJunctionCreateData(e, index, template) {
     restInterval: e.restInterval ?? null,
     notes: e.notes ?? null,
     intensity: e.intensity ?? null,
+    ...toLinkCreateInput(techniqueSelection),
   };
 }
+
+const junctionInclude = {
+  exerciseTemplate: true,
+  ...advancedTechniqueLinksInclude,
+};
 
 const exerciseTemplatesInclude = {
   trainingTemplateExerciseTemplates: {
     orderBy: ExerciseOrderBy,
-    include: {
-      exerciseTemplate: true,
-    },
+    include: junctionInclude,
   },
 };
+
+// Resolves each junction input's techniques: explicit ids win (validated), otherwise inherit the library template's.
+async function resolveJunctionTechniqueSelections(trainerId, inputs, templatesById) {
+  const explicit = await resolveAdvancedTechniqueSelectionBatch(
+    prisma,
+    trainerId,
+    inputs.map((input) => input.advancedTechniqueIds),
+  );
+  const inherited = await inheritSelectionBatch(
+    prisma,
+    trainerId,
+    inputs.map((input) => templatesById[input.exerciseTemplateId]?.advancedTechniqueLinks ?? []),
+  );
+  return inputs.map((input, index) => (input.advancedTechniqueIds === undefined ? inherited[index] : explicit[index]));
+}
 
 /**
  * Create a new training template
@@ -96,6 +129,7 @@ export async function createTrainingTemplate(userId, data) {
     // Allow own templates and public ones from other trainers (the library lists both).
     const existing = await prisma.exerciseTemplate.findMany({
       where: { id: { in: ids }, deletedAt: null, OR: [{ trainerId: trainer.id }, { isPublic: true }] },
+      include: { advancedTechniqueLinks: true },
     });
     const foundIds = new Set(existing.map((e) => e.id));
     const missing = ids.filter((id) => !foundIds.has(id));
@@ -121,9 +155,10 @@ export async function createTrainingTemplate(userId, data) {
     isPublic: data.isPublic !== undefined ? data.isPublic : false,
   };
   if (exerciseTemplatesInput.length > 0) {
+    const selections = await resolveJunctionTechniqueSelections(trainer.id, exerciseTemplatesInput, existingTemplatesById);
     createData.trainingTemplateExerciseTemplates = {
       create: exerciseTemplatesInput.map((e, index) =>
-        buildJunctionCreateData(e, index, existingTemplatesById[e.exerciseTemplateId]),
+        buildJunctionCreateData(e, index, existingTemplatesById[e.exerciseTemplateId], selections[index]),
       ),
     };
   }
@@ -133,7 +168,7 @@ export async function createTrainingTemplate(userId, data) {
     include: exerciseTemplatesInclude,
   });
 
-  return template;
+  return withJunctionTechniqueRefs(template);
 }
 
 /**
@@ -197,7 +232,7 @@ export async function getTrainingTemplatesByTrainer(userId, filters = {}) {
     prisma.trainingTemplate.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  return { data: data.map((template) => withJunctionTechniqueRefs(template, trainer.id)), total, page, limit };
 }
 
 /**
@@ -231,11 +266,17 @@ export async function batchDeleteTrainingTemplates(userId, ids) {
 }
 
 /**
- * Get public training templates only
+ * Get public training templates only, hiding other trainers' private techniques
  *
+ * @param {string} userId - User ID of the requesting trainer
  * @returns {Promise<object[]>} List of public templates
  */
-export async function getPublicTrainingTemplates() {
+export async function getPublicTrainingTemplates(userId) {
+  const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
   const templates = await prisma.trainingTemplate.findMany({
     where: {
       isPublic: true,
@@ -260,7 +301,7 @@ export async function getPublicTrainingTemplates() {
     },
   });
 
-  return templates;
+  return templates.map((template) => withJunctionTechniqueRefs(template, trainer.id));
 }
 
 /**
@@ -309,7 +350,7 @@ export async function getTrainingTemplateById(userId, templateId) {
     throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
   }
 
-  return template;
+  return withJunctionTechniqueRefs(template, trainer.id);
 }
 
 /**
@@ -377,6 +418,7 @@ export async function updateTrainingTemplate(userId, templateId, data) {
       const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
       const existing = await prisma.exerciseTemplate.findMany({
         where: { id: { in: ids }, trainerId: trainer.id, deletedAt: null },
+        include: { advancedTechniqueLinks: true },
       });
       const foundIds = new Set(existing.map((e) => e.id));
       const missing = ids.filter((id) => !foundIds.has(id));
@@ -389,10 +431,11 @@ export async function updateTrainingTemplate(userId, templateId, data) {
       }
       updateTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
     }
+    const selections = await resolveJunctionTechniqueSelections(trainer.id, exerciseTemplatesInput, updateTemplatesById);
     updateData.trainingTemplateExerciseTemplates = {
       deleteMany: {},
       create: exerciseTemplatesInput.map((e, index) =>
-        buildJunctionCreateData(e, index, updateTemplatesById[e.exerciseTemplateId]),
+        buildJunctionCreateData(e, index, updateTemplatesById[e.exerciseTemplateId], selections[index]),
       ),
     };
   }
@@ -404,7 +447,7 @@ export async function updateTrainingTemplate(userId, templateId, data) {
     include: exerciseTemplatesInclude,
   });
 
-  return updated;
+  return withJunctionTechniqueRefs(updated);
 }
 
 /**
@@ -447,6 +490,23 @@ export async function deleteTrainingTemplate(userId, templateId) {
   });
 
   return deleted;
+}
+
+// Updates a junction row and replaces its technique links atomically.
+function updateJunctionWithTechniques(junctionId, updateData, techniqueSelection) {
+  return prisma.$transaction(async (tx) => {
+    await replaceAdvancedTechniqueLinks(
+      tx.trainingTemplateExerciseAdvancedTechnique,
+      'trainingTemplateExerciseTemplateId',
+      junctionId,
+      techniqueSelection,
+    );
+    return tx.trainingTemplateExerciseTemplate.update({
+      where: { id: junctionId },
+      data: updateData,
+      include: junctionInclude,
+    });
+  });
 }
 
 /**
@@ -519,13 +579,19 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
   }
 
   // 5. Update and return the updated junction row with exerciseTemplate for reference
-  const updated = await prisma.trainingTemplateExerciseTemplate.update({
-    where: { id: exerciseId },
-    data: updateData,
-    include: { exerciseTemplate: true },
-  });
+  const techniqueSelection = data.advancedTechniqueIds === undefined
+    ? undefined
+    : await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
-  return updated;
+  const updated = techniqueSelection
+    ? await updateJunctionWithTechniques(exerciseId, updateData, techniqueSelection)
+    : await prisma.trainingTemplateExerciseTemplate.update({
+      where: { id: exerciseId },
+      data: updateData,
+      include: junctionInclude,
+    });
+
+  return withAdvancedTechniqueRefs(updated);
 }
 
 /**
@@ -591,6 +657,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
 
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
+  const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
   const junction = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     const order = await resolveJunctionOrder(tx, templateId, data.order);
@@ -626,12 +693,13 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         restInterval: data.restInterval ?? null,
         notes: data.notes ?? null,
         intensity: data.intensity ?? null,
+        ...toLinkCreateInput(techniqueSelection),
       },
-      include: { exerciseTemplate: true },
+      include: junctionInclude,
     });
   }));
 
-  return junction;
+  return withAdvancedTechniqueRefs(junction);
 }
 
 /**
@@ -648,6 +716,7 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
 
   const exerciseTemplate = await prisma.exerciseTemplate.findUnique({
     where: { id: data.exerciseTemplateId },
+    include: { advancedTechniqueLinks: true },
   });
 
   if (!exerciseTemplate || exerciseTemplate.deletedAt) {
@@ -666,6 +735,12 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
   // time (the workout's direction) — the library template no longer carries prescription.
   const resolvedMode = data.prescriptionMode ?? PrescriptionMode.REPS;
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, data);
+  const techniqueSelection = await resolveSelectionOrInherit(
+    prisma,
+    trainer.id,
+    data.advancedTechniqueIds,
+    exerciseTemplate.advancedTechniqueLinks,
+  );
 
   const junction = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     const order = await resolveJunctionOrder(tx, templateId, data.order);
@@ -689,12 +764,13 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
         restInterval: data.restInterval ?? null,
         notes: data.notes ?? null,
         intensity: data.intensity ?? null,
+        ...toLinkCreateInput(techniqueSelection),
       },
-      include: { exerciseTemplate: true },
+      include: junctionInclude,
     });
   }));
 
-  return junction;
+  return withAdvancedTechniqueRefs(junction);
 }
 
 /**
@@ -712,7 +788,7 @@ export async function deleteTrainingTemplateExercise(userId, templateId, exercis
 
   const junctionRow = await prisma.trainingTemplateExerciseTemplate.findFirst({
     where: { id: exerciseId, trainingTemplateId: templateId },
-    include: { exerciseTemplate: true },
+    include: junctionInclude,
   });
 
   if (!junctionRow) {
@@ -723,5 +799,5 @@ export async function deleteTrainingTemplateExercise(userId, templateId, exercis
     where: { id: exerciseId },
   });
 
-  return junctionRow;
+  return withAdvancedTechniqueRefs(junctionRow);
 }

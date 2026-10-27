@@ -10,6 +10,9 @@ import { prisma } from '../../src/db.js';
  * Use this in beforeEach hooks to ensure test isolation.
  */
 export async function cleanDatabase() {
+  // why: system advanced techniques come from a data migration and TRUNCATE ... CASCADE on `trainers` empties advanced_techniques too; snapshot and restore them.
+  const systemTechniques = await readSystemAdvancedTechniques();
+
   const tables = [
     'anamnesis_answers',
     'anamnesis_responses',
@@ -68,4 +71,14 @@ export async function cleanDatabase() {
   await prisma.$executeRawUnsafe(
     `TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`
   );
+
+  if (systemTechniques.length > 0) {
+    await prisma.advancedTechnique.createMany({ data: systemTechniques, skipDuplicates: true });
+  }
+}
+
+// Reads the system (trainerId null) advanced techniques; [] before the model exists.
+async function readSystemAdvancedTechniques() {
+  if (!prisma.advancedTechnique) return [];
+  return prisma.advancedTechnique.findMany({ where: { trainerId: null } });
 }
