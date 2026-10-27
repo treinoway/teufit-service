@@ -245,6 +245,14 @@ export async function getProtocolTemplateById(userId, templateId) {
   return template;
 }
 
+// Editing the example routine turns its linked example trainings into normal ones.
+async function clearExampleOnLinkedTrainings(tx, protocolTemplateId) {
+  await tx.trainingTemplate.updateMany({
+    where: { isExample: true, protocolTemplateTrainings: { some: { protocolTemplateId } } },
+    data: { isExample: false },
+  });
+}
+
 /**
  * Update a protocol template
  *
@@ -291,7 +299,11 @@ export async function updateProtocolTemplate(userId, templateId, data) {
   if (data.trainingLevel !== undefined) updateData.trainingLevel = data.trainingLevel;
   if (data.type !== undefined) updateData.type = data.type;
 
+  if (template.isExample) updateData.isExample = false;
+
   const updated = await prisma.$transaction(async (tx) => {
+    if (template.isExample) await clearExampleOnLinkedTrainings(tx, templateId);
+
     await tx.trainingProtocolTemplate.update({
       where: { id: templateId },
       data: updateData,

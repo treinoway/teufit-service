@@ -110,6 +110,9 @@ model Trainer {
   profileCompletedAt     DateTime? @map("profile_completed_at") @db.Timestamptz(6)
   firstStudentLinkedAt   DateTime? @map("first_student_linked_at") @db.Timestamptz(6)
   firstProtocolCreatedAt DateTime? @map("first_protocol_created_at") @db.Timestamptz(6)
+  firstStudentInvitedAt  DateTime? @map("first_student_invited_at") @db.Timestamptz(6)
+  firstAnamnesisSentAt   DateTime? @map("first_anamnesis_sent_at") @db.Timestamptz(6)
+  brandingConfiguredAt   DateTime? @map("branding_configured_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -358,6 +361,7 @@ model TrainingProtocolTemplate {
   genderOrdination     String? @map("gender_ordination") @db.Text
   trainingLevel        String? @map("training_level") @db.Text
   type                 String? @db.Text
+  isExample            Boolean @default(false) @map("is_example")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -413,6 +417,7 @@ model TrainingTemplate {
   bodySegment String?  @map("body_segment") @db.Text
   tags        String[] @default([])
   isPublic    Boolean  @default(false) @map("is_public")
+  isExample   Boolean  @default(false) @map("is_example")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

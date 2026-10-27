@@ -36,6 +36,14 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkProfileComplete: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../src/services/trainer-example-routine-service.js', () => ({
+  seedExampleRoutine: vi.fn(),
+}));
+
+vi.mock('../../src/config/email-handler.js', () => ({
+  default: { sendTrainerWelcomeEmail: vi.fn() },
+}));
+
 vi.mock('../../src/services/platform-plan-service.js', () => ({
   buildPlatformPlanForMe: vi.fn(),
 }));
@@ -191,6 +199,7 @@ describe('userService', () => {
   });
 
   it('setActiveProfileToTrainer upserts preferences with trainer profile', async () => {
+    prisma.trainer.create.mockResolvedValue({ id: 't1' });
     prisma.user.findUnique.mockResolvedValue({ roles: ['student'] });
     prisma.userPreferences.upsert.mockResolvedValue({
       id: 'pref1',
@@ -202,7 +211,7 @@ describe('userService', () => {
 
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
     where: { id: 'u1' },
-    select: { roles: true },
+    select: { roles: true, email: true, firstName: true },
   });
 
     expect(prisma.user.update).toHaveBeenCalledWith({
@@ -230,6 +239,7 @@ describe('userService', () => {
   });
 
   it('setActiveProfileToTrainer does not duplicate TRAINER role', async () => {
+  prisma.trainer.create.mockResolvedValue({ id: 't2' });
   prisma.user.findUnique.mockResolvedValue({ roles: ['student', 'trainer'] });
   prisma.userPreferences.upsert.mockResolvedValue({
     id: 'pref2',
@@ -254,6 +264,7 @@ describe('userService', () => {
   });
 
   it('setActiveProfileToTrainer always calls maybeMarkProfileComplete to check profile milestone on role upgrade', async () => {
+    prisma.trainer.create.mockResolvedValue({ id: 't3' });
     prisma.user.findUnique.mockResolvedValue({ roles: ['student'] });
     prisma.userPreferences.upsert.mockResolvedValue({
       id: 'pref3',
@@ -1102,6 +1113,73 @@ describe('userService', () => {
           where: { studentId: 'u1' },
           select: { id: true },
         });
+      });
+    });
+  });
+
+  describe('getUserProfileById trainerOnboarding mapping', () => {
+    const FIRST_INVITED_AT = new Date('2026-03-01T10:00:00.000Z');
+    const FIRST_ANAMNESIS_AT = new Date('2026-03-02T10:00:00.000Z');
+    const BRANDING_AT = new Date('2026-03-03T10:00:00.000Z');
+
+    const baseUser = {
+      id: 'u1',
+      email: 'trainer@example.com',
+      roles: ['trainer'],
+      status: 'active',
+      firstName: 'Ana',
+      lastName: 'Silva',
+      gender: null,
+      birthDate: null,
+      avatarUrl: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: null,
+    };
+
+    const trainerRow = (overrides = {}) => ({
+      profileCompletedAt: null,
+      firstStudentLinkedAt: null,
+      firstProtocolCreatedAt: null,
+      firstStudentInvitedAt: null,
+      firstAnamnesisSentAt: null,
+      brandingConfiguredAt: null,
+      ...overrides,
+    });
+
+    it('exposes the new milestone timestamps as ISO strings and the matching booleans as true', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        trainer: trainerRow({
+          firstStudentInvitedAt: FIRST_INVITED_AT,
+          firstAnamnesisSentAt: FIRST_ANAMNESIS_AT,
+          brandingConfiguredAt: BRANDING_AT,
+        }),
+      });
+
+      const result = await getUserProfileById('u1', ['trainerOnboarding']);
+
+      expect(result.trainerOnboarding).toMatchObject({
+        firstStudentInvitedAt: FIRST_INVITED_AT.toISOString(),
+        firstStudentInvited: true,
+        firstAnamnesisSentAt: FIRST_ANAMNESIS_AT.toISOString(),
+        firstAnamnesisSent: true,
+        brandingConfiguredAt: BRANDING_AT.toISOString(),
+        brandingConfigured: true,
+      });
+    });
+
+    it('exposes null timestamps and false booleans for milestones not reached', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, trainer: trainerRow() });
+
+      const result = await getUserProfileById('u1', ['trainerOnboarding']);
+
+      expect(result.trainerOnboarding).toMatchObject({
+        firstStudentInvitedAt: null,
+        firstStudentInvited: false,
+        firstAnamnesisSentAt: null,
+        firstAnamnesisSent: false,
+        brandingConfiguredAt: null,
+        brandingConfigured: false,
       });
     });
   });

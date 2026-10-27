@@ -5,6 +5,10 @@ vi.mock('../../src/services/platform-plan-service.js', () => ({
   assertCanUseBranding: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
+  maybeMarkBrandingConfigured: vi.fn(),
+}));
+
 vi.mock('../../src/db.js', () => ({
   prisma: {
     trainerBranding: {
@@ -38,6 +42,7 @@ import {
   getStudentTrainerBranding,
 } from '../../src/services/trainer-branding-service.js';
 import { assertCanUseBranding } from '../../src/services/platform-plan-service.js';
+import { maybeMarkBrandingConfigured } from '../../src/services/trainer-onboarding-service.js';
 
 const TRAINER_ID = 'trainer-uuid-1';
 
@@ -58,6 +63,7 @@ describe('trainer-branding-service', () => {
     vi.clearAllMocks();
     // Re-apply platform-plan-service mocks after mockReset (mockReset: true in vitest config).
     assertCanUseBranding.mockResolvedValue(undefined);
+    maybeMarkBrandingConfigured.mockResolvedValue(undefined);
     s3BucketHandler.resolveUrl.mockResolvedValue(null);
   });
 
@@ -218,6 +224,39 @@ describe('trainer-branding-service', () => {
       const result = await upsertBranding({ trainerId: TRAINER_ID, data: { primaryColor: '#FF5733' } });
 
       expect(result.logoUrl).toBe('https://cdn.example.com/branding/logos/trainer-uuid-1.jpg');
+    });
+  });
+
+
+  describe('upsertBranding branding-configured milestone', () => {
+    it('marks brandingConfiguredAt for the trainer after the branding is saved', async () => {
+      prisma.trainerBranding.upsert.mockResolvedValue(baseBranding);
+
+      await upsertBranding({ trainerId: TRAINER_ID, data: { primaryColor: '#FF5733' } });
+
+      expect(maybeMarkBrandingConfigured).toHaveBeenCalledTimes(1);
+      expect(maybeMarkBrandingConfigured).toHaveBeenCalledWith(expect.objectContaining({ trainerId: TRAINER_ID }));
+      expect(maybeMarkBrandingConfigured.mock.invocationCallOrder[0]).toBeGreaterThan(
+        prisma.trainerBranding.upsert.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not mark the milestone when validation rejects the input', async () => {
+      await expect(
+        upsertBranding({ trainerId: TRAINER_ID, data: { primaryColor: 'not-a-color' } }),
+      ).rejects.toMatchObject({ httpStatus: 400 });
+
+      expect(maybeMarkBrandingConfigured).not.toHaveBeenCalled();
+    });
+
+    it('does not mark the milestone when the plan gate rejects the trainer', async () => {
+      assertCanUseBranding.mockRejectedValue(new Error('plan'));
+
+      await expect(
+        upsertBranding({ trainerId: TRAINER_ID, data: { primaryColor: '#FF5733' } }),
+      ).rejects.toThrow('plan');
+
+      expect(maybeMarkBrandingConfigured).not.toHaveBeenCalled();
     });
   });
 

@@ -8,6 +8,7 @@ import {
 } from '../constants/branding.js';
 import { TrainingStatus } from '../constants/training.js';
 import { assertCanUseBranding } from './platform-plan-service.js';
+import { maybeMarkBrandingConfigured } from './trainer-onboarding-service.js';
 
 const MIME_TO_EXTENSION = {
   'image/jpeg': 'jpg',
@@ -93,6 +94,7 @@ export async function upsertBranding({ trainerId, data }) {
     create: { trainerId, ...upsertData },
     update: upsertData,
   });
+  await maybeMarkBrandingConfigured({ trainerId });
 
   return resolveBrandingUrls(branding);
 }

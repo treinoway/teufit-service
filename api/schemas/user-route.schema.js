@@ -197,9 +197,27 @@ export const getMeSchema = {
               format: 'date-time',
               description: 'ISO timestamp when the trainer created their first training protocol (null if not yet done)',
             },
+            firstStudentInvitedAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer sent their first student invite (null if not yet done)',
+            },
+            firstAnamnesisSentAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer first assigned an anamnesis to a student (null if not yet done)',
+            },
+            brandingConfiguredAt: {
+              type: 'string',
+              nullable: true,
+              format: 'date-time',
+              description: 'ISO timestamp when the trainer first saved their branding (null if not yet done)',
+            },
             profileCompleted: {
               type: 'boolean',
-              description: 'True when the trainer has filled all required personal and address fields',
+              description: 'True when the trainer has first name, last name and avatar set',
             },
             firstStudentLinked: {
               type: 'boolean',
@@ -208,6 +226,18 @@ export const getMeSchema = {
             firstProtocolCreated: {
               type: 'boolean',
               description: 'True when the trainer has created at least one training protocol',
+            },
+            firstStudentInvited: {
+              type: 'boolean',
+              description: 'True when the trainer has sent at least one student invite',
+            },
+            firstAnamnesisSent: {
+              type: 'boolean',
+              description: 'True when the trainer has assigned an anamnesis to a student at least once',
+            },
+            brandingConfigured: {
+              type: 'boolean',
+              description: 'True when the trainer has saved their branding at least once',
             },
           },
         },

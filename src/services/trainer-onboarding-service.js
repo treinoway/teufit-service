@@ -1,7 +1,6 @@
 import { prisma } from '../db.js';
 
-const REQUIRED_USER_FIELDS = ['firstName', 'lastName', 'birthDate', 'gender'];
-const REQUIRED_ADDRESS_FIELDS = ['line1', 'city', 'state', 'postalCode', 'country'];
+const REQUIRED_USER_FIELDS = ['firstName', 'lastName', 'avatarUrl'];
 
 /**
  * Check whether a field value counts as "filled in".
@@ -14,29 +13,21 @@ function isFieldFilled(value) {
 }
 
 /**
- * Returns true when all nine required personal + address fields are filled.
+ * Returns true when the user has first name, last name and avatar filled in.
  *
- * @param {{ user: object, address: object|null }} params
+ * @param {{ user: object|null }} params
  */
-export function isProfileDataComplete({ user, address }) {
-  if (!user || !address) return false;
+export function isProfileDataComplete({ user }) {
+  if (!user) return false;
 
-  const allUserFieldsFilled = REQUIRED_USER_FIELDS.every((field) =>
-    isFieldFilled(user[field]),
-  );
-
-  const allAddressFieldsFilled = REQUIRED_ADDRESS_FIELDS.every((field) =>
-    isFieldFilled(address[field]),
-  );
-
-  return allUserFieldsFilled && allAddressFieldsFilled;
+  return REQUIRED_USER_FIELDS.every((field) => isFieldFilled(user[field]));
 }
 
 /**
  * Mark profileCompletedAt on the Trainer row if:
  *   - The user has a Trainer record.
  *   - profileCompletedAt is still null.
- *   - All nine required profile fields are present and non-empty.
+ *   - First name, last name and avatar are present and non-empty.
  *
  * Idempotent and safe to call from inside or outside a transaction.
  *
@@ -54,27 +45,14 @@ export async function maybeMarkProfileComplete({ userId, tx }) {
         select: {
           firstName: true,
           lastName: true,
-          birthDate: true,
-          gender: true,
+          avatarUrl: true,
         },
       },
     },
   });
 
   if (!trainer || trainer.profileCompletedAt !== null) return;
-
-  const address = await db.address.findUnique({
-    where: { userId },
-    select: {
-      line1: true,
-      city: true,
-      state: true,
-      postalCode: true,
-      country: true,
-    },
-  });
-
-  if (!isProfileDataComplete({ user: trainer.user, address })) return;
+  if (!isProfileDataComplete({ user: trainer.user })) return;
 
   await db.trainer.updateMany({
     where: { id: trainer.id, profileCompletedAt: null },
@@ -110,4 +88,41 @@ export async function maybeMarkFirstProtocolCreated({ trainerId, tx }) {
     where: { id: trainerId, firstProtocolCreatedAt: null },
     data: { firstProtocolCreatedAt: new Date() },
   });
+}
+
+// Sets a Trainer milestone column once, guarded by a where-null clause.
+async function markMilestoneOnce({ trainerId, tx, column }) {
+  const db = tx ?? prisma;
+
+  await db.trainer.updateMany({
+    where: { id: trainerId, [column]: null },
+    data: { [column]: new Date() },
+  });
+}
+
+/**
+ * Mark firstStudentInvitedAt on the Trainer row if it is still null.
+ *
+ * @param {{ trainerId: string, tx?: import('@prisma/client').PrismaClient }} params
+ */
+export function maybeMarkFirstStudentInvited({ trainerId, tx }) {
+  return markMilestoneOnce({ trainerId, tx, column: 'firstStudentInvitedAt' });
+}
+
+/**
+ * Mark firstAnamnesisSentAt on the Trainer row if it is still null.
+ *
+ * @param {{ trainerId: string, tx?: import('@prisma/client').PrismaClient }} params
+ */
+export function maybeMarkFirstAnamnesisSent({ trainerId, tx }) {
+  return markMilestoneOnce({ trainerId, tx, column: 'firstAnamnesisSentAt' });
+}
+
+/**
+ * Mark brandingConfiguredAt on the Trainer row if it is still null.
+ *
+ * @param {{ trainerId: string, tx?: import('@prisma/client').PrismaClient }} params
+ */
+export function maybeMarkBrandingConfigured({ trainerId, tx }) {
+  return markMilestoneOnce({ trainerId, tx, column: 'brandingConfiguredAt' });
 }

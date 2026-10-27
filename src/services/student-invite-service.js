@@ -1,4 +1,5 @@
 import emailHandler from '../config/email-handler.js';
+import { runNonCritical } from '../helpers/non-critical.js';
 import { AppError, ConflictAppError, NotFoundAppError } from '../errors/app-error.js';
 import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
 import { PLATFORM_PLAN_ERRORS } from '../constants/platform-plan.js';
@@ -19,7 +20,7 @@ import {
 import { UserStatus } from '../constants/user-status.js';
 import { assertStudentCap } from './platform-plan-service.js';
 import { linkStudentByEmail } from './trainer-service.js';
-import { maybeMarkFirstStudentLinked } from './trainer-onboarding-service.js';
+import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
 import {
   issueCodeRespectingLimits,
@@ -306,13 +307,17 @@ async function createPendingInvite(prisma, { trainerId, email }) {
   });
 
   try {
-    return await prisma.studentInvite.create({
+    const invite = await prisma.studentInvite.create({
       data: {
         trainerId,
         email,
         expiresAt: new Date(Date.now() + STUDENT_INVITE_TTL_MS),
       },
     });
+    await runNonCritical('First-student-invited milestone', () =>
+      maybeMarkFirstStudentInvited({ trainerId, tx: prisma }),
+    );
+    return invite;
   } catch (error) {
     // Partial unique index (trainer_id, email) WHERE status = 'pending'.
     if (error?.code === UNIQUE_VIOLATION_CODE) {

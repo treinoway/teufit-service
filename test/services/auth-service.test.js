@@ -149,7 +149,7 @@ describe('authService', () => {
           userId: 'u1',
         },
       });
-      expect(res).toEqual({ created: true, role: Roles.TRAINER });
+      expect(res).toEqual({ created: true, role: Roles.TRAINER, trainerId: 't1' });
     });
 
     it('uses the given transaction client instead of the global one', async () => {
@@ -160,7 +160,7 @@ describe('authService', () => {
       expect(tx.trainer.create).toHaveBeenCalledWith({ data: { userId: 'u1' } });
       expect(prisma.trainer.findFirst).not.toHaveBeenCalled();
       expect(prisma.trainer.create).not.toHaveBeenCalled();
-      expect(res).toEqual({ created: true, role: Roles.TRAINER });
+      expect(res).toEqual({ created: true, role: Roles.TRAINER, trainerId: 't1' });
     });
 
     it('throws INVALID_PROFILE_TYPE for STUDENT role (removed)', async () => {

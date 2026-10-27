@@ -20,6 +20,7 @@ vi.mock('../../src/services/trainer-service.js', () => ({
 }));
 vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
   maybeMarkFirstStudentLinked: vi.fn(),
+  maybeMarkFirstStudentInvited: vi.fn(),
 }));
 vi.mock('../../src/services/briefing-service.js', () => ({
   markBriefingDirty: vi.fn(),
@@ -35,7 +36,7 @@ import {
 import { findUserIdByEmailCaseInsensitive } from '../../src/helpers/email-lookup.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 import { linkStudentByEmail } from '../../src/services/trainer-service.js';
-import { maybeMarkFirstStudentLinked } from '../../src/services/trainer-onboarding-service.js';
+import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from '../../src/services/trainer-onboarding-service.js';
 import { markBriefingDirty } from '../../src/services/briefing-service.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { PLATFORM_PLAN_ERRORS } from '../../src/constants/platform-plan.js';
@@ -387,6 +388,61 @@ describe('student-invite-service', () => {
         linkStudentByEmail.mockRejectedValue(failure);
 
         await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toBe(failure);
+      });
+    });
+
+    describe('first-invite onboarding milestone', () => {
+      beforeEach(() => {
+        maybeMarkFirstStudentInvited.mockResolvedValue(undefined);
+        prisma.studentInvite.create.mockImplementation(async ({ data }) => makeInvite(data));
+      });
+
+      it('should mark firstStudentInvitedAt for the trainer when a pending invite is created', async () => {
+        await inviteStudent(prisma, args(), { emailSender });
+
+        expect(maybeMarkFirstStudentInvited).toHaveBeenCalledTimes(1);
+        expect(maybeMarkFirstStudentInvited).toHaveBeenCalledWith(expect.objectContaining({ trainerId: TRAINER_ID }));
+      });
+
+      it('should mark the milestone only after the invite row is created', async () => {
+        await inviteStudent(prisma, args(), { emailSender });
+
+        expect(maybeMarkFirstStudentInvited.mock.invocationCallOrder[0]).toBeGreaterThan(
+          prisma.studentInvite.create.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('should mark the milestone when the invite goes to a registered user with an unverified email', async () => {
+        const STUDENT_USER_ID = 'user-9';
+        findUserIdByEmailCaseInsensitive.mockResolvedValue(STUDENT_USER_ID);
+        prisma.user.findUnique.mockImplementation(async ({ where }) =>
+          where.id === STUDENT_USER_ID
+            ? { id: STUDENT_USER_ID, email: STUDENT_EMAIL, deletedAt: null }
+            : { firstName: 'Ana', lastName: 'Coach' },
+        );
+        prisma.account.findFirst.mockResolvedValue(null);
+
+        await inviteStudent(prisma, args(), { emailSender });
+
+        expect(maybeMarkFirstStudentInvited).toHaveBeenCalledWith(expect.objectContaining({ trainerId: TRAINER_ID }));
+      });
+
+      it('should not mark the milestone when the student is linked immediately (no invite is created)', async () => {
+        findUserIdByEmailCaseInsensitive.mockResolvedValue('user-9');
+        prisma.user.findUnique.mockResolvedValue({ id: 'user-9', email: STUDENT_EMAIL, deletedAt: null });
+        linkStudentByEmail.mockResolvedValue({ id: 'user-9' });
+
+        await inviteStudent(prisma, args(), { emailSender });
+
+        expect(maybeMarkFirstStudentInvited).not.toHaveBeenCalled();
+      });
+
+      it('should not mark the milestone when the invite row cannot be created', async () => {
+        prisma.studentInvite.create.mockRejectedValue(new Error('db down'));
+
+        await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toThrow('db down');
+
+        expect(maybeMarkFirstStudentInvited).not.toHaveBeenCalled();
       });
     });
 

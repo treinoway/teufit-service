@@ -81,13 +81,14 @@ async function buildTrainerContext(userId) {
       take: AI_LIMITS.MAX_CONTEXT_STUDENTS,
     }),
     prisma.trainingProtocolTemplate.findMany({
-      where: { trainerId: trainer.id, deletedAt: null },
+      where: { trainerId: trainer.id, deletedAt: null, isExample: false },
       select: { id: true, name: true, description: true },
       take: AI_LIMITS.MAX_CONTEXT_PROTOCOL_TEMPLATES,
     }),
     prisma.trainingTemplate.findMany({
       where: {
         deletedAt: null,
+        isExample: false,
         OR: [{ trainerId: trainer.id }, { isPublic: true }],
       },
       select: { id: true, name: true, category: true },

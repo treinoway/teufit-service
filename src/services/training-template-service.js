@@ -160,6 +160,7 @@ export async function getTrainingTemplatesByTrainer(userId, filters = {}) {
 
   const where = {
     deletedAt: null,
+    isExample: false,
     OR: [
       { trainerId: trainer.id },
       { isPublic: true },

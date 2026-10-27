@@ -93,12 +93,12 @@ export async function ensureProfileForUser({ userId, role, tx }) {
   if (role === Roles.TRAINER) {
     const existing = await db.trainer.findFirst({ where: { userId } });
     if (existing) return { created: false, role };
-    await db.trainer.create({
+    const trainer = await db.trainer.create({
       data: {
         userId,
       },
     });
-    return { created: true, role };
+    return { created: true, role, trainerId: trainer.id };
   }
 
   if (role === Roles.NUTRITIONIST) {

@@ -357,3 +357,64 @@ describe('email-handler rendered emails', () => {
     });
   });
 });
+
+describe('email-handler sendTrainerWelcomeEmail', () => {
+  let send;
+  let originalClient;
+
+  beforeEach(() => {
+    originalClient = emailHandler.resendClient;
+    send = vi.fn().mockResolvedValue({ id: 'email-1' });
+    emailHandler.resendClient = { emails: { send } };
+  });
+
+  afterEach(() => {
+    emailHandler.resendClient = originalClient;
+  });
+
+  it('should send one email to the trainer with the Teufit brand in subject and html', async () => {
+    await emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: 'Bia' });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const { to, subject, html } = send.mock.calls[0][0];
+    expect(to).toBe('trainer@example.com');
+    expect(subject).toContain(BRAND);
+    expect(html).toContain(BRAND);
+  });
+
+  it('should greet the trainer by first name', async () => {
+    await emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: 'Bia' });
+
+    expect(send.mock.calls[0][0].html).toContain('Bia');
+  });
+
+  it('should HTML-escape the first name', async () => {
+    await emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: '<script>x</script>' });
+
+    expect(send.mock.calls[0][0].html).not.toContain('<script>x</script>');
+  });
+
+  it('should still send when the trainer has no first name', async () => {
+    await emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: null });
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not contain legacy brand spellings', async () => {
+    await emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: 'Bia' });
+
+    const { subject, html } = send.mock.calls[0][0];
+    for (const legacy of LEGACY_BRAND_SPELLINGS) {
+      expect(subject).not.toContain(legacy);
+      expect(html).not.toContain(legacy);
+    }
+  });
+
+  it('should resolve to undefined (no-op) when no email client is configured', async () => {
+    emailHandler.resendClient = null;
+
+    await expect(
+      emailHandler.sendTrainerWelcomeEmail({ to: 'trainer@example.com', firstName: 'Bia' }),
+    ).resolves.toBeUndefined();
+  });
+});

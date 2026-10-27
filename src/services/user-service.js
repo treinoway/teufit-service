@@ -6,6 +6,8 @@ import s3BucketHandler from '../config/s3-bucket-handler.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getAddressByPostalCode } from './address-service.js';
 import { maybeMarkProfileComplete } from './trainer-onboarding-service.js';
+import { seedExampleRoutine } from './trainer-example-routine-service.js';
+import emailHandler from '../config/email-handler.js';
 import { buildPlatformPlanForMe } from './platform-plan-service.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
 import { parseBool } from '../helpers/env.js';
@@ -82,9 +84,15 @@ async function toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess,
 			profileCompletedAt: user.trainer.profileCompletedAt?.toISOString() ?? null,
 			firstStudentLinkedAt: user.trainer.firstStudentLinkedAt?.toISOString() ?? null,
 			firstProtocolCreatedAt: user.trainer.firstProtocolCreatedAt?.toISOString() ?? null,
+			firstStudentInvitedAt: user.trainer.firstStudentInvitedAt?.toISOString() ?? null,
+			firstAnamnesisSentAt: user.trainer.firstAnamnesisSentAt?.toISOString() ?? null,
+			brandingConfiguredAt: user.trainer.brandingConfiguredAt?.toISOString() ?? null,
 			profileCompleted: user.trainer.profileCompletedAt !== null,
 			firstStudentLinked: user.trainer.firstStudentLinkedAt !== null,
 			firstProtocolCreated: user.trainer.firstProtocolCreatedAt !== null,
+			firstStudentInvited: Boolean(user.trainer.firstStudentInvitedAt),
+			firstAnamnesisSent: Boolean(user.trainer.firstAnamnesisSentAt),
+			brandingConfigured: Boolean(user.trainer.brandingConfiguredAt),
 		} : null;
 	}
 
@@ -168,12 +176,43 @@ export async function getUserProfileById(userId, includeRelations = []) {
 	return toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess, emailVerified });
 }
 
+// Seeds the example routine for a new trainer on the global client; a failure must never block the role grant.
+async function seedExampleRoutineSafely({ trainerId }) {
+	try {
+		await seedExampleRoutine({ trainerId, tx: prisma });
+	} catch (error) {
+		console.error(`Failed to seed example routine (non-critical): ${error.message}`);
+	}
+}
+
+// Hands the task to the caller's post-commit scheduler, or runs it now (awaited) when there is none.
+async function runAfterCommit(onCommit, task) {
+	if (onCommit) {
+		onCommit(task);
+		return;
+	}
+	await task();
+}
+
+// Fire-and-forget welcome email: sync throws and rejections are logged, never propagated.
+function sendTrainerWelcomeEmailSafely({ to, firstName }) {
+	try {
+		Promise.resolve(emailHandler.sendTrainerWelcomeEmail({ to, firstName })).catch((error) => {
+			console.error(`Failed to send trainer welcome email (non-critical): ${error.message}`);
+		});
+	} catch (error) {
+		console.error(`Failed to send trainer welcome email (non-critical): ${error.message}`);
+	}
+}
+
 /**
  * Grants the trainer role + Trainer row and makes trainer the active profile.
  * Idempotent. Pass `tx` to run inside a caller's interactive transaction (e.g.
  * signup via trainer invite, where the user row is not committed yet).
+ * Pass `onCommit(task)` to defer the example-routine seeding and the welcome
+ * email until the caller's transaction commits; without it they run immediately.
  */
-export async function setActiveProfileToTrainer(userId, { tx } = {}) {
+export async function setActiveProfileToTrainer(userId, { tx, onCommit } = {}) {
 	const db = tx ?? prisma;
 	if (!userId) {
 		const err = new Error('userId is required');
@@ -185,7 +224,7 @@ export async function setActiveProfileToTrainer(userId, { tx } = {}) {
 	// Ensure the user has the TRAINER role in addition to any existing roles.
 	const user = await db.user.findUnique({
 		where: { id: userId },
-		select: { roles: true },
+		select: { roles: true, email: true, firstName: true },
 	});
 
 	if (!user) {
@@ -208,7 +247,13 @@ export async function setActiveProfileToTrainer(userId, { tx } = {}) {
 	}
 
 	// Ensure the Trainer record exists in the database
-	await ensureProfileForUser({ userId, role: Roles.TRAINER, tx });
+	const profile = await ensureProfileForUser({ userId, role: Roles.TRAINER, tx });
+	if (profile?.created) {
+		const seedRoutine = () => seedExampleRoutineSafely({ trainerId: profile.trainerId });
+		const sendWelcomeEmail = () => sendTrainerWelcomeEmailSafely({ to: user.email, firstName: user.firstName });
+		await runAfterCommit(onCommit, seedRoutine);
+		await runAfterCommit(onCommit, sendWelcomeEmail);
+	}
 
 	// If the user already had all required profile fields filled before becoming a trainer,
 	// mark the profile milestone immediately — it would otherwise stay null until the

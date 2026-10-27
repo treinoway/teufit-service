@@ -941,6 +941,97 @@ ${renderStoreButtonsBlock()}
             subject: subject,
         });
     }
+
+    // Welcome email sent once, when a Trainer profile is first created (firstName optional).
+    sendTrainerWelcomeEmail({to, firstName}) {
+        const greetingName = sanitizeSubjectText(firstName);
+        const greeting = greetingName ? `Olá, ${escapeHtml(greetingName)}!` : 'Olá!';
+        const subject = '[Teufit] Boas-vindas! Vamos montar o seu primeiro treino';
+        const dashboardUrl = escapeHtml(config.web.baseUrl);
+        const firstSteps = renderBulletList([
+            'Complete seu perfil com nome e foto',
+            'Convide seu primeiro aluno',
+            'Monte sua primeira rotina (já deixamos um exemplo pra você)',
+        ], '#1054B2');
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boas-vindas ao Teufit</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(16, 84, 178, 0.08); border-radius: 16px; overflow: hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 44px 40px;">
+                            <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
+                                ${greeting} Bem-vindo(a) ao Teufit
+                            </h2>
+
+                            <p style="margin: 0 0 24px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
+                                Sua conta de treinador(a) está pronta. Estes são os primeiros passos para colocar sua consultoria no ar:
+                            </p>
+
+                            ${firstSteps}
+
+                            <table role="presentation" style="width: 100%; margin: 28px 0; border-collapse: collapse;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="${dashboardUrl}" style="display: inline-block; background-color: #1054B2; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 32px; border-radius: 12px;">
+                                            Abrir meu painel
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
+                                Bons treinos,<br>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                © 2026 Teufit. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        `;
+
+        if (!this.resendClient) {
+            return Promise.resolve();
+        }
+
+        return this.resendClient.emails.send({
+            from: 'onboarding@teufit.com.br',
+            to,
+            html: htmlContent,
+            subject: subject,
+        });
+    }
 }
 
 export default new EmailHandler();
