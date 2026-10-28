@@ -16,4 +16,9 @@ export default {
   betaInviteGate: {
     enabled: false,
   },
+  // Never report from tests, even with ROLLBAR_ACCESS_TOKEN in a local .env: e2e suites
+  // trigger real 5xx (e.g. /admin/debug/rollbar-test) that would land in the real project.
+  rollbar: {
+    accessToken: null,
+  },
 };

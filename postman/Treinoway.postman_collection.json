@@ -10248,6 +10248,35 @@
       ]
     },
     {
+      "name": "Debug - Admin (temporary)",
+      "item": [
+        {
+          "name": "Trigger Rollbar Test Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/debug/rollbar-test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "debug",
+                "rollbar-test"
+              ]
+            },
+            "description": "TEMPORARY. Always fails with 500 so the error reaches Rollbar/Sentry through the error handler — used to verify error reporting in production. Requires ADMIN role. Errors: 401, 403 (not admin), 429, 500 (expected)."
+          }
+        }
+      ]
+    },
+    {
       "name": "Anamnesis - Copy",
       "item": [
         {
