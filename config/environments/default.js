@@ -44,6 +44,13 @@ export default {
       ? Number(process.env.SENTRY_TRACES_SAMPLE_RATE)
       : 0.1,
   },
+  rollbar: {
+    // Optional — src/rollbar.js exports null (every call is skipped) when the token is absent.
+    accessToken: process.env.ROLLBAR_ACCESS_TOKEN || null,
+    environment: process.env.ROLLBAR_ENVIRONMENT || 'beta',
+    // Railway injects the deployed commit SHA; lets Rollbar tie errors to a deploy.
+    codeVersion: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+  },
   asaas: {
     apiKey: process.env.ASAAS_API_KEY,
     webhookSecret: process.env.ASAAS_WEBHOOK_SECRET,

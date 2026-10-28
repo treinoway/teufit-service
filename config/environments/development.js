@@ -17,6 +17,13 @@ export default {
         ? process.env.SENTRY_DSN || null
         : null,
     },
+    // Mesma regra do Sentry: Rollbar desligado em dev, a não ser que
+    // ROLLBAR_FORCE_LOCAL=true (para testar a integração localmente).
+    rollbar: {
+      accessToken: parseBool(process.env.ROLLBAR_FORCE_LOCAL, false)
+        ? process.env.ROLLBAR_ACCESS_TOKEN || null
+        : null,
+    },
     rateLimit: {
         global: { max: 10000, timeWindow: '1 minute' },
         globalPerUser: { max: 10000, timeWindow: '1 minute' },

@@ -12,6 +12,7 @@ import { registerRateLimit } from '../src/helpers/register-rate-limit.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
+import { rollbar } from '../src/rollbar.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { translate } from '../src/i18n/index.js';
 import { parseBool } from '../src/helpers/env.js';
@@ -151,6 +152,12 @@ export async function buildServer(options = {}) {
           tags: { requestId: request.id, route },
           user: { id: request.user?.id },
         });
+      }
+
+      // why: passing the request lets Rollbar attach method, url, scrubbed headers and person (request.user.id).
+      if (rollbar) {
+        const route = request.routeOptions?.url ?? request.url;
+        rollbar.error(error, request, { requestId: request.id, route });
       }
     }
 
