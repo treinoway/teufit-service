@@ -12,6 +12,7 @@ import { registerRateLimit } from '../src/helpers/register-rate-limit.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { prisma } from '../src/db.js';
+import { rollbar } from '../src/rollbar.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { translate } from '../src/i18n/index.js';
 import { parseBool } from '../src/helpers/env.js';
@@ -56,6 +57,7 @@ import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
+import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
@@ -151,6 +153,12 @@ export async function buildServer(options = {}) {
           tags: { requestId: request.id, route },
           user: { id: request.user?.id },
         });
+      }
+
+      // why: passing the request lets Rollbar attach method, url, scrubbed headers and person (request.user.id).
+      if (rollbar) {
+        const route = request.routeOptions?.url ?? request.url;
+        rollbar.error(error, request, { requestId: request.id, route });
       }
     }
 
@@ -386,6 +394,7 @@ export async function buildServer(options = {}) {
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
     await fastify.register(adminAiUsageRoutes);
+    await fastify.register(adminDebugRoutes);
   });
 
   // Daily briefing cron — enabled only in production or when ENABLE_BRIEFING_CRON=true.
