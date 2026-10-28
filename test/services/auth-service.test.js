@@ -80,6 +80,7 @@ import {
   loginWithEmailPassword,
   requestPasswordReset,
   resetPasswordWithCode,
+  resetPasswordWithLegacyToken,
   addEmailToWaitlist,
   changePassword,
 } from '../../src/services/auth-service.js';
@@ -581,6 +582,23 @@ describe('authService', () => {
         ['confirmation does not match', { passwordConfirmation: 'other-pass1' }, 'passwordConfirmation', PasswordResetMessageCode.PASSWORD_MISMATCH],
       ])('should throw VALIDATION_ERROR when %s', async (_label, overrides, field, messageCode) => {
         await expect(resetPasswordWithCode(resetInput(overrides))).rejects.toMatchObject({
+          httpStatus: 400,
+          error: 'VALIDATION_ERROR',
+          messageCode,
+          details: [{ field, reason: expect.any(String) }],
+        });
+        expect(prisma.passwordResetToken.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('resetPasswordWithLegacyToken validation', () => {
+      it.each([
+        ['password is shorter than 8 characters', { password: 'short', passwordConfirmation: 'short' }, 'password', PasswordResetMessageCode.WEAK_PASSWORD],
+        ['confirmation does not match', { passwordConfirmation: 'other-pass1' }, 'passwordConfirmation', PasswordResetMessageCode.PASSWORD_MISMATCH],
+      ])('should throw VALIDATION_ERROR when %s', async (_label, overrides, field, messageCode) => {
+        await expect(
+          resetPasswordWithLegacyToken({ token: CODE, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD, ...overrides }),
+        ).rejects.toMatchObject({
           httpStatus: 400,
           error: 'VALIDATION_ERROR',
           messageCode,

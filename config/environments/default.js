@@ -21,6 +21,17 @@ export default {
     // still gets the uniform 200, it just sends nothing).
     passwordResetCooldownMs: 60 * 1000,
     passwordResetMaxPerHour: 5,
+    // Temporary: accepts the old mobile body {token, password, passwordConfirmation}
+    // on POST /auth/reset-password. Remove 1 day after the mobile release that
+    // sends {email, code}. Kill switch: LEGACY_RESET_TOKEN_ENABLED=false.
+    legacyResetToken: {
+      enabled: parseBool(process.env.LEGACY_RESET_TOKEN_ENABLED, true),
+      // One global bucket (constant key): a code without an email is matchable against any user.
+      rateLimit: { max: 30, timeWindow: '1 minute' },
+      rateLimitHourly: { max: 100, timeWindow: '1 hour' },
+      // Process-local: opens after maxInvalid wrong codes inside windowMs and stays open until restart.
+      circuitBreaker: { maxInvalid: 30, windowMs: 3600000 },
+    },
   },
   sentry: {
     // Optional — all Sentry calls are no-ops when DSN is absent.

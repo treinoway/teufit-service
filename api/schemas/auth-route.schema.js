@@ -184,19 +184,27 @@ export const resetPasswordSchema = {
   tags: authTags,
   summary: 'Reset password using the emailed code',
   description:
-    'The code is bound to the email it was sent to. Unknown email, deleted account, missing/used/expired code, wrong code and too many attempts (5 per code) all return the same 400 `PASSWORD_RESET_INVALID_CODE` / `passwordReset.invalidCode`. The legacy `token` field is not used (no alias; it is stripped, so a body without `code` fails validation).',
+    'The code is bound to the email it was sent to. Unknown email, deleted account, missing/used/expired code, wrong code and too many attempts (5 per code) all return the same 400 `PASSWORD_RESET_INVALID_CODE` / `passwordReset.invalidCode`. Dispatch: when `email` is present the body must carry `code` (new contract; if `token` is also sent it is ignored). Without `email`, the deprecated `token` field (old mobile versions) is accepted while the temporary legacy path is enabled: it is matched against all active codes, answers the same 400 invalid code unless exactly one matches, is throttled by global 30/min and 100/hour buckets, and is switched off by a circuit breaker after repeated wrong codes until restart. When the legacy path is disabled or neither field is usable, a missing code answers 400 `VALIDATION_ERROR` / `passwordReset.codeRequired`.',
   body: {
     type: 'object',
-    required: ['email', 'code', 'password', 'passwordConfirmation'],
+    required: ['password', 'passwordConfirmation'],
     additionalProperties: false,
     properties: {
-      email: { type: 'string', format: 'email', description: 'Email the reset code was requested for' },
+      email: { type: 'string', format: 'email', description: 'Email the reset code was requested for (required with `code`)' },
       code: {
         type: 'string',
         minLength: 6,
         maxLength: 6,
         pattern: '^[0-9]{6}$',
         description: '6-digit reset code sent via email (valid for 15 minutes, 5 attempts)',
+      },
+      token: {
+        type: 'string',
+        minLength: 6,
+        maxLength: 6,
+        pattern: '^[0-9]{6}$',
+        deprecated: true,
+        description: 'Legacy field of old mobile versions (the same 6-digit code, sent without email). Temporary: removed after the mobile release that sends email + code.',
       },
       password: { type: 'string', minLength: 8 },
       passwordConfirmation: {

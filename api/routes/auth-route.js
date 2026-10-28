@@ -14,6 +14,8 @@ import {
   loginWithEmailPasswordStateless,
   requestPasswordReset,
   resetPasswordWithCode,
+  resetPasswordWithLegacyToken,
+  throwResetCodeRequired,
 } from '../../src/services/auth-service.js';
 import { verifyGoogleIdToken } from '../../src/services/google-id-token-service.js';
 import { verifyAppleIdToken } from '../../src/services/apple-id-token-service.js';
@@ -49,7 +51,7 @@ import {
 import { prisma } from '../../src/db.js';
 import { verifyEmailCode, resendVerificationCode } from '../../src/services/email-verification-service.js';
 import { userRateLimitKey } from '../../src/helpers/rate-limit-key.js';
-import { perEmailRateLimiter } from '../../src/helpers/per-email-rate-limiter.js';
+import { conditionalRateLimiter, perEmailRateLimiter } from '../../src/helpers/per-email-rate-limiter.js';
 import {
   processSignupRequest,
   processSignupResendRequest,
@@ -61,6 +63,83 @@ import { acceptPendingInvitesForUser } from '../../src/services/student-invite-s
 import { hasBetaAccess } from '../../src/helpers/beta-access.js';
 import { runAfterResponse } from '../../src/helpers/run-after-response.js';
 import { SignupStatus } from '../../src/constants/signup-verification.js';
+import { isLegacyResetCircuitOpen, recordLegacyInvalidCode } from '../../src/helpers/legacy-reset-circuit.js';
+import { PasswordResetErrorCode } from '../../src/constants/password-reset.js';
+
+const LEGACY_RESET_LOG_EVENT = 'password_reset.legacy_token_used';
+const LEGACY_RESET_RATE_LIMIT_KEY = 'reset-password-legacy';
+const LEGACY_RESET_HOURLY_RATE_LIMIT_KEY = 'reset-password-legacy-h';
+const LEGACY_RESET_CIRCUIT_LOG_EVENT = 'password_reset.legacy_circuit_open';
+const VALIDATION_ERROR_CODE = 'VALIDATION_ERROR';
+const LegacyResetOutcome = {
+  SUCCESS: 'success',
+  INVALID_CODE: 'invalid_code',
+  DISABLED: 'disabled',
+  VALIDATION_ERROR: 'validation_error',
+};
+
+// Whether the legacy path is switched off, by the kill switch or the tripped circuit breaker.
+function isLegacyResetUnavailable() {
+  return !config.auth.legacyResetToken.enabled || isLegacyResetCircuitOpen();
+}
+
+// Whether a request is legacy-shaped and the kill switch is on (the only ones the legacy limiters count; circuit-open requests still count).
+function isCountedLegacyRequest(request) {
+  return isLegacyResetBody(request.body) && config.auth.legacyResetToken.enabled;
+}
+
+// Logs a legacy-path outcome (never the code or email).
+function logLegacyOutcome(request, outcome) {
+  request.log.warn({ event: LEGACY_RESET_LOG_EVENT, outcome }, LEGACY_RESET_LOG_EVENT);
+}
+
+// Feeds the circuit breaker and warns once when this invalid code trips it.
+function recordInvalidLegacyCode(request) {
+  if (recordLegacyInvalidCode()) {
+    request.log.warn({ event: LEGACY_RESET_CIRCUIT_LOG_EVENT }, LEGACY_RESET_CIRCUIT_LOG_EVENT);
+  }
+}
+
+// Whether a reset body is the old mobile shape: a token and no email.
+function isLegacyResetBody(body) {
+  return !body?.email && typeof body?.token === 'string';
+}
+
+// Resets via the legacy token path and logs the outcome (never the code or email).
+async function resetWithLegacyToken(request, { token, password, passwordConfirmation }) {
+  try {
+    const user = await resetPasswordWithLegacyToken({ token, password, passwordConfirmation });
+    logLegacyOutcome(request, LegacyResetOutcome.SUCCESS);
+    return user;
+  } catch (error) {
+    if (error?.error === PasswordResetErrorCode.INVALID_CODE) {
+      logLegacyOutcome(request, LegacyResetOutcome.INVALID_CODE);
+      recordInvalidLegacyCode(request);
+    } else if (error?.error === VALIDATION_ERROR_CODE) {
+      logLegacyOutcome(request, LegacyResetOutcome.VALIDATION_ERROR);
+    }
+    throw error;
+  }
+}
+
+// Logs a schema validation failure of a legacy-shaped body, then rethrows it unchanged for the global error handler.
+function rethrowResetValidationError(request) {
+  if (isLegacyResetBody(request.body)) logLegacyOutcome(request, LegacyResetOutcome.VALIDATION_ERROR);
+  throw request.validationError;
+}
+
+// Picks the reset path: email present -> email+code; legacy token -> temporary legacy path; else email+code validation.
+async function resetPasswordFromBody(request) {
+  const { email, code, token, password, passwordConfirmation } = request.body ?? {};
+  if (!isLegacyResetBody(request.body)) {
+    return resetPasswordWithCode({ email, code, password, passwordConfirmation });
+  }
+  if (isLegacyResetUnavailable()) {
+    logLegacyOutcome(request, LegacyResetOutcome.DISABLED);
+    throwResetCodeRequired();
+  }
+  return resetWithLegacyToken(request, { token, password, passwordConfirmation });
+}
 
 export async function authRoutes(fastify) {
   // Configure Google OAuth2 plugin.
@@ -310,13 +389,25 @@ export async function authRoutes(fastify) {
     {
       config: { rateLimit: config.rateLimit.auth.resetPassword },
       schema: resetPasswordSchema,
+      // why: lets the handler log legacy-shaped schema failures (e.g. a weak password) before rethrowing them.
+      attachValidation: true,
+      preHandler: [
+        ...conditionalRateLimiter(fastify, {
+          limitConfig: config.auth.legacyResetToken.rateLimit,
+          keyGenerator: () => LEGACY_RESET_RATE_LIMIT_KEY,
+          appliesTo: isCountedLegacyRequest,
+        }),
+        ...conditionalRateLimiter(fastify, {
+          limitConfig: config.auth.legacyResetToken.rateLimitHourly,
+          keyGenerator: () => LEGACY_RESET_HOURLY_RATE_LIMIT_KEY,
+          appliesTo: isCountedLegacyRequest,
+        }),
+      ],
     },
     async (request, reply) => {
+      if (request.validationError) rethrowResetValidationError(request);
       try {
-        const body = request.body ?? {};
-        const { email, code, password, passwordConfirmation } = body;
-
-        const user = await resetPasswordWithCode({ email, code, password, passwordConfirmation });
+        const user = await resetPasswordFromBody(request);
 
         const access = issueAccessToken({ fastify, user });
         const refresh = await issueRefreshToken({ user });

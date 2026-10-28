@@ -986,17 +986,7 @@ e2eDescribe('e2e: auth flows', () => {
     });
 
     describe('request validation', () => {
-      it('should reject the legacy token field with 400 VALIDATION_ERROR', async () => {
-        const user = await signupUser('legacy-token');
-        const code = await requestCode(user.email);
-
-        const res = await reset({ token: code, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
-
-        expect(res.statusCode).toBe(400);
-        expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
-      });
-
-      it('should ignore a stray legacy token field (stripped by the schema) and never treat it as the code', async () => {
+      it('should ignore a stray legacy token field (stripped by the schema) when email is present and never treat it as the code', async () => {
         const user = await signupUser('legacy-extra');
         const code = await requestCode(user.email);
 
@@ -1008,8 +998,17 @@ e2eDescribe('e2e: auth flows', () => {
       });
 
       it.each([
-        ['email is missing', { code: '123456', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }],
-        ['code is missing', { email: 'a@example.com', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }],
+        ['email and token are missing', { code: '123456', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }, 'auth.email.required'],
+        ['code is missing', { email: 'a@example.com', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }, 'passwordReset.codeRequired'],
+      ])('should return 400 VALIDATION_ERROR when %s', async (_label, payload, messageCode) => {
+        const res = await reset(payload);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR', messageCode });
+        expect(Array.isArray(res.json().details)).toBe(true);
+      });
+
+      it.each([
         ['code has 5 digits', { email: 'a@example.com', code: '12345', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }],
         ['code is not numeric', { email: 'a@example.com', code: 'abcdef', password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD }],
         ['password is shorter than 8 chars', { email: 'a@example.com', code: '123456', password: 'short', passwordConfirmation: 'short' }],
@@ -1042,6 +1041,182 @@ e2eDescribe('e2e: auth flows', () => {
 
         expect(res.statusCode).toBe(400);
         expect(res.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
+      });
+    });
+
+    describe('legacy {token} body (old mobile versions)', () => {
+      const originalLegacyConfig = config.auth.legacyResetToken;
+      const legacyBody = (token, password = NEW_PASSWORD) => ({ token, password, passwordConfirmation: password });
+      const login = (email, password) => app.inject({ method: 'POST', url: '/auth/login', payload: { email, password } });
+
+      afterEach(() => {
+        config.auth.legacyResetToken = originalLegacyConfig;
+      });
+
+      it('should reset the password and return tokens when only a valid token is sent', async () => {
+        const user = await signupUser('legacy-ok');
+        const code = await requestCode(user.email);
+
+        const res = await reset(legacyBody(code));
+
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.user.id).toBe(user.user.id);
+        expect(typeof body.token.accessToken).toBe('string');
+        expect(typeof body.refreshToken).toBe('string');
+        expect((await login(user.email, NEW_PASSWORD)).statusCode).toBe(200);
+        expect((await login(user.email, PASSWORD)).statusCode).toBe(401);
+      });
+
+      it('should mark the token used and revoke the refresh tokens issued before the reset', async () => {
+        const user = await signupUser('legacy-revoke');
+        const code = await requestCode(user.email);
+
+        const res = await reset(legacyBody(code));
+
+        expect(res.statusCode).toBe(200);
+        const [token] = await tokensOf(user.user.id);
+        expect(token.used).toBe(true);
+        const refreshRes = await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken: user.refreshToken } });
+        expect(refreshRes.statusCode).toBe(401);
+      });
+
+      it('should mark the email verified for a legacy unverified account', async () => {
+        const email = uniqueEmail('legacy-verify');
+        const legacy = await seedLegacyUnverifiedUser(app, { email, password: PASSWORD });
+        const code = await requestCode(email);
+
+        const res = await reset(legacyBody(code));
+
+        expect(res.statusCode).toBe(200);
+        const account = await prisma.account.findFirst({ where: { userId: legacy.userId, provider: EMAIL_PROVIDER } });
+        expect(account.verifiedAt).not.toBeNull();
+      });
+
+      it('should return the identical invalid-code body for wrong, expired and used tokens', async () => {
+        const expected = (await reset(resetBody(uniqueEmail('legacy-ghost'), '123456'))).json();
+        const expired = await signupUser('legacy-expired');
+        await seedToken(expired.user.id, '111111', { expiresAt: new Date(Date.now() - 1000) });
+        const used = await signupUser('legacy-used');
+        await seedToken(used.user.id, '222222', { used: true });
+
+        const responses = [
+          await reset(legacyBody(WRONG_CODE)),
+          await reset(legacyBody('111111')),
+          await reset(legacyBody('222222')),
+        ];
+
+        for (const res of responses) {
+          expectInvalidCode(res);
+          expect(res.json()).toEqual(expected);
+        }
+      });
+
+      it('should reject a token that matches active codes of two different users and change neither password', async () => {
+        const userA = await signupUser('legacy-dup-a');
+        const userB = await signupUser('legacy-dup-b');
+        await seedToken(userA.user.id, FIXED_CODE);
+        await seedToken(userB.user.id, FIXED_CODE);
+
+        const res = await reset(legacyBody(FIXED_CODE));
+
+        expectInvalidCode(res);
+        expect((await login(userA.email, PASSWORD)).statusCode).toBe(200);
+        expect((await login(userB.email, PASSWORD)).statusCode).toBe(200);
+        expect((await tokensOf(userA.user.id))[0].used).toBe(false);
+        expect((await tokensOf(userB.user.id))[0].used).toBe(false);
+      });
+
+      it('should answer 400 codeRequired and leave the password unchanged when the legacy path is disabled', async () => {
+        const user = await signupUser('legacy-off');
+        const code = await requestCode(user.email);
+        config.auth.legacyResetToken = { ...originalLegacyConfig, enabled: false };
+
+        const res = await reset(legacyBody(code));
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({
+          error: 'VALIDATION_ERROR',
+          messageCode: PasswordResetMessageCode.CODE_REQUIRED,
+        });
+        expect((await login(user.email, PASSWORD)).statusCode).toBe(200);
+      });
+
+      it('should answer 400 invalid code and leave the password unchanged for a legacy token of a deleted user', async () => {
+        const user = await signupUser('legacy-deleted');
+        await seedToken(user.user.id, FIXED_CODE);
+        const { passwordHash: hashBefore } = await prisma.user.update({
+          where: { id: user.user.id },
+          data: { deletedAt: new Date() },
+        });
+
+        const res = await reset(legacyBody(FIXED_CODE));
+
+        expectInvalidCode(res);
+        const stored = await prisma.user.findUnique({ where: { id: user.user.id } });
+        expect(stored.passwordHash).toBe(hashBefore);
+        expect((await tokensOf(user.user.id))[0].used).toBe(false);
+      });
+
+      it('should answer 400 invalid code and keep the token unused when the legacy token has exhausted its attempts', async () => {
+        const user = await signupUser('legacy-exhausted');
+        await seedToken(user.user.id, FIXED_CODE, { attempts: PASSWORD_RESET_MAX_ATTEMPTS });
+
+        const res = await reset(legacyBody(FIXED_CODE));
+
+        expectInvalidCode(res);
+        expect((await tokensOf(user.user.id))[0].used).toBe(false);
+        expect((await login(user.email, PASSWORD)).statusCode).toBe(200);
+      });
+
+      describe('circuit breaker', () => {
+        const CIRCUIT_MAX_INVALID = 3;
+        const loadCircuit = () => import('../../src/helpers/legacy-reset-circuit.js');
+
+        afterEach(async () => {
+          const { resetLegacyResetCircuit } = await loadCircuit();
+          resetLegacyResetCircuit();
+        });
+
+        it('should answer 400 codeRequired for a correct legacy code once maxInvalid wrong codes tripped the breaker, keeping the new path working', async () => {
+          const { resetLegacyResetCircuit } = await loadCircuit();
+          resetLegacyResetCircuit();
+          config.auth.legacyResetToken = {
+            ...originalLegacyConfig,
+            circuitBreaker: { maxInvalid: CIRCUIT_MAX_INVALID, windowMs: 3600000 },
+          };
+          const user = await signupUser('legacy-circuit');
+          const code = await requestCode(user.email);
+          for (let attempt = 0; attempt < CIRCUIT_MAX_INVALID; attempt += 1) {
+            expectInvalidCode(await reset(legacyBody(WRONG_CODE)));
+          }
+
+          const res = await reset(legacyBody(code));
+
+          expect(res.statusCode).toBe(400);
+          expect(res.json()).toMatchObject({
+            error: 'VALIDATION_ERROR',
+            messageCode: PasswordResetMessageCode.CODE_REQUIRED,
+          });
+          expect((await login(user.email, PASSWORD)).statusCode).toBe(200);
+          const newPathRes = await reset(resetBody(user.email, code));
+          expect(newPathRes.statusCode).toBe(200);
+          expect((await login(user.email, NEW_PASSWORD)).statusCode).toBe(200);
+        });
+      });
+
+      it('should use the new path when both email and token are sent: code is required and the token is ignored', async () => {
+        const user = await signupUser('legacy-both');
+        const code = await requestCode(user.email);
+
+        const res = await reset({ email: user.email, token: code, password: NEW_PASSWORD, passwordConfirmation: NEW_PASSWORD });
+
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({
+          error: 'VALIDATION_ERROR',
+          messageCode: PasswordResetMessageCode.CODE_REQUIRED,
+        });
+        expect((await login(user.email, PASSWORD)).statusCode).toBe(200);
       });
     });
   });
