@@ -283,15 +283,13 @@ function assertResetInputValid({ email, code, password, passwordConfirmation }) 
     });
   }
 
-  if (typeof code !== 'string' || code.trim() === '') {
-    throwPasswordResetValidation({
-      field: 'code',
-      error: PasswordResetErrorCode.CODE_REQUIRED,
-      messageCode: PasswordResetMessageCode.CODE_REQUIRED,
-      message: 'Reset code is required',
-    });
-  }
+  if (typeof code !== 'string' || code.trim() === '') throwResetCodeRequired();
 
+  assertResetPasswordsValid({ password, passwordConfirmation });
+}
+
+// Validates the new password and its confirmation (shared by the email+code and legacy token paths).
+function assertResetPasswordsValid({ password, passwordConfirmation }) {
   if (typeof password !== 'string' || password.length < PASSWORD_RESET_MIN_PASSWORD_LENGTH) {
     throwPasswordResetValidation({
       field: 'password',
@@ -339,6 +337,16 @@ async function consumeResetAttempt(token) {
   return count > 0;
 }
 
+// Throws the validation error for a reset request that carries no usable code.
+export function throwResetCodeRequired() {
+  throwPasswordResetValidation({
+    field: 'code',
+    error: PasswordResetErrorCode.CODE_REQUIRED,
+    messageCode: PasswordResetMessageCode.CODE_REQUIRED,
+    message: 'Reset code is required',
+  });
+}
+
 function resetCodeMatches(code, token) {
   const candidate = Buffer.from(hashToken(code.trim()));
   const stored = Buffer.from(token?.tokenHash ?? hashToken(NIL_UUID));
@@ -368,14 +376,19 @@ export async function resetPasswordWithCode({ email, code, password, passwordCon
 
   if (!user || user.deletedAt || !token || !attemptConsumed || !codeMatches) throwInvalidResetCode();
 
+  return completePasswordReset({ user, token, password });
+}
+
+// Spends the code, revokes every session, sets the new password and marks the email verified; returns the safe user.
+async function completePasswordReset({ user, token, password }) {
   const passwordHash = hashPassword(password);
 
-  // Revoking every session is what makes the reset a recovery: a legacy
+  // why: revoking every session is what makes the reset a recovery: a legacy
   // account pre-registered by someone else with this email (unverified) would
   // otherwise keep the squatter's refresh tokens alive, and the reset below
   // marks the email verified, so the OAuth-time neutralization never runs.
   const updatedUser = await prisma.$transaction(async (tx) => {
-    // Guards two concurrent requests with the same correct code.
+    // why: guards two concurrent requests with the same correct code.
     const { count } = await tx.passwordResetToken.updateMany({
       where: { id: token.id, used: false },
       data: { used: true },
@@ -389,11 +402,29 @@ export async function resetPasswordWithCode({ email, code, password, passwordCon
     return tx.user.update({ where: { id: user.id }, data: { passwordHash } });
   });
 
-  // The reset code was delivered to the inbox: it proves email ownership.
-  // Not a gate on the reset itself; never throws.
+  // why: the reset code was delivered to the inbox, so it proves email ownership; not a gate on the reset itself, never throws.
   await markEmailVerifiedFromInboxProof(prisma, updatedUser);
 
   return safeUser(updatedUser);
+}
+
+// Temporary legacy reset for old mobile versions: a code without an email must match exactly one active code, else the invalid-code error.
+export async function resetPasswordWithLegacyToken({ token, password, passwordConfirmation }) {
+  if (typeof token !== 'string' || token.trim() === '') throwResetCodeRequired();
+  assertResetPasswordsValid({ password, passwordConfirmation });
+
+  const matches = await prisma.passwordResetToken.findMany({
+    where: { tokenHash: hashToken(token.trim()), used: false, expiresAt: { gt: new Date() } },
+    take: 2,
+  });
+  if (matches.length !== 1) throwInvalidResetCode();
+
+  const [resetToken] = matches;
+  const user = await prisma.user.findUnique({ where: { id: resetToken.userId }, select: { id: true, deletedAt: true } });
+  const attemptConsumed = await consumeResetAttempt(resetToken);
+  if (!user || user.deletedAt || !attemptConsumed) throwInvalidResetCode();
+
+  return completePasswordReset({ user, token: resetToken, password });
 }
 
 /**
