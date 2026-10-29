@@ -1,11 +1,12 @@
 import { prisma } from '../db.js';
 import { TrainingStatus, trainingStatusValues, BulkProtocolErrorCode, BulkProtocolMessageCode, ExerciseOrderBy } from '../constants/training.js';
-import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode, applyPrescriptionModeExclusivity } from '../helpers/training-validators.js';
+import { buildError, validateGenderOrdination, validateTrainingLevel, validateProtocolType, resolvePrescriptionMode, applyPrescriptionModeExclusivity, assertBulkSupersetGroups } from '../helpers/training-validators.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { maybeMarkFirstProtocolCreated } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
 import { estimateWorkoutDuration } from '../helpers/workout-duration.js';
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../errors/app-error.js';
 import { toLinkCreateInput } from '../helpers/advanced-technique-refs.js';
 import {
@@ -496,8 +497,15 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
 
   const trainingsData = template.trainings.map((templateTraining) => {
     const { trainingTemplate } = templateTraining;
-    const exerciseCreateData = trainingTemplate.trainingTemplateExerciseTemplates.map(
-      (exercise, index) => buildNestedExerciseCreateData(exercise, index, selectionByJunctionId.get(exercise.id)),
+    const junctions = trainingTemplate.trainingTemplateExerciseTemplates;
+    const groupIdMap = buildFreshGroupIdMap(junctions);
+    const exerciseCreateData = junctions.map(
+      (exercise, index) => buildNestedExerciseCreateData(
+        exercise,
+        index,
+        selectionByJunctionId.get(exercise.id),
+        buildSupersetFields(exercise, groupIdMap),
+      ),
     );
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
@@ -553,6 +561,64 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
 
 // ─── Shared exercise helper ───────────────────────────────────────────────────
 
+// Maps every distinct supersetGroupId in the exercises to a fresh server uuid.
+function buildFreshGroupIdMap(exercises) {
+  const groupIdMap = new Map();
+  for (const exercise of exercises) {
+    if (exercise.supersetGroupId && !groupIdMap.has(exercise.supersetGroupId)) {
+      groupIdMap.set(exercise.supersetGroupId, randomUUID());
+    }
+  }
+  return groupIdMap;
+}
+
+// Builds the superset columns of an exercise, remapping its group id; ungrouped rows get no group data.
+function buildSupersetFields(exercise, groupIdMap) {
+  if (!exercise.supersetGroupId) return { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null };
+  return {
+    supersetGroupId: groupIdMap.get(exercise.supersetGroupId),
+    supersetOrder: exercise.supersetOrder ?? 0,
+    supersetRestInterval: exercise.supersetRestInterval ?? null,
+  };
+}
+
+// Builds a nested substitute create row linked to its principal by the surrounding nested write.
+function buildSubstituteCreateData(substitute, substituteOrder, trainingId, techniqueSelection = []) {
+  const resolvedMode = resolvePrescriptionMode(substitute.prescriptionMode, substitute);
+  const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, substitute);
+
+  return {
+    trainingId,
+    exerciseTemplateId: substitute.exerciseTemplateId ?? null,
+    name: substitute.name,
+    type: substitute.type,
+    videoUrl: substitute.videoUrl ?? null,
+    gifUrl: substitute.gifUrl ?? null,
+    substituteOrder,
+    sets: substitute.sets ?? null,
+    repetitions,
+    duration,
+    prescriptionMode: resolvedMode,
+    hasLoad: substitute.hasLoad ?? false,
+    suggestedLoad: substitute.suggestedLoad ?? null,
+    restInterval: substitute.restInterval ?? null,
+    notes: substitute.notes ?? null,
+    intensity: substitute.intensity ?? null,
+    ...toLinkCreateInput(techniqueSelection),
+  };
+}
+
+// Builds the nested substitutes create block for a principal, or {} when it has none.
+function buildSubstitutesCreate(exercise, trainingId, substituteSelections = []) {
+  const substitutes = exercise.substitutes ?? [];
+  if (substitutes.length === 0) return {};
+  return {
+    substitutes: {
+      create: substitutes.map((substitute, index) => buildSubstituteCreateData(substitute, index, trainingId, substituteSelections[index])),
+    },
+  };
+}
+
 /**
  * Build a single exercise's nested-create data for a protocol/training write.
  * Applies prescriptionMode exclusivity so repetitions and duration are mutually exclusive.
@@ -560,7 +626,7 @@ export async function importFromTemplate(userId, templateId, assigneeId, data = 
  * Used by both importFromTemplate and createProtocolWithTrainings so that any
  * new exercise field only needs to be added here.
  */
-function buildNestedExerciseCreateData(exercise, index, techniqueSelection = []) {
+function buildNestedExerciseCreateData(exercise, index, techniqueSelection = [], supersetFields = {}) {
   const resolvedMode = resolvePrescriptionMode(exercise.prescriptionMode, exercise);
   const { repetitions, duration } = applyPrescriptionModeExclusivity(resolvedMode, exercise);
 
@@ -574,6 +640,7 @@ function buildNestedExerciseCreateData(exercise, index, techniqueSelection = [])
     // exercise inherits Prisma's @default(0) and the training is created with a
     // duplicated/zeroed order, which breaks execution ordering (orderBy order asc).
     order: exercise.order ?? index,
+    ...supersetFields,
     sets: exercise.sets ?? null,
     repetitions,
     duration,
@@ -660,6 +727,11 @@ function collectTemplateIds(trainings) {
       if (exercise.exerciseTemplateId) {
         exerciseTemplateIds.add(exercise.exerciseTemplateId);
       }
+      for (const substitute of exercise.substitutes ?? []) {
+        if (substitute.exerciseTemplateId) {
+          exerciseTemplateIds.add(substitute.exerciseTemplateId);
+        }
+      }
     }
   }
 
@@ -686,17 +758,22 @@ async function resolveExerciseSelections(db, trainerId, exercises, linksByTempla
   return exercises.map((exercise) => selectionByExercise.get(exercise));
 }
 
-// Validates or inherits every exercise's techniques; returns selections grouped [training][exercise].
+// Lists a principal followed by its substitutes, the order selections are resolved and regrouped in.
+function flattenWithSubstitutes(exercise) {
+  return [exercise, ...(exercise.substitutes ?? [])];
+}
+
+// Validates or inherits every principal's and substitute's techniques; returns [training][exercise] = { principal, substitutes }.
 async function resolveTechniqueSelectionsByTraining(db, trainerId, trainings, linksByTemplateId) {
-  const exercises = trainings.flatMap((training) => training.exercises ?? []);
+  const exercises = trainings.flatMap((training) => (training.exercises ?? []).flatMap(flattenWithSubstitutes));
   const flatSelections = await resolveExerciseSelections(db, trainerId, exercises, linksByTemplateId);
   let cursor = 0;
-  return trainings.map((training) => {
-    const count = (training.exercises ?? []).length;
-    const group = flatSelections.slice(cursor, cursor + count);
-    cursor += count;
-    return group;
-  });
+  return trainings.map((training) =>
+    (training.exercises ?? []).map((exercise) => {
+      const [principal, ...substitutes] = flatSelections.slice(cursor, cursor + 1 + (exercise.substitutes ?? []).length);
+      cursor += 1 + (exercise.substitutes ?? []).length;
+      return { principal, substitutes };
+    }));
 }
 
 /**
@@ -706,12 +783,22 @@ async function resolveTechniqueSelectionsByTraining(db, trainerId, trainings, li
 function buildTrainingsData(trainings, selectionsByTraining) {
   return trainings.map((training, trainingIndex) => {
     const exercises = training.exercises ?? [];
-    const exerciseCreateData = exercises.map((exercise, index) =>
-      buildNestedExerciseCreateData(exercise, index, selectionsByTraining[trainingIndex][index]),
-    );
+    assertBulkSupersetGroups(exercises);
+    const trainingId = randomUUID();
+    const groupIdMap = buildFreshGroupIdMap(exercises);
+    const exerciseCreateData = exercises.map((exercise, index) => ({
+      ...buildNestedExerciseCreateData(
+        exercise,
+        index,
+        selectionsByTraining[trainingIndex][index].principal,
+        buildSupersetFields(exercise, groupIdMap),
+      ),
+      ...buildSubstitutesCreate(exercise, trainingId, selectionsByTraining[trainingIndex][index].substitutes),
+    }));
     const estimatedDurationSeconds = estimateWorkoutDuration({ exercises: exerciseCreateData });
 
     return {
+      id: trainingId,
       trainingTemplateId: training.trainingTemplateId ?? null,
       name: training.name,
       description: training.description ?? null,

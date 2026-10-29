@@ -335,6 +335,24 @@ async function createSupersetMemberAtomically(trainingId, data, trainerId, techn
   }));
 }
 
+// Load a template the trainer may use (owned or public, not deleted); 404 if missing, 403 if foreign-private.
+async function findVisibleTemplate(db, trainerId, templateId) {
+  const template = await db.exerciseTemplate.findUnique({
+    where: { id: templateId },
+    include: advancedTechniqueLinksInclude,
+  });
+
+  if (!template || template.deletedAt) {
+    throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
+  }
+
+  if (template.trainerId !== trainerId && !template.isPublic) {
+    throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
+  }
+
+  return template;
+}
+
 /**
  * Create an exercise from a template.
  */
@@ -350,18 +368,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
 
   await verifyTrainingOwnership(trainingId, trainer.id);
 
-  const template = await prisma.exerciseTemplate.findUnique({
-    where: { id: templateId },
-    include: advancedTechniqueLinksInclude,
-  });
-
-  if (!template || template.deletedAt) {
-    throw buildError('EXERCISE_TEMPLATE_NOT_FOUND', 'Exercise template not found', 404);
-  }
-
-  if (template.trainerId !== trainer.id && !template.isPublic) {
-    throw buildError('FORBIDDEN_PRIVATE_TEMPLATE', 'This template is private', 403);
-  }
+  const template = await findVisibleTemplate(prisma, trainer.id, templateId);
 
   const effectiveType = data.type || template.type;
   // Identity (name/type/video) comes from the library template; prescription comes from the
@@ -899,7 +906,7 @@ export async function deleteExercise(userId, exerciseId) {
       if (remainingMembers.length < SupersetConstraints.MIN_MEMBERS) {
         await tx.exercise.updateMany({
           where: { trainingId: exercise.trainingId, supersetGroupId: exercise.supersetGroupId, deletedAt: null },
-          data: { supersetGroupId: null, supersetOrder: 0 },
+          data: { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null },
         });
       }
     }
@@ -914,6 +921,15 @@ export async function deleteExercise(userId, exerciseId) {
 }
 
 // ─── Add substitute ──────────────────────────────────────────────────────────
+
+// Fill absent videoUrl/gifUrl from the linked library template.
+function withTemplateMedia(data, template) {
+  return {
+    ...data,
+    videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
+    gifUrl: data.gifUrl !== undefined ? data.gifUrl : template.gifUrl,
+  };
+}
 
 /**
  * Add a substitute exercise under a principal.
@@ -951,7 +967,13 @@ export async function addSubstitute(userId, principalId, data) {
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
   validateIntensityRequiresCardio(data.intensity, data.type);
-  const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
+  const template = data.exerciseTemplateId
+    ? await findVisibleTemplate(prisma, trainer.id, data.exerciseTemplateId)
+    : null;
+  const techniqueSelection = template
+    ? await resolveSelectionOrInherit(prisma, trainer.id, data.advancedTechniqueIds, template.advancedTechniqueLinks)
+    : await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
+  const substituteInput = template ? withTemplateMedia(data, template) : data;
 
   // The substitute schema blocks supersetGroupId, so the candidate always has null here.
   validateSubstituteConstraint(principal, {
@@ -971,9 +993,11 @@ export async function addSubstitute(userId, principalId, data) {
     });
     const nextSubstituteOrder = lastSubstitute ? lastSubstitute.substituteOrder + 1 : 0;
 
-    const exerciseTemplateId = await findOrCreateLibraryTemplate(tx, trainer.id, data);
+    const exerciseTemplateId = template
+      ? template.id
+      : await findOrCreateLibraryTemplate(tx, trainer.id, data);
     const substituteData = buildExerciseData(
-      { ...data, substituteForExerciseId: principalId, substituteOrder: nextSubstituteOrder },
+      { ...substituteInput, substituteForExerciseId: principalId, substituteOrder: nextSubstituteOrder },
       principal.trainingId,
       exerciseTemplateId,
       techniqueSelection,
@@ -1171,9 +1195,10 @@ export async function reorderSupersetMembers(userId, trainingId, supersetGroupId
  * @param {string} userId - Trainer user ID
  * @param {string} trainingId - Training ID (from URL param)
  * @param {string[]} exerciseIds - Ordered list of 2–6 principal exercise IDs
- * @returns {Promise<{ supersetGroupId, trainingId, members }>}
+ * @param {number|null} [restInterval] - Round rest in seconds; omitted or null defaults to the last member's restInterval
+ * @returns {Promise<{ supersetGroupId, trainingId, restInterval, members }>}
  */
-export async function createSuperset(userId, trainingId, exerciseIds) {
+export async function createSuperset(userId, trainingId, exerciseIds, restInterval) {
   const trainer = await prisma.trainer.findUnique({
     where: { userId },
     select: { id: true },
@@ -1204,6 +1229,7 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
   }
 
   const supersetGroupId = randomUUID();
+  let appliedRestInterval = null;
 
   const updatedMembers = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     await lockTrainingForUpdate(tx, trainingId);
@@ -1277,6 +1303,9 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
       }
     }
 
+    const lastMember = memberMap.get(exerciseIds[exerciseIds.length - 1]);
+    appliedRestInterval = restInterval ?? lastMember.restInterval ?? null;
+
     // Assign members their contiguous orders and superset fields
     const results = [];
     for (let i = 0; i < exerciseIds.length; i += 1) {
@@ -1286,6 +1315,7 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
         data: {
           supersetGroupId,
           supersetOrder: i,
+          supersetRestInterval: appliedRestInterval,
           order: blockStart + i,
         },
         select: { id: true, name: true, order: true, supersetOrder: true },
@@ -1299,8 +1329,62 @@ export async function createSuperset(userId, trainingId, exerciseIds) {
   return {
     supersetGroupId,
     trainingId,
+    restInterval: appliedRestInterval,
     members: updatedMembers,
   };
+}
+
+// ─── Update superset round rest ──────────────────────────────────────────────
+
+/**
+ * Set the round rest (supersetRestInterval) on every active member of a superset group.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} trainingId - Training ID (from URL param)
+ * @param {string} groupId - Superset group UUID
+ * @param {number} restInterval - Round rest in seconds
+ * @returns {Promise<{ supersetGroupId, trainingId, restInterval, members }>}
+ */
+export async function updateSupersetRestInterval(userId, trainingId, groupId, restInterval) {
+  const trainer = await prisma.trainer.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!trainer) {
+    throw buildError('TRAINER_PROFILE_MISSING', 'Trainer profile not found', 404);
+  }
+
+  await verifyTrainingOwnership(trainingId, trainer.id);
+
+  const existingMembers = await prisma.exercise.findMany({
+    where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+    select: { id: true },
+  });
+
+  if (existingMembers.length === 0) {
+    throw new AppError({
+      httpStatus: 404,
+      error: 'SUPERSET_GROUP_NOT_FOUND',
+      messageCode: SupersetMessageCode.GROUP_NOT_FOUND,
+      message: 'Superset group not found or has no active members',
+    });
+  }
+
+  const members = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingForUpdate(tx, trainingId);
+    await tx.exercise.updateMany({
+      where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+      data: { supersetRestInterval: restInterval },
+    });
+    return tx.exercise.findMany({
+      where: { trainingId, supersetGroupId: groupId, deletedAt: null },
+      select: { id: true, name: true, supersetOrder: true },
+      orderBy: { supersetOrder: 'asc' },
+    });
+  }));
+
+  return { supersetGroupId: groupId, trainingId, restInterval, members };
 }
 
 // ─── Dissolve superset ───────────────────────────────────────────────────────
@@ -1346,7 +1430,7 @@ export async function dissolveSuperset(userId, trainingId, groupId) {
     await lockTrainingForUpdate(tx, trainingId);
     await tx.exercise.updateMany({
       where: { trainingId, supersetGroupId: groupId, deletedAt: null },
-      data: { supersetGroupId: null, supersetOrder: 0 },
+      data: { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null },
     });
   }));
 

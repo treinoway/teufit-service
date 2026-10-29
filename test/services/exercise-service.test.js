@@ -1512,7 +1512,7 @@ describe('exercise-service', () => {
       expect(txMock.exercise.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ supersetGroupId: 'group-a', deletedAt: null }),
-          data: { supersetGroupId: null, supersetOrder: 0 },
+          data: { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null },
         }),
       );
     });
@@ -2212,7 +2212,7 @@ describe('exercise-service', () => {
 
       expect(txMock.exercise.updateMany).toHaveBeenCalledWith({
         where: { trainingId: 'tr1', supersetGroupId: 'group-a', deletedAt: null },
-        data: { supersetGroupId: null, supersetOrder: 0 },
+        data: { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null },
       });
     });
 

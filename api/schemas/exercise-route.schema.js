@@ -15,6 +15,7 @@ const exerciseBaseProperties = {
   order: { type: 'integer' },
   supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
   supersetOrder: { type: 'integer' },
+  supersetRestInterval: { type: 'integer', nullable: true },
   substituteForExerciseId: { type: 'string', format: 'uuid', nullable: true },
   substituteOrder: { type: 'integer' },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
@@ -267,11 +268,17 @@ const substituteBodyProperties = {
   notes: exerciseBodyProperties.notes,
   intensity: exerciseBodyProperties.intensity,
   advancedTechniqueIds: exerciseBodyProperties.advancedTechniqueIds,
+  exerciseTemplateId: {
+    type: 'string',
+    format: 'uuid',
+    description: 'Optional library template (owned or public) to link the substitute to. When set, no library copy is made; absent videoUrl/gifUrl and advancedTechniqueIds are inherited from the template.',
+  },
 };
 
 export const addSubstituteSchema = {
   tags: ['Exercises - Trainer'],
   summary: 'Add a substitute exercise under a principal',
+  description: 'Optional exerciseTemplateId links the substitute to a library template (owned or public) without copying it; absent media and advancedTechniqueIds are inherited from the template. 404 EXERCISE_TEMPLATE_NOT_FOUND, 403 FORBIDDEN_PRIVATE_TEMPLATE.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -350,6 +357,7 @@ const supersetMemberResponseSchema = {
 export const createSupersetSchema = {
   tags: ['Exercises - Trainer'],
   summary: 'Create a superset (bi-set) from existing exercises',
+  description: 'restInterval is optional; omitted or null defaults to the last member restInterval, 0 is kept as 0.',
   security: [{ bearerAuth: [] }],
   params: {
     type: 'object',
@@ -366,6 +374,8 @@ export const createSupersetSchema = {
         minItems: 2,
         maxItems: 6,
       },
+      // why: Fastify coerces null to 0 for plain integers; nullable keeps null so the service can default it.
+      restInterval: { type: 'integer', minimum: 0, nullable: true },
     },
     additionalProperties: false,
   },
@@ -375,6 +385,7 @@ export const createSupersetSchema = {
       properties: {
         supersetGroupId: { type: 'string', format: 'uuid' },
         trainingId: { type: 'string', format: 'uuid' },
+        restInterval: { type: 'integer', nullable: true },
         members: {
           type: 'array',
           items: supersetMemberResponseSchema,
@@ -386,6 +397,56 @@ export const createSupersetSchema = {
     403: errorResponseSchema,
     404: errorResponseSchema,
     409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const updateSupersetRestIntervalSchema = {
+  tags: ['Exercises - Trainer'],
+  summary: 'Update the round rest of a superset group',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['trainingId', 'groupId'],
+    properties: {
+      trainingId: { type: 'string', format: 'uuid' },
+      groupId: { type: 'string', format: 'uuid' },
+    },
+  },
+  body: {
+    type: 'object',
+    required: ['restInterval'],
+    properties: {
+      // why: Fastify coerces null to 0 for integers; the explicit const guard keeps null a 400.
+      restInterval: { allOf: [{ not: { const: null } }, { type: 'integer', minimum: 0 }] },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        supersetGroupId: { type: 'string', format: 'uuid' },
+        trainingId: { type: 'string', format: 'uuid' },
+        restInterval: { type: 'integer' },
+        members: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              name: { type: 'string' },
+              supersetOrder: { type: 'integer' },
+            },
+          },
+        },
+      },
+    },
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,
   },

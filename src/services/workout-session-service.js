@@ -105,6 +105,9 @@ const exerciseSelectWithSubstitutes = {
     hasLoad: true,
     suggestedLoad: true,
     restInterval: true,
+    supersetGroupId: true,
+    supersetOrder: true,
+    supersetRestInterval: true,
     videoUrl: true,
     gifUrl: true,
     notes: true,
@@ -113,7 +116,17 @@ const exerciseSelectWithSubstitutes = {
     substitutes: {
       where: { deletedAt: null },
       orderBy: { substituteOrder: 'asc' },
-      select: { id: true, name: true, type: true, substituteOrder: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        substituteOrder: true,
+        sets: true,
+        repetitions: true,
+        prescriptionMode: true,
+        gifUrl: true,
+        videoUrl: true,
+      },
     },
   },
 };
@@ -881,7 +894,7 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
   ) {
     const existing = await prisma.exerciseLog.findFirst({
       where: { workoutSessionId: sessionId, exerciseId: substituteExerciseId },
-      include: { setLogs: { orderBy: { setNumber: 'asc' } } },
+      include: { setLogs: { orderBy: { setNumber: 'asc' } }, exercise: exerciseSelectWithSubstitutes },
     });
     if (existing) return existing;
   }
@@ -942,7 +955,7 @@ export async function substituteExerciseLog(userId, sessionId, exerciseLogId, su
         status: ExerciseLogStatus.PENDING,
         order: principalLog.order + 1,
       },
-      include: { setLogs: { orderBy: { setNumber: 'asc' } } },
+      include: { setLogs: { orderBy: { setNumber: 'asc' } }, exercise: exerciseSelectWithSubstitutes },
     });
   }));
 

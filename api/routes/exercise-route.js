@@ -162,8 +162,26 @@ export async function exerciseRoutes(fastify) {
         request.user.id,
         request.params.trainingId,
         request.body.exerciseIds,
+        request.body.restInterval,
       );
       return reply.status(201).send(result);
+    },
+  );
+
+  fastify.patch(
+    '/trainer/trainings/:trainingId/supersets/:groupId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateSupersetRestIntervalSchema,
+    },
+    async (request, reply) => {
+      const result = await service.updateSupersetRestInterval(
+        request.user.id,
+        request.params.trainingId,
+        request.params.groupId,
+        request.body.restInterval,
+      );
+      return reply.send(result);
     },
   );
 

@@ -390,6 +390,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
             ? supersetGroupIdMap.get(junctionRow.supersetGroupId)
             : null,
           supersetOrder: junctionRow.supersetOrder ?? 0,
+          supersetRestInterval: junctionRow.supersetRestInterval ?? null,
           sets: junctionRow.sets ?? null,
           repetitions,
           duration,

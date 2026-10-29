@@ -32,6 +32,11 @@ const substituteExerciseMinimalSchema = {
     name: { type: 'string' },
     ...i18nField('type', 'exerciseType'),
     substituteOrder: { type: 'integer' },
+    sets: { type: 'integer', nullable: true },
+    repetitions: { nullable: true },
+    prescriptionMode: { type: 'string', enum: prescriptionModeValues },
+    gifUrl: gifUrlResponseSchema,
+    videoUrl: { type: 'string', nullable: true },
   },
 };
 
@@ -63,6 +68,9 @@ const exerciseLogSchema = {
         hasLoad: { type: 'boolean' },
         suggestedLoad: { type: 'number', nullable: true },
         restInterval: { type: 'integer', nullable: true },
+        supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+        supersetOrder: { type: 'integer' },
+        supersetRestInterval: { type: 'integer', nullable: true },
         videoUrl: { type: 'string', nullable: true },
         gifUrl: gifUrlResponseSchema,
         notes: { type: 'string', nullable: true },
