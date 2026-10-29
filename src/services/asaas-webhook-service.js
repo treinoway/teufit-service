@@ -16,7 +16,7 @@ import {
   PLATFORM_SUBSCRIPTION_STATUSES,
   PLATFORM_PLAN_TIERS,
 } from '../constants/platform-plan.js';
-import { enforceStudentCapAfterDowngrade } from './platform-plan-service.js';
+import { syncStudentCapWithPlan } from './platform-plan-service.js';
 import { parseTierFromExternalReference } from './asaas-subscription-service.js';
 
 const FREE_TIER = PLATFORM_PLAN_TIERS.FREE;
@@ -166,6 +166,10 @@ async function handlePaymentConfirmed(prisma, payment, logger) {
     },
   });
 
+  // A confirmed payment can raise the tier (FREE -> paid, upgrade) — unblock
+  // students that the previous cap had blocked.
+  await syncStudentCapWithPlan(prisma, platformSubscription.trainerId);
+
   logger.info(
     { paymentId: payment.id, tier: resolvedTier ?? platformSubscription.tier },
     '[asaas-webhook] PAYMENT_CONFIRMED — subscription activated',
@@ -240,7 +244,7 @@ async function handleSubscriptionDeleted(prisma, subscription, logger) {
     },
   });
 
-  await enforceStudentCapAfterDowngrade(prisma, platformSubscription.trainerId);
+  await syncStudentCapWithPlan(prisma, platformSubscription.trainerId);
 
   logger.info(
     { asaasSubscriptionId: subscription.id, trainerId: platformSubscription.trainerId },

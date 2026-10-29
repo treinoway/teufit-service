@@ -17,15 +17,16 @@ vi.mock('../../src/billing/asaas-client.js', () => ({
 
 vi.mock('../../src/services/platform-plan-service.js', () => ({
   getTrainerPlan: vi.fn(),
-  enforceStudentCapAfterDowngrade: vi.fn().mockResolvedValue(undefined),
+  syncStudentCapWithPlan: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as asaasClient from '../../src/billing/asaas-client.js';
-import { getTrainerPlan } from '../../src/services/platform-plan-service.js';
+import { getTrainerPlan, syncStudentCapWithPlan } from '../../src/services/platform-plan-service.js';
 import {
   createOrGetAsaasCustomer,
   createCheckout,
   getTrainerSubscription,
+  changeTier,
 } from '../../src/services/asaas-subscription-service.js';
 
 // ─── Prisma mock ──────────────────────────────────────────────────────────────
@@ -394,5 +395,50 @@ describe('getTrainerSubscription', () => {
     const result = await getTrainerSubscription(mockPrisma, TRAINER_ID);
 
     expect(result).toBeNull();
+  });
+});
+
+// ─── changeTier ───────────────────────────────────────────────────────────────
+
+describe('changeTier', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function arrange(currentTier) {
+    getTrainerPlan.mockResolvedValue({ tier: currentTier });
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(
+      makePlatformSubscription({ tier: currentTier, asaasSubscriptionId: ASAAS_SUBSCRIPTION_ID })
+    );
+    mockPrisma.platformSubscription.update.mockResolvedValue({});
+    asaasClient.updateSubscription.mockResolvedValue({});
+  }
+
+  it.each([
+    ['upgrade', PLATFORM_PLAN_TIERS.PRO, PLATFORM_PLAN_TIERS.DIAMOND],
+    ['downgrade', PLATFORM_PLAN_TIERS.DIAMOND, PLATFORM_PLAN_TIERS.PRO],
+  ])('reconciles the student cap after persisting the new tier on %s', async (_label, from, to) => {
+    arrange(from);
+
+    const result = await changeTier(mockPrisma, mockAsaasConfig, mockHttpClient, TRAINER_ID, to);
+
+    expect(result).toEqual({ tier: to });
+    expect(mockPrisma.platformSubscription.update).toHaveBeenCalledWith({
+      where: { trainerId: TRAINER_ID },
+      data: { tier: to },
+    });
+    expect(syncStudentCapWithPlan).toHaveBeenCalledOnce();
+    expect(syncStudentCapWithPlan).toHaveBeenCalledWith(mockPrisma, TRAINER_ID);
+    expect(mockPrisma.platformSubscription.update.mock.invocationCallOrder[0])
+      .toBeLessThan(syncStudentCapWithPlan.mock.invocationCallOrder[0]);
+  });
+
+  it('rejects a change to the current tier without touching the student cap', async () => {
+    arrange(PLATFORM_PLAN_TIERS.PRO);
+
+    await expect(
+      changeTier(mockPrisma, mockAsaasConfig, mockHttpClient, TRAINER_ID, PLATFORM_PLAN_TIERS.PRO)
+    ).rejects.toMatchObject({ error: 'ALREADY_ON_TIER', httpStatus: 409 });
+
+    expect(mockPrisma.platformSubscription.update).not.toHaveBeenCalled();
+    expect(syncStudentCapWithPlan).not.toHaveBeenCalled();
   });
 });

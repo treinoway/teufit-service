@@ -74,6 +74,39 @@ e2eDescribe('e2e: asaas webhook route', () => {
     return { userId, trainerId };
   }
 
+  /**
+   * Links `count` students to the trainer with strictly increasing createdAt
+   * (index 0 = oldest). `blockedFrom` marks every link from that index on as
+   * blocked by the seat quota (activeOnPlan=false).
+   */
+  async function linkStudents(trainerId, count, { blockedFrom = count } = {}) {
+    const studentIds = [];
+    for (let i = 0; i < count; i++) {
+      const student = await prisma.user.create({
+        data: { email: `student+cap+${i}+${Date.now()}@example.com`, roles: ['STUDENT'] },
+      });
+      await prisma.trainerStudent.create({
+        data: {
+          trainerId,
+          studentId: student.id,
+          activeOnPlan: i < blockedFrom,
+          createdAt: new Date(Date.UTC(2026, 0, 1 + i)),
+        },
+      });
+      studentIds.push(student.id);
+    }
+    return studentIds;
+  }
+
+  async function activeOnPlanByStudent(trainerId, studentIds) {
+    const links = await prisma.trainerStudent.findMany({
+      where: { trainerId },
+      select: { studentId: true, activeOnPlan: true },
+    });
+    const byId = Object.fromEntries(links.map((l) => [l.studentId, l.activeOnPlan]));
+    return studentIds.map((id) => byId[id]);
+  }
+
   function webhookHeaders() {
     return {
       'content-type': 'application/json',
@@ -227,6 +260,27 @@ e2eDescribe('e2e: asaas webhook route', () => {
       expect(payment.status).toBe('CONFIRMED');
     });
 
+    it('unblocks students blocked by the FREE cap when the payment upgrades the tier', async () => {
+      const { trainerId } = await createTrainerWithSubscription('FREE');
+      // FREE cap is 3: the two newest links were blocked by the quota.
+      const studentIds = await linkStudents(trainerId, 5, { blockedFrom: 3 });
+
+      const res = await sendWebhook({
+        event: 'PAYMENT_CONFIRMED',
+        payment: {
+          id: 'pay_unblock_001',
+          subscription: 'sub_webhook_test',
+          value: 299.90,
+          dueDate: '2026-05-16',
+          billingType: 'PIX',
+          externalReference: `tier:DIAMOND:trainer:${trainerId}`,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(await activeOnPlanByStudent(trainerId, studentIds)).toEqual([true, true, true, true, true]);
+    });
+
     it('is idempotent — processing same PAYMENT_CONFIRMED twice does not cause errors', async () => {
       const { trainerId } = await createTrainerWithSubscription('FREE');
 
@@ -318,6 +372,20 @@ e2eDescribe('e2e: asaas webhook route', () => {
       expect(sub.tier).toBe('FREE');
       expect(sub.status).toBe('CANCELED');
       expect(sub.asaasSubscriptionId).toBeNull();
+    });
+
+    it('blocks the newest students above the FREE cap and keeps the oldest active', async () => {
+      const { trainerId } = await createTrainerWithSubscription('PLATINUM');
+      const studentIds = await linkStudents(trainerId, 5);
+
+      const res = await sendWebhook({
+        event: 'SUBSCRIPTION_DELETED',
+        subscription: { id: 'sub_webhook_test', status: 'INACTIVE' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      // FREE cap is 3 → the 2 newest links get blocked.
+      expect(await activeOnPlanByStudent(trainerId, studentIds)).toEqual([true, true, true, false, false]);
     });
   });
 
