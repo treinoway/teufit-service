@@ -7,7 +7,17 @@ on:
 
 jobs:
   e2e:
+    name: e2e (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
+
+    # Each shard is its own runner with its own Postgres container; inside a
+    # shard, files also run in parallel (one database per Vitest worker). Two
+    # workers match the 2 vCPUs of a private-repo runner: more oversubscribes
+    # the CPU and pushes Prisma interactive transactions past their 5s timeout.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
 
     env:
       DISABLE_EMAIL: 'true'
@@ -20,9 +30,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run e2e tests with Docker Postgres
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }} --maxWorkers=2
