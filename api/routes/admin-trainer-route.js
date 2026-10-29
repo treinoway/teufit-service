@@ -12,8 +12,8 @@ export async function adminTrainerRoutes(fastify) {
       schema: schema.listTrainersSchema,
     },
     async (request, reply) => {
-      const { search, page, pageSize } = request.query;
-      return reply.send(await listTrainers(prisma, { search, page, pageSize }));
+      const { search, page, pageSize, includeSignups, inviteStatus } = request.query;
+      return reply.send(await listTrainers(prisma, { search, page, pageSize, includeSignups, inviteStatus }));
     },
   );
 

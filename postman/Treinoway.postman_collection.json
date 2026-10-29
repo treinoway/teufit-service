@@ -9900,6 +9900,18 @@
                   "description": "Optional search by name or email (max 200 chars)"
                 },
                 {
+                  "key": "includeSignups",
+                  "value": "true",
+                  "description": "Optional boolean (default false). When true, also lists signups that have no trainer profile yet (accountType \"signup\" with null trainerId/tier/activeStudents/studentCap/subscriptionStatus)",
+                  "disabled": true
+                },
+                {
+                  "key": "inviteStatus",
+                  "value": "pending",
+                  "description": "Optional filter by invite status: none | pending | accepted",
+                  "disabled": true
+                },
+                {
                   "key": "page",
                   "value": "1",
                   "description": "Page number (min: 1, default: 1)"
@@ -9911,7 +9923,7 @@
                 }
               ]
             },
-            "description": "List trainers with their platform plan tier, subscription status and active student usage vs cap (studentCap null = unlimited). Requires ADMIN role. Errors: 400 validation, 401, 403 (not admin), 429, 500."
+            "description": "List trainers with their platform plan tier, subscription status and active student usage vs cap (studentCap null = unlimited). Requires ADMIN role. Errors: 400 validation, 401, 403 (not admin), 429, 500. Optional includeSignups (boolean, default false) adds signups without a trainer profile; optional inviteStatus (none|pending|accepted) filters by trainer-invite status. Every item has accountType (trainer|signup), inviteStatus and inviteSentAt (ISO date-time or null)."
           },
           "response": [
             {
@@ -9940,6 +9952,18 @@
                       "description": "Optional search by name or email (max 200 chars)"
                     },
                     {
+                      "key": "includeSignups",
+                      "value": "true",
+                      "description": "Optional boolean (default false). When true, also lists signups that have no trainer profile yet (accountType \"signup\" with null trainerId/tier/activeStudents/studentCap/subscriptionStatus)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "inviteStatus",
+                      "value": "pending",
+                      "description": "Optional filter by invite status: none | pending | accepted",
+                      "disabled": true
+                    },
+                    {
                       "key": "page",
                       "value": "1",
                       "description": "Page number (min: 1, default: 1)"
@@ -9961,7 +9985,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"items\": [\n    {\n      \"trainerId\": \"3f8a6c2e-1b4d-4e7a-9c05-6d2e8f1a7b34\",\n      \"userId\": \"9d1e4b7a-2c3f-4a68-b5d0-7e8f9a0b1c2d\",\n      \"firstName\": \"Maria\",\n      \"lastName\": \"Silva\",\n      \"email\": \"maria.silva@example.com\",\n      \"tier\": \"PRO\",\n      \"subscriptionStatus\": \"ACTIVE\",\n      \"hasAsaasSubscription\": true,\n      \"activeStudents\": 12,\n      \"studentCap\": 30\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+              "body": "{\n  \"items\": [\n    {\n      \"accountType\": \"trainer\",\n      \"trainerId\": \"3f8a6c2e-1b4d-4e7a-9c05-6d2e8f1a7b34\",\n      \"userId\": \"9d1e4b7a-2c3f-4a68-b5d0-7e8f9a0b1c2d\",\n      \"firstName\": \"Maria\",\n      \"lastName\": \"Silva\",\n      \"email\": \"maria.silva@example.com\",\n      \"tier\": \"PRO\",\n      \"subscriptionStatus\": \"ACTIVE\",\n      \"hasAsaasSubscription\": true,\n      \"activeStudents\": 12,\n      \"studentCap\": 30,\n      \"inviteStatus\": \"accepted\",\n      \"inviteSentAt\": \"2026-07-10T12:00:00.000Z\"\n    },\n    {\n      \"accountType\": \"signup\",\n      \"trainerId\": null,\n      \"userId\": \"c4d5e6f7-8a9b-4c0d-9e1f-2a3b4c5d6e7f\",\n      \"firstName\": \"Marcos\",\n      \"lastName\": \"Almeida\",\n      \"email\": \"marcos.almeida@example.com\",\n      \"tier\": null,\n      \"subscriptionStatus\": null,\n      \"hasAsaasSubscription\": false,\n      \"activeStudents\": null,\n      \"studentCap\": null,\n      \"inviteStatus\": \"pending\",\n      \"inviteSentAt\": \"2026-07-12T09:00:00.000Z\"\n    }\n  ],\n  \"total\": 2,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
             },
             {
               "name": "List Trainers - 403 Forbidden",
@@ -9987,6 +10011,18 @@
                       "key": "search",
                       "value": "maria",
                       "description": "Optional search by name or email (max 200 chars)"
+                    },
+                    {
+                      "key": "includeSignups",
+                      "value": "true",
+                      "description": "Optional boolean (default false). When true, also lists signups that have no trainer profile yet (accountType \"signup\" with null trainerId/tier/activeStudents/studentCap/subscriptionStatus)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "inviteStatus",
+                      "value": "pending",
+                      "description": "Optional filter by invite status: none | pending | accepted",
+                      "disabled": true
                     },
                     {
                       "key": "page",

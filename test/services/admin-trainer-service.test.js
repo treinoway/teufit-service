@@ -37,6 +37,7 @@ const mockPrisma = {
   trainer: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
   platformSubscription: { upsert: vi.fn() },
   trainerStudent: { groupBy: vi.fn(), count: vi.fn() },
+  trainerInvite: { findMany: vi.fn() },
 };
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ describe('listTrainers', () => {
   beforeEach(() => {
     mockPrisma.trainer.findMany.mockResolvedValue([]);
     mockPrisma.trainer.count.mockResolvedValue(0);
+    mockPrisma.trainerInvite.findMany.mockResolvedValue([]);
     stubActiveStudentCounts({});
   });
 
