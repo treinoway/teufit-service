@@ -395,6 +395,13 @@ export default {
     'protocol.trainingTemplateNotOwned': 'Um ou mais modelos de treino não pertencem ao seu perfil.',
     'protocol.exerciseTemplateNotOwned': 'Um ou mais modelos de exercício não pertencem ao seu perfil.',
 
+    // Tutorials ("Como usar")
+    'tutorial.notFound': 'Tutorial não encontrado.',
+    'tutorial.invalidVideoType': 'Formato de vídeo não suportado. Use MP4, WebM ou MOV.',
+    'tutorial.videoTooLarge': 'O vídeo excede o tamanho máximo de 500 MB.',
+    'tutorial.invalidVideoKey': 'Arquivo de vídeo inválido. Envie o vídeo novamente.',
+    'tutorial.invalidOrder': 'A nova ordem dos tutoriais é inválida.',
+
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
     'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',

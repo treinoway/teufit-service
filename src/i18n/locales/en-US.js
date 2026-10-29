@@ -391,6 +391,13 @@ export default {
     'protocol.trainingTemplateNotOwned': 'One or more training templates do not belong to your profile.',
     'protocol.exerciseTemplateNotOwned': 'One or more exercise templates do not belong to your profile.',
 
+    // Tutorials ("How to use")
+    'tutorial.notFound': 'Tutorial not found.',
+    'tutorial.invalidVideoType': 'Unsupported video format. Use MP4, WebM or MOV.',
+    'tutorial.videoTooLarge': 'The video exceeds the 500 MB size limit.',
+    'tutorial.invalidVideoKey': 'Invalid video file. Please upload the video again.',
+    'tutorial.invalidOrder': 'The new tutorial order is invalid.',
+
     // Video library
     'video.notFound': 'Video not found.',
     'video.invalidUrl': 'Invalid URL. Please use a valid http(s) address.',

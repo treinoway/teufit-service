@@ -36,6 +36,8 @@ import { anamnesisRoutes } from './routes/anamnesis-route.js';
 import { adminAnamnesisRoutes } from './routes/admin-anamnesis-route.js';
 import { adminVideoRoutes } from './routes/admin-video-route.js';
 import { videoRoutes } from './routes/video-route.js';
+import { adminTutorialRoutes } from './routes/admin-tutorial-route.js';
+import { tutorialRoutes } from './routes/tutorial-route.js';
 import { aiRoutes } from './routes/ai-route.js';
 import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
 import { gamificationRoutes } from './routes/gamification-route.js';
@@ -373,6 +375,8 @@ export async function buildServer(options = {}) {
     await fastify.register(adminAnamnesisRoutes);
     await fastify.register(adminVideoRoutes);
     await fastify.register(videoRoutes);
+    await fastify.register(adminTutorialRoutes);
+    await fastify.register(tutorialRoutes);
     await fastify.register(aiRoutes);
     await fastify.register(trainerBrandingRoutes);
     await fastify.register(gamificationRoutes);
