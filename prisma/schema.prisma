@@ -53,6 +53,7 @@ model User {
   metabolicProfile       PatientMetabolicProfile?
   dietProtocolsAsPatient DietProtocol[]
   videosCreated              Video[]
+  tutorialsCreated           Tutorial[]
   studentSubscriptions       StudentSubscription[]
   aiUsageEventsAsStudent     AiUsageEvent[]        @relation("aiUsageStudent")
   aiTokenUsagesAsStudent     AiTokenUsage[]        @relation("aiTokenUsageStudent")
@@ -1340,6 +1341,30 @@ model Video {
   @@index([deletedAt])
   @@index([tags], type: Gin)
   @@map("videos")
+}
+
+enum TutorialVideoSource {
+  LINK
+  UPLOAD
+}
+
+model Tutorial {
+  id          String                @id @default(uuid()) @db.Uuid
+  title       String                @db.Text
+  description String?               @db.Text
+  videoSource TutorialVideoSource   @map("video_source")
+  videoUrl    String?               @map("video_url") @db.Text
+  videoKey    String?               @map("video_key") @db.Text
+  order       Int                   @default(0)
+  createdById String                @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([order])
+  @@map("tutorials")
 }
 
 // ─── Platform Subscription models (Treinoway → Trainer SaaS layer) ────────────

@@ -69,6 +69,12 @@
       "key": "advancedTechniqueId",
       "value": "b1c2d3e4-0000-0000-0000-000000000001",
       "type": "string"
+    },
+    {
+      "key": "tutorialId",
+      "value": "",
+      "type": "string",
+      "description": "Tutorial UUID — used in /admin/tutorials/:tutorialId"
     }
   ],
   "auth": {
@@ -15186,6 +15192,664 @@
             }
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tutorials - Admin",
+      "item": [
+        {
+          "name": "Get Upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials/upload-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials",
+                "upload-url"
+              ]
+            },
+            "description": "Get a presigned URL to upload a tutorial video file directly to storage (PUT the file with the same Content-Type). Then call Create Tutorial with videoSource=upload and the returned videoKey. Requires ADMIN role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"video/mp4\",\n  \"fileSize\": 52428800\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials/upload-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials",
+                    "upload-url"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"uploadUrl\": \"https://storage.example.com/tutorials/abc.mp4?signature=...\",\n  \"videoKey\": \"tutorials/abc.mp4\",\n  \"expiresIn\": 900\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Tutorial (Link)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials"
+              ]
+            },
+            "description": "Create a tutorial from an external video link. videoSource=link requires videoUrl. Requires ADMIN role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Como criar seu primeiro protocolo\",\n  \"description\": \"Passo a passo para montar um protocolo de treino.\",\n  \"videoSource\": \"link\",\n  \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n  \"title\": \"Como criar seu primeiro protocolo\",\n  \"description\": \"Passo a passo para montar um protocolo de treino.\",\n  \"videoSource\": \"link\",\n  \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n  \"order\": 0,\n  \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n  \"videoKey\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Tutorial (Upload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials"
+              ]
+            },
+            "description": "Create a tutorial from an uploaded file. videoSource=upload requires videoKey from Get Upload URL. Requires ADMIN role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Montando um treino\",\n  \"description\": \"Como montar um treino do zero.\",\n  \"videoSource\": \"upload\",\n  \"videoKey\": \"tutorials/abc.mp4\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n  \"title\": \"Como criar seu primeiro protocolo\",\n  \"description\": \"Passo a passo para montar um protocolo de treino.\",\n  \"videoSource\": \"upload\",\n  \"videoUrl\": null,\n  \"order\": 0,\n  \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n  \"videoKey\": \"tutorials/abc.mp4\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Tutorials (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials"
+              ]
+            },
+            "description": "List all tutorials ordered by `order`, including videoKey. Requires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n      \"title\": \"Como criar seu primeiro protocolo\",\n      \"description\": \"Passo a passo para montar um protocolo de treino.\",\n      \"videoSource\": \"link\",\n      \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n      \"order\": 0,\n      \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n      \"videoKey\": null\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Tutorial by ID (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials",
+                ":tutorialId"
+              ],
+              "variable": [
+                {
+                  "key": "tutorialId",
+                  "value": "{{tutorialId}}",
+                  "description": "Tutorial UUID"
+                }
+              ]
+            },
+            "description": "Get a single tutorial including videoKey. Requires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials",
+                    ":tutorialId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "tutorialId",
+                      "value": "{{tutorialId}}",
+                      "description": "Tutorial UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n  \"title\": \"Como criar seu primeiro protocolo\",\n  \"description\": \"Passo a passo para montar um protocolo de treino.\",\n  \"videoSource\": \"link\",\n  \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n  \"order\": 0,\n  \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n  \"videoKey\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Tutorial",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials",
+                ":tutorialId"
+              ],
+              "variable": [
+                {
+                  "key": "tutorialId",
+                  "value": "{{tutorialId}}",
+                  "description": "Tutorial UUID"
+                }
+              ]
+            },
+            "description": "Partial update. To change the video, send videoSource plus videoUrl (link) or videoKey (upload). Requires ADMIN role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Como criar seu primeiro protocolo (atualizado)\",\n  \"videoSource\": \"link\",\n  \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials",
+                    ":tutorialId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "tutorialId",
+                      "value": "{{tutorialId}}",
+                      "description": "Tutorial UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n  \"title\": \"Como criar seu primeiro protocolo\",\n  \"description\": \"Passo a passo para montar um protocolo de treino.\",\n  \"videoSource\": \"link\",\n  \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n  \"order\": 0,\n  \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n  \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n  \"videoKey\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Tutorial",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials",
+                ":tutorialId"
+              ],
+              "variable": [
+                {
+                  "key": "tutorialId",
+                  "value": "{{tutorialId}}",
+                  "description": "Tutorial UUID"
+                }
+              ]
+            },
+            "description": "Delete a tutorial. Returns 204 with no body. Requires ADMIN role."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials/:tutorialId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials",
+                    ":tutorialId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "tutorialId",
+                      "value": "{{tutorialId}}",
+                      "description": "Tutorial UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Reorder Tutorials",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tutorials/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "tutorials",
+                "reorder"
+              ]
+            },
+            "description": "Set tutorial order. orderedIds is the full list of tutorial IDs in the desired order. Requires ADMIN role.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderedIds\": [\n    \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n    \"d4b2a7b3-6c8f-4e1b-8b66-2e3f4a5b6c7d\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/tutorials/reorder",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "tutorials",
+                    "reorder"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n      \"title\": \"Como criar seu primeiro protocolo\",\n      \"description\": \"Passo a passo para montar um protocolo de treino.\",\n      \"videoSource\": \"link\",\n      \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n      \"order\": 0,\n      \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-01T12:00:00.000Z\",\n      \"videoKey\": null\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tutorials",
+      "item": [
+        {
+          "name": "List Tutorials",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tutorials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tutorials"
+              ]
+            },
+            "description": "List tutorials for trainers (videoKey omitted). Requires TRAINER or ADMIN role."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/tutorials",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "tutorials"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n      \"title\": \"Como criar seu primeiro protocolo\",\n      \"description\": \"Passo a passo para montar um protocolo de treino.\",\n      \"videoSource\": \"link\",\n      \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n      \"order\": 0,\n      \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-01T12:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     }

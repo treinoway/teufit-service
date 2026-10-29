@@ -45,6 +45,8 @@ class S3BucketHandler {
                 accessKeyId: awsAccessKeyId,
                 secretAccessKey: awsSecretAccessKey,
             },
+            // why: the SDK default (WHEN_SUPPORTED) signs a CRC32 of an empty body into presigned PUT URLs, so browser uploads fail with SignatureDoesNotMatch
+            requestChecksumCalculation: 'WHEN_REQUIRED',
         };
 
         // Add endpoint override if provided (for Railway S3-compatible storage)
@@ -155,6 +157,28 @@ class S3BucketHandler {
         const command = new GetObjectCommand({
             Bucket: this.bucketName,
             Key: key,
+        });
+
+        return getSignedUrl(this.s3Client, command, { expiresIn });
+    }
+
+    /**
+     * Get a presigned PUT URL so a client can upload an object directly to the bucket.
+     * @param {Object} params - Parameters
+     * @param {string} params.key - S3 object key (file path in bucket)
+     * @param {string} params.contentType - MIME type the upload must declare
+     * @param {number} [params.expiresIn=900] - URL expiration in seconds
+     * @returns {Promise<string>} Presigned upload URL
+     */
+    async getSignedPutUrl({ key, contentType, expiresIn = 900 }) {
+        if (!this.s3Client || !this.bucketName) {
+            return 'https://example.com/disabled-s3-upload';
+        }
+
+        const command = new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+            ContentType: contentType,
         });
 
         return getSignedUrl(this.s3Client, command, { expiresIn });

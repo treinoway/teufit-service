@@ -58,6 +58,7 @@ export async function cleanDatabase() {
     'platform_subscription_payments',
     'platform_subscriptions',
     'ai_usage_events',
+    'tutorials',
     'users',
     'user_waitlist',
     // Not FK-linked to users, so TRUNCATE ... CASCADE on users does not reach them.
