@@ -10,4 +10,5 @@ cd "$(dirname "$0")/.."
 # daemon. Any DATABASE_URL in the environment is ignored (the container provides
 # its own, injected per worker via test/e2e/setup-env.js).
 echo "[e2e] Running Vitest e2e suite (ephemeral Postgres via Testcontainers)..."
-npx vitest run --config vitest.e2e.config.js
+# Extra args (e.g. --shard=1/3, --maxWorkers=2) are forwarded to Vitest.
+npx vitest run --config vitest.e2e.config.js "$@"

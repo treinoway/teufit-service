@@ -11,8 +11,7 @@ export default defineConfig({
     restoreMocks: true,
     clearMocks: true,
     mockReset: true,
-    // Run e2e tests sequentially to avoid database deadlocks with TRUNCATE
-    fileParallelism: false,
+    // No database here (e2e is excluded above), so files run in parallel.
     env: {
       DISABLE_EMAIL: 'true',
       DISABLE_S3_UPLOAD: 'true',

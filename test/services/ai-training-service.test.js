@@ -295,6 +295,10 @@ describe('ai-training-service', () => {
   // ---------------------------------------------------------------------------
 
   describe('processAiChat', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
     function stubTrainerContext() {
       prisma.trainer.findUnique.mockResolvedValue({ id: 'trainer-1' })
       prisma.trainerStudent.findMany.mockResolvedValue([])
@@ -479,13 +483,17 @@ describe('ai-training-service', () => {
       rateLimitError.status = 429
       anthropicCreate.mockRejectedValue(rateLimitError)
 
-      await expect(
+      vi.useFakeTimers()
+
+      const assertion = expect(
         processAiChat('user-1', { message: 'Olá' }),
       ).rejects.toMatchObject({
         httpStatus: 429,
         error: AI_ERRORS.RATE_LIMITED,
         messageCode: 'ai.rateLimited',
       })
+      await vi.runAllTimersAsync()
+      await assertion
     })
 
     it('throws AppError 502 with AI_MODEL_ERROR when Anthropic API returns 500', async () => {
@@ -496,13 +504,17 @@ describe('ai-training-service', () => {
       serverError.status = 500
       anthropicCreate.mockRejectedValue(serverError)
 
-      await expect(
+      vi.useFakeTimers()
+
+      const assertion = expect(
         processAiChat('user-1', { message: 'Olá' }),
       ).rejects.toMatchObject({
         httpStatus: 502,
         error: AI_ERRORS.MODEL_ERROR,
         messageCode: 'ai.modelError',
       })
+      await vi.runAllTimersAsync()
+      await assertion
     })
 
     it('sets the conversation title to the first 100 chars of the first user message', async () => {

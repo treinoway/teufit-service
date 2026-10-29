@@ -1,7 +1,23 @@
 import crypto from 'node:crypto';
 
 const SCRYPT_KEY_LENGTH = 64;
-const SCRYPT_PARAMS = Object.freeze({ N: 16384, r: 8, p: 1 });
+// PASSWORD_SCRYPT_COST lowers N only under NODE_ENV=test (the e2e suite hashes
+// hundreds of passwords), so a stray env var can never weaken production hashes.
+// Verification reads N from the stored hash, so hashes of any cost still verify.
+const DEFAULT_SCRYPT_COST = 16384;
+const SCRYPT_PARAMS = Object.freeze({ N: resolveScryptCost(process.env), r: 8, p: 1 });
+
+/**
+ * Scrypt cost (N) for new hashes: PASSWORD_SCRYPT_COST under NODE_ENV=test, else the default.
+ * @param {Record<string, string|undefined>} env
+ * @returns {number}
+ */
+export function resolveScryptCost(env) {
+  if (env.NODE_ENV !== 'test' || !env.PASSWORD_SCRYPT_COST) return DEFAULT_SCRYPT_COST;
+  const cost = Number(env.PASSWORD_SCRYPT_COST);
+  const isPowerOfTwo = Number.isInteger(cost) && cost > 1 && (cost & (cost - 1)) === 0;
+  return isPowerOfTwo ? cost : DEFAULT_SCRYPT_COST;
+}
 
 /**
  * Hashes a password with scrypt into a self-contained string:
