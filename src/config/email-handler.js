@@ -3,6 +3,7 @@
 import { Resend } from 'resend';
 import { parseBool } from '../helpers/env.js';
 import config from '../../config/index.js';
+import { INVITE_TTL_MS } from '../constants/trainer-invite.js';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const disableEmail = parseBool(process.env.DISABLE_EMAIL, false);
@@ -11,6 +12,13 @@ const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Returns how many whole days a trainer invite stays valid, derived from the TTL constant.
+function getInviteExpiryDays() {
+    return Math.round(INVITE_TTL_MS / MS_PER_DAY);
 }
 
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]+/g;
@@ -460,7 +468,7 @@ ${renderStoreButtonsBlock()}
                             </table>
 
                             <p style="margin: 0; color: #9ca3af; font-size: 13px; line-height: 1.6; text-align: center;">
-                                Este convite expira em 7 dias e só pode ser usado com este e-mail.
+                                Este convite expira em ${getInviteExpiryDays()} dias e só pode ser usado com este e-mail.
                             </p>
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
@@ -474,7 +482,7 @@ ${renderStoreButtonsBlock()}
                     <tr>
                         <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
                             <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                © 2026 Teufit. Todos os direitos reservados.
+                                © ${new Date().getFullYear()} Teufit. Todos os direitos reservados.
                             </p>
                         </td>
                     </tr>
@@ -488,6 +496,122 @@ ${renderStoreButtonsBlock()}
         `;
 
         // In test mode with no client configured, act as a no-op
+        if (!this.resendClient) {
+            return Promise.resolve();
+        }
+
+        return this.resendClient.emails.send({
+            from: 'onboarding@teufit.com.br',
+            to,
+            html: htmlContent,
+            subject: subject,
+        });
+    }
+
+    // Sends the closed-beta invite to someone who already has an account, pointing to activation.
+    sendExistingAccountTrainerInviteEmail({to, code, inviteUrl, firstName}) {
+        const greeting = firstName ? `${escapeHtml(firstName)}, seu acesso ao Teufit foi liberado` : 'Seu acesso ao Teufit foi liberado';
+        const subject = '[Teufit] Seu acesso ao teste fechado foi liberado';
+        const htmlContent = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seu acesso Teufit</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(16, 84, 178, 0.08); border-radius: 16px; overflow: hidden;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 44px 40px;">
+                            <!-- Beta badge -->
+                            <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse;">
+                                <tr>
+                                    <td align="center">
+                                        <span style="display: inline-block; background-color: #D6E5F8; color: #1054B2; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;">
+                                            Acesso antecipado · Teste fechado
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
+                                ${greeting}
+                            </h2>
+
+                            <p style="margin: 0 0 30px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
+                                Você criou sua conta no Teufit e agora ela está liberada para o nosso teste fechado. Ao ativar o convite, você entra com o plano Beta, que tem os mesmos recursos do plano Diamond e não custa nada durante o teste: alunos ilimitados e IA.
+                            </p>
+
+                            <!-- CTA -->
+                            <table role="presentation" style="width: 100%; margin: 0 0 28px; border-collapse: collapse;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="${inviteUrl}" style="display: inline-block; background-color: #1054B2; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 16px 32px; border-radius: 12px;">
+                                            Ativar meu acesso
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 20px; color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                                Entre com a conta deste e-mail (${escapeHtml(to)}). Se já estiver logado(a), a ativação é automática.
+                            </p>
+
+                            <p style="margin: 0 0 12px; color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
+                                Ou insira este código manualmente na tela de convite:
+                            </p>
+
+                            <!-- Code -->
+                            <table role="presentation" width="100%" align="center" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: separate; margin: 0 0 28px;">
+                                <tr>
+                                    <td align="center" style="text-align: center; background-color: #D6E5F8; border-radius: 16px; padding: 20px;">
+                                        <span style="color: #1054B2; font-size: 22px; font-weight: 800; letter-spacing: 0.12em; font-family: 'Nunito Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">${code}</span>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0; color: #9ca3af; font-size: 13px; line-height: 1.6; text-align: center;">
+                                Este convite expira em ${getInviteExpiryDays()} dias.
+                            </p>
+
+                            <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
+                                Bons treinos,<br>
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                © ${new Date().getFullYear()} Teufit. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        `;
+
+        // why: in test mode with no client configured, act as a no-op
         if (!this.resendClient) {
             return Promise.resolve();
         }

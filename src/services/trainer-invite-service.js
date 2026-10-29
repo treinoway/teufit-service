@@ -85,6 +85,39 @@ export function assertCanCreateInvite(actingUser) {
   }
 }
 
+// Finds the live account owning this email (case-insensitive), if any.
+function findExistingAccountByEmail(email) {
+  return prisma.user.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null },
+    select: { id: true, firstName: true, email: true },
+  });
+}
+
+// Sends the invite email matching whether the invitee already has an account; never throws.
+async function sendInviteEmailSafely({ actingUserId, normalizedEmail, rawCode }) {
+  try {
+    const inviteUrl = `${config.web.baseUrl}/invite?code=${encodeURIComponent(rawCode)}`;
+    const existingAccount = await findExistingAccountByEmail(normalizedEmail);
+    if (existingAccount?.email?.toLowerCase() === normalizedEmail) {
+      await emailHandler.sendExistingAccountTrainerInviteEmail({
+        to: normalizedEmail,
+        code: rawCode,
+        inviteUrl,
+        firstName: existingAccount.firstName,
+      });
+      return;
+    }
+    const inviter = await prisma.user.findUnique({
+      where: { id: actingUserId },
+      select: { firstName: true, lastName: true },
+    });
+    const invitedByName = `${inviter?.firstName ?? ''} ${inviter?.lastName ?? ''}`.trim() || null;
+    await emailHandler.sendTrainerInviteEmail({ to: normalizedEmail, code: rawCode, inviteUrl, invitedByName });
+  } catch (emailError) {
+    console.error('Failed to send trainer invite email', emailError);
+  }
+}
+
 /**
  * Creates a trainer invite for `email`, superseding any prior pending invite
  * for the same email. Returns the plain (unhashed) code — only ever returned
@@ -135,18 +168,7 @@ export async function createInvite({ actingUserId, email }) {
     });
   });
 
-  // Fire-and-forget delivery — an email outage must never fail invite creation.
-  try {
-    const inviter = await prisma.user.findUnique({
-      where: { id: actingUserId },
-      select: { firstName: true, lastName: true },
-    });
-    const invitedByName = `${inviter?.firstName ?? ''} ${inviter?.lastName ?? ''}`.trim() || null;
-    const inviteUrl = `${config.web.baseUrl}/invite?code=${encodeURIComponent(rawCode)}`;
-    await emailHandler.sendTrainerInviteEmail({ to: normalizedEmail, code: rawCode, inviteUrl, invitedByName });
-  } catch (emailError) {
-    console.error('Failed to send trainer invite email', emailError);
-  }
+  await sendInviteEmailSafely({ actingUserId, normalizedEmail, rawCode });
 
   return { invite, code: rawCode };
 }

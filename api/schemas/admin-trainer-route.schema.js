@@ -1,4 +1,5 @@
 import { PLATFORM_PLAN_TIERS } from '../../src/constants/platform-plan.js';
+import { ADMIN_ACCOUNT_TYPE, adminInviteStatusValues } from '../../src/constants/admin-trainer-list.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const ADMIN_TRAINERS_TAG = 'Admin - Trainers';
@@ -6,6 +7,7 @@ const TRAINER_LIST_PAGE_SIZE_MAX = 100;
 const TRAINER_LIST_PAGE_SIZE_DEFAULT = 20;
 const SEARCH_MAX_LENGTH = 200;
 const tierValues = Object.values(PLATFORM_PLAN_TIERS);
+const accountTypeValues = Object.values(ADMIN_ACCOUNT_TYPE);
 
 const nullableString = { type: 'string', nullable: true };
 const nullableInteger = { type: 'integer', nullable: true };
@@ -13,20 +15,23 @@ const nullableInteger = { type: 'integer', nullable: true };
 const trainerListItemSchema = {
   type: 'object',
   required: [
-    'trainerId', 'userId', 'tier', 'subscriptionStatus',
-    'hasAsaasSubscription', 'activeStudents', 'studentCap',
+    'accountType', 'trainerId', 'userId', 'tier', 'subscriptionStatus',
+    'hasAsaasSubscription', 'activeStudents', 'studentCap', 'inviteStatus', 'inviteSentAt',
   ],
   properties: {
-    trainerId: { type: 'string', format: 'uuid' },
+    accountType: { type: 'string', enum: accountTypeValues },
+    trainerId: { type: 'string', format: 'uuid', nullable: true, description: 'null only for accountType=signup' },
     userId: { type: 'string', format: 'uuid' },
     firstName: nullableString,
     lastName: nullableString,
     email: nullableString,
-    tier: { type: 'string', enum: tierValues },
-    subscriptionStatus: nullableString,
+    tier: { type: 'string', enum: tierValues, nullable: true, description: 'null only for accountType=signup' },
+    subscriptionStatus: { ...nullableString, description: 'null only for accountType=signup' },
     hasAsaasSubscription: { type: 'boolean' },
-    activeStudents: { type: 'integer' },
-    studentCap: nullableInteger,
+    activeStudents: { ...nullableInteger, description: 'null only for accountType=signup' },
+    studentCap: { ...nullableInteger, description: 'null only for accountType=signup' },
+    inviteStatus: { type: 'string', enum: adminInviteStatusValues },
+    inviteSentAt: { type: 'string', format: 'date-time', nullable: true },
   },
   additionalProperties: false,
 };
@@ -39,6 +44,8 @@ export const listTrainersSchema = {
     type: 'object',
     properties: {
       search: { type: 'string', maxLength: SEARCH_MAX_LENGTH },
+      includeSignups: { type: 'boolean', default: false },
+      inviteStatus: { type: 'string', enum: adminInviteStatusValues },
       page: { type: 'integer', minimum: 1, default: 1 },
       pageSize: {
         type: 'integer',
@@ -97,10 +104,10 @@ export const setTrainerPlanSchema = {
         previousTier: { type: 'string', enum: tierValues },
         tier: { type: 'string', enum: tierValues },
         changed: { type: 'boolean' },
-        subscriptionStatus: nullableString,
+        subscriptionStatus: { ...nullableString, description: 'null only for accountType=signup' },
         hasAsaasSubscription: { type: 'boolean' },
         activeStudents: { type: 'integer' },
-        studentCap: nullableInteger,
+        studentCap: { ...nullableInteger, description: 'null only for accountType=signup' },
       },
       additionalProperties: false,
     },
