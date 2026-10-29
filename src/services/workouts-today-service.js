@@ -223,7 +223,7 @@ export async function getTodayWorkout(userId, { timeZone, language = 'pt-BR', lo
         orderBy: { order: 'asc' },
         include: {
           exercises: {
-            where: { deletedAt: null },
+            where: { deletedAt: null, substituteForExerciseId: null },
             orderBy: ExerciseOrderBy,
             include: advancedTechniqueLinksInclude,
           },

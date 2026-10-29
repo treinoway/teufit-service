@@ -492,6 +492,7 @@ model TrainingTemplateExerciseTemplate {
   // Superset group fields — carried through template import
   supersetGroupId String? @map("superset_group_id") @db.Uuid
   supersetOrder   Int     @default(0) @map("superset_order")
+  supersetRestInterval Int? @map("superset_rest_interval")
 
   // Snapshot fields — copied from ExerciseTemplate at link time; independent after that
   name             String  @db.Text
@@ -533,6 +534,7 @@ model Exercise {
   // Superset (bi-set / tri-set) group fields
   supersetGroupId String? @map("superset_group_id") @db.Uuid
   supersetOrder   Int     @default(0) @map("superset_order")
+  supersetRestInterval Int? @map("superset_rest_interval")
 
   // Substitute exercise fields
   substituteForExerciseId String? @map("substitute_for_exercise_id") @db.Uuid

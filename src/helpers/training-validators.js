@@ -341,3 +341,64 @@ export function validateSubstituteConstraint(principal, candidate) {
     });
   }
 }
+
+// Builds the 400 AppError used for every invalid bulk superset group.
+function buildSupersetGroupError(messageCode, message) {
+  return new AppError({ httpStatus: 400, error: 'VALIDATION_ERROR', messageCode, message });
+}
+
+// Groups array positions by client supersetGroupId, preserving first-seen group order.
+function collectGroupPositions(exercises) {
+  const positionsByGroup = new Map();
+  exercises.forEach((exercise, position) => {
+    if (!exercise.supersetGroupId) return;
+    const positions = positionsByGroup.get(exercise.supersetGroupId) ?? [];
+    positions.push(position);
+    positionsByGroup.set(exercise.supersetGroupId, positions);
+  });
+  return positionsByGroup;
+}
+
+// Throws when any substitute in the payload carries superset fields.
+function assertSubstitutesOutsideSupersets(exercises) {
+  const offending = exercises
+    .flatMap((exercise) => exercise.substitutes ?? [])
+    .some((substitute) => substitute.supersetGroupId || substitute.supersetOrder !== undefined);
+  if (offending) {
+    throw buildSupersetGroupError(
+      SupersetMessageCode.MEMBERSHIP_INVALID,
+      'Substitute exercises cannot belong to a superset group',
+    );
+  }
+}
+
+/**
+ * Validate the client-supplied superset groups (2–6 contiguous members) of one training in a bulk payload.
+ *
+ * @param {object[]} exercises - The training's exercise bodies, in array order.
+ */
+export function assertBulkSupersetGroups(exercises) {
+  assertSubstitutesOutsideSupersets(exercises);
+
+  for (const positions of collectGroupPositions(exercises).values()) {
+    if (positions.length < SupersetConstraints.MIN_MEMBERS) {
+      throw buildSupersetGroupError(
+        SupersetMessageCode.MIN_MEMBERS,
+        `A superset group requires at least ${SupersetConstraints.MIN_MEMBERS} members`,
+      );
+    }
+    if (positions.length > SupersetConstraints.MAX_MEMBERS) {
+      throw buildSupersetGroupError(
+        SupersetMessageCode.MAX_MEMBERS,
+        `A superset group cannot have more than ${SupersetConstraints.MAX_MEMBERS} members`,
+      );
+    }
+    const span = positions[positions.length - 1] - positions[0] + 1;
+    if (span !== positions.length) {
+      throw buildSupersetGroupError(
+        SupersetMessageCode.MEMBERSHIP_INVALID,
+        'Superset members must be contiguous in the training exercise order — no non-member exercises may appear between them',
+      );
+    }
+  }
+}

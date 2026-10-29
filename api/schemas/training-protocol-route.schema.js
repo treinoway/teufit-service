@@ -391,11 +391,59 @@ export const getMyProtocolByIdSchema = {
 
 // ─── Bulk create: protocol + trainings + exercises in one request ─────────────
 
+const substituteInputProperties = {
+  exerciseTemplateId: { type: 'string', format: 'uuid', description: 'Optional library exercise template the substitute comes from. Must be owned by or public to the trainer (403 EXERCISE_TEMPLATE_NOT_OWNED otherwise).' },
+  advancedTechniqueIds: { ...advancedTechniqueIdsRequestSchema, description: 'Ordered advanced technique ids for the substitute (max 5, unique). Omitted: inherits the exerciseTemplateId techniques; [] or a list overrides. Unknown/deleted/not visible: 400 advancedTechnique.invalidSelection.' },
+  name: { type: 'string', minLength: 1 },
+  type: { type: 'string', enum: exerciseTypeValues },
+  videoUrl: { type: 'string' },
+  gifUrl: gifUrlRequestSchema,
+  sets: { type: 'integer', minimum: 1, nullable: true },
+  repetitions: {
+    anyOf: [
+      {
+        type: 'object',
+        properties: {
+          min: { type: 'integer', minimum: 1, nullable: true },
+          max: { type: 'integer', minimum: 1, nullable: true },
+        },
+        additionalProperties: false,
+      },
+      { type: 'integer', minimum: 1 },
+      { type: 'null' },
+    ],
+  },
+  duration: { type: 'integer', minimum: 1, nullable: true },
+  prescriptionMode: { type: 'string', enum: prescriptionModeValues },
+  hasLoad: { type: 'boolean' },
+  suggestedLoad: { type: 'number', nullable: true },
+  restInterval: { type: 'integer', minimum: 0, nullable: true },
+  notes: { type: 'string', nullable: true },
+  intensity: { type: ['string', 'null'], enum: [...exerciseIntensityValues, null] },
+  // why: Fastify strips undeclared properties instead of rejecting; `not: {}` makes these a 400.
+  supersetGroupId: { not: {} },
+  supersetOrder: { not: {} },
+  supersetRestInterval: { not: {} },
+  substitutes: { not: {} },
+};
+
+// Substitute body nested under a principal; carries no order or superset fields.
+const substituteInputSchema = {
+  type: 'object',
+  required: ['name', 'type'],
+  additionalProperties: false,
+  properties: substituteInputProperties,
+};
+
 const exerciseInputSchema = {
   type: 'object',
   required: ['name', 'type', 'order'],
   additionalProperties: false,
   properties: {
+    supersetGroupId: { type: 'string', format: 'uuid' },
+    supersetOrder: { type: 'integer', minimum: 0 },
+    supersetRestInterval: { type: 'integer', minimum: 0, nullable: true },
+    substitutes: { type: 'array', items: substituteInputSchema },
     exerciseTemplateId: { type: 'string', format: 'uuid' },
     name: { type: 'string', minLength: 1 },
     type: { type: 'string', enum: exerciseTypeValues },

@@ -168,6 +168,9 @@ export const importedExerciseResponseSchema = {
     videoUrl: { type: 'string', nullable: true },
     gifUrl: gifUrlResponseSchema,
     order: { type: 'integer' },
+    supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
+    supersetOrder: { type: 'integer' },
+    supersetRestInterval: { type: 'integer', nullable: true },
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
     repetitions: {

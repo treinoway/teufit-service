@@ -29,6 +29,7 @@ const trainingTemplateExerciseTemplateSchema = {
     // Bi-set / superset grouping fields (C3)
     supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
     supersetOrder: { type: 'integer' },
+    supersetRestInterval: { type: 'integer', nullable: true },
     // Snapshot fields — independent copy of the exercise at link time
     name: { type: 'string' },
     type: { type: 'string' },
@@ -139,6 +140,7 @@ export const createTrainingTemplateSchema = {
             // Bi-set / superset grouping (C3)
             supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
             supersetOrder: { type: 'integer', minimum: 0 },
+            supersetRestInterval: { type: 'integer', nullable: true, minimum: 0 },
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
@@ -309,6 +311,7 @@ export const updateTrainingTemplateSchema = {
             // Bi-set / superset grouping (C3)
             supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
             supersetOrder: { type: 'integer', minimum: 0 },
+            supersetRestInterval: { type: 'integer', nullable: true, minimum: 0 },
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
@@ -390,6 +393,7 @@ export const createTrainingTemplateExerciseSchema = {
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
       supersetOrder: { type: 'integer', minimum: 0 },
+      supersetRestInterval: { type: 'integer', nullable: true, minimum: 0 },
       sets: { type: 'integer', nullable: true, minimum: 1 },
       repetitions: {
         type: 'object',
@@ -442,6 +446,7 @@ export const createTrainingTemplateExerciseFromTemplateSchema = {
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
       supersetOrder: { type: 'integer', minimum: 0 },
+      supersetRestInterval: { type: 'integer', nullable: true, minimum: 0 },
       // Prescription set by the trainer at link time — the library template carries none.
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       sets: { type: 'integer', nullable: true, minimum: 1 },
@@ -521,6 +526,7 @@ export const updateTrainingTemplateExerciseSchema = {
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
       supersetOrder: { type: 'integer', minimum: 0 },
+      supersetRestInterval: { type: 'integer', nullable: true, minimum: 0 },
       sets: { type: 'integer', nullable: true },
       repetitions: {
         type: 'object',

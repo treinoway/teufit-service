@@ -3167,7 +3167,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tríceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\",\n          \"advancedTechniqueIds\": [\n            \"{{advancedTechniqueId}}\"\n          ]\n        },\n        {\n          \"name\": \"Tríceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60,\n          \"advancedTechniqueIds\": []\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tríceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\",\n          \"advancedTechniqueIds\": [\n            \"{{advancedTechniqueId}}\"\n          ],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 0,\n          \"supersetRestInterval\": 90,\n          \"substitutes\": [\n            {\n              \"name\": \"Supino Inclinado com Halteres\",\n              \"type\": \"strength\",\n              \"sets\": 4,\n              \"prescriptionMode\": \"reps\",\n              \"repetitions\": {\n                \"min\": 8,\n                \"max\": 12\n              },\n              \"hasLoad\": true\n            }\n          ]\n        },\n        {\n          \"name\": \"Tríceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60,\n          \"advancedTechniqueIds\": [],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 1,\n          \"supersetRestInterval\": 90\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3185,7 +3185,7 @@
                 "with-trainings"
               ]
             },
-            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}].\n\nSupersets: exercises sharing the same supersetGroupId (uuid chosen by the client) form a group; supersetOrder and supersetRestInterval (int >= 0) are optional. substitutes[] items take exercise fields without order/superset fields, plus optional exerciseTemplateId (uuid; must be owned by or public to the trainer, else 403 EXERCISE_TEMPLATE_NOT_OWNED / protocol.exerciseTemplateNotOwned) and advancedTechniqueIds (uuid[], max 5, unique; same rules as principals: omitted inherits the substitute's template techniques, [] or a list overrides; invalid selection returns 400 advancedTechnique.invalidSelection). Techniques are linked to the substitute only; principal and substitute lists are independent. Invalid groups return 400 VALIDATION_ERROR with messageCode exercise.supersetMinMembers, exercise.supersetMaxMembers or exercise.supersetMembershipInvalid."
           },
           "response": []
         },
@@ -5328,7 +5328,7 @@
                 }
               ]
             },
-            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes). Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes). Optional exerciseTemplateId (uuid): links the substitute to that library template (owned or public) instead of find-or-creating a private copy by name+type; absent videoUrl/gifUrl fall back to the template media and an omitted advancedTechniqueIds inherits the template techniques in order (deleted/foreign-private dropped, reindexed); an explicit list or [] wins. Not found or deleted: 404 EXERCISE_TEMPLATE_NOT_FOUND; another trainer's private template: 403 FORBIDDEN_PRIVATE_TEMPLATE. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
           },
           "response": []
         },
@@ -5421,6 +5421,198 @@
             "description": "Reorder exercises within a superset (bi-set/tri-set) group. Provide the full ordered list of exerciseIds that belong to the group."
           },
           "response": []
+        },
+        {
+          "name": "Create Superset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exerciseIds\": [\n    \"b1b2c3d4-0000-4000-8000-000000000011\",\n    \"b1b2c3d4-0000-4000-8000-000000000012\"\n  ],\n  \"restInterval\": 90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/trainings/:trainingId/supersets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":trainingId",
+                "supersets"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                }
+              ]
+            },
+            "description": "Group 2-6 existing exercises of a training into a superset (bi-set/tri-set). Optional restInterval (seconds, int >= 0) is the rest between rounds of the whole group; omitted or explicit null both default to the last member's restInterval, and 0 is kept as 0. Responds 404 if any exercise is not in the training, 409/400 on invalid membership."
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n  \"trainingId\": \"a1b2c3d4-0000-4000-8000-000000000001\",\n  \"restInterval\": 90,\n  \"members\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetOrder\": 0\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetOrder\": 1\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Superset Rest Interval",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restInterval\": 120\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/trainings/:trainingId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":trainingId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Update the round rest (seconds, int >= 0) of an existing superset group. 404 SUPERSET_GROUP_NOT_FOUND when the group does not exist in the training."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n  \"trainingId\": \"a1b2c3d4-0000-4000-8000-000000000001\",\n  \"restInterval\": 120,\n  \"members\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetOrder\": 0\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetOrder\": 1\n    }\n  ]\n}"
+            },
+            {
+              "name": "Superset group not found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUPERSET_GROUP_NOT_FOUND\",\n  \"messageCode\": \"exercise.supersetGroupNotFound\",\n  \"message\": \"Superset group not found\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Dissolve Superset",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/trainings/:trainingId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "trainings",
+                ":trainingId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "trainingId",
+                  "value": "",
+                  "description": "Training UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Dissolve a superset group; members become standalone exercises."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n  \"trainingId\": \"a1b2c3d4-0000-4000-8000-000000000001\",\n  \"dissolvedCount\": 2\n}"
+            }
+          ]
         }
       ]
     },
@@ -6108,7 +6300,7 @@
                 }
               ]
             },
-            "description": "Swap a principal exercise log for one of its substitute exercises. Marks the principal log as 'substituted' and creates a new ExerciseLog for the substitute. Idempotent: re-calling with the same substituteExerciseId returns the existing new log. Returns 409 if already substituted with a different exercise."
+            "description": "Swap a principal exercise log for one of its substitute exercises. Marks the principal log as 'substituted' and creates a new ExerciseLog for the substitute. Idempotent: re-calling with the same substituteExerciseId returns the existing new log. Returns 409 if already substituted with a different exercise.\n\nThe 201 response includes the new log's `exercise` (with supersetGroupId/supersetOrder/supersetRestInterval)."
           },
           "response": []
         },
