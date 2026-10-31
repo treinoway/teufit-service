@@ -187,18 +187,22 @@ export async function revokeRefreshToken(token) {
 }
 
 /**
- * Revoke all refresh tokens for a given user.
- * Used for security actions like password changes.
+ * Revoke all refresh tokens and drop every push device of a given user.
+ * Used for security actions like password changes: a device that was signed out
+ * must stop receiving pushes until it signs in and registers again.
  */
 export async function revokeAllUserRefreshTokens(userId) {
-  await prisma.refreshToken.updateMany({
-    where: {
-      userId,
-      revoked: false,
-    },
-    data: {
-      revoked: true,
-      revokedAt: new Date(),
-    },
-  });
+  await prisma.$transaction([
+    prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revoked: false,
+      },
+      data: {
+        revoked: true,
+        revokedAt: new Date(),
+      },
+    }),
+    prisma.device.deleteMany({ where: { userId } }),
+  ]);
 }

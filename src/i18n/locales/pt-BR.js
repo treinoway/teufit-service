@@ -482,6 +482,14 @@ export default {
     autoCompleted24h: '[Treino concluído automaticamente após 24h sem atividade]',
   },
 
+  push: {
+    studentFallbackName: 'Um aluno',
+    workoutCompletedTitle: 'Treino concluído',
+    workoutCompletedBody: '{studentName} concluiu um treino.',
+    anamnesisSubmittedTitle: 'Anamnese enviada',
+    anamnesisSubmittedBody: '{studentName} enviou a anamnese.',
+  },
+
   validation: {
     required: 'O campo {field} é obrigatório.',
     type: 'O campo {field} tem um tipo inválido.',

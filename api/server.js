@@ -66,6 +66,12 @@ import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { healthRoutes } from './routes/health-route.js';
+import { appRoutes } from './routes/app-route.js';
+import { deviceRoutes } from './routes/device-route.js';
+import { redactSensitiveUrl, withRedactedRequestSerializer } from '../src/helpers/log-redaction.js';
+import { createFcmClient } from '../src/push/fcm-client.js';
+import { createTrainerPushService } from '../src/services/trainer-push-service.js';
+import { MobileAppEnv, DEVICE_TOKEN_MAX_LENGTH } from '../src/constants/mobile-app.js';
 import { checkLlmConfiguration } from '../src/llm/config.js';
 import { assertAsaasWebhookSecretConfigured } from '../src/helpers/asaas-webhook-helpers.js';
 
@@ -90,6 +96,19 @@ function translateErrorPayloadMessage(payload, language) {
   });
 }
 
+/**
+ * Parses MOBILE_APP_ORIGINS (comma-separated) into trimmed origins without a trailing slash.
+ *
+ * @param {string | undefined} rawOrigins
+ * @returns {string[]}
+ */
+function parseMobileAppOrigins(rawOrigins) {
+  return (rawOrigins ?? '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+}
+
 export async function buildServer(options = {}) {
   // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
   // production/staging, boot without a webhook secret must not succeed — otherwise
@@ -103,10 +122,12 @@ export async function buildServer(options = {}) {
   });
 
   const fastify = Fastify({
-    logger: options.logger ?? true,
+    logger: withRedactedRequestSerializer(options.logger ?? true),
     // Railway runs behind a reverse proxy. Trust it so Fastify correctly detects HTTPS,
     // client IPs, and sets secure cookies consistently.
     trustProxy: true,
+    // why: FCM tokens are ~160 chars and travel in the DELETE /me/devices/:token path; Fastify's default limit is 100. Equal to the schema token limit, so no accepted token can 404.
+    routerOptions: { maxParamLength: DEVICE_TOKEN_MAX_LENGTH },
     // Error schemas are shared by almost every route; compile each one once instead of
     // once per route × status (~40 MB of heap otherwise). See error-serializer-cache.js.
     schemaController: {
@@ -120,6 +141,12 @@ export async function buildServer(options = {}) {
 
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
+
+  const fcmClient = options.fcmClient ?? (await createFcmClient({ logger: fastify.log }));
+  fastify.decorate(
+    'trainerPush',
+    createTrainerPushService({ prisma, fcmClient, logger: fastify.log }),
+  );
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);
@@ -140,7 +167,7 @@ export async function buildServer(options = {}) {
         {
           err: error,
           method: request.method,
-          url: request.url,
+          url: redactSensitiveUrl(request.url),
           requestId: request.id,
         },
         'Unhandled server error',
@@ -229,12 +256,14 @@ export async function buildServer(options = {}) {
   
   // Define allowed origins - normalize URLs by removing trailing slashes
   const normalizeUrl = (url) => url?.replace(/\/$/, '') || '';
+  const mobileAppOrigins = parseMobileAppOrigins(process.env[MobileAppEnv.APP_ORIGINS]);
   const allowedOrigins = isDevelopment 
     ? true // Allow all in development
     : [
         normalizeUrl(process.env.FRONTEND_URL),
         normalizeUrl(process.env.FRONTEND_REDIRECT_URL),
         normalizeUrl(process.env.BACKEND_URL), // Backend URL (e.g., for Swagger UI)
+        ...mobileAppOrigins,
       ].filter(Boolean); // Remove undefined/null values
 
   await fastify.register(fastifyCors, {
@@ -341,6 +370,8 @@ export async function buildServer(options = {}) {
   // Health check endpoint (public — registered before the authenticate onRequest hook below).
   await fastify.register(healthRoutes);
 
+  await fastify.register(appRoutes);
+
   // Trainer invite preview (public — pre-signup code validation; must stay
   // outside the protected block below since that block's onRequest hook
   // cannot be opted out of per-route).
@@ -360,6 +391,7 @@ export async function buildServer(options = {}) {
     await fastify.register(trainerRoutes);
     await fastify.register(nutritionistRoutes);
     await fastify.register(userRoutes);
+    await fastify.register(deviceRoutes);
     await fastify.register(trainerInviteRoutes);
     await fastify.register(studentInviteRoutes);
     await fastify.register(addressRoutes);

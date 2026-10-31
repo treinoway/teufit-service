@@ -9,6 +9,7 @@ vi.mock('../../src/db.js', () => ({
     trainer: { findFirst: vi.fn() },
     nutritionist: { findFirst: vi.fn() },
     account: { deleteMany: vi.fn() },
+    device: { deleteMany: vi.fn() },
     refreshToken: { deleteMany: vi.fn() },
     passwordResetToken: { deleteMany: vi.fn() },
     address: { deleteMany: vi.fn() },
@@ -173,6 +174,7 @@ describe('account-deletion-service', () => {
         const result = await deleteOwnAccount(USER_ID);
 
         expect(prisma.account.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { userId: USER_ID } });
+        expect(prisma.device.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { userId: USER_ID } });
         expect(prisma.refreshToken.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { userId: USER_ID } });
         expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { userId: USER_ID } });
         expect(prisma.address.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { userId: USER_ID } });

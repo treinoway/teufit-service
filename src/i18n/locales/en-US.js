@@ -478,6 +478,14 @@ export default {
     autoCompleted24h: '[Workout auto-completed after 24h of inactivity]',
   },
 
+  push: {
+    studentFallbackName: 'A student',
+    workoutCompletedTitle: 'Workout completed',
+    workoutCompletedBody: '{studentName} completed a workout.',
+    anamnesisSubmittedTitle: 'Anamnesis submitted',
+    anamnesisSubmittedBody: '{studentName} submitted the anamnesis.',
+  },
+
   validation: {
     required: 'The field {field} is required.',
     type: 'The field {field} has an invalid type.',

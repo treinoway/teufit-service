@@ -85,6 +85,7 @@ async function neutralizeUnverifiedPasswordCredential(user, provider) {
       where: { userId: user.id, revoked: false },
       data: { revoked: true, revokedAt: now },
     }),
+    prisma.device.deleteMany({ where: { userId: user.id } }),
     prisma.passwordResetToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } }),
     prisma.emailVerificationToken.updateMany({ where: { userId: user.id, used: false }, data: { used: true } }),
   ]);

@@ -33,6 +33,9 @@ vi.mock('../../src/db.js', () => {
       refreshToken: {
         updateMany: vi.fn(),
       },
+      device: {
+        deleteMany: vi.fn(),
+      },
       $queryRaw: vi.fn(),
       $transaction: vi.fn(async (ops) => {
         // Simple mock: if ops is an array of promises, resolve them.
@@ -631,6 +634,12 @@ describe('authService', () => {
         throw new Error('expected rejection');
       }
 
+      it('should not delete any device when the code is wrong', async () => {
+        await expect(resetPasswordWithCode(resetInput({ code: '000000' }))).rejects.toMatchObject(INVALID);
+
+        expect(prisma.device.deleteMany).not.toHaveBeenCalled();
+      });
+
       it('should throw the uniform error for an unknown email', async () => {
         prisma.$queryRaw.mockResolvedValue([]);
         prisma.passwordResetToken.findFirst.mockResolvedValue(null);
@@ -780,6 +789,12 @@ describe('authService', () => {
           where: { userId: USER_ID, revoked: false },
           data: { revoked: true, revokedAt: expect.any(Date) },
         });
+      });
+
+      it('should delete every device of the user so no push goes to the previous session', async () => {
+        await resetPasswordWithCode(resetInput());
+
+        expect(prisma.device.deleteMany).toHaveBeenCalledWith({ where: { userId: USER_ID } });
       });
 
       it('should trim whitespace around the code and normalize the email', async () => {

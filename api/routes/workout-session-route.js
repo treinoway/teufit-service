@@ -1,4 +1,5 @@
 import { Roles } from '../../src/constants/roles.js';
+import { WorkoutSessionStatus } from '../../src/constants/training.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import * as service from '../../src/services/workout-session-service.js';
 import * as schema from '../schemas/workout-session-route.schema.js';
@@ -64,6 +65,12 @@ export async function workoutSessionRoutes(fastify) {
         request.params.sessionId,
         request.body,
       );
+      if (request.body.status === WorkoutSessionStatus.COMPLETED) {
+        fastify.trainerPush.notifyWorkoutCompleted({
+          studentId: request.user.id,
+          sessionId: request.params.sessionId,
+        });
+      }
       return reply.send(updated);
     },
   );

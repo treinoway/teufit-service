@@ -2022,7 +2022,7 @@
                 "me"
               ]
             },
-            "description": "Permanently soft-delete and anonymize the authenticated user's own account (App Store guideline 5.1.1(v) / Google Play account deletion compliance). Only available for plain (student) accounts today — an account with an active Trainer or Nutritionist profile gets 409 instead (see below); that professional graph (billing, linked students/patients, branding, protocols) needs its own teardown design and is tracked as separate follow-up work.\n\nClears PII on the user row (email, username, password hash, first/last name, gender, birth date, avatar) and sets deletedAt. Deletes linked OAuth/email accounts, refresh tokens, password reset tokens, address, social networks, health details, preferences, metabolic profile, workout sessions (and their exercise/set logs), anamnesis responses, AI conversations, gamification records (points/challenges), trainer-student/nutritionist-patient links where this user is the student/patient, and trainer invites addressed to or redeemed by this user (by userId and by email).\n\nScrubbed, not deleted: AiInteractionLog rows where this user was the student in a trainer's AI conversation about them keep the row (trainer diagnostic record + beta usage metrics) but have studentId/userMessage/responseText nulled — that's specifically where this user's PII could appear.\n\nRetained (not deleted): subscription/payment records (tax/accounting reasons), and any TrainingProtocol/DietProtocol assigned to this user (trainer/nutritionist-owned content). Clearing the email frees it up for a future signup with the same address — note a prior accepted trainer invite is deleted, not restored, so a fresh signup does not automatically regain beta access.\n\nIrreversible.\n\nReturns 204 on success (no body). Returns 403 (error: USER_DELETED, messageCode: auth.user.deleted) if the account was already deleted previously. Returns 404 (error: USER_NOT_FOUND, messageCode: resource.notFound) if the user row is not found (edge case). Returns 409 (error: PROFESSIONAL_ACCOUNT_DELETION_UNSUPPORTED, messageCode: account.deletion.professionalUnsupported) if the account has an active Trainer or Nutritionist profile. Rate limited: 3 requests/hour in production (1000/hour in dev/staging)."
+            "description": "Permanently soft-delete and anonymize the authenticated user's own account (App Store guideline 5.1.1(v) / Google Play account deletion compliance). Only available for plain (student) accounts today — an account with an active Trainer or Nutritionist profile gets 409 instead (see below); that professional graph (billing, linked students/patients, branding, protocols) needs its own teardown design and is tracked as separate follow-up work.\n\nClears PII on the user row (email, username, password hash, first/last name, gender, birth date, avatar) and sets deletedAt. Deletes linked OAuth/email accounts, refresh tokens, password reset tokens, address, social networks, health details, preferences, metabolic profile, workout sessions (and their exercise/set logs), anamnesis responses, AI conversations, gamification records (points/challenges), trainer-student/nutritionist-patient links where this user is the student/patient, and trainer invites addressed to or redeemed by this user (by userId and by email), and push notification devices (FCM tokens registered via POST /me/devices).\n\nScrubbed, not deleted: AiInteractionLog rows where this user was the student in a trainer's AI conversation about them keep the row (trainer diagnostic record + beta usage metrics) but have studentId/userMessage/responseText nulled — that's specifically where this user's PII could appear.\n\nRetained (not deleted): subscription/payment records (tax/accounting reasons), and any TrainingProtocol/DietProtocol assigned to this user (trainer/nutritionist-owned content). Clearing the email frees it up for a future signup with the same address — note a prior accepted trainer invite is deleted, not restored, so a fresh signup does not automatically regain beta access.\n\nIrreversible.\n\nReturns 204 on success (no body). Returns 403 (error: USER_DELETED, messageCode: auth.user.deleted) if the account was already deleted previously. Returns 404 (error: USER_NOT_FOUND, messageCode: resource.notFound) if the user row is not found (edge case). Returns 409 (error: PROFESSIONAL_ACCOUNT_DELETION_UNSUPPORTED, messageCode: account.deletion.professionalUnsupported) if the account has an active Trainer or Nutritionist profile. Rate limited: 3 requests/hour in production (1000/hour in dev/staging)."
           },
           "response": []
         },
@@ -15848,6 +15848,457 @@
                 }
               ],
               "body": "{\n  \"items\": [\n    {\n      \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n      \"title\": \"Como criar seu primeiro protocolo\",\n      \"description\": \"Passo a passo para montar um protocolo de treino.\",\n      \"videoSource\": \"link\",\n      \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n      \"order\": 0,\n      \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-01T12:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "Register Push Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-token-example-eXaMpLe:APA91bH\",\n  \"platform\": \"android\",\n  \"appId\": \"br.com.treinoway.coach\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/me/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "devices"
+              ]
+            },
+            "description": "Upserts the FCM push token of this app installation (keyed by token). A token already registered by another user moves to the authenticated user. platform: ios | android. Bearer JWT required. Returns 200 with the stored token/platform/appId; 400 on validation error; 401 if unauthenticated."
+          },
+          "response": [
+            {
+              "name": "200 - Registered",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"fcm-token-example-eXaMpLe:APA91bH\",\n  \"platform\": \"android\",\n  \"appId\": \"br.com.treinoway.coach\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/me/devices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "devices"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"token\": \"fcm-token-example-eXaMpLe:APA91bH\",\n  \"platform\": \"android\",\n  \"appId\": \"br.com.treinoway.coach\"\n}"
+            },
+            {
+              "name": "400 - Validation error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"fcm-token-example-eXaMpLe:APA91bH\",\n  \"platform\": \"android\",\n  \"appId\": \"br.com.treinoway.coach\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/me/devices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "devices"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"platform\",\n      \"message\": \"must be equal to one of the allowed values\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "401 - Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"fcm-token-example-eXaMpLe:APA91bH\",\n  \"platform\": \"android\",\n  \"appId\": \"br.com.treinoway.coach\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/me/devices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "devices"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"UNAUTHORIZED\",\n  \"messageCode\": \"auth.unauthorized\",\n  \"message\": \"Unauthorized\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Remove Push Device",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/devices/:token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "devices",
+                ":token"
+              ],
+              "variable": [
+                {
+                  "key": "token",
+                  "value": "fcm-token-example-eXaMpLe%3AAPA91bH",
+                  "description": "FCM token, URL-encoded (e.g. ':' becomes %3A)"
+                }
+              ]
+            },
+            "description": "Removes the push token only when it belongs to the authenticated user (use on logout). Answers 204 even when the token is unknown. The :token path segment must be URL-encoded. Bearer JWT required. 400 on validation error; 401 if unauthenticated."
+          },
+          "response": [
+            {
+              "name": "204 - Removed",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/devices/:token",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "devices",
+                    ":token"
+                  ],
+                  "variable": [
+                    {
+                      "key": "token",
+                      "value": "fcm-token-example-eXaMpLe%3AAPA91bH",
+                      "description": "FCM token, URL-encoded (e.g. ':' becomes %3A)"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "401 - Unauthorized",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/me/devices/:token",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "devices",
+                    ":token"
+                  ],
+                  "variable": [
+                    {
+                      "key": "token",
+                      "value": "fcm-token-example-eXaMpLe%3AAPA91bH",
+                      "description": "FCM token, URL-encoded (e.g. ':' becomes %3A)"
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"UNAUTHORIZED\",\n  \"messageCode\": \"auth.unauthorized\",\n  \"message\": \"Unauthorized\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "App",
+      "item": [
+        {
+          "name": "Get App Minimum Version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/app/min-version?appId=br.com.treinoway.coach&platform=android",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "app",
+                "min-version"
+              ],
+              "query": [
+                {
+                  "key": "appId",
+                  "value": "br.com.treinoway.coach",
+                  "description": "App identifier (bundle id / package name)"
+                },
+                {
+                  "key": "platform",
+                  "value": "android",
+                  "description": "ios | android"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Public (no authentication). Returns the minimum supported version and store url configured for the app/platform, so an outdated app can prompt for update before login. An unknown app answers 200 with null minVersion and storeUrl. 400 if appId/platform are missing or platform is not ios|android."
+          },
+          "response": [
+            {
+              "name": "200 - Configured",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/app/min-version?appId=br.com.treinoway.coach&platform=android",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "app",
+                    "min-version"
+                  ],
+                  "query": [
+                    {
+                      "key": "appId",
+                      "value": "br.com.treinoway.coach",
+                      "description": "App identifier (bundle id / package name)"
+                    },
+                    {
+                      "key": "platform",
+                      "value": "android",
+                      "description": "ios | android"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"appId\": \"br.com.treinoway.coach\",\n  \"platform\": \"android\",\n  \"minVersion\": \"1.2.0\",\n  \"storeUrl\": \"https://play.google.com/store/apps/details?id=br.com.treinoway.coach\"\n}"
+            },
+            {
+              "name": "200 - Not configured",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/app/min-version?appId=br.com.treinoway.coach&platform=android",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "app",
+                    "min-version"
+                  ],
+                  "query": [
+                    {
+                      "key": "appId",
+                      "value": "br.com.treinoway.coach",
+                      "description": "App identifier (bundle id / package name)"
+                    },
+                    {
+                      "key": "platform",
+                      "value": "android",
+                      "description": "ios | android"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"appId\": \"br.com.unknown.app\",\n  \"platform\": \"ios\",\n  \"minVersion\": null,\n  \"storeUrl\": null\n}"
+            },
+            {
+              "name": "400 - Validation error",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/app/min-version?appId=br.com.treinoway.coach&platform=android",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "app",
+                    "min-version"
+                  ],
+                  "query": [
+                    {
+                      "key": "appId",
+                      "value": "br.com.treinoway.coach",
+                      "description": "App identifier (bundle id / package name)"
+                    },
+                    {
+                      "key": "platform",
+                      "value": "android",
+                      "description": "ios | android"
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"platform\",\n      \"message\": \"must be equal to one of the allowed values\"\n    }\n  ]\n}"
             }
           ]
         }

@@ -44,6 +44,7 @@ export async function deleteOwnAccount(userId, logger = console) {
     await tx.account.deleteMany({ where: { userId } });
 
     await tx.refreshToken.deleteMany({ where: { userId } });
+    await tx.device.deleteMany({ where: { userId } });
     await tx.passwordResetToken.deleteMany({ where: { userId } });
 
     await tx.address.deleteMany({ where: { userId } });
