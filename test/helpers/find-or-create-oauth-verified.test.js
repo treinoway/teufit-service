@@ -14,6 +14,7 @@ vi.mock('../../src/db.js', () => ({
       update: vi.fn(),
     },
     refreshToken: { updateMany: vi.fn() },
+    device: { deleteMany: vi.fn() },
     passwordResetToken: { updateMany: vi.fn() },
     emailVerificationToken: { updateMany: vi.fn() },
     $queryRaw: vi.fn(),
@@ -268,6 +269,7 @@ describe('findOrCreateUserFromOAuth emailVerified behavior', () => {
           where: { userId: 'existing-user', revoked: false },
           data: { revoked: true, revokedAt: expect.any(Date) },
         });
+        expect(prisma.device.deleteMany).toHaveBeenCalledWith({ where: { userId: 'existing-user' } });
         expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith({
           where: { userId: 'existing-user', used: false },
           data: { used: true },

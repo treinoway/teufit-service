@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import {
   issueAccessToken,
-  rotateRefreshToken
+  rotateRefreshToken,
+  revokeAllUserRefreshTokens
 } from '../../src/services/token-service.js';
 
 // Mock Prisma
@@ -12,7 +13,12 @@ vi.mock('../../src/db.js', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
+    device: {
+      deleteMany: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -202,6 +208,39 @@ describe('tokenService', () => {
       expect(updateCall.data.rotatedAt).toBeInstanceOf(Date);
       expect(updateCall.data.revoked).toBe(true);
       expect(updateCall.data.revokedAt).toBeInstanceOf(Date);
+    });
+  });
+});
+
+describe('revokeAllUserRefreshTokens', () => {
+  const USER_ID = 'user-revoke-1';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.refreshToken.updateMany.mockReturnValue('revoke-op');
+    prisma.device.deleteMany.mockReturnValue('delete-devices-op');
+    prisma.$transaction.mockResolvedValue([]);
+  });
+
+  it('should revoke the live refresh tokens and delete the user devices in one transaction', async () => {
+    await revokeAllUserRefreshTokens(USER_ID);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledWith(['revoke-op', 'delete-devices-op']);
+  });
+
+  it('should delete only the devices of the given user', async () => {
+    await revokeAllUserRefreshTokens(USER_ID);
+
+    expect(prisma.device.deleteMany).toHaveBeenCalledWith({ where: { userId: USER_ID } });
+  });
+
+  it('should only revoke tokens of the user that are not revoked yet', async () => {
+    await revokeAllUserRefreshTokens(USER_ID);
+
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: USER_ID, revoked: false },
+      data: { revoked: true, revokedAt: expect.any(Date) },
     });
   });
 });

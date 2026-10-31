@@ -399,6 +399,7 @@ async function completePasswordReset({ user, token, password }) {
       where: { userId: user.id, revoked: false },
       data: { revoked: true, revokedAt: new Date() },
     });
+    await tx.device.deleteMany({ where: { userId: user.id } });
     return tx.user.update({ where: { id: user.id }, data: { passwordHash } });
   });
 

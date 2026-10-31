@@ -1314,6 +1314,23 @@ async function assertAnamnesisLinkedToStudent(studentId, anamnesisId, prismaClie
 }
 
 /**
+ * Lists the ids of the trainers who assigned the anamnesis to the student (the owners to notify).
+ *
+ * @param {string} studentId
+ * @param {string} anamnesisId
+ * @param {object} [prismaClient]
+ * @returns {Promise<string[]>}
+ */
+export async function listAnamnesisAssignerTrainerIds(studentId, anamnesisId, prismaClient = prisma) {
+  const links = await prismaClient.studentAnamnesis.findMany({
+    where: { studentId, anamnesisId },
+    select: { trainerId: true },
+  });
+
+  return links.map((link) => link.trainerId);
+}
+
+/**
  * Add the derived `status` and the public `filledBy` (author role) to a response row.
  *
  * @param {{ submittedAt: Date|null, filledByRole: string, studentConfirmedAt: Date|null }} response

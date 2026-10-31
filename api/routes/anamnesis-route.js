@@ -4,6 +4,22 @@ import * as service from '../../src/services/anamnesis-service.js';
 import * as schema from '../schemas/anamnesis-route.schema.js';
 import { runAfterResponse } from '../../src/helpers/run-after-response.js';
 
+/**
+ * Pushes the submission to each trainer who assigned the anamnesis; fire-and-forget, never throws.
+ */
+async function notifyAssignerTrainers(fastify, studentId, anamnesisId) {
+  try {
+    const trainerIds = await service.listAnamnesisAssignerTrainerIds(studentId, anamnesisId, fastify.prisma);
+    await Promise.all(
+      trainerIds.map((trainerId) =>
+        fastify.trainerPush.notifyAnamnesisSubmitted({ studentId, anamnesisId, trainerId }),
+      ),
+    );
+  } catch (error) {
+    fastify.log.warn({ err: error }, 'anamnesis: trainer push lookup failed');
+  }
+}
+
 export async function anamnesisRoutes(fastify) {
   // ═══════════════════════════════════════════════════════════
   // TRAINER ROUTES — Anamnesis CRUD
@@ -433,6 +449,7 @@ export async function anamnesisRoutes(fastify) {
         request.params.anamnesisId,
         request.body,
       );
+      notifyAssignerTrainers(fastify, request.user.id, request.params.anamnesisId);
       return reply.send(result);
     },
   );

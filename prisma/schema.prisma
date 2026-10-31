@@ -54,6 +54,7 @@ model User {
   dietProtocolsAsPatient DietProtocol[]
   videosCreated              Video[]
   tutorialsCreated           Tutorial[]
+  devices                    Device[]
   studentSubscriptions       StudentSubscription[]
   aiUsageEventsAsStudent     AiUsageEvent[]        @relation("aiUsageStudent")
   aiTokenUsagesAsStudent     AiTokenUsage[]        @relation("aiTokenUsageStudent")
@@ -1625,4 +1626,21 @@ model TrainingTemplateExerciseAdvancedTechnique {
   @@unique([trainingTemplateExerciseTemplateId, advancedTechniqueId])
   @@index([advancedTechniqueId])
   @@map("training_template_exercise_advanced_techniques")
+}
+
+// Push notification token of one app installation. The token is globally unique: when the
+// same installation signs in as another user, the row moves to the new owner.
+model Device {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.Text
+  platform  String   @db.Text
+  appId     String   @map("app_id") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("devices")
 }
