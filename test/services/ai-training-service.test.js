@@ -100,6 +100,8 @@ describe('ai-training-service', () => {
     assertCanUseAi.mockResolvedValue(undefined)
     recordAiAction.mockResolvedValue(undefined)
 
+    prisma.exerciseTemplate.findMany.mockResolvedValue([])
+
     // Default $transaction: execute callback with prisma as tx (for interactive transactions)
     prisma.$transaction.mockImplementation(async (fn) => {
       if (typeof fn === 'function') return fn(prisma)

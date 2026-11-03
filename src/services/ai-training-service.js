@@ -33,6 +33,9 @@ import { translate } from "../i18n/index.js";
 import { getLlmProvider } from "../llm/index.js";
 import { isLlmConfigured, resolveProviderName } from "../llm/config.js";
 import { withDeadlockRetry } from "../helpers/db-retry.js";
+import { addToExerciseLibraryIndex, findLibraryExercise, libraryExerciseFields, loadExerciseLibraryIndex } from "../helpers/exercise-library-match.js";
+import { toLinkCreateInput } from "../helpers/advanced-technique-refs.js";
+import { inheritSelectionBatch } from "./advanced-technique-service.js";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
 
@@ -562,6 +565,35 @@ function resolveAiExerciseFields(resolvedMode, ex) {
   return { repetitions: ex.repetitions ?? null, duration: null };
 }
 
+// Reuses the library template whose name matches an inline exercise, or creates a private one and indexes it.
+async function resolveInlineExerciseTemplate(tx, library, trainerId, ex) {
+  const match = findLibraryExercise(library, ex.name);
+  if (match) return match;
+  const created = await tx.exerciseTemplate.create({
+    data: {
+      trainerId,
+      name: ex.name,
+      type: ex.type,
+      videoUrl: ex.videoUrl ?? null,
+      isPublic: false,
+    },
+  });
+  addToExerciseLibraryIndex(library, created);
+  return created;
+}
+
+// Library link, media and inherited techniques (visible to the trainer) for exercises created by name, in order.
+async function matchLibraryExercises(tx, library, trainerId, exercises) {
+  const matches = exercises.map((exercise) => findLibraryExercise(library, exercise.name));
+  const selections = await inheritLibraryTechniques(tx, trainerId, matches);
+  return matches.map((match, index) => ({ ...libraryExerciseFields(match), ...toLinkCreateInput(selections[index]) }));
+}
+
+// Technique selections the trainer may see, copied from each library template (none for a missing one).
+function inheritLibraryTechniques(tx, trainerId, templates) {
+  return inheritSelectionBatch(tx, trainerId, templates.map((template) => template?.advancedTechniqueLinks ?? []));
+}
+
 // --- Tool executor ---
 
 // LLM sometimes passes [TYPE_REF:uuid] wrapper tags instead of raw UUIDs in tool arguments.
@@ -673,6 +705,7 @@ async function executeTool(userId, toolName, toolInput) {
         if (existingIds.length > 0) {
           existingTemplatesForSnapshot = await prisma.exerciseTemplate.findMany({
             where: { id: { in: existingIds }, trainerId: trainer.id },
+            include: { advancedTechniqueLinks: true },
           });
         }
         const existingTemplateSnapshotById = Object.fromEntries(
@@ -683,26 +716,19 @@ async function executeTool(userId, toolName, toolInput) {
           // Batch create exercise templates; collect full data for snapshot
           const createdExerciseSnapshots = [];
           if (inlineExercises.length > 0) {
+            const library = await loadExerciseLibraryIndex(tx, trainer.id);
             for (const ex of inlineExercises) {
-              // ExerciseTemplate carries only identity — no prescription fields
-              const created = await tx.exerciseTemplate.create({
-                data: {
-                  trainerId: trainer.id,
-                  name: ex.name,
-                  type: ex.type,
-                  videoUrl: ex.videoUrl ?? null,
-                  isPublic: false,
-                },
-              });
-              createdExerciseSnapshots.push(created);
+              createdExerciseSnapshots.push(await resolveInlineExerciseTemplate(tx, library, trainer.id, ex));
             }
           }
+          const existingSelections = await inheritLibraryTechniques(tx, trainer.id, existingIds.map((id) => existingTemplateSnapshotById[id]));
+          const createdSelections = await inheritLibraryTechniques(tx, trainer.id, createdExerciseSnapshots);
 
           // Build junction rows: existing ids first, then newly created.
           // Prescription for existing-by-ID templates defaults to null because the
           // library template no longer carries prescription — set it when building
           // the template, not from a stale library snapshot.
-          const existingJunctionRows = existingIds.map((id) => {
+          const existingJunctionRows = existingIds.map((id, index) => {
             const t = existingTemplateSnapshotById[id];
             return {
               exerciseTemplateId: id,
@@ -718,6 +744,7 @@ async function executeTool(userId, toolName, toolInput) {
               suggestedLoad: null,
               restInterval: null,
               notes: null,
+              ...toLinkCreateInput(existingSelections[index]),
             };
           });
           // Prescription for inline exercises comes from the AI-provided spec (ex),
@@ -728,9 +755,9 @@ async function executeTool(userId, toolName, toolInput) {
             const { repetitions, duration } = resolveAiExerciseFields(resolvedMode, ex);
             return {
               exerciseTemplateId: t.id,
-              name: t.name,
-              type: t.type,
-              videoUrl: t.videoUrl ?? null,
+              name: ex.name,
+              type: ex.type,
+              videoUrl: ex.videoUrl ?? t.videoUrl ?? null,
               gifUrl: t.gifUrl ?? null,
               sets: ex.sets ?? null,
               repetitions,
@@ -740,6 +767,7 @@ async function executeTool(userId, toolName, toolInput) {
               suggestedLoad: ex.suggestedLoad ?? null,
               restInterval: ex.restInterval ?? null,
               notes: ex.notes ?? null,
+              ...toLinkCreateInput(createdSelections[index]),
             };
           });
           const allJunctionRows = [...existingJunctionRows, ...createdJunctionRows].map(
@@ -816,6 +844,7 @@ async function executeTool(userId, toolName, toolInput) {
 
         result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           const resolvedTrainings = [];
+          let library = null;
 
           for (const training of input.trainings || []) {
             if (training.trainingTemplateId) {
@@ -863,6 +892,7 @@ async function executeTool(userId, toolName, toolInput) {
             if (existingExIds.length > 0) {
               existingExSnapshots = await tx.exerciseTemplate.findMany({
                 where: { id: { in: existingExIds }, trainerId: trainer.id },
+                include: { advancedTechniqueLinks: true },
               });
             }
 
@@ -870,17 +900,11 @@ async function executeTool(userId, toolName, toolInput) {
             const inlineExerciseSpecs = training.exercises || [];
             const exerciseSnapshots = [];
             for (const ex of inlineExerciseSpecs) {
-              const created = await tx.exerciseTemplate.create({
-                data: {
-                  trainerId: trainer.id,
-                  name: ex.name,
-                  type: ex.type,
-                  videoUrl: ex.videoUrl ?? null,
-                  isPublic: false,
-                },
-              });
-              exerciseSnapshots.push(created);
+              library ??= await loadExerciseLibraryIndex(tx, trainer.id);
+              exerciseSnapshots.push(await resolveInlineExerciseTemplate(tx, library, trainer.id, ex));
             }
+            const inlineSelections = await inheritLibraryTechniques(tx, trainer.id, exerciseSnapshots);
+            const existingSelections = await inheritLibraryTechniques(tx, trainer.id, existingExSnapshots);
 
             // Build junction rows: inline first, then existing-by-ID (order is sequential, no gaps).
             // Prescription for inline exercises comes from the AI spec (inlineExerciseSpecs),
@@ -892,9 +916,9 @@ async function executeTool(userId, toolName, toolInput) {
               return {
                 exerciseTemplateId: t.id,
                 order: index,
-                name: t.name,
-                type: t.type,
-                videoUrl: t.videoUrl ?? null,
+                name: ex.name,
+                type: ex.type,
+                videoUrl: ex.videoUrl ?? t.videoUrl ?? null,
                 gifUrl: t.gifUrl ?? null,
                 sets: ex.sets ?? null,
                 repetitions,
@@ -904,6 +928,7 @@ async function executeTool(userId, toolName, toolInput) {
                 suggestedLoad: ex.suggestedLoad ?? null,
                 restInterval: ex.restInterval ?? null,
                 notes: ex.notes ?? null,
+                ...toLinkCreateInput(inlineSelections[index]),
               };
             });
             const existingJunctionRows = existingExSnapshots.map((t, index) => ({
@@ -921,6 +946,7 @@ async function executeTool(userId, toolName, toolInput) {
               suggestedLoad: null,
               restInterval: null,
               notes: null,
+              ...toLinkCreateInput(existingSelections[index]),
             }));
             const allJunctionRows = [...inlineJunctionRows, ...existingJunctionRows];
 
@@ -1059,6 +1085,7 @@ async function executeTool(userId, toolName, toolInput) {
 
         result = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
           const createdTrainings = [];
+          let library = null;
           const { _max: maxTraining } = await tx.training.aggregate({
             where: { trainingProtocolId: input.protocolId, deletedAt: null },
             _max: { order: true },
@@ -1085,6 +1112,8 @@ async function executeTool(userId, toolName, toolInput) {
 
             const createdExercises = [];
             if (training.exercises?.length) {
+              library ??= await loadExerciseLibraryIndex(tx, trainer.id);
+              const libraryFields = await matchLibraryExercises(tx, library, trainer.id, training.exercises);
               for (const [index, exercise] of training.exercises.entries()) {
                 validateExerciseType(exercise.type);
                 if (exercise.repetitions)
@@ -1095,6 +1124,7 @@ async function executeTool(userId, toolName, toolInput) {
 
                 const createdExercise = await tx.exercise.create({
                   data: {
+                    ...libraryFields[index],
                     name: exercise.name,
                     type: exercise.type,
                     // Sequential order by position; without it Prisma's @default(0)
@@ -1230,6 +1260,8 @@ async function executeTool(userId, toolName, toolInput) {
             _max: { order: true },
           });
           const firstOrder = (maxExercise?.order ?? -1) + 1;
+          const library = await loadExerciseLibraryIndex(tx, trainer.id);
+          const libraryFields = await matchLibraryExercises(tx, library, trainer.id, input.exercises);
 
           for (const [index, exercise] of input.exercises.entries()) {
             validateExerciseType(exercise.type);
@@ -1240,6 +1272,7 @@ async function executeTool(userId, toolName, toolInput) {
 
             const ex = await tx.exercise.create({
               data: {
+                ...libraryFields[index],
                 name: exercise.name,
                 type: exercise.type,
                 order: firstOrder + index,
