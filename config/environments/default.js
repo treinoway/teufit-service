@@ -10,7 +10,19 @@ function parseEmailAllowlist(raw) {
     .filter(Boolean);
 }
 
+// Parses a positive integer env var, falling back when unset, blank or invalid.
+function parsePositiveInt(raw, fallback) {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export default {
+  // Isolated read-only pool for the manager (backoffice) queries; see src/db-admin.js.
+  adminDb: {
+    url: process.env.ADMIN_DATABASE_URL || process.env.DATABASE_URL,
+    poolMax: parsePositiveInt(process.env.ADMIN_DB_POOL_MAX, 2),
+    statementTimeoutMs: parsePositiveInt(process.env.ADMIN_DB_STATEMENT_TIMEOUT_MS, 5000),
+  },
   auth: {
     accessTokenTtlSeconds: 60 * 15, // 15 minutes
     refreshTokenTtlSeconds: 60 * 60 * 24 * 7, // 7 days
@@ -204,6 +216,7 @@ export default {
         timeWindow: '1 minute',
       },
     },
+    adminManager: { max: 60, timeWindow: '1 minute' },
     platformPlan: {
       checkout: { max: 5, timeWindow: '1 minute' },
       cancel: { max: 5, timeWindow: '1 minute' },

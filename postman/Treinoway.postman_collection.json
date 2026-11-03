@@ -10406,6 +10406,789 @@
       ]
     },
     {
+      "name": "Admin - Manager",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users?search=maria&kind=trainer&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "maria",
+                  "description": "Optional search by name or email (max 200 chars)"
+                },
+                {
+                  "key": "kind",
+                  "value": "trainer",
+                  "description": "Optional filter: trainer | student | admin | nutritionist"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ]
+            },
+            "description": "List platform users with search and kind filter. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List Users - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users?search=maria&kind=trainer&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "maria",
+                      "description": "Optional search by name or email (max 200 chars)"
+                    },
+                    {
+                      "key": "kind",
+                      "value": "trainer",
+                      "description": "Optional filter: trainer | student | admin | nutritionist"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n      \"firstName\": \"Maria\",\n      \"lastName\": \"Silva\",\n      \"email\": \"maria@example.com\",\n      \"roles\": [\n        \"trainer\"\n      ],\n      \"status\": \"ACTIVE\",\n      \"createdAt\": \"2026-01-15T12:00:00.000Z\",\n      \"deletedAt\": null,\n      \"isTrainer\": true,\n      \"isStudent\": false\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get User Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "User profile, trainer summary, counts and last workout date. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 404 not found, 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get User Overview - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": {\n    \"id\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n    \"firstName\": \"Maria\",\n    \"lastName\": \"Silva\",\n    \"email\": \"maria@example.com\",\n    \"roles\": [\n      \"trainer\"\n    ],\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-01-15T12:00:00.000Z\",\n    \"deletedAt\": null\n  },\n  \"trainer\": {\n    \"id\": \"t1\",\n    \"createdAt\": \"2026-01-15T12:00:00.000Z\",\n    \"planTier\": \"PRO\"\n  },\n  \"counts\": {\n    \"students\": 12,\n    \"activeStudents\": 10,\n    \"protocolsCreated\": 25,\n    \"trainingTemplates\": 8,\n    \"exerciseTemplates\": 14,\n    \"challenges\": 2,\n    \"trainers\": 0,\n    \"protocolsAssigned\": 0,\n    \"workoutSessions\": 0\n  },\n  \"lastWorkoutAt\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "List User Students",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId/students?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "Students linked to a trainer user. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List User Students - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId/students?page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId",
+                    "students"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"studentId\": \"s1\",\n      \"firstName\": \"Joao\",\n      \"lastName\": \"Souza\",\n      \"email\": \"joao@example.com\",\n      \"status\": \"ACTIVE\",\n      \"activeOnPlan\": true,\n      \"lastWorkoutAt\": \"2026-10-30T09:00:00.000Z\",\n      \"linkedAt\": \"2026-02-01T12:00:00.000Z\"\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "List User Trainers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId/trainers?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId",
+                "trainers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "Trainers a user is linked to as a student. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List User Trainers - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId/trainers?page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId",
+                    "trainers"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"trainerId\": \"t1\",\n      \"userId\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n      \"firstName\": \"Maria\",\n      \"lastName\": \"Silva\",\n      \"email\": \"maria@example.com\",\n      \"status\": \"ACTIVE\",\n      \"linkedAt\": \"2026-02-01T12:00:00.000Z\"\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "List User Protocols",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId/protocols?as=trainer&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId",
+                "protocols"
+              ],
+              "query": [
+                {
+                  "key": "as",
+                  "value": "trainer",
+                  "description": "Required. Perspective: trainer (created by) | student (assigned to)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "Protocols created by (as=trainer) or assigned to (as=student) a user. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List User Protocols - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId/protocols?as=trainer&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId",
+                    "protocols"
+                  ],
+                  "query": [
+                    {
+                      "key": "as",
+                      "value": "trainer",
+                      "description": "Required. Perspective: trainer (created by) | student (assigned to)"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"7a1d3c5e-9b2f-4e86-a4c0-2d3e4f5a6b7c\",\n      \"name\": \"Hipertrofia 12 semanas\",\n      \"trainerName\": \"Maria Silva\",\n      \"assigneeName\": \"Joao Souza\",\n      \"startDate\": \"2026-09-01\",\n      \"endDate\": \"2026-11-24\",\n      \"trainingsCount\": 4,\n      \"createdAt\": \"2026-08-30T12:00:00.000Z\",\n      \"deletedAt\": null\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Protocol Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/protocols/:protocolId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "protocols",
+                ":protocolId"
+              ],
+              "variable": [
+                {
+                  "key": "protocolId",
+                  "value": "7a1d3c5e-9b2f-4e86-a4c0-2d3e4f5a6b7c",
+                  "description": "Protocol UUID"
+                }
+              ]
+            },
+            "description": "Protocol with trainings and exercises, read-only. 404 if not found. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 404 not found, 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get Protocol Detail - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/protocols/:protocolId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "protocols",
+                    ":protocolId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "protocolId",
+                      "value": "7a1d3c5e-9b2f-4e86-a4c0-2d3e4f5a6b7c",
+                      "description": "Protocol UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7a1d3c5e-9b2f-4e86-a4c0-2d3e4f5a6b7c\",\n  \"name\": \"Hipertrofia 12 semanas\",\n  \"description\": null,\n  \"status\": \"ACTIVE\",\n  \"trainerName\": \"Maria Silva\",\n  \"assigneeName\": \"Joao Souza\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-11-24\",\n  \"createdAt\": \"2026-08-30T12:00:00.000Z\",\n  \"deletedAt\": null,\n  \"trainings\": [\n    {\n      \"id\": \"tr1\",\n      \"name\": \"Treino A\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"id\": \"c1\",\n          \"name\": \"Supino reto\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"repetitions\": [\n            12,\n            10,\n            8\n          ],\n          \"hasLoad\": true,\n          \"suggestedLoad\": 40,\n          \"restInterval\": 60,\n          \"notes\": null\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List User Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId/templates?type=training&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "training",
+                  "description": "Required. Template type: training | exercise"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "Training or exercise templates of a trainer user. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List User Templates - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId/templates?type=training&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId",
+                    "templates"
+                  ],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "training",
+                      "description": "Required. Template type: training | exercise"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"tp1\",\n      \"name\": \"Treino de peito\",\n      \"createdAt\": \"2026-03-01T12:00:00.000Z\",\n      \"deletedAt\": null\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "List User Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/users/:userId/sessions?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "users",
+                ":userId",
+                "sessions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (min 1, default 1)"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Items per page (min 1, max 50, default 20)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                  "description": "User UUID"
+                }
+              ]
+            },
+            "description": "Workout sessions of a user, newest first. Paginated. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "List User Sessions - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/users/:userId/sessions?page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "users",
+                    ":userId",
+                    "sessions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number (min 1, default 1)"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Items per page (min 1, max 50, default 20)"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "userId",
+                      "value": "4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d",
+                      "description": "User UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"ws1\",\n      \"trainingName\": \"Treino A\",\n      \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n      \"durationSec\": 3300\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "AI Usage - Admin",
       "item": [
         {

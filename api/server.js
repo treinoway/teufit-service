@@ -58,6 +58,8 @@ import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
+import { adminManagerRoutes } from './routes/admin-manager-route.js';
+import { createAdminPrisma } from '../src/db-admin.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
@@ -87,6 +89,20 @@ function translateErrorPayloadMessage(payload, language) {
   if (!language || !payload?.messageCode) return;
   payload.message = translate('errors', payload.messageCode, language, {
     fallbackValue: payload.message,
+  });
+}
+
+// Decorates the isolated read-only admin client (injected override or built from config) and closes it on shutdown.
+function decorateAdminDb(fastify, injectedAdminDb) {
+  const adminDb = injectedAdminDb ?? createAdminPrisma({
+    connectionString: config.adminDb.url,
+    max: config.adminDb.poolMax,
+    statementTimeoutMs: config.adminDb.statementTimeoutMs,
+  });
+  fastify.decorate('adminDb', adminDb);
+  if (injectedAdminDb) return;
+  fastify.addHook('onClose', async () => {
+    await adminDb.$disconnect();
   });
 }
 
@@ -120,6 +136,7 @@ export async function buildServer(options = {}) {
 
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
+  decorateAdminDb(fastify, options.adminDb);
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);
@@ -397,6 +414,7 @@ export async function buildServer(options = {}) {
     await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
+    await fastify.register(adminManagerRoutes);
     await fastify.register(adminAiUsageRoutes);
     await fastify.register(adminDebugRoutes);
   });
