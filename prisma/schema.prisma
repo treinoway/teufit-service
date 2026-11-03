@@ -63,6 +63,8 @@ model User {
   emailVerificationTokens    EmailVerificationToken[]
   studentInvitesAccepted     StudentInvite[]
 
+  // Added for the manager backoffice user list (ORDER BY created_at DESC).
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -457,6 +459,8 @@ model Training {
   exercises        Exercise[]
   workoutSessions  WorkoutSession[]
 
+  // Added for protocol detail and trainingsCount joins (FK had no index).
+  @@index([trainingProtocolId])
   @@map("trainings")
 }
 

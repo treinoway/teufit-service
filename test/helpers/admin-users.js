@@ -64,8 +64,8 @@ export async function createTrainerWithToken(app, { firstName, lastName } = {}) 
 
 /** Creates a plain student user and returns { userId, accessToken }. */
 export async function createStudentWithToken(app) {
-  const { userId, accessToken } = await signupUser(app, 'student');
-  return { userId, accessToken };
+  const { userId, accessToken, email } = await signupUser(app, 'student');
+  return { userId, accessToken, email };
 }
 
 /** Links `count` new students to the trainer (oldest first, the oldest `blockedCount` blocked) and returns their ids. */

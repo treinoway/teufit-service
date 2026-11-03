@@ -76,6 +76,18 @@ DATABASE_URL="${{treinoway-service-db-prod.DATABASE_URL}}"
 | `AWS_ENDPOINT_URL` | from prod Bucket — **blocker #1** |
 | `AWS_S3_BUCKET_NAME` | from prod Bucket — **blocker #1** |
 
+### Optional: manager (backoffice) read-only client
+The `/admin/manager/*` routes use their own small read-only pool (`application_name=teufit-manager`),
+so backoffice queries never compete with app traffic for connections. All optional; defaults work with no config.
+```bash
+ADMIN_DATABASE_URL=<read replica URL>   # default: DATABASE_URL (same primary)
+ADMIN_DB_POOL_MAX=2                      # default 2
+ADMIN_DB_STATEMENT_TIMEOUT_MS=5000       # default 5000; queries above this (or waiting for a pool connection) return 503 admin.queryTimeout
+```
+`ADMIN_DATABASE_URL` must NOT point at a transaction-mode PgBouncer: the startup `options`
+(read-only, statement timeout) would be silently dropped. Use a direct or session-mode connection.
+All 8 manager routes share one rate-limit bucket (60 req/min per client).
+
 ### Do NOT set
 - `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — the app never reads them
   (only `DATABASE_URL`; the `POSTGRES_*` are docker-compose-local only). Staging

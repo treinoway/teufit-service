@@ -395,6 +395,10 @@ export default {
     'protocol.trainingTemplateNotOwned': 'Um ou mais modelos de treino não pertencem ao seu perfil.',
     'protocol.exerciseTemplateNotOwned': 'Um ou mais modelos de exercício não pertencem ao seu perfil.',
 
+    // Admin manager (backoffice)
+    'admin.queryTimeout': 'A consulta demorou demais. Refine a busca e tente novamente.',
+    'admin.userNotFound': 'Usuário não encontrado.',
+    'admin.protocolNotFound': 'Rotina não encontrada.',
     // Tutorials ("Como usar")
     'tutorial.notFound': 'Tutorial não encontrado.',
     'tutorial.invalidVideoType': 'Formato de vídeo não suportado. Use MP4, WebM ou MOV.',
