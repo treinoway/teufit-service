@@ -22,6 +22,7 @@ export const AI_TOOLS = Object.freeze({
   ADD_EXERCISES_TO_TRAINING: 'add_exercises_to_training',
   REORDER_EXERCISES_IN_TRAINING: 'reorder_exercises_in_training',
   GET_STUDENT_PERFORMANCE: 'get_student_performance',
+  SEARCH_EXERCISE_LIBRARY: 'search_exercise_library',
 })
 
 export const AI_ERRORS = Object.freeze({
@@ -75,6 +76,10 @@ export const AI_LIMITS = Object.freeze({
   CONTEXT_PERFORMANCE_WINDOW_DAYS: 90,
   // why: Sonnet 5.5 thinks adaptively and thinking tokens count against max_tokens; 2500 truncated tool calls.
   MAX_TOKENS: 8000,
+  // search_exercise_library: queries per call, chars kept per query, candidates returned per query.
+  LIBRARY_SEARCH_MAX_QUERIES: 20,
+  LIBRARY_SEARCH_MAX_QUERY_CHARS: 80,
+  LIBRARY_SEARCH_MAX_RESULTS: 5,
   RATE_LIMIT_MAX: 10,
   RATE_LIMIT_WINDOW: '1 minute',
   // Upper bound for a single model call; SDK retries are disabled so withLlmRetry is the only retry layer.

@@ -471,6 +471,7 @@ export default {
       add_exercises_to_training: 'Adding exercises to training',
       reorder_exercises_in_training: 'Reordering exercises',
       get_student_performance: 'Checking student performance',
+      search_exercise_library: 'Searching exercise library',
     },
   },
 
