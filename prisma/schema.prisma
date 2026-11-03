@@ -471,6 +471,7 @@ model ExerciseTemplate {
   type      String  @db.Text
   videoUrl  String? @map("video_url") @db.Text
   gifUrl  String? @map("gif_url") @db.Text
+  videoFileKey String? @map("video_file_key") @db.Text
   isPublic  Boolean @default(false) @map("is_public")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -504,6 +505,7 @@ model TrainingTemplateExerciseTemplate {
   type             String  @db.Text
   videoUrl         String? @map("video_url") @db.Text
   gifUrl         String? @map("gif_url") @db.Text
+  videoFileKey   String? @map("video_file_key") @db.Text
   sets             Int?
   repetitions      Json?
   duration         Int?
@@ -534,6 +536,7 @@ model Exercise {
   type               String  @db.Text
   videoUrl           String? @map("video_url") @db.Text
   gifUrl           String? @map("gif_url") @db.Text
+  videoFileKey     String? @map("video_file_key") @db.Text
   order              Int     @default(0)
 
   // Superset (bi-set / tri-set) group fields

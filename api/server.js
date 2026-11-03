@@ -38,6 +38,7 @@ import { adminVideoRoutes } from './routes/admin-video-route.js';
 import { videoRoutes } from './routes/video-route.js';
 import { adminTutorialRoutes } from './routes/admin-tutorial-route.js';
 import { tutorialRoutes } from './routes/tutorial-route.js';
+import { exerciseVideoRoutes } from './routes/exercise-video-route.js';
 import { aiRoutes } from './routes/ai-route.js';
 import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
 import { gamificationRoutes } from './routes/gamification-route.js';
@@ -67,6 +68,9 @@ import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
+import { createSignedFileHook } from './hooks/signed-file-hook.js';
+import s3BucketHandler from '../src/config/s3-bucket-handler.js';
+import { resolveExerciseVideoUrl } from '../src/helpers/exercise-video-key.js';
 import { healthRoutes } from './routes/health-route.js';
 import { checkLlmConfiguration } from '../src/llm/config.js';
 import { assertAsaasWebhookSecretConfigured } from '../src/helpers/asaas-webhook-helpers.js';
@@ -222,6 +226,8 @@ export async function buildServer(options = {}) {
   //    data responses on routes that use i18nField() / i18nArrayField() in their schemas.
   //    Early-returns for statusCode >= 400 (errors are handled above).
   fastify.addHook('preSerialization', applyLabelsPreSerializationHook);
+
+  fastify.addHook('preSerialization', createSignedFileHook((key) => resolveExerciseVideoUrl(s3BucketHandler, key)));
 
   // 4. Structured per-request access log (one line per completed request).
   //    Skipped for /health to avoid monitor-polling noise.
@@ -394,6 +400,7 @@ export async function buildServer(options = {}) {
     await fastify.register(videoRoutes);
     await fastify.register(adminTutorialRoutes);
     await fastify.register(tutorialRoutes);
+    await fastify.register(exerciseVideoRoutes);
     await fastify.register(aiRoutes);
     await fastify.register(trainerBrandingRoutes);
     await fastify.register(gamificationRoutes);

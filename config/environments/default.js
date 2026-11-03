@@ -222,5 +222,8 @@ export default {
       cancel: { max: 5, timeWindow: '1 minute' },
       change: { max: 5, timeWindow: '1 minute' },
     },
+    exerciseVideo: {
+      uploadUrl: { max: 20, timeWindow: '1 minute' },
+    },
   },
 };

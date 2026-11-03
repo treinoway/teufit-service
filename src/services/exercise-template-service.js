@@ -7,6 +7,7 @@ import {
   toLinkCreateInput,
   withAdvancedTechniqueRefs,
 } from '../helpers/advanced-technique-refs.js';
+import { assertVideoFileKeyAllowed } from '../helpers/exercise-video-key.js';
 import { resolveAdvancedTechniqueSelection } from './advanced-technique-service.js';
 
 // Library exercise templates carry only the exercise identity (name, type, video).
@@ -19,6 +20,7 @@ function buildTemplateData(data, trainerId) {
     type: data.type,
     videoUrl: data.videoUrl || null,
     gifUrl: data.gifUrl || null,
+    videoFileKey: data.videoFileKey ?? null,
     isPublic: data.isPublic !== undefined ? data.isPublic : false,
   };
 }
@@ -41,6 +43,7 @@ export async function createExerciseTemplate(userId, data) {
   }
 
   validateExerciseType(data.type);
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey);
   const techniqueSelection = await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);
 
   const created = await prisma.exerciseTemplate.create({
@@ -248,12 +251,14 @@ export async function updateExerciseTemplate(userId, templateId, data) {
   if (data.type) {
     validateExerciseType(data.type);
   }
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, [template.videoFileKey]);
 
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
+  if (data.videoFileKey !== undefined) updateData.videoFileKey = data.videoFileKey;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
   const techniqueSelection = data.advancedTechniqueIds === undefined

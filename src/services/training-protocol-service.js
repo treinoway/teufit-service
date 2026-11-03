@@ -9,6 +9,7 @@ import { estimateWorkoutDuration } from '../helpers/workout-duration.js';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../errors/app-error.js';
 import { toLinkCreateInput } from '../helpers/advanced-technique-refs.js';
+import { assertVideoFileKeyAllowed, isOwnVideoKey } from '../helpers/exercise-video-key.js';
 import {
   inheritSelectionBatch,
   resolveAdvancedTechniqueSelectionBatch,
@@ -594,6 +595,7 @@ function buildSubstituteCreateData(substitute, substituteOrder, trainingId, tech
     type: substitute.type,
     videoUrl: substitute.videoUrl ?? null,
     gifUrl: substitute.gifUrl ?? null,
+    videoFileKey: substitute.videoFileKey ?? null,
     substituteOrder,
     sets: substitute.sets ?? null,
     repetitions,
@@ -636,6 +638,7 @@ function buildNestedExerciseCreateData(exercise, index, techniqueSelection = [],
     type: exercise.type,
     videoUrl: exercise.videoUrl ?? null,
     gifUrl: exercise.gifUrl ?? null,
+    videoFileKey: exercise.videoFileKey ?? null,
     // Fall back to array position when the client omits `order`; otherwise every
     // exercise inherits Prisma's @default(0) and the training is created with a
     // duplicated/zeroed order, which breaks execution ordering (orderBy order asc).
@@ -736,6 +739,37 @@ function collectTemplateIds(trainings) {
   }
 
   return { trainingTemplateIds, exerciseTemplateIds };
+}
+
+// Flattens exercises and their substitutes into the entries that carry a caller-supplied videoFileKey.
+function collectVideoKeyEntries(trainings) {
+  return trainings.flatMap((training) => (training.exercises ?? []).flatMap((exercise) => [
+    exercise,
+    ...(exercise.substitutes ?? []),
+  ])).filter((entry) => entry.videoFileKey !== undefined && entry.videoFileKey !== null);
+}
+
+// Loads videoFileKey by id for the visible library templates referenced by entries with a non-own key, in one query.
+async function loadReferencedTemplateVideoKeys(prismaClient, trainerId, entries) {
+  const templateIds = [...new Set(entries.filter((entry) => !isOwnVideoKey(trainerId, entry.videoFileKey))
+    .map((entry) => entry.exerciseTemplateId).filter(Boolean))];
+  if (templateIds.length === 0) return new Map();
+  const templates = await prismaClient.exerciseTemplate.findMany({
+    where: { id: { in: templateIds }, deletedAt: null, OR: [{ trainerId }, { isPublic: true }] },
+    select: { id: true, videoFileKey: true },
+  });
+  return new Map(templates.map((template) => [template.id, template.videoFileKey]));
+}
+
+// Validates each exercise/substitute videoFileKey; a key inherited from its referenced library template is allowed.
+async function assertTrainingsVideoFileKeys(prismaClient, trainerId, trainings) {
+  const entries = collectVideoKeyEntries(trainings);
+  const videoKeysByTemplateId = await loadReferencedTemplateVideoKeys(prismaClient, trainerId, entries);
+  entries.forEach((entry) => assertVideoFileKeyAllowed(
+    trainerId,
+    entry.videoFileKey,
+    [videoKeysByTemplateId.get(entry.exerciseTemplateId)],
+  ));
 }
 
 // True when the exercise omitted advancedTechniqueIds but points at a library template to inherit from.
@@ -873,6 +907,7 @@ export async function createProtocolWithTrainings(userId, data) {
     trainingTemplateIds,
     exerciseTemplateIds,
   );
+  await assertTrainingsVideoFileKeys(prisma, trainer.id, trainings);
 
   // 6. Build in-memory nested create payload
   const selectionsByTraining = await resolveTechniqueSelectionsByTraining(

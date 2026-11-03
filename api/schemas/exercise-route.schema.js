@@ -3,6 +3,7 @@ import { badRequestErrorResponseSchema, errorResponseSchema } from './error-resp
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
 import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
+import { videoFileKeyRequestSchema, videoFileResponseProperties } from './exercise-video.schema.js';
 
 const exerciseBaseProperties = {
   id: { type: 'string', format: 'uuid' },
@@ -11,6 +12,7 @@ const exerciseBaseProperties = {
   name: { type: 'string' },
   ...i18nField('type', 'exerciseType'),
   videoUrl: { type: 'string', nullable: true },
+  ...videoFileResponseProperties,
   gifUrl: gifUrlResponseSchema,
   order: { type: 'integer' },
   supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
@@ -61,6 +63,7 @@ const exerciseBodyProperties = {
   type: { type: 'string', enum: exerciseTypeValues },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
   videoUrl: { type: 'string', nullable: true },
+  videoFileKey: videoFileKeyRequestSchema,
   gifUrl: gifUrlRequestSchema,
   order: { type: 'integer', minimum: 0 },
   supersetGroupId: { type: 'string', format: 'uuid' },
@@ -181,6 +184,7 @@ const exerciseUpdateBodyProperties = {
   type: { type: 'string', enum: exerciseTypeValues },
   prescriptionMode: { type: 'string', enum: prescriptionModeValues },
   videoUrl: { type: 'string' },
+  videoFileKey: videoFileKeyRequestSchema,
   gifUrl: gifUrlRequestSchema,
   order: { type: 'integer', minimum: 0 },
   sets: { type: ['integer', 'null'], minimum: 1 },
@@ -259,6 +263,7 @@ const substituteBodyProperties = {
   prescriptionMode: exerciseBodyProperties.prescriptionMode,
   videoUrl: exerciseBodyProperties.videoUrl,
   gifUrl: exerciseBodyProperties.gifUrl,
+  videoFileKey: exerciseBodyProperties.videoFileKey,
   sets: exerciseBodyProperties.sets,
   repetitions: exerciseBodyProperties.repetitions,
   duration: exerciseBodyProperties.duration,

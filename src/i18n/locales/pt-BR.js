@@ -406,6 +406,9 @@ export default {
     'tutorial.invalidVideoKey': 'Arquivo de vídeo inválido. Envie o vídeo novamente.',
     'tutorial.invalidOrder': 'A nova ordem dos tutoriais é inválida.',
 
+    // Exercise video upload
+    'exerciseVideo.invalidFileKey': 'Arquivo de vídeo inválido. Envie o vídeo novamente.',
+
     // Video library
     'video.notFound': 'Vídeo não encontrado.',
     'video.invalidUrl': 'URL inválida. Use um endereço http(s) válido.',

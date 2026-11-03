@@ -3,6 +3,7 @@ import { badRequestErrorResponseSchema, errorResponseSchema } from './error-resp
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema } from './gif-url.schema.js';
 import { advancedTechniqueIdsRequestSchema } from './advanced-technique.schema.js';
+import { videoFileKeyRequestSchema } from './exercise-video.schema.js';
 
 const statusEnum = trainingStatusValues;
 const genderOrdinationEnum = genderOrdinationValues;
@@ -397,6 +398,7 @@ const substituteInputProperties = {
   name: { type: 'string', minLength: 1 },
   type: { type: 'string', enum: exerciseTypeValues },
   videoUrl: { type: 'string' },
+  videoFileKey: videoFileKeyRequestSchema,
   gifUrl: gifUrlRequestSchema,
   sets: { type: 'integer', minimum: 1, nullable: true },
   repetitions: {
@@ -448,6 +450,7 @@ const exerciseInputSchema = {
     name: { type: 'string', minLength: 1 },
     type: { type: 'string', enum: exerciseTypeValues },
     videoUrl: { type: 'string' },
+    videoFileKey: videoFileKeyRequestSchema,
     gifUrl: gifUrlRequestSchema,
     order: { type: 'integer', minimum: 0 },
     sets: { type: 'integer', minimum: 1, nullable: true },

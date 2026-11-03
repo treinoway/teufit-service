@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockTrainingTemplateForUpdate } from '../helpers/row-locks.js';
+import { assertVideoFileKeyAllowed } from '../helpers/exercise-video-key.js';
 import {
   buildError,
   validateCategory,
@@ -24,6 +25,15 @@ import {
   resolveAdvancedTechniqueSelectionBatch,
   resolveSelectionOrInherit,
 } from './advanced-technique-service.js';
+
+// Validates each junction input's videoFileKey; a key inherited from the input's loaded library template is allowed.
+function assertJunctionVideoFileKeys(trainerId, junctionInputs, templatesById) {
+  junctionInputs.forEach((input) => assertVideoFileKeyAllowed(
+    trainerId,
+    input.videoFileKey,
+    [templatesById[input.exerciseTemplateId]?.videoFileKey],
+  ));
+}
 
 /**
  * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
@@ -52,6 +62,7 @@ function buildJunctionCreateData(e, index, template, techniqueSelection = []) {
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
     gifUrl: e.gifUrl !== undefined ? e.gifUrl : template.gifUrl,
+    videoFileKey: e.videoFileKey !== undefined ? e.videoFileKey : template.videoFileKey,
     sets: e.sets ?? null,
     repetitions,
     duration,
@@ -123,7 +134,6 @@ export async function createTrainingTemplate(userId, data) {
     ? data.exerciseTemplateIds.map((id) => ({ exerciseTemplateId: id }))
     : data.exerciseTemplates || [];
   const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
-
   let existingTemplatesById = {};
   if (exerciseTemplatesInput.length > 0) {
     const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
@@ -144,6 +154,7 @@ export async function createTrainingTemplate(userId, data) {
     // Index by id for O(1) lookup when building junction rows
     existingTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
   }
+  assertJunctionVideoFileKeys(trainer.id, exerciseTemplatesInput, existingTemplatesById);
 
   // 5. Build create data (omit trainingTemplateExerciseTemplates when empty so Prisma does not receive undefined)
   const createData = {
@@ -432,6 +443,7 @@ export async function updateTrainingTemplate(userId, templateId, data) {
       }
       updateTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
     }
+    assertJunctionVideoFileKeys(trainer.id, exerciseTemplatesInput, updateTemplatesById);
     const selections = await resolveJunctionTechniqueSelections(trainer.id, exerciseTemplatesInput, updateTemplatesById);
     updateData.trainingTemplateExerciseTemplates = {
       deleteMany: {},
@@ -553,12 +565,15 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
     throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
   }
 
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, [junctionRow.videoFileKey]);
+
   // 4. Build update data — only include fields explicitly provided by the caller
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
+  if (data.videoFileKey !== undefined) updateData.videoFileKey = data.videoFileKey;
   if (data.sets !== undefined) updateData.sets = data.sets;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
@@ -653,6 +668,7 @@ async function resolveJunctionOrder(tx, templateId, explicitOrder) {
 export async function createTrainingTemplateExercise(userId, templateId, data) {
   const { trainer } = await assertTrainerOwnsTemplate(userId, templateId);
 
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey);
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
@@ -671,6 +687,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         type: data.type,
         videoUrl: data.videoUrl ?? null,
         gifUrl: data.gifUrl ?? null,
+        videoFileKey: data.videoFileKey ?? null,
         isPublic: data.isPublic !== undefined ? data.isPublic : false,
       },
     });
@@ -687,6 +704,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
         gifUrl: exerciseTemplate.gifUrl,
+        videoFileKey: exerciseTemplate.videoFileKey,
         sets: data.sets ?? null,
         repetitions,
         duration,
@@ -759,6 +777,7 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
         gifUrl: exerciseTemplate.gifUrl,
+        videoFileKey: exerciseTemplate.videoFileKey,
         sets: data.sets ?? null,
         repetitions,
         duration,

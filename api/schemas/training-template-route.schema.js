@@ -3,6 +3,7 @@ import { badRequestErrorResponseSchema, errorResponseSchema } from './error-resp
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
 import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
+import { videoFileKeyRequestSchema, videoFileResponseProperties } from './exercise-video.schema.js';
 
 // The linked library template carries only the exercise identity. Prescription lives on
 // the junction (trainingTemplateExerciseTemplateSchema), not here.
@@ -14,6 +15,7 @@ const exerciseTemplateRefSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     isPublic: { type: 'boolean' },
   },
@@ -34,6 +36,7 @@ const trainingTemplateExerciseTemplateSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
@@ -144,6 +147,7 @@ export const createTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            videoFileKey: videoFileKeyRequestSchema,
             gifUrl: gifUrlRequestSchema,
             prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
@@ -315,6 +319,7 @@ export const updateTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            videoFileKey: videoFileKeyRequestSchema,
             gifUrl: gifUrlRequestSchema,
             prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
@@ -388,6 +393,7 @@ export const createTrainingTemplateExerciseSchema = {
       type: { type: 'string', enum: exerciseTypeValues },
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
+      videoFileKey: videoFileKeyRequestSchema,
       gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
       // Bi-set / superset grouping (C3)
@@ -522,6 +528,7 @@ export const updateTrainingTemplateExerciseSchema = {
       type: { type: 'string' },
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
+      videoFileKey: videoFileKeyRequestSchema,
       gifUrl: gifUrlRequestSchema,
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },

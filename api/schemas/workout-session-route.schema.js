@@ -3,6 +3,7 @@ import { errorResponseSchema, badRequestErrorResponseSchema } from './error-resp
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlResponseSchema } from './gif-url.schema.js';
 import { advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
+import { videoFileResponseProperties } from './exercise-video.schema.js';
 
 // ─── Shared sub-schemas ───────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ const substituteExerciseMinimalSchema = {
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     gifUrl: gifUrlResponseSchema,
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
   },
 };
 
@@ -72,6 +74,7 @@ const exerciseLogSchema = {
         supersetOrder: { type: 'integer' },
         supersetRestInterval: { type: 'integer', nullable: true },
         videoUrl: { type: 'string', nullable: true },
+        ...videoFileResponseProperties,
         gifUrl: gifUrlResponseSchema,
         notes: { type: 'string', nullable: true },
         ...i18nField('intensity', 'exerciseIntensity', { nullable: true }),
