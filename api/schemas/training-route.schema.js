@@ -3,6 +3,7 @@ import { badRequestErrorResponseSchema, errorResponseSchema } from './error-resp
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlResponseSchema } from './gif-url.schema.js';
 import { advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
+import { videoFileResponseProperties } from './exercise-video.schema.js';
 
 export const trainingResponseSchema = {
   type: 'object',
@@ -166,6 +167,7 @@ export const importedExerciseResponseSchema = {
     name: { type: 'string' },
     ...i18nField('type', 'exerciseType'),
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     order: { type: 'integer' },
     supersetGroupId: { type: 'string', format: 'uuid', nullable: true },

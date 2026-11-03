@@ -997,6 +997,62 @@ describe('training-protocol-service', () => {
       expect(exerciseCreate).toMatchObject({ gifUrl: 'https://example.com/supino.gif' });
     });
 
+    it('copies videoFileKey from training template exercise rows into the nested exercise create data', async () => {
+      const key = 'exercise-videos/t1/11111111-1111-4111-8111-111111111111.mp4';
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({
+        id: 'tmpl-1',
+        trainerId: 't1',
+        name: 'Template A',
+        deletedAt: null,
+        trainings: [
+          {
+            id: 'pt-1',
+            weekDay: 'monday',
+            order: 0,
+            trainingTemplate: {
+              id: 'tt-1',
+              name: 'Bench Press',
+              description: null,
+              category: 'strength',
+              bodySegment: 'upper',
+              trainingTemplateExerciseTemplates: [
+                {
+                  id: 'jt-1',
+                  exerciseTemplateId: 'et-1',
+                  order: 0,
+                  name: 'Supino',
+                  type: 'strength',
+                  videoUrl: null,
+                  videoFileKey: key,
+                  sets: 3,
+                  repetitions: 10,
+                  duration: null,
+                  hasLoad: true,
+                  suggestedLoad: 60,
+                  notes: null,
+                  exerciseTemplate: { id: 'et-1', name: 'Supino', type: 'strength' },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      prisma.user.findUnique.mockResolvedValue({ id: 'assignee-1' });
+      prisma.trainingProtocol.create.mockResolvedValue({
+        id: 'p1',
+        assigneeId: 'assignee-1',
+        trainings: [],
+        assignee: { id: 'assignee-1', firstName: 'Jane', lastName: 'Smith', avatarUrl: null },
+      });
+
+      await importFromTemplate('u1', 'tmpl-1', 'assignee-1');
+
+      const createCall = prisma.trainingProtocol.create.mock.calls[0][0];
+      const [exerciseCreate] = createCall.data.trainings.create[0].exercises.create;
+      expect(exerciseCreate).toMatchObject({ videoFileKey: key });
+    });
+
     it('inherits genderOrdination and trainingLevel from template when not overridden', async () => {
       prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
       prisma.trainingProtocolTemplate.findUnique.mockResolvedValue({

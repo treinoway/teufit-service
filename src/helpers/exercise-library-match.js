@@ -7,12 +7,13 @@ const LIBRARY_EXERCISE_SELECT = {
   type: true,
   videoUrl: true,
   gifUrl: true,
+  videoFileKey: true,
   advancedTechniqueLinks: { select: { advancedTechniqueId: true, order: true } },
 };
 
 // Scores a library template for a name match: lower is better (media beats ownership, own beats public).
 function matchRank(template, trainerId) {
-  const mediaPenalty = template.videoUrl || template.gifUrl ? 0 : 2;
+  const mediaPenalty = template.videoFileKey || template.videoUrl || template.gifUrl ? 0 : 2;
   const ownershipPenalty = template.trainerId === trainerId ? 0 : 1;
   return mediaPenalty + ownershipPenalty;
 }
@@ -52,5 +53,10 @@ export function findLibraryExercise(index, name) {
 // Library link and media for a student exercise created by name; empty when nothing matched.
 export function libraryExerciseFields(match) {
   if (!match) return {};
-  return { exerciseTemplateId: match.id, videoUrl: match.videoUrl ?? null, gifUrl: match.gifUrl ?? null };
+  return {
+    exerciseTemplateId: match.id,
+    videoUrl: match.videoUrl ?? null,
+    gifUrl: match.gifUrl ?? null,
+    videoFileKey: match.videoFileKey ?? null,
+  };
 }

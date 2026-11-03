@@ -4,12 +4,13 @@ import * as service from '../../src/services/training-template-service.js';
 import * as schema from '../schemas/training-template-route.schema.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { AdvancedTechniqueErrorCode } from '../../src/constants/advanced-technique.js';
+import { ExerciseVideoErrorCode } from '../../src/constants/exercise-video.js';
 
-const advancedTechniqueErrorCodes = new Set(Object.values(AdvancedTechniqueErrorCode));
+const unifiedDomainErrorCodes = new Set([...Object.values(AdvancedTechniqueErrorCode), ...Object.values(ExerciseVideoErrorCode)]);
 
-// Tells whether an error is an advanced-technique domain error that must reach the unified error handler.
-function isAdvancedTechniqueError(error) {
-  return error instanceof AppError && advancedTechniqueErrorCodes.has(error.error);
+// Tells whether an error is an advanced-technique or exercise-video domain error that must reach the unified error handler.
+function isUnifiedDomainError(error) {
+  return error instanceof AppError && unifiedDomainErrorCodes.has(error.error);
 }
 
 export async function trainingTemplateRoutes(fastify) {
@@ -25,7 +26,7 @@ export async function trainingTemplateRoutes(fastify) {
         const template = await service.createTrainingTemplate(request.user.id, request.body);
         return reply.status(201).send(template);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (error.code === 'TRAINER_PROFILE_MISSING' || error.code === 'EXERCISE_TEMPLATE_NOT_FOUND') {
           return reply.status(404).send({ error: error.message });
         }
@@ -91,7 +92,7 @@ export async function trainingTemplateRoutes(fastify) {
         const templates = await service.getPublicTrainingTemplates(request.user.id);
         return reply.send(templates);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         fastify.log.error(error);
         return reply.status(500).send({ error: 'Failed to fetch public templates' });
       }
@@ -110,7 +111,7 @@ export async function trainingTemplateRoutes(fastify) {
         const template = await service.getTrainingTemplateById(request.user.id, request.params.id);
         return reply.send(template);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
@@ -135,7 +136,7 @@ export async function trainingTemplateRoutes(fastify) {
         const updated = await service.updateTrainingTemplate(request.user.id, request.params.id, request.body);
         return reply.send(updated);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (
           error.code === 'TEMPLATE_NOT_FOUND' ||
           error.code === 'TRAINER_PROFILE_MISSING' ||
@@ -171,7 +172,7 @@ export async function trainingTemplateRoutes(fastify) {
         );
         return reply.status(201).send(created);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }
@@ -236,7 +237,7 @@ export async function trainingTemplateRoutes(fastify) {
         );
         return reply.send(deleted);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (
           error.code === 'TEMPLATE_NOT_FOUND' ||
           error.code === 'TRAINER_PROFILE_MISSING' ||
@@ -270,7 +271,7 @@ export async function trainingTemplateRoutes(fastify) {
         );
         return reply.send(updated);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (
           error.code === 'TEMPLATE_NOT_FOUND' ||
           error.code === 'TRAINER_PROFILE_MISSING' ||
@@ -299,7 +300,7 @@ export async function trainingTemplateRoutes(fastify) {
         const deleted = await service.deleteTrainingTemplate(request.user.id, request.params.id);
         return reply.send(deleted);
       } catch (error) {
-        if (isAdvancedTechniqueError(error)) throw error;
+        if (isUnifiedDomainError(error)) throw error;
         if (error.code === 'TEMPLATE_NOT_FOUND' || error.code === 'TRAINER_PROFILE_MISSING') {
           return reply.status(404).send({ error: error.message });
         }

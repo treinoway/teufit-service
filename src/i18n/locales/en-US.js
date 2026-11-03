@@ -402,6 +402,9 @@ export default {
     'tutorial.invalidVideoKey': 'Invalid video file. Please upload the video again.',
     'tutorial.invalidOrder': 'The new tutorial order is invalid.',
 
+    // Exercise video upload
+    'exerciseVideo.invalidFileKey': 'Invalid video file. Please upload the video again.',
+
     // Video library
     'video.notFound': 'Video not found.',
     'video.invalidUrl': 'Invalid URL. Please use a valid http(s) address.',

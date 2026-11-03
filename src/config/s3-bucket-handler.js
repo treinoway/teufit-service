@@ -159,7 +159,7 @@ class S3BucketHandler {
             Key: key,
         });
 
-        return getSignedUrl(this.s3Client, command, { expiresIn });
+        return getSignedUrl(this.s3Client, command, { expiresIn, signableHeaders: new Set(['content-type', 'content-length']) });
     }
 
     /**
@@ -167,10 +167,11 @@ class S3BucketHandler {
      * @param {Object} params - Parameters
      * @param {string} params.key - S3 object key (file path in bucket)
      * @param {string} params.contentType - MIME type the upload must declare
+     * @param {number} [params.contentLength] - Exact byte size to sign; omitted keeps the length unsigned
      * @param {number} [params.expiresIn=900] - URL expiration in seconds
      * @returns {Promise<string>} Presigned upload URL
      */
-    async getSignedPutUrl({ key, contentType, expiresIn = 900 }) {
+    async getSignedPutUrl({ key, contentType, contentLength, expiresIn = 900 }) {
         if (!this.s3Client || !this.bucketName) {
             return 'https://example.com/disabled-s3-upload';
         }
@@ -179,9 +180,10 @@ class S3BucketHandler {
             Bucket: this.bucketName,
             Key: key,
             ContentType: contentType,
+            ...(contentLength !== undefined && { ContentLength: contentLength }),
         });
 
-        return getSignedUrl(this.s3Client, command, { expiresIn });
+        return getSignedUrl(this.s3Client, command, { expiresIn, signableHeaders: new Set(['content-type', 'content-length']) });
     }
 }
 

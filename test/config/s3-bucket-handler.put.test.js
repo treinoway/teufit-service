@@ -49,7 +49,10 @@ describe('s3-bucket-handler getSignedPutUrl', () => {
       Key: 'tutorials/a.mp4',
       ContentType: 'video/mp4',
     });
-    expect(getSignedUrl).toHaveBeenCalledWith(handler.s3Client, putCommandInstances[0], { expiresIn: 600 });
+    expect(getSignedUrl).toHaveBeenCalledWith(handler.s3Client, putCommandInstances[0], {
+      expiresIn: 600,
+      signableHeaders: new Set(['content-type', 'content-length']),
+    });
   });
 
   it('creates the client with checksums only when required so presigned PUTs accept browser bodies', async () => {

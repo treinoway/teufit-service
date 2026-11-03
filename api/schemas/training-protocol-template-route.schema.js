@@ -2,6 +2,7 @@ import { weekDayValues, genderOrdinationValues, trainingLevelValues, protocolTyp
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlResponseSchema } from './gif-url.schema.js';
+import { videoFileResponseProperties } from './exercise-video.schema.js';
 
 const weekDayEnum = weekDayValues;
 const genderOrdinationEnum = genderOrdinationValues;
@@ -27,6 +28,7 @@ const exerciseTemplateRefSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     isPublic: { type: 'boolean' },
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
@@ -58,6 +60,7 @@ const trainingTemplateExerciseTemplateSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },

@@ -440,6 +440,41 @@ describe('training-service', () => {
       );
     });
 
+    it('copies videoFileKey from the junction row to the Exercise', async () => {
+      const key = 'exercise-videos/t1/11111111-1111-4111-8111-111111111111.mp4';
+      const junctionRow = makeJunctionRow({ videoFileKey: key });
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ videoFileKey: key }) }),
+      );
+    });
+
+    it('copies videoFileKey as null when the junction row has none', async () => {
+      const junctionRow = makeJunctionRow();
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingProtocol.findUnique.mockResolvedValue({ id: 'p1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplate.findUnique.mockResolvedValue(
+        makeTemplate({ trainingTemplateExerciseTemplates: [junctionRow] }),
+      );
+      prisma.training.create.mockResolvedValue({ id: 'tr-1' });
+      prisma.training.findUnique.mockResolvedValue({ id: 'tr-1', exercises: [] });
+
+      await importFromTemplate('u1', 'p1', 'tmpl-1');
+
+      expect(prisma.exercise.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ videoFileKey: null }) }),
+      );
+    });
+
     it('regression: non-null restInterval from junction row is copied to Exercise', async () => {
       const junctionRow = makeJunctionRow({ restInterval: 120 });
 
