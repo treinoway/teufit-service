@@ -1,4 +1,4 @@
-import { AI_TOOLS } from "../constants/ai.js";
+import { AI_LIMITS, AI_TOOLS } from "../constants/ai.js";
 
 // Tool schemas offered to the model (names, descriptions and JSON input schemas).
 export const TOOLS = [
@@ -475,6 +475,26 @@ export const TOOLS = [
         studentId: { type: 'string', description: 'ID do aluno [ASSIGNEE_REF:id]' },
         windowDays: { type: 'integer', description: 'Janela em dias (default 90, max 365)', minimum: 1, maximum: 365 },
         includeExerciseProgression: { type: 'boolean', description: 'Incluir progressao de carga por exercicio (default true)' },
+      },
+    },
+  },
+  {
+    name: AI_TOOLS.SEARCH_EXERCISE_LIBRARY,
+    description:
+      "Busca na biblioteca de exercicios (do treinador e publica) os nomes que correspondem aos exercicios que voce pretende propor. " +
+      "Passe TODOS os nomes pretendidos em uma unica chamada. Retorna, por consulta, ate 5 candidatos {name, type, hasMedia}. " +
+      "FERRAMENTA DE LEITURA — execute imediatamente sem pedir confirmacao.",
+    input_schema: {
+      type: 'object',
+      required: ['queries'],
+      properties: {
+        queries: {
+          type: 'array',
+          description: 'Nomes de exercicios a buscar (um por exercicio pretendido)',
+          items: { type: 'string', maxLength: AI_LIMITS.LIBRARY_SEARCH_MAX_QUERY_CHARS },
+          minItems: 1,
+          maxItems: AI_LIMITS.LIBRARY_SEARCH_MAX_QUERIES,
+        },
       },
     },
   },

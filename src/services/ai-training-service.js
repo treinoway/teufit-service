@@ -33,6 +33,7 @@ import { translate } from "../i18n/index.js";
 import { getLlmProvider } from "../llm/index.js";
 import { isLlmConfigured, resolveProviderName } from "../llm/config.js";
 import { withDeadlockRetry } from "../helpers/db-retry.js";
+import { searchExerciseLibrary } from "../helpers/exercise-library-search.js";
 import { addToExerciseLibraryIndex, findLibraryExercise, libraryExerciseFields, loadExerciseLibraryIndex } from "../helpers/exercise-library-match.js";
 import { toLinkCreateInput } from "../helpers/advanced-technique-refs.js";
 import { inheritSelectionBatch } from "./advanced-technique-service.js";
@@ -160,7 +161,7 @@ async function buildTrainerContext(userId, knownTrainerId) {
 }
 
 // Read-only tools bypass the first-turn enforcement guard because they do not mutate state.
-const READ_ONLY_TOOLS = new Set([AI_TOOLS.GET_STUDENT_PERFORMANCE]);
+const READ_ONLY_TOOLS = new Set([AI_TOOLS.GET_STUDENT_PERFORMANCE, AI_TOOLS.SEARCH_EXERCISE_LIBRARY]);
 
 // --- Audit logging ---
 
@@ -292,6 +293,10 @@ function summarizeToolResult(toolResult) {
         maxLoadDeltaPct: e.maxLoadDeltaPct,
       })),
     };
+  }
+
+  if (Array.isArray(data.results)) {
+    return { success: true, results: data.results };
   }
 
   // Single entity (exercise template, protocol import, etc.)
@@ -524,6 +529,12 @@ function buildToolResultMessage(toolName, toolResult, conversationHistory = []) 
       break;
     }
 
+    case AI_TOOLS.SEARCH_EXERCISE_LIBRARY: {
+      const found = (toolResult.data?.results ?? []).reduce((sum, r) => sum + r.matches.length, 0);
+      baseMessage = `Consulta à biblioteca concluída: ${found} exercício(s) encontrado(s).`;
+      break;
+    }
+
     default:
       baseMessage = "Ação executada com sucesso!";
   }
@@ -628,6 +639,17 @@ function sanitizeToolInputIds(input) {
     }
   }
   return sanitized;
+}
+
+// Keeps the non-empty string queries of a library search, bounded in count and length; null when none.
+function normalizeLibraryQueries(rawQueries) {
+  if (!Array.isArray(rawQueries)) return null;
+  const queries = rawQueries
+    .filter((q) => typeof q === "string")
+    .map((q) => q.trim().slice(0, AI_LIMITS.LIBRARY_SEARCH_MAX_QUERY_CHARS))
+    .filter(Boolean)
+    .slice(0, AI_LIMITS.LIBRARY_SEARCH_MAX_QUERIES);
+  return queries.length > 0 ? queries : null;
 }
 
 async function executeTool(userId, toolName, toolInput) {
@@ -1304,6 +1326,19 @@ async function executeTool(userId, toolName, toolInput) {
           },
         );
         result = snapshot;
+        break;
+      }
+
+      case AI_TOOLS.SEARCH_EXERCISE_LIBRARY: {
+        const queries = normalizeLibraryQueries(input.queries);
+        if (!queries) {
+          return { success: false, error: "INVALID_TOOL_INPUT", message: "queries deve ser uma lista de nomes de exercicios" };
+        }
+        const trainerId = await resolveTrainerId(userId);
+        const matches = await Promise.all(
+          queries.map((query) => searchExerciseLibrary(prisma, trainerId, query, { maxResults: AI_LIMITS.LIBRARY_SEARCH_MAX_RESULTS })),
+        );
+        result = { results: queries.map((query, i) => ({ query, matches: matches[i] })) };
         break;
       }
 
