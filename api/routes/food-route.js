@@ -1,52 +1,29 @@
-import { authenticate } from '../middleware/auth.js';
 import { prisma } from '../../src/db.js';
+import { authenticate } from '../middleware/auth.js';
+import { findNutritionistId } from '../middleware/nutritionist.js';
 import * as service from '../../src/services/food-service.js';
+import { foodSourceValues } from '../../src/constants/nutrition.js';
 import * as schema from '../schemas/food-route.schema.js';
 
+// Parses the comma separated sources query (unknown values are dropped; absent means all).
+function parseSources(sources) {
+  if (sources === undefined) return foodSourceValues;
+  return sources.split(',').map((source) => source.trim()).filter((source) => foodSourceValues.includes(source));
+}
+
+// Registers the food search and food group routes.
 export async function foodRoutes(fastify) {
-  // GET /foods — search foods
-  fastify.get(
-    '/foods',
-    {
-      preHandler: [authenticate],
-      schema: schema.searchFoodsSchema,
-    },
-    async (request, reply) => {
-      const { q, groupId, source, limit, offset } = request.query;
-      const result = await service.searchFoods(prisma, {
-        query: q,
-        groupId,
-        source: source ?? 'taco',
-        limit: limit ? Number(limit) : 20,
-        offset: offset ? Number(offset) : 0,
-      });
-      return reply.send(result);
-    },
-  );
+  fastify.get('/foods', { preHandler: [authenticate], schema: schema.searchFoodsSchema }, async (request) => {
+    const { q, groupId, sources, limit } = request.query;
+    const nutritionistId = await findNutritionistId(request.user.id);
+    return service.searchFoods(prisma, { nutritionistId, query: q, groupId, sources: parseSources(sources), limit });
+  });
 
-  // GET /foods/:id — get food by ID
-  fastify.get(
-    '/foods/:id',
-    {
-      preHandler: [authenticate],
-      schema: schema.getFoodByIdSchema,
-    },
-    async (request, reply) => {
-      const food = await service.getFoodById(prisma, request.params.id);
-      return reply.send(food);
-    },
-  );
+  fastify.get('/foods/:id', { preHandler: [authenticate], schema: schema.getFoodByIdSchema }, async (request) => {
+    const nutritionistId = await findNutritionistId(request.user.id);
+    return service.getFoodById(prisma, { nutritionistId, foodId: request.params.id });
+  });
 
-  // GET /food-groups — list all food groups
-  fastify.get(
-    '/food-groups',
-    {
-      preHandler: [authenticate],
-      schema: schema.listFoodGroupsSchema,
-    },
-    async (request, reply) => {
-      const groups = await service.listFoodGroups(prisma);
-      return reply.send(groups);
-    },
-  );
+  fastify.get('/food-groups', { preHandler: [authenticate], schema: schema.listFoodGroupsSchema }, () =>
+    service.listFoodGroups(prisma));
 }
