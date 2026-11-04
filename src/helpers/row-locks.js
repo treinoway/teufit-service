@@ -67,3 +67,13 @@ export async function lockAnamnesisResponseForUpdate(tx, id) {
 export async function lockTrainingTemplateForUpdate(tx, id) {
   await tx.$queryRaw`SELECT id FROM training_templates WHERE id = ${id}::uuid FOR UPDATE`;
 }
+
+/**
+ * Acquire a FOR NO KEY UPDATE lock on the `diet_protocols` row, so child-row FK checks are not blocked.
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {string} id - Plan UUID
+ */
+export async function lockDietProtocolForUpdate(tx, id) {
+  await tx.$queryRaw`SELECT id FROM diet_protocols WHERE id = ${id}::uuid FOR NO KEY UPDATE`;
+}

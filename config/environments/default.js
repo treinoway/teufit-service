@@ -217,6 +217,16 @@ export default {
       },
     },
     adminManager: { max: 60, timeWindow: '1 minute' },
+    nutritionist: {
+      invitePatient: {
+        max: 20,
+        timeWindow: '1 minute',
+      },
+      resendPatientInvite: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+    },
     platformPlan: {
       checkout: { max: 5, timeWindow: '1 minute' },
       cancel: { max: 5, timeWindow: '1 minute' },

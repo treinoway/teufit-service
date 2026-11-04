@@ -1,18 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { searchFoods, getFoodById, listFoodGroups } from '../../src/services/food-service.js';
+import {
+  searchFoods,
+  getFoodById,
+  listFoodGroups,
+  createCustomFood,
+  updateCustomFood,
+  deleteCustomFood,
+} from '../../src/services/food-service.js';
+import { FoodSource, NutritionErrorCode, NutritionMessageCode } from '../../src/constants/nutrition.js';
 
-const makePrisma = (overrides = {}) => ({
-  food: {
-    findMany: vi.fn().mockResolvedValue([]),
-    findUnique: vi.fn().mockResolvedValue(null),
-    count: vi.fn().mockResolvedValue(0),
-  },
-  foodGroup: {
-    findMany: vi.fn().mockResolvedValue([]),
-  },
-  $transaction: vi.fn((ops) => Promise.all(ops)),
-  ...overrides,
-});
+const NUTRITIONIST_ID = 'nutri-1';
+const FOOD_ID = 'food-1';
+const GROUP_ID = 'group-1';
+const HTTP_NOT_FOUND = 404;
+
+// Test helper: build a Food row as returned by Prisma.
+function makeFood(overrides = {}) {
+  return {
+    id: FOOD_ID,
+    name: 'Arroz',
+    source: FoodSource.TACO,
+    nutritionistId: null,
+    foodGroupId: GROUP_ID,
+    foodGroup: { id: GROUP_ID, name: 'Cereais' },
+    energyKcal: 128,
+    proteinG: 2.5,
+    carbohydratesG: 28,
+    totalFatG: 0.2,
+    fiberG: 1.6,
+    servingSizeG: 50,
+    servingSizeDescription: '2 colheres',
+    ...overrides,
+  };
+}
+
+// Test helper: expected DTO of makeFood().
+function makeFoodDto(overrides = {}) {
+  return {
+    id: FOOD_ID,
+    name: 'Arroz',
+    source: FoodSource.TACO,
+    groupId: GROUP_ID,
+    groupName: 'Cereais',
+    portion: { label: '2 colheres', grams: 50 },
+    per100g: { kcal: 128, protein: 2.5, carbs: 28, fat: 0.2, fiber: 1.6 },
+    ...overrides,
+  };
+}
+
+// Test helper: build a mocked prisma client.
+function makePrisma() {
+  return {
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    food: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn().mockResolvedValue(undefined),
+    },
+    foodGroup: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue({ id: GROUP_ID }),
+    },
+  };
+}
 
 describe('searchFoods', () => {
   let db;
@@ -21,76 +73,260 @@ describe('searchFoods', () => {
     db = makePrisma();
   });
 
-  it('defaults source to taco', async () => {
-    await searchFoods(db);
-    // findMany is called inside the transaction array; check the where passed
-    expect(db.food.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ source: 'taco' }) }),
-    );
+  it('should return no items without querying when no source is visible', async () => {
+    const result = await searchFoods(db, { sources: [] });
+
+    expect(result).toEqual({ items: [] });
+    expect(db.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('passes source=tbca when explicitly set', async () => {
-    await searchFoods(db, { source: 'tbca' });
-    expect(db.food.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ source: 'tbca' }) }),
-    );
+  it('should return no items for custom-only sources without a nutritionist', async () => {
+    const result = await searchFoods(db, { sources: [FoodSource.CUSTOM], nutritionistId: null });
+
+    expect(result).toEqual({ items: [] });
+    expect(db.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it('applies name filter when query is provided', async () => {
-    await searchFoods(db, { query: 'arroz' });
-    expect(db.food.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          name: { contains: 'arroz', mode: 'insensitive' },
-        }),
-      }),
-    );
+  it('should return no items and skip the food lookup when no id matches', async () => {
+    const result = await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, query: 'xyz' });
+
+    expect(result).toEqual({ items: [] });
+    expect(db.food.findMany).not.toHaveBeenCalled();
   });
 
-  it('applies groupId filter when provided', async () => {
-    await searchFoods(db, { groupId: 'group-uuid' });
-    expect(db.food.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ foodGroupId: 'group-uuid' }),
-      }),
-    );
+  it('should return foods in the order of the matched ids', async () => {
+    db.$queryRaw.mockResolvedValue([{ id: 'b' }, { id: 'a' }]);
+    db.food.findMany.mockResolvedValue([makeFood({ id: 'a', name: 'A' }), makeFood({ id: 'b', name: 'B' })]);
+
+    const result = await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, query: 'a' });
+
+    expect(result.items.map((item) => item.id)).toEqual(['b', 'a']);
   });
 
-  it('returns items and total', async () => {
-    const fakeFood = { id: 'f1', name: 'Arroz', source: 'taco' };
-    db.food.findMany.mockResolvedValue([fakeFood]);
-    db.food.count.mockResolvedValue(1);
-    db.$transaction.mockImplementation((ops) => Promise.all(ops));
+  it('should load the matched ids with their food group', async () => {
+    db.$queryRaw.mockResolvedValue([{ id: FOOD_ID }]);
+    db.food.findMany.mockResolvedValue([makeFood()]);
 
-    const result = await searchFoods(db, { query: 'arroz' });
-    expect(result).toEqual({ items: [fakeFood], total: 1 });
+    await searchFoods(db, { nutritionistId: NUTRITIONIST_ID });
+
+    expect(db.food.findMany).toHaveBeenCalledWith({
+      where: { id: { in: [FOOD_ID] } },
+      include: { foodGroup: { select: { id: true, name: true } } },
+    });
+  });
+
+  it('should map foods to the Food contract shape', async () => {
+    db.$queryRaw.mockResolvedValue([{ id: FOOD_ID }]);
+    db.food.findMany.mockResolvedValue([makeFood()]);
+
+    const result = await searchFoods(db, {});
+
+    expect(result.items).toEqual([makeFoodDto()]);
+  });
+
+  it('should pass the default limit to the query when none is given', async () => {
+    await searchFoods(db, {});
+
+    const values = db.$queryRaw.mock.calls[0].slice(1);
+    expect(values).toContain(20);
+  });
+
+  it('should clamp an oversized limit to the maximum', async () => {
+    await searchFoods(db, { limit: 5000 });
+
+    const values = db.$queryRaw.mock.calls[0].slice(1);
+    expect(values).toContain(100);
   });
 });
 
 describe('getFoodById', () => {
-  it('returns food when found', async () => {
-    const food = { id: 'f1', name: 'Arroz', source: 'taco' };
-    const db = makePrisma();
-    db.food.findUnique.mockResolvedValue(food);
+  let db;
 
-    await expect(getFoodById(db, 'f1')).resolves.toEqual(food);
+  beforeEach(() => {
+    db = makePrisma();
   });
 
-  it('throws 404 when not found', async () => {
-    const db = makePrisma();
-    db.food.findUnique.mockResolvedValue(null);
+  it('should return the food DTO when it is accessible', async () => {
+    db.food.findFirst.mockResolvedValue(makeFood());
 
-    await expect(getFoodById(db, 'missing')).rejects.toMatchObject({ httpStatus: 404 });
+    const result = await getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
+
+    expect(result).toEqual(makeFoodDto());
+  });
+
+  it('should restrict visibility to public foods and the caller custom foods', async () => {
+    db.food.findFirst.mockResolvedValue(makeFood());
+
+    await getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
+
+    expect(db.food.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: FOOD_ID, OR: [{ nutritionistId: null }, { nutritionistId: NUTRITIONIST_ID }] } }),
+    );
+  });
+
+  it('should only see public foods without a nutritionist', async () => {
+    db.food.findFirst.mockResolvedValue(makeFood());
+
+    await getFoodById(db, { foodId: FOOD_ID });
+
+    expect(db.food.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: FOOD_ID, OR: [{ nutritionistId: null }] } }),
+    );
+  });
+
+  it('should throw 404 FOOD_NOT_FOUND when the food is not accessible', async () => {
+    await expect(getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID })).rejects.toMatchObject({
+      httpStatus: HTTP_NOT_FOUND,
+      error: NutritionErrorCode.FOOD_NOT_FOUND,
+      messageCode: NutritionMessageCode.FOOD_NOT_FOUND,
+    });
   });
 });
 
 describe('listFoodGroups', () => {
-  it('returns all food groups ordered by name', async () => {
+  it('should return groups ordered by name with only id, name and code', async () => {
     const db = makePrisma();
-    const groups = [{ id: 'g1', name: 'Cereais', code: 'cereais' }];
-    db.foodGroup.findMany.mockResolvedValue(groups);
+    db.foodGroup.findMany.mockResolvedValue([{ id: GROUP_ID, name: 'Cereais', code: 'CER', extra: 'x' }]);
 
-    await expect(listFoodGroups(db)).resolves.toEqual(groups);
+    const result = await listFoodGroups(db);
+
+    expect(result).toEqual({ items: [{ id: GROUP_ID, name: 'Cereais', code: 'CER' }] });
     expect(db.foodGroup.findMany).toHaveBeenCalledWith({ orderBy: { name: 'asc' } });
+  });
+});
+
+describe('createCustomFood', () => {
+  let db;
+  const data = {
+    name: 'Meu bolo',
+    groupId: GROUP_ID,
+    per100g: { kcal: 300, protein: 5, carbs: 50, fat: 10, fiber: 2 },
+    portion: { label: '1 fatia', grams: 60 },
+  };
+
+  beforeEach(() => {
+    db = makePrisma();
+  });
+
+  it('should create a custom food owned by the nutritionist', async () => {
+    db.food.create.mockResolvedValue(
+      makeFood({ name: 'Meu bolo', source: FoodSource.CUSTOM, nutritionistId: NUTRITIONIST_ID }),
+    );
+
+    await createCustomFood(db, { nutritionistId: NUTRITIONIST_ID, data });
+
+    expect(db.food.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          nutritionistId: NUTRITIONIST_ID,
+          foodGroupId: GROUP_ID,
+          name: 'Meu bolo',
+          source: FoodSource.CUSTOM,
+          energyKcal: 300,
+          proteinG: 5,
+          carbohydratesG: 50,
+          fiberG: 2,
+          totalFatG: 10,
+          servingSizeG: 60,
+          servingSizeDescription: '1 fatia',
+        },
+      }),
+    );
+  });
+
+  it('should return the created food as a DTO', async () => {
+    db.food.create.mockResolvedValue(makeFood({ source: FoodSource.CUSTOM }));
+
+    const result = await createCustomFood(db, { nutritionistId: NUTRITIONIST_ID, data });
+
+    expect(result).toEqual(makeFoodDto({ source: FoodSource.CUSTOM }));
+  });
+
+  it('should throw 404 FOOD_GROUP_NOT_FOUND when the group does not exist', async () => {
+    db.foodGroup.findUnique.mockResolvedValue(null);
+
+    await expect(createCustomFood(db, { nutritionistId: NUTRITIONIST_ID, data })).rejects.toMatchObject({
+      httpStatus: HTTP_NOT_FOUND,
+      error: NutritionErrorCode.FOOD_GROUP_NOT_FOUND,
+      messageCode: NutritionMessageCode.FOOD_GROUP_NOT_FOUND,
+    });
+    expect(db.food.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateCustomFood', () => {
+  let db;
+
+  beforeEach(() => {
+    db = makePrisma();
+    db.food.findFirst.mockResolvedValue(makeFood({ nutritionistId: NUTRITIONIST_ID }));
+    db.food.update.mockResolvedValue(makeFood({ name: 'Novo' }));
+  });
+
+  it('should check ownership through the nutritionist id', async () => {
+    await updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { name: 'Novo' } });
+
+    expect(db.food.findFirst).toHaveBeenCalledWith({ where: { id: FOOD_ID, nutritionistId: NUTRITIONIST_ID } });
+  });
+
+  it('should only update the provided fields', async () => {
+    await updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { name: 'Novo' } });
+
+    expect(db.food.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: FOOD_ID }, data: { name: 'Novo' } }));
+  });
+
+  it('should map the group id to the food group column after validating it', async () => {
+    await updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { groupId: 'group-2' } });
+
+    expect(db.foodGroup.findUnique).toHaveBeenCalledWith({ where: { id: 'group-2' }, select: { id: true } });
+    expect(db.food.update).toHaveBeenCalledWith(expect.objectContaining({ data: { foodGroupId: 'group-2' } }));
+  });
+
+  it('should return the updated food as a DTO', async () => {
+    const result = await updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { name: 'Novo' } });
+
+    expect(result).toEqual(makeFoodDto({ name: 'Novo' }));
+  });
+
+  it('should throw 404 FOOD_NOT_FOUND when the food is not owned by the nutritionist', async () => {
+    db.food.findFirst.mockResolvedValue(null);
+
+    await expect(
+      updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { name: 'Novo' } }),
+    ).rejects.toMatchObject({ httpStatus: HTTP_NOT_FOUND, error: NutritionErrorCode.FOOD_NOT_FOUND });
+    expect(db.food.update).not.toHaveBeenCalled();
+  });
+
+  it('should throw 404 FOOD_GROUP_NOT_FOUND when the new group does not exist', async () => {
+    db.foodGroup.findUnique.mockResolvedValue(null);
+
+    await expect(
+      updateCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID, data: { groupId: 'missing' } }),
+    ).rejects.toMatchObject({ httpStatus: HTTP_NOT_FOUND, error: NutritionErrorCode.FOOD_GROUP_NOT_FOUND });
+    expect(db.food.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteCustomFood', () => {
+  let db;
+
+  beforeEach(() => {
+    db = makePrisma();
+  });
+
+  it('should delete an owned custom food', async () => {
+    db.food.findFirst.mockResolvedValue(makeFood({ nutritionistId: NUTRITIONIST_ID }));
+
+    await deleteCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
+
+    expect(db.food.delete).toHaveBeenCalledWith({ where: { id: FOOD_ID } });
+  });
+
+  it('should throw 404 FOOD_NOT_FOUND and not delete when the food is not owned', async () => {
+    await expect(deleteCustomFood(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID })).rejects.toMatchObject({
+      httpStatus: HTTP_NOT_FOUND,
+      error: NutritionErrorCode.FOOD_NOT_FOUND,
+    });
+    expect(db.food.delete).not.toHaveBeenCalled();
   });
 });
