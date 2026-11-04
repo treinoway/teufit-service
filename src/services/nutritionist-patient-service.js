@@ -1,337 +1,162 @@
-import { AppError } from '../errors/app-error.js';
-import { DietErrorCode, DietMessageCode, tmbFormulaValues, activityLevelValues } from '../constants/diet.js';
-import { calculateTmb, calculateGet } from './tmb-calculator-service.js';
-import { formatDateOnly } from '../helpers/date-helpers.js';
+import s3BucketHandler from '../config/s3-bucket-handler.js';
+import { NotFoundAppError } from '../errors/app-error.js';
+import { computeAge, toNumber } from '../helpers/nutrition-sheet.js';
+import { hasPendingChanges } from '../helpers/nutrition-plan-view.js';
+import { loadAdherenceByPatient } from './nutrition-adherence-service.js';
+import { PlanStatus, PatientLinkStatus, NutritionErrorCode, NutritionMessageCode } from '../constants/nutrition.js';
 
-function buildDietError(errorCode, messageCode, message, httpStatus = 400) {
-  return new AppError({ httpStatus, error: errorCode, messageCode, message });
+// Builds the patient-not-found error.
+function patientNotFoundError() {
+  return new NotFoundAppError({
+    error: NutritionErrorCode.PATIENT_NOT_FOUND,
+    messageCode: NutritionMessageCode.PATIENT_NOT_FOUND,
+    message: 'Patient not found.',
+  });
 }
 
-function toNumber(value) {
-  return value != null ? Number(value) : null;
+/**
+ * Active nutritionist-patient link or 404 nutrition.patient.notFound.
+ */
+export async function requirePatientLink(prisma, { nutritionistId, patientId }) {
+  const link = await prisma.nutritionistPatient.findUnique({
+    where: { nutritionistId_patientId: { nutritionistId, patientId } },
+  });
+  if (!link || link.deletedAt) throw patientNotFoundError();
+  return link;
 }
 
-function normalizeMetabolicProfile(profile) {
-  if (!profile) return null;
+// Plan summary shown in the patient row.
+function toPlanSummary(plan) {
+  if (!plan) return null;
   return {
-    ...profile,
-    weightKg: toNumber(profile.weightKg),
-    heightCm: toNumber(profile.heightCm),
-    leanBodyMassKg: toNumber(profile.leanBodyMassKg),
-    tmbKcal: toNumber(profile.tmbKcal),
-    palMultiplier: toNumber(profile.palMultiplier),
-    getKcal: toNumber(profile.getKcal),
+    id: plan.id,
+    status: plan.status,
+    publishedAt: plan.publishedAt ? plan.publishedAt.toISOString() : null,
+    hasUnpublishedChanges: hasPendingChanges(plan),
   };
 }
 
-function computeAgeFromBirthDate(birthDate) {
-  if (!birthDate) return null;
-  const today = new Date();
-  const birth = new Date(birthDate);
-  let age = today.getUTCFullYear() - birth.getUTCFullYear();
-  const monthDiff = today.getUTCMonth() - birth.getUTCMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birth.getUTCDate())) {
-    age -= 1;
-  }
-  return age;
+// Adherence summary shown in the patient row.
+function toRowAdherence(adherence) {
+  if (!adherence) return null;
+  return { done: adherence.mealsDone, expected: adherence.mealsExpected, percent: adherence.percent };
+}
+
+// Groups rows by a key into a Map (last row wins).
+function indexBy(rows, key) {
+  return new Map(rows.map((row) => [row[key], row]));
+}
+
+// Loads everything needed to render patient rows in 3 queries.
+async function loadRowSources(prisma, { nutritionistId, patientIds }) {
+  return Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: patientIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        avatarUrl: true,
+        birthDate: true,
+        healthDetail: { select: { weight: true } },
+      },
+    }),
+    prisma.dietProtocol.findMany({
+      where: { nutritionistId, assigneeId: { in: patientIds } },
+      select: {
+        id: true,
+        assigneeId: true,
+        status: true,
+        objective: true,
+        publishedAt: true,
+        firstPublishedAt: true,
+        publishedSnapshot: true,
+        hasUnpublishedChanges: true,
+      },
+    }),
+    prisma.patientMetabolicProfile.findMany({
+      where: { nutritionistId, patientId: { in: patientIds } },
+      select: { patientId: true, weightKg: true },
+    }),
+  ]);
+}
+
+// Assembles one PatientRow.
+async function toPatientRow({ link, user, plan, profile, adherence }) {
+  return {
+    id: user.id,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    email: user.email,
+    avatarUrl: await s3BucketHandler.resolveUrl(user.avatarUrl),
+    age: computeAge(user.birthDate),
+    weightKg: toNumber(profile?.weightKg) ?? user.healthDetail?.weight ?? null,
+    objective: plan ? plan.objective : null,
+    plan: toPlanSummary(plan),
+    adherence7d: plan?.status === PlanStatus.PUBLISHED ? toRowAdherence(adherence) : null,
+    linkedAt: link.createdAt.toISOString(),
+  };
 }
 
 /**
- * Link a patient to a nutritionist.
+ * Builds PatientRow objects for links.
  *
- * @param {object} db - Prisma client
- * @param {string} nutritionistUserId - User ID of the nutritionist
- * @param {string} patientId - User ID of the patient
- * @param {object} data - Optional data (notes)
- * @returns {Promise<object>} Created link
+ * @returns {Promise<{ rows: object[], adherenceByPatient: Map<string, object> }>}
  */
-export async function linkPatient(db, nutritionistUserId, email, data = {}) {
-  const nutritionist = await db.nutritionist.findUnique({
-    where: { userId: nutritionistUserId },
-    select: { id: true },
-  });
+export async function buildPatientRows(prisma, { nutritionistId, links }) {
+  if (links.length === 0) return { rows: [], adherenceByPatient: new Map() };
+  const patientIds = links.map((link) => link.patientId);
+  const [users, plans, profiles] = await loadRowSources(prisma, { nutritionistId, patientIds });
+  const adherenceByPatient = await loadAdherenceByPatient(prisma, plans);
+  const userById = indexBy(users, 'id');
+  const planByPatient = indexBy(plans, 'assigneeId');
+  const profileByPatient = indexBy(profiles, 'patientId');
 
-  if (!nutritionist) {
-    throw buildDietError(
-      DietErrorCode.NUTRITIONIST_NOT_FOUND,
-      'nutritionist.notFound',
-      'Nutritionist profile not found.',
-      404,
-    );
-  }
-
-  const patient = await db.user.findUnique({
-    where: { email },
-    select: { id: true, deletedAt: true },
-  });
-
-  if (!patient || patient.deletedAt) {
-    throw buildDietError(
-      DietErrorCode.PATIENT_NOT_FOUND,
-      DietMessageCode.PATIENT_NOT_FOUND,
-      'Patient not found.',
-      404,
-    );
-  }
-
-  const patientId = patient.id;
-
-  const existing = await db.nutritionistPatient.findUnique({
-    where: { nutritionistId_patientId: { nutritionistId: nutritionist.id, patientId } },
-  });
-
-  if (existing && !existing.deletedAt) {
-    throw buildDietError(
-      DietErrorCode.PATIENT_ALREADY_LINKED,
-      DietMessageCode.PATIENT_ALREADY_LINKED,
-      'Patient is already linked to this nutritionist.',
-      409,
-    );
-  }
-
-  if (existing && existing.deletedAt) {
-    return db.nutritionistPatient.update({
-      where: { id: existing.id },
-      data: {
-        status: 'active',
-        notes: data.notes !== undefined ? data.notes : existing.notes,
-        deletedAt: null,
-      },
-      include: {
-        patient: {
-          select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true },
-        },
-      },
-    });
-  }
-
-  return db.nutritionistPatient.create({
-    data: {
-      nutritionistId: nutritionist.id,
-      patientId,
-      notes: data.notes || null,
-    },
-    include: {
-      patient: {
-        select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true },
-      },
-    },
-  });
+  const rows = await Promise.all(
+    links
+      .filter((link) => userById.has(link.patientId))
+      .map((link) =>
+        toPatientRow({
+          link,
+          user: userById.get(link.patientId),
+          plan: planByPatient.get(link.patientId),
+          profile: profileByPatient.get(link.patientId),
+          adherence: adherenceByPatient.get(link.patientId),
+        }),
+      ),
+  );
+  return { rows, adherenceByPatient };
 }
 
 /**
- * Unlink (soft-delete) a patient from a nutritionist.
- *
- * @param {object} db - Prisma client
- * @param {string} nutritionistUserId - User ID of the nutritionist
- * @param {string} patientId - User ID of the patient
- * @returns {Promise<object>} Updated link
+ * Lists the active patients of a nutritionist as PatientRow[].
  */
-export async function unlinkPatient(db, nutritionistUserId, patientId) {
-  const nutritionist = await db.nutritionist.findUnique({
-    where: { userId: nutritionistUserId },
-    select: { id: true },
-  });
-
-  if (!nutritionist) {
-    throw buildDietError(
-      DietErrorCode.NUTRITIONIST_NOT_FOUND,
-      'nutritionist.notFound',
-      'Nutritionist profile not found.',
-      404,
-    );
-  }
-
-  const link = await db.nutritionistPatient.findUnique({
-    where: { nutritionistId_patientId: { nutritionistId: nutritionist.id, patientId } },
-  });
-
-  if (!link || link.deletedAt) {
-    throw buildDietError(
-      DietErrorCode.PATIENT_NOT_LINKED,
-      DietMessageCode.PATIENT_NOT_LINKED,
-      'Patient is not linked to this nutritionist.',
-      404,
-    );
-  }
-
-  return db.nutritionistPatient.update({
-    where: { id: link.id },
-    data: { deletedAt: new Date(), status: 'inactive' },
-  });
-}
-
-/**
- * List all active patients for a nutritionist.
- *
- * @param {object} db - Prisma client
- * @param {string} nutritionistUserId - User ID of the nutritionist
- * @returns {Promise<object[]>} List of patient links with patient and metabolic profile
- */
-export async function listPatients(db, nutritionistUserId) {
-  const nutritionist = await db.nutritionist.findUnique({
-    where: { userId: nutritionistUserId },
-    select: { id: true },
-  });
-
-  if (!nutritionist) {
-    throw buildDietError(
-      DietErrorCode.NUTRITIONIST_NOT_FOUND,
-      'nutritionist.notFound',
-      'Nutritionist profile not found.',
-      404,
-    );
-  }
-
-  const links = await db.nutritionistPatient.findMany({
-    where: { nutritionistId: nutritionist.id, deletedAt: null },
-    include: {
-      patient: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          avatarUrl: true,
-          birthDate: true,
-          gender: true,
-          metabolicProfile: true,
-        },
-      },
-    },
+export async function listPatients(prisma, { nutritionistId }) {
+  const links = await prisma.nutritionistPatient.findMany({
+    where: { nutritionistId, deletedAt: null, patient: { deletedAt: null } },
     orderBy: { createdAt: 'desc' },
   });
-
-  return links.map((link) => {
-    const { metabolicProfile, ...patientFields } = link.patient ?? {};
-    return {
-      ...link,
-      patient: link.patient
-        ? { ...patientFields, birthDate: formatDateOnly(patientFields.birthDate) }
-        : null,
-      metabolicProfile: metabolicProfile ? normalizeMetabolicProfile(metabolicProfile) : null,
-    };
-  });
+  const { rows } = await buildPatientRows(prisma, { nutritionistId, links });
+  return rows;
 }
 
 /**
- * Validate that a patient is linked to a nutritionist (not deleted).
- * Returns the nutritionist record.
+ * One PatientRow (and its adherence) for a linked patient.
  */
-async function validatePatientLink(db, nutritionistUserId, patientId) {
-  const nutritionist = await db.nutritionist.findUnique({
-    where: { userId: nutritionistUserId },
-    select: { id: true },
-  });
-
-  if (!nutritionist) {
-    throw buildDietError(
-      DietErrorCode.NUTRITIONIST_NOT_FOUND,
-      'nutritionist.notFound',
-      'Nutritionist profile not found.',
-      404,
-    );
-  }
-
-  const link = await db.nutritionistPatient.findUnique({
-    where: { nutritionistId_patientId: { nutritionistId: nutritionist.id, patientId } },
-  });
-
-  if (!link || link.deletedAt) {
-    throw buildDietError(
-      DietErrorCode.PATIENT_NOT_LINKED,
-      DietMessageCode.PATIENT_NOT_LINKED,
-      'Patient is not linked to this nutritionist.',
-      404,
-    );
-  }
-
-  return nutritionist;
+export async function getPatientRow(prisma, { nutritionistId, patientId }) {
+  const link = await requirePatientLink(prisma, { nutritionistId, patientId });
+  const { rows, adherenceByPatient } = await buildPatientRows(prisma, { nutritionistId, links: [link] });
+  return { row: rows[0], adherence: adherenceByPatient.get(patientId) ?? null };
 }
 
 /**
- * Create or update the metabolic profile of a patient.
- * Calculates TMB and GET when formula and activity level are provided.
- *
- * @param {object} db - Prisma client
- * @param {string} nutritionistUserId - User ID of the nutritionist
- * @param {string} patientId - User ID of the patient
- * @param {object} data - Profile data
- * @returns {Promise<object>} Upserted metabolic profile
+ * Soft-unlinks a patient from the nutritionist.
  */
-export async function upsertMetabolicProfile(db, nutritionistUserId, patientId, data) {
-  const nutritionist = await validatePatientLink(db, nutritionistUserId, patientId);
-
-  if (data.tmbFormula && !tmbFormulaValues.includes(data.tmbFormula)) {
-    throw new AppError({
-      httpStatus: 400,
-      error: 'INVALID_TMB_FORMULA',
-      messageCode: 'validation.failed',
-      message: `Invalid TMB formula: ${data.tmbFormula}.`,
-    });
-  }
-
-  if (data.activityLevel && !activityLevelValues.includes(data.activityLevel)) {
-    throw new AppError({
-      httpStatus: 400,
-      error: 'INVALID_ACTIVITY_LEVEL',
-      messageCode: 'validation.failed',
-      message: `Invalid activity level: ${data.activityLevel}.`,
-    });
-  }
-
-  let tmbKcal = data.tmbKcal ?? undefined;
-  let getKcal = data.getKcal ?? undefined;
-  let palMultiplier = data.palMultiplier ?? undefined;
-
-  const shouldCalculateTmb = data.tmbFormula && (data.weightKg || data.heightCm);
-
-  if (shouldCalculateTmb) {
-    const patient = await db.user.findUnique({
-      where: { id: patientId },
-      select: { birthDate: true, gender: true },
-    });
-
-    const ageYears = computeAgeFromBirthDate(patient?.birthDate);
-    const gender = patient?.gender || null;
-
-    const tmbParams = {
-      weightKg: data.weightKg ? Number(data.weightKg) : undefined,
-      heightCm: data.heightCm ? Number(data.heightCm) : undefined,
-      leanBodyMassKg: data.leanBodyMassKg ? Number(data.leanBodyMassKg) : undefined,
-      ageYears,
-      gender,
-    };
-
-    tmbKcal = calculateTmb(data.tmbFormula, tmbParams);
-
-    if (data.activityLevel) {
-      const getResult = calculateGet(tmbKcal, data.activityLevel);
-      getKcal = getResult.getKcal;
-      palMultiplier = getResult.palMultiplier;
-    }
-  } else if (data.tmbKcal != null && data.activityLevel) {
-    const getResult = calculateGet(Number(data.tmbKcal), data.activityLevel);
-    getKcal = getResult.getKcal;
-    palMultiplier = getResult.palMultiplier;
-  }
-
-  const profileData = {
-    nutritionistId: nutritionist.id,
-    ...(data.weightKg !== undefined && { weightKg: data.weightKg }),
-    ...(data.heightCm !== undefined && { heightCm: data.heightCm }),
-    ...(data.leanBodyMassKg !== undefined && { leanBodyMassKg: data.leanBodyMassKg }),
-    ...(data.tmbFormula !== undefined && { tmbFormula: data.tmbFormula }),
-    ...(tmbKcal !== undefined && { tmbKcal }),
-    ...(data.activityLevel !== undefined && { activityLevel: data.activityLevel }),
-    ...(palMultiplier !== undefined && { palMultiplier }),
-    ...(getKcal !== undefined && { getKcal }),
-  };
-
-  const result = await db.patientMetabolicProfile.upsert({
-    where: { patientId },
-    create: { patientId, ...profileData },
-    update: profileData,
+export async function unlinkPatient(prisma, { nutritionistId, patientId }) {
+  const link = await requirePatientLink(prisma, { nutritionistId, patientId });
+  await prisma.nutritionistPatient.update({
+    where: { id: link.id },
+    data: { deletedAt: new Date(), status: PatientLinkStatus.INACTIVE },
   });
-  return normalizeMetabolicProfile(result);
 }

@@ -75,6 +75,10 @@ export default {
           inviteStudent: { max: 1000, timeWindow: '1 minute' },
           resendStudentInvite: { max: 1000, timeWindow: '1 minute' },
         },
+        nutritionist: {
+          invitePatient: { max: 1000, timeWindow: '1 minute' },
+          resendPatientInvite: { max: 1000, timeWindow: '1 minute' },
+        },
         exerciseTemplate: {
           create: { max: 1000, timeWindow: '1 minute' },
           list: { max: 1000, timeWindow: '1 minute' },

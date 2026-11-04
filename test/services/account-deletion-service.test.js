@@ -25,6 +25,9 @@ vi.mock('../../src/db.js', () => ({
     challengeParticipant: { deleteMany: vi.fn() },
     trainerStudent: { deleteMany: vi.fn() },
     nutritionistPatient: { deleteMany: vi.fn() },
+    waterLog: { deleteMany: vi.fn() },
+    dietProtocol: { deleteMany: vi.fn() },
+    patientInvite: { deleteMany: vi.fn() },
     aiInteractionLog: { updateMany: vi.fn() },
     trainerInvite: { deleteMany: vi.fn() },
     $transaction: vi.fn(),
@@ -189,6 +192,11 @@ describe('account-deletion-service', () => {
         expect(prisma.challengeParticipant.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { studentId: USER_ID } });
         expect(prisma.trainerStudent.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { studentId: USER_ID } });
         expect(prisma.nutritionistPatient.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { patientId: USER_ID } });
+        expect(prisma.waterLog.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { patientId: USER_ID } });
+        expect(prisma.dietProtocol.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { assigneeId: USER_ID } });
+        expect(prisma.patientInvite.deleteMany).toHaveBeenCalledExactlyOnceWith({
+          where: { OR: [{ patientId: USER_ID }, { email: USER_EMAIL.trim().toLowerCase() }] },
+        });
         expect(prisma.aiInteractionLog.updateMany).toHaveBeenCalledExactlyOnceWith({
           where: { studentId: USER_ID },
           data: { studentId: null, userMessage: null, responseText: null },

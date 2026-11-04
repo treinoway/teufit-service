@@ -122,7 +122,7 @@ export function requireBetaAccess() {
       throw new ForbiddenAppError({
         error: 'INVITE_REQUIRED',
         messageCode: InviteMessageCode.REQUIRED,
-        message: 'A trainer invite is required to access this feature during the closed beta.',
+        message: 'An invite is required to access this feature during the closed beta.',
       });
     }
 
