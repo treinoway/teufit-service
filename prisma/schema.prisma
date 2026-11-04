@@ -50,8 +50,12 @@ model User {
   pointTransactions          PointTransaction[]
   pointBalances              PointBalance[]
   nutritionistPatients       NutritionistPatient[]
-  metabolicProfile           PatientMetabolicProfile?
+  metabolicProfiles          PatientMetabolicProfile[]
   dietProtocolsAsPatient     DietProtocol[]
+  dietMealLogs               DietMealLog[]
+  dietSwapLogs               DietSwapLog[]
+  waterLogs                  WaterLog[]
+  patientInvitesAccepted     PatientInvite[]
   videosCreated              Video[]
   tutorialsCreated           Tutorial[]
   studentSubscriptions       StudentSubscription[]
@@ -353,10 +357,11 @@ model Nutritionist {
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  patients              NutritionistPatient[]
-  metabolicProfiles     PatientMetabolicProfile[]
-  dietProtocolTemplates DietProtocolTemplate[]
-  dietProtocols         DietProtocol[]
+  patients          NutritionistPatient[]
+  metabolicProfiles PatientMetabolicProfile[]
+  dietProtocols     DietProtocol[]
+  patientInvites    PatientInvite[]
+  customFoods       Food[]
 
   @@map("nutritionists")
 }
@@ -1015,6 +1020,7 @@ model FoodGroup {
 model Food {
   id                     String   @id @default(uuid()) @db.Uuid
   foodGroupId            String   @map("food_group_id") @db.Uuid
+  nutritionistId         String?  @map("nutritionist_id") @db.Uuid
   name                   String   @db.Text
   tacoId                 String?  @unique @map("taco_id") @db.VarChar(50)
   tbcaId                 String?  @unique @map("tbca_id") @db.VarChar(50)
@@ -1060,165 +1066,211 @@ model Food {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  foodGroup             FoodGroup              @relation(fields: [foodGroupId], references: [id], onDelete: Restrict)
-  dietTemplateFoodItems DietTemplateFoodItem[]
-  dietFoodItems         DietFoodItem[]
+  foodGroup           FoodGroup            @relation(fields: [foodGroupId], references: [id], onDelete: Restrict)
+  nutritionist        Nutritionist?        @relation(fields: [nutritionistId], references: [id], onDelete: Cascade)
+  dietFoodItems       DietFoodItem[]
+  dietItemSubstitutes DietItemSubstitute[]
 
+  @@index([nutritionistId])
   @@map("foods")
 }
 
+// Patient "ficha" (assessment sheet) written by a nutritionist. One per (patient, nutritionist).
 model PatientMetabolicProfile {
   id             String    @id @default(uuid()) @db.Uuid
-  patientId      String    @unique @map("patient_id") @db.Uuid
+  patientId      String    @map("patient_id") @db.Uuid
   nutritionistId String    @map("nutritionist_id") @db.Uuid
+  sex            String?   @db.Text // female|male
   weightKg       Decimal?  @map("weight_kg") @db.Decimal(6, 2)
   heightCm       Decimal?  @map("height_cm") @db.Decimal(6, 2)
-  leanBodyMassKg Decimal?  @map("lean_body_mass_kg") @db.Decimal(6, 2)
-  tmbFormula     String?   @map("tmb_formula")
-  tmbKcal        Decimal?  @map("tmb_kcal") @db.Decimal(8, 2)
-  activityLevel  String?   @map("activity_level")
-  palMultiplier  Decimal?  @map("pal_multiplier") @db.Decimal(4, 3)
-  getKcal        Decimal?  @map("get_kcal") @db.Decimal(8, 2)
+  bodyFatPct     Decimal?  @map("body_fat_pct") @db.Decimal(5, 2)
+  assessedAt     DateTime? @map("assessed_at") @db.Date
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   patient      User         @relation(fields: [patientId], references: [id], onDelete: Restrict)
   nutritionist Nutritionist @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
 
+  @@unique([patientId, nutritionistId])
   @@map("patient_metabolic_profiles")
 }
 
-model DietProtocolTemplate {
-  id             String    @id @default(uuid()) @db.Uuid
-  nutritionistId String    @map("nutritionist_id") @db.Uuid
-  name           String    @db.VarChar(255)
-  description    String?   @db.Text
-  dietType       String?   @map("diet_type")
-  goalType       String?   @map("goal_type")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
-
-  nutritionist  Nutritionist       @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
-  meals         DietTemplateMeal[]
-  dietProtocols DietProtocol[]
-
-  @@map("diet_protocol_templates")
-}
-
-model DietTemplateMeal {
-  id                     String    @id @default(uuid()) @db.Uuid
-  dietProtocolTemplateId String    @map("diet_protocol_template_id") @db.Uuid
-  name                   String    @db.VarChar(255)
-  mealType               String    @map("meal_type")
-  order                  Int
-  scheduledTime          String?   @map("scheduled_time") @db.VarChar(10)
-  notes                  String?   @db.Text
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
-
-  template  DietProtocolTemplate   @relation(fields: [dietProtocolTemplateId], references: [id], onDelete: Cascade)
-  foodItems DietTemplateFoodItem[]
-
-  @@map("diet_template_meals")
-}
-
-model DietTemplateFoodItem {
-  id                 String    @id @default(uuid()) @db.Uuid
-  dietTemplateMealId String    @map("diet_template_meal_id") @db.Uuid
-  foodId             String?   @map("food_id") @db.Uuid
-  foodName           String    @map("food_name") @db.VarChar(255)
-  quantityG          Decimal   @map("quantity_g") @db.Decimal(8, 2)
-  unit               String    @default("g") @db.VarChar(20)
-  energyKcal         Decimal?  @map("energy_kcal") @db.Decimal(8, 2)
-  proteinG           Decimal?  @map("protein_g") @db.Decimal(6, 2)
-  carbohydratesG     Decimal?  @map("carbohydrates_g") @db.Decimal(6, 2)
-  totalFatG          Decimal?  @map("total_fat_g") @db.Decimal(6, 2)
-  fiberG             Decimal?  @map("fiber_g") @db.Decimal(6, 2)
-  order              Int
-  notes              String?   @db.Text
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
-
-  meal DietTemplateMeal @relation(fields: [dietTemplateMealId], references: [id], onDelete: Cascade)
-  food Food?            @relation(fields: [foodId], references: [id], onDelete: SetNull)
-
-  @@map("diet_template_food_items")
-}
-
+// Meal plan of one patient for one nutritionist (draft until published; the app reads publishedSnapshot).
 model DietProtocol {
-  id                     String    @id @default(uuid()) @db.Uuid
-  nutritionistId         String    @map("nutritionist_id") @db.Uuid
-  assigneeId             String    @map("assignee_id") @db.Uuid
-  dietProtocolTemplateId String?   @map("diet_protocol_template_id") @db.Uuid
-  name                   String    @db.VarChar(255)
-  description            String?   @db.Text
-  status                 String    @default("active")
-  startDate              DateTime  @map("start_date") @db.Date
-  expirationDate         DateTime? @map("expiration_date") @db.Date
-  dietType               String?   @map("diet_type")
-  goalType               String?   @map("goal_type")
-  tmbFormula             String?   @map("tmb_formula")
-  tmbKcal                Decimal?  @map("tmb_kcal") @db.Decimal(8, 2)
-  activityLevel          String?   @map("activity_level")
-  getKcal                Decimal?  @map("get_kcal") @db.Decimal(8, 2)
-  dailyCaloricTarget     Decimal?  @map("daily_caloric_target") @db.Decimal(8, 2)
-  notes                  String?   @db.Text
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id                    String    @id @default(uuid()) @db.Uuid
+  nutritionistId        String    @map("nutritionist_id") @db.Uuid
+  assigneeId            String    @map("assignee_id") @db.Uuid
+  status                String    @default("draft") @db.Text // draft|published
+  version               Int       @default(0)
+  publishedAt           DateTime? @map("published_at") @db.Timestamptz(6)
+  firstPublishedAt      DateTime? @map("first_published_at") @db.Timestamptz(6)
+  publishedSnapshot     Json?     @map("published_snapshot")
+  hasUnpublishedChanges Boolean   @default(false) @map("has_unpublished_changes")
 
-  nutritionist Nutritionist          @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
-  assignee     User                  @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
-  template     DietProtocolTemplate? @relation(fields: [dietProtocolTemplateId], references: [id], onDelete: SetNull)
+  // Goals and energy expenditure
+  bmrFormula      String   @default("mifflin") @map("bmr_formula") @db.Text
+  activityFactor  Decimal  @default(1.375) @map("activity_factor") @db.Decimal(4, 3)
+  activities      Json     @default("[]")
+  objective       String   @default("maintain") @db.Text
+  kcalTarget      Decimal? @map("kcal_target") @db.Decimal(8, 2)
+  proteinPerKg    Decimal? @map("protein_per_kg") @db.Decimal(5, 2)
+  fatPerKg        Decimal? @map("fat_per_kg") @db.Decimal(5, 2)
+  carbPerKg       Decimal? @map("carb_per_kg") @db.Decimal(5, 2)
+  carbIsRemainder Boolean  @default(false) @map("carb_is_remainder")
+  fiberMinG       Decimal? @map("fiber_min_g") @db.Decimal(6, 2)
+
+  // Guidance
+  waterTargetMl    Int?    @map("water_target_ml")
+  freeMealsPerWeek Int     @default(0) @map("free_meals_per_week")
+  freeMealText     String? @map("free_meal_text") @db.Text
+  supplements      Json    @default("[]")
+  observations     String? @db.Text
+  patientMessage   String? @map("patient_message") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  nutritionist Nutritionist  @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
+  assignee     User          @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
   meals        DietMeal[]
+  mealLogs     DietMealLog[]
+  swapLogs     DietSwapLog[]
 
+  @@unique([nutritionistId, assigneeId])
+  @@index([assigneeId, status])
   @@map("diet_protocols")
 }
 
 model DietMeal {
   id             String    @id @default(uuid()) @db.Uuid
   dietProtocolId String    @map("diet_protocol_id") @db.Uuid
-  templateMealId String?   @map("template_meal_id") @db.Uuid
   name           String    @db.VarChar(255)
-  mealType       String    @map("meal_type")
+  time           String    @db.VarChar(5) // HH:MM
   order          Int
-  scheduledTime  String?   @map("scheduled_time") @db.VarChar(10)
-  notes          String?   @db.Text
+  tip            String?   @db.Text
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  protocol  DietProtocol   @relation(fields: [dietProtocolId], references: [id], onDelete: Cascade)
-  foodItems DietFoodItem[]
+  protocol DietProtocol     @relation(fields: [dietProtocolId], references: [id], onDelete: Cascade)
+  options  DietMealOption[]
 
+  @@index([dietProtocolId, order])
   @@map("diet_meals")
 }
 
+model DietMealOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  mealId    String   @map("diet_meal_id") @db.Uuid
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  meal  DietMeal       @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  items DietFoodItem[]
+
+  @@unique([mealId, position])
+  @@map("diet_meal_options")
+}
+
 model DietFoodItem {
-  id             String    @id @default(uuid()) @db.Uuid
-  dietMealId     String    @map("diet_meal_id") @db.Uuid
-  foodId         String?   @map("food_id") @db.Uuid
-  foodName       String    @map("food_name") @db.VarChar(255)
-  quantityG      Decimal   @map("quantity_g") @db.Decimal(8, 2)
-  unit           String    @default("g") @db.VarChar(20)
-  energyKcal     Decimal?  @map("energy_kcal") @db.Decimal(8, 2)
-  proteinG       Decimal?  @map("protein_g") @db.Decimal(6, 2)
-  carbohydratesG Decimal?  @map("carbohydrates_g") @db.Decimal(6, 2)
-  totalFatG      Decimal?  @map("total_fat_g") @db.Decimal(6, 2)
-  fiberG         Decimal?  @map("fiber_g") @db.Decimal(6, 2)
-  order          Int
-  notes          String?   @db.Text
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id               String    @id @default(uuid()) @db.Uuid
+  dietMealOptionId String    @map("diet_meal_option_id") @db.Uuid
+  foodId           String?   @map("food_id") @db.Uuid
+  source           String    @db.Text // taco|tbca|custom
+  name             String    @db.VarChar(255)
+  householdMeasure String?   @map("household_measure") @db.VarChar(100)
+  quantity         Decimal   @db.Decimal(8, 2)
+  unit             String    @default("g") @db.VarChar(5) // g|ml
+  kcalPer100g      Decimal   @map("kcal_per_100g") @db.Decimal(8, 2)
+  proteinPer100g   Decimal   @map("protein_per_100g") @db.Decimal(6, 2)
+  carbsPer100g     Decimal   @map("carbs_per_100g") @db.Decimal(6, 2)
+  fatPer100g       Decimal   @map("fat_per_100g") @db.Decimal(6, 2)
+  fiberPer100g     Decimal   @map("fiber_per_100g") @db.Decimal(6, 2)
+  swapBasis        String    @default("protein") @map("swap_basis") @db.Text // protein|kcal
+  order            Int
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  meal DietMeal @relation(fields: [dietMealId], references: [id], onDelete: Cascade)
-  food Food?    @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  option      DietMealOption       @relation(fields: [dietMealOptionId], references: [id], onDelete: Cascade)
+  food        Food?                @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  substitutes DietItemSubstitute[]
 
+  @@index([dietMealOptionId, order])
   @@map("diet_food_items")
+}
+
+model DietItemSubstitute {
+  id               String   @id @default(uuid()) @db.Uuid
+  dietFoodItemId   String   @map("diet_food_item_id") @db.Uuid
+  foodId           String?  @map("food_id") @db.Uuid
+  source           String   @db.Text
+  name             String   @db.VarChar(255)
+  householdMeasure String?  @map("household_measure") @db.VarChar(100)
+  quantity         Decimal  @db.Decimal(8, 2)
+  kcalPer100g      Decimal  @map("kcal_per_100g") @db.Decimal(8, 2)
+  proteinPer100g   Decimal  @map("protein_per_100g") @db.Decimal(6, 2)
+  carbsPer100g     Decimal  @map("carbs_per_100g") @db.Decimal(6, 2)
+  fatPer100g       Decimal  @map("fat_per_100g") @db.Decimal(6, 2)
+  fiberPer100g     Decimal  @map("fiber_per_100g") @db.Decimal(6, 2)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  item DietFoodItem @relation(fields: [dietFoodItemId], references: [id], onDelete: Cascade)
+  food Food?        @relation(fields: [foodId], references: [id], onDelete: SetNull)
+
+  @@index([dietFoodItemId])
+  @@map("diet_item_substitutes")
+}
+
+// Patient day logs reference snapshot ids (no FK): a republish can drop meals/items and orphan logs are ignored.
+model DietMealLog {
+  id        String    @id @default(uuid()) @db.Uuid
+  patientId String    @map("patient_id") @db.Uuid
+  planId    String    @map("plan_id") @db.Uuid
+  date      DateTime  @db.Date
+  mealId    String    @map("meal_id") @db.Uuid
+  optionId  String?   @map("option_id") @db.Uuid
+  status    String?   @db.Text // done|different, null when only the option was chosen
+  doneAt    DateTime? @map("done_at") @db.Timestamptz(6)
+  note      String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient User         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  plan    DietProtocol @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, planId, date, mealId])
+  @@index([planId, date])
+  @@map("diet_meal_logs")
+}
+
+model DietSwapLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  patientId    String   @map("patient_id") @db.Uuid
+  planId       String   @map("plan_id") @db.Uuid
+  date         DateTime @db.Date
+  itemId       String   @map("item_id") @db.Uuid
+  substituteId String   @map("substitute_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  patient User         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  plan    DietProtocol @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, planId, date, itemId])
+  @@index([planId, date])
+  @@map("diet_swap_logs")
+}
+
+model WaterLog {
+  id        String    @id @default(uuid()) @db.Uuid
+  patientId String    @map("patient_id") @db.Uuid
+  date      DateTime  @db.Date
+  ml        Int
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient User @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, date])
+  @@map("water_logs")
 }
 
 // ─── Subscription models ──────────────────────────────────────────────────────
@@ -1540,7 +1592,7 @@ model TrainerInvite {
   id              String    @id @default(uuid()) @db.Uuid
   email           String    @map("email") @db.Text // normalized lowercase, bound email
   codeHash        String    @unique @map("code_hash") @db.Text // sha256(normalizedCode)
-  status          String    @default("pending") @map("status") @db.Text // pending|accepted|revoked|expired
+  status          String    @default("pending") @map("status") @db.Text // pending|accepted|revoked|expired|declined
   invitedByUserId String    @map("invited_by_user_id") @db.Uuid // generic sender (admin now, trainer later)
   userId          String?   @map("user_id") @db.Uuid // redeemer; null until redeemed (scenario A)
   expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
@@ -1567,7 +1619,7 @@ model StudentInvite {
   id         String    @id @default(uuid()) @db.Uuid
   trainerId  String    @map("trainer_id") @db.Uuid
   email      String    @db.Text // normalized lowercase
-  status     String    @default("pending") @db.Text // pending|accepted|revoked|expired
+  status     String    @default("pending") @db.Text // pending|accepted|revoked|expired|declined
   studentId  String?   @map("student_id") @db.Uuid
   expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
   acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
@@ -1584,6 +1636,29 @@ model StudentInvite {
   @@index([email, status])
   @@index([studentId])
   @@map("student_invites")
+}
+
+model PatientInvite {
+  id             String    @id @default(uuid()) @db.Uuid
+  nutritionistId String    @map("nutritionist_id") @db.Uuid
+  email          String    @db.Text // normalized lowercase
+  status         String    @default("pending") @db.Text // pending|accepted|revoked|expired|declined
+  patientId      String?   @map("patient_id") @db.Uuid
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastSentAt     DateTime  @default(now()) @map("last_sent_at") @db.Timestamptz(6)
+  sendCount      Int       @default(1) @map("send_count")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  nutritionist Nutritionist @relation(fields: [nutritionistId], references: [id], onDelete: Cascade)
+  patient      User?        @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([nutritionistId, status, createdAt])
+  @@index([email, status])
+  @@index([patientId])
+  @@map("patient_invites")
 }
 
 // High-fidelity interaction log for closed-beta diagnostics.

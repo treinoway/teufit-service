@@ -97,7 +97,7 @@ export async function userRoutes(fastify) {
       config: {
         rateLimit: config.rateLimit.user.becomeNutritionist,
       },
-      preHandler: [authenticate],
+      preHandler: [authenticate, requireBetaAccess()],
       schema: becomeNutritionistSchema,
     },
     async (request, reply) => {
