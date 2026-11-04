@@ -288,6 +288,56 @@ export async function trainingTemplateRoutes(fastify) {
     },
   );
 
+  fastify.post(
+    '/trainer/training-templates/:templateId/supersets',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.createTemplateSupersetSchema,
+    },
+    async (request, reply) => {
+      const template = await service.createTemplateSuperset(
+        request.user.id,
+        request.params.templateId,
+        request.body.exerciseIds,
+        request.body.restInterval,
+      );
+      return reply.status(201).send(template);
+    },
+  );
+
+  fastify.patch(
+    '/trainer/training-templates/:templateId/supersets/:groupId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.updateTemplateSupersetRestIntervalSchema,
+    },
+    async (request, reply) => {
+      const template = await service.updateTemplateSupersetRestInterval(
+        request.user.id,
+        request.params.templateId,
+        request.params.groupId,
+        request.body.restInterval,
+      );
+      return reply.send(template);
+    },
+  );
+
+  fastify.delete(
+    '/trainer/training-templates/:templateId/supersets/:groupId',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: schema.dissolveTemplateSupersetSchema,
+    },
+    async (request, reply) => {
+      const template = await service.dissolveTemplateSuperset(
+        request.user.id,
+        request.params.templateId,
+        request.params.groupId,
+      );
+      return reply.send(template);
+    },
+  );
+
   // Delete template
   fastify.delete(
     '/trainer/training-templates/:id',

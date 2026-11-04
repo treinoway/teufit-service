@@ -4255,6 +4255,211 @@
           "response": []
         },
         {
+          "name": "Create Template Superset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exerciseIds\": [\n    \"b1b2c3d4-0000-4000-8000-000000000011\",\n    \"b1b2c3d4-0000-4000-8000-000000000012\"\n  ],\n  \"restInterval\": 90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                }
+              ]
+            },
+            "description": "Group 2-6 exercises (junction row ids, TrainingTemplateExerciseTemplate.id) of a training template into a superset (bi-set/tri-set), in superset order. Optional restInterval (seconds, int >= 0, nullable) is the rest between rounds; omitted or null stores no round rest, 0 is kept as 0. Requires TRAINER role and template ownership. Returns the updated template. Errors: 400 VALIDATION_ERROR (exercise.supersetMinMembers / exercise.supersetMaxMembers / exercise.supersetMembershipInvalid / validation.failed), 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND, 409 EXERCISE_ALREADY_IN_SUPERSET (exercise.alreadyInSuperset)."
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 0,\n      \"supersetRestInterval\": 90\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 1,\n      \"supersetRestInterval\": 90\n    }\n  ]\n}"
+            },
+            {
+              "name": "Exercise already in superset",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EXERCISE_ALREADY_IN_SUPERSET\",\n  \"messageCode\": \"exercise.alreadyInSuperset\",\n  \"message\": \"Exercise already belongs to a superset\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Template Superset Rest Interval",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restInterval\": 120\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Update the round rest (seconds, int >= 0; null clears it) of an existing superset group of a training template. restInterval is required. Requires TRAINER role and template ownership. Returns the updated template. Errors: 400 VALIDATION_ERROR, 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND / SUPERSET_GROUP_NOT_FOUND (exercise.supersetGroupNotFound)."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 0,\n      \"supersetRestInterval\": 120\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 1,\n      \"supersetRestInterval\": 120\n    }\n  ]\n}"
+            },
+            {
+              "name": "Superset group not found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUPERSET_GROUP_NOT_FOUND\",\n  \"messageCode\": \"exercise.supersetGroupNotFound\",\n  \"message\": \"Superset group not found\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Dissolve Template Superset",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Dissolve a superset group of a training template; members stay in the template, ungrouped. Requires TRAINER role and template ownership. Returns the updated template. Errors: 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND / SUPERSET_GROUP_NOT_FOUND."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": null,\n      \"supersetOrder\": null,\n      \"supersetRestInterval\": null\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": null,\n      \"supersetOrder\": null,\n      \"supersetRestInterval\": null\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
           "name": "Delete Training Template",
           "request": {
             "method": "DELETE",
