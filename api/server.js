@@ -60,6 +60,8 @@ import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminManagerRoutes } from './routes/admin-manager-route.js';
+import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
+import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
@@ -422,6 +424,8 @@ export async function buildServer(options = {}) {
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
     await fastify.register(adminManagerRoutes);
+    await fastify.register(trainerFeedbackRoutes);
+    await fastify.register(adminFeedbackRoutes);
     await fastify.register(adminAiUsageRoutes);
     await fastify.register(adminDebugRoutes);
   });
