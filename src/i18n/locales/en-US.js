@@ -186,6 +186,11 @@ export default {
       semiannual: 'Semiannual',
       annual: 'Annual',
     },
+    feedbackCategory: {
+      BUG: 'Problem',
+      SUGGESTION: 'Suggestion',
+      PRAISE: 'Praise',
+    },
     subscriptionStatus: {
       active: 'Active',
       cancelled: 'Cancelled',

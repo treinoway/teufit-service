@@ -103,6 +103,20 @@ export function requireAdmin() {
   };
 }
 
+// Middleware requiring the trainer role; rejects with the unified AppError contract (error/messageCode/message/details)
+export function requireTrainer() {
+  return async function (request) {
+    const userRoles = Array.isArray(request.user?.roles) ? request.user.roles : [];
+
+    if (!userRoles.includes(Roles.TRAINER)) {
+      throw new ForbiddenAppError({
+        message: 'This resource requires the trainer role',
+        details: {},
+      });
+    }
+  };
+}
+
 // Middleware to close the /become-trainer self-promotion bypass during the
 // closed beta. Exempts admins, existing trainers, and tester-allowlisted
 // emails (via hasBetaAccess) — only a plain roles:[] user without an accepted

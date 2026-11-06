@@ -190,6 +190,11 @@ export default {
       semiannual: 'Semestral',
       annual: 'Anual',
     },
+    feedbackCategory: {
+      BUG: 'Problema',
+      SUGGESTION: 'Sugestão',
+      PRAISE: 'Elogio',
+    },
     subscriptionStatus: {
       active: 'Ativo',
       cancelled: 'Cancelado',
