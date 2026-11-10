@@ -115,3 +115,12 @@ export const StandingsFilter = Object.freeze({
 });
 
 export const standingsFilterValues = Object.freeze(Object.values(StandingsFilter));
+
+// Allowed integer ranges of the panel rules the trainer can configure
+export const PANEL_RULE_RANGES = Object.freeze({
+  riskLimit: Object.freeze({ min: 50, max: 90 }),
+  riskWeeks: Object.freeze({ min: 1, max: 4 }),
+  minWorkoutMinutes: Object.freeze({ min: 0, max: 60 }),
+  batchCount: Object.freeze({ min: 2, max: 20 }),
+  batchMinutes: Object.freeze({ min: 10, max: 120 }),
+});
