@@ -17381,6 +17381,804 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Consistency Ranking",
+      "item": [
+        {
+          "name": "Get Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "standings"
+              ],
+              "query": [
+                {
+                  "key": "season",
+                  "value": "1",
+                  "description": "Season number (optional, min 1). Omit for the current season",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consistency ranking standings of the trainer: season, ranked students and students still entering the ranking. Without season returns the current season; season selects a closed one (closed seasons omit partialScore, weekStatus and pillars). Before the ranking launches season is null and the lists are empty. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 consistencyRanking.season.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Standings - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"season\": {\n    \"number\": 1,\n    \"startWeek\": \"2026-11-09\",\n    \"endWeek\": \"2026-11-30\",\n    \"weeks\": 4,\n    \"currentWeek\": 1,\n    \"status\": \"active\"\n  },\n  \"rows\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n      \"name\": \"Camila Souza\",\n      \"position\": 1,\n      \"eligible\": true,\n      \"average\": 92.5,\n      \"validWeeks\": 3,\n      \"weeksAt100\": 1,\n      \"streak\": 2,\n      \"partialScore\": 60,\n      \"weekStatus\": \"valid\",\n      \"pillars\": {\n        \"workouts\": {\n          \"expected\": 4,\n          \"done\": 3\n        },\n        \"cardio\": {\n          \"expected\": 2,\n          \"done\": 1\n        }\n      }\n    }\n  ],\n  \"entering\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000012\",\n      \"name\": \"Rafael Lima\",\n      \"validWeeks\": 1,\n      \"weeksMissing\": 1\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Standings - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"consistencyRanking.season.notFound\",\n  \"message\": \"Season not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "config"
+              ]
+            },
+            "description": "Scoring configuration of the trainer (weights summing to 100, active pillars, season length, minimum weeks to podium, weekly close day/hour and time zone). closeWeekday: 0 = Sunday. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Config - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Update the scoring configuration (all fields optional). weights must sum to 100; seasonWeeks: 4 | 8 | 12; minPodiumWeeks 1-4; closeWeekday 0-6 (0 = Sunday); closeHour 0-23; timeZone is an IANA name. Returns the config plus effectiveFrom, the Monday from which the new scoring rule applies (null when no rule changed). Requires TRAINER role. Errors: 400 consistencyRanking.config.invalid or validation, 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Update Config - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\",\n  \"effectiveFrom\": \"2026-11-16\"\n}"
+            },
+            {
+              "name": "Update Config - 400 Bad Request",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"BAD_REQUEST\",\n  \"messageCode\": \"consistencyRanking.config.invalid\",\n  \"message\": \"Invalid ranking configuration.\",\n  \"details\": {\n    \"weights\": \"sum\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Pause Week",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "pauses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Pause a week (Monday) so it does not count in the ranking. Omit studentId to pause the whole team. weekStart must be a real Monday (YYYY-MM-DD); reason is optional (max 255). Requires TRAINER role. Errors: 400 validation (weekStart not a date or not a Monday), 401, 403 trainer.notFound, 404 student.notFound, 409 consistencyRanking.pause.weekNotEditable (week closed or more than 12 weeks ahead), 500."
+          },
+          "response": [
+            {
+              "name": "Pause Week - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"paused\": true,\n  \"reason\": \"Viagem\"\n}"
+            },
+            {
+              "name": "Pause Week - 409 Conflict",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"consistencyRanking.pause.weekNotEditable\",\n  \"message\": \"This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.\",\n  \"details\": {\n    \"weekStart\": \"2026-11-16\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Resume Week",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "pauses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Resume (unpause) a week. DELETE with a JSON body: send Content-Type application/json. Omit studentId to resume the whole team (this also removes individual pauses of that week). weekStart must be a real Monday. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 student.notFound, 409 consistencyRanking.pause.weekNotEditable, 500."
+          },
+          "response": [
+            {
+              "name": "Resume Week - 200 OK",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"paused\": false\n}"
+            },
+            {
+              "name": "Resume Week - 409 Conflict",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"consistencyRanking.pause.weekNotEditable\",\n  \"message\": \"This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.\",\n  \"details\": {\n    \"weekStart\": \"2026-11-16\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Close Current Season",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "seasons",
+                "current",
+                "close"
+              ]
+            },
+            "description": "Request the early close of the current season; it ends after the first due week is closed. No body. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 404 consistencyRanking.season.notFound (no active season), 500."
+          },
+          "response": [
+            {
+              "name": "Close Current Season - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "seasons",
+                    "current",
+                    "close"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"number\": 1,\n  \"startWeek\": \"2026-11-09\",\n  \"weeks\": 4,\n  \"status\": \"active\",\n  \"closeRequestedAt\": \"2026-11-12T15:00:00.000Z\"\n}"
+            },
+            {
+              "name": "Close Current Season - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "seasons",
+                    "current",
+                    "close"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"consistencyRanking.season.notFound\",\n  \"message\": \"Season not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consistency Ranking - Admin",
+      "item": [
+        {
+          "name": "Get Trainer Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "consistency-ranking",
+                "trainers",
+                "{{trainerId}}",
+                "standings"
+              ],
+              "query": [
+                {
+                  "key": "season",
+                  "value": "1",
+                  "description": "Season number (optional, min 1). Omit for the current season",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consistency ranking standings of a given trainer (same payload as the trainer route). Set the trainerId collection variable. Without season it creates/locks the trainer current season, like the trainer read. Requires ADMIN role. Errors: 400 validation, 401, 403, 404 resource.notFound (unknown trainer) or consistencyRanking.season.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Trainer Standings - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "consistency-ranking",
+                    "trainers",
+                    "{{trainerId}}",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"season\": {\n    \"number\": 1,\n    \"startWeek\": \"2026-11-09\",\n    \"endWeek\": \"2026-11-30\",\n    \"weeks\": 4,\n    \"currentWeek\": 1,\n    \"status\": \"active\"\n  },\n  \"rows\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n      \"name\": \"Camila Souza\",\n      \"position\": 1,\n      \"eligible\": true,\n      \"average\": 92.5,\n      \"validWeeks\": 3,\n      \"weeksAt100\": 1,\n      \"streak\": 2,\n      \"partialScore\": 60,\n      \"weekStatus\": \"valid\",\n      \"pillars\": {\n        \"workouts\": {\n          \"expected\": 4,\n          \"done\": 3\n        },\n        \"cardio\": {\n          \"expected\": 2,\n          \"done\": 1\n        }\n      }\n    }\n  ],\n  \"entering\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000012\",\n      \"name\": \"Rafael Lima\",\n      \"validWeeks\": 1,\n      \"weeksMissing\": 1\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Trainer Standings - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "consistency-ranking",
+                    "trainers",
+                    "{{trainerId}}",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Resource not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
