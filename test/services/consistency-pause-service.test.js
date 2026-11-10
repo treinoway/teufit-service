@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { pauseWeek, pausesFor, resumeWeek } from '../../src/services/consistency-pause-service.js';
-import { ConsistencyErrorCode, ConsistencyMessageCode } from '../../src/constants/consistency-ranking.js';
+import { liveAverage, seasonFigures } from '../../src/helpers/consistency-math.js';
+import { ConsistencyErrorCode, ConsistencyMessageCode, WeekStatus } from '../../src/constants/consistency-ranking.js';
 
 const TRAINER_ID = 'trainer-1';
 const STUDENT_ID = 'student-1';
@@ -11,6 +12,9 @@ const CURRENT_WEEK_DATE = new Date(Date.UTC(2026, 10, 9));
 const PAST_WEEK = { year: 2026, month: 11, day: 2 };
 const TWELVE_AHEAD = { year: 2027, month: 2, day: 1 };
 const THIRTEEN_AHEAD = { year: 2027, month: 2, day: 8 };
+const SEASON_ID = 'season-1';
+const WEEK_BEFORE = { year: 2026, month: 11, day: 2 };
+const WEEK_AFTER = { year: 2026, month: 11, day: 16 };
 
 // Builds a prisma mock with the given link, close mark and stored pause rows
 function createPrisma({ linked = true, closeRow = null, rows = [] } = {}) {
@@ -27,6 +31,12 @@ function createPrisma({ linked = true, closeRow = null, rows = [] } = {}) {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   };
+}
+
+// Stored result of a week as the close writes it: a paused student gets no score
+function closedResult(weekKey, score, pauses) {
+  const paused = pauses.get(weekKey).students.get(STUDENT_ID) === true;
+  return { seasonId: SEASON_ID, status: paused ? WeekStatus.PAUSED : WeekStatus.VALID, score: paused ? null : score };
 }
 
 // Asserts no pause row was created, changed or removed
@@ -64,6 +74,20 @@ describe('pauseWeek', () => {
       data: { trainerId: TRAINER_ID, studentId: STUDENT_ID, weekStart: CURRENT_WEEK_DATE, paused: true, reason: 'injury' },
     });
     expect(result).toEqual({ weekStart: '2026-11-09', studentId: STUDENT_ID, paused: true, reason: 'injury' });
+
+    prisma.consistencyWeekPause.findMany.mockResolvedValue([prisma.consistencyWeekPause.create.mock.calls[0][0].data]);
+
+    const pauses = await pausesFor(prisma, TRAINER_ID, [WEEK_BEFORE, CURRENT_WEEK, WEEK_AFTER]);
+    const results = [
+      closedResult('2026-11-16', 100, pauses),
+      closedResult('2026-11-09', 40, pauses),
+      closedResult('2026-11-02', 100, pauses),
+    ];
+    const figures = seasonFigures(results, SEASON_ID);
+
+    expect(results.map((row) => row.status)).toEqual([WeekStatus.VALID, WeekStatus.PAUSED, WeekStatus.VALID]);
+    expect(liveAverage(figures.scores, null).toNumber()).toBe(100);
+    expect(figures.streak).toBe(2);
   });
 
   it('RANK-41 is idempotent and flips a reactivated student back', async () => {
