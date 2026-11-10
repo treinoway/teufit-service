@@ -16,6 +16,76 @@ function escapeHtml(value) {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// Wraps a heading and body paragraphs in the Teufit transactional email layout.
+function renderTransactionalEmail({ title, heading, bodyHtml }) {
+    return `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(title)}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F2F5F9;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #F2F5F9;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(16, 84, 178, 0.08); border-radius: 16px; overflow: hidden;">
+                    <tr>
+                        <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 44px 40px;">
+                            <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">${heading}</h2>
+${bodyHtml}
+                            <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
+                                <strong style="color: #4b5563;">Equipe Teufit</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #f7fafc; padding: 24px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">&copy; ${new Date().getFullYear()} Teufit. Todos os direitos reservados.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        `;
+}
+
+// Renders one centered paragraph.
+function renderParagraph(text) {
+    return `                            <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">${text}</p>`;
+}
+
+// Renders the verification code block.
+function renderVerificationCodeBlock(code) {
+    return `${renderParagraph('Abra o app Teufit e confirme seu e-mail com o código abaixo. Ele expira em <strong>30 minutos</strong>.')}
+                            <p style="margin: 0 0 20px; text-align: center; color: #1054B2; font-size: 36px; font-weight: 800; letter-spacing: 0.35em;">${escapeHtml(code)}</p>`;
+}
+
+const PATIENT_INVITE_CONSENT_NOTICE = 'Nenhum dado seu é compartilhado com o nutricionista até você aceitar.';
+
+// Subject line for a nutritionist invite.
+function patientInviteSubject(nutritionistName) {
+    return nutritionistName
+        ? `[Teufit] ${nutritionistName} convidou você para acompanhar sua alimentação`
+        : '[Teufit] Você foi convidado por um nutricionista';
+}
+
+// Sends through Resend; a no-op without a configured client (test mode).
+function sendTransactional(handler, { to, subject, html }) {
+    if (!handler.resendClient) return Promise.resolve();
+    return handler.resendClient.emails.send({ from: 'onboarding@teufit.com.br', to, html, subject });
+}
+
+
 // Returns how many whole days a trainer invite stays valid, derived from the TTL constant.
 function getInviteExpiryDays() {
     return Math.round(INVITE_TTL_MS / MS_PER_DAY);
@@ -970,6 +1040,42 @@ ${renderStoreButtonsBlock()}
             html: htmlContent,
             subject: subject,
         });
+    }
+
+    // Invite email for a person without an account: create it, then accept or decline in the app.
+    sendPatientInviteEmail({to, nutritionistName: rawNutritionistName}) {
+        const nutritionistName = sanitizeSubjectText(rawNutritionistName);
+        const label = nutritionistName ? escapeHtml(nutritionistName) : 'seu nutricionista';
+        const html = renderTransactionalEmail({
+            title: 'Convite Teufit',
+            heading: `${label} convidou você`,
+            bodyHtml: [
+                renderParagraph(`${label} quer acompanhar sua alimentação pelo Teufit.`),
+                renderParagraph('Baixe o app e crie sua conta usando <strong>este mesmo e-mail</strong>. Depois de confirmar o e-mail, o convite aparece no app e você escolhe aceitar ou recusar.'),
+                renderParagraph(PATIENT_INVITE_CONSENT_NOTICE),
+                renderStoreButtonsBlock(),
+                renderParagraph('Este convite expira em 30 dias.'),
+            ].join('\n'),
+        });
+        return sendTransactional(this, { to, subject: patientInviteSubject(nutritionistName), html });
+    }
+
+    // Invite email for an existing account: open the app to accept (verification code only when the email is unverified).
+    sendExistingUserPatientInviteEmail({to, nutritionistName: rawNutritionistName, code}) {
+        const nutritionistName = sanitizeSubjectText(rawNutritionistName);
+        const label = nutritionistName ? escapeHtml(nutritionistName) : 'seu nutricionista';
+        const html = renderTransactionalEmail({
+            title: 'Convite Teufit',
+            heading: `${label} convidou você`,
+            bodyHtml: [
+                renderParagraph(`${label} quer acompanhar sua alimentação pelo Teufit. Abra o app Teufit para aceitar ou recusar o convite.`),
+                renderParagraph(PATIENT_INVITE_CONSENT_NOTICE),
+                ...(code ? [renderVerificationCodeBlock(code)] : []),
+                renderStoreButtonsBlock(),
+                renderParagraph('Este convite expira em 30 dias.'),
+            ].join('\n'),
+        });
+        return sendTransactional(this, { to, subject: patientInviteSubject(nutritionistName), html });
     }
 
     /**

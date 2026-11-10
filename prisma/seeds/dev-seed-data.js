@@ -14,6 +14,20 @@ export const TRAINER = Object.freeze({
   notes: 'Conta de demonstração para desenvolvimento local.',
 });
 
+// Nutritionist-only account (no trainer role) — patients are the first `patientCount` students.
+export const NUTRITIONIST = Object.freeze({
+  email: 'nutri@treinoway.local',
+  password: 'nutri123',
+  firstName: 'Nina',
+  lastName: 'Nutri',
+  gender: 'female',
+  birthDate: '1990-05-12',
+  professionalDocument: 'CRN-DEMO-001',
+  clinicName: 'Clínica Demo',
+  serviceMode: 'online',
+  patientCount: 3,
+});
+
 // DIAMOND trainer — use to test premium-only features (unlimited students, AI, branding, championships).
 export const TRAINER_DIAMOND = Object.freeze({
   email: 'dev_diamond@treinoway.local',

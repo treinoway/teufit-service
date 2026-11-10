@@ -25,7 +25,9 @@ import {
   TRAINING_LEVEL_CYCLE,
   SUBSCRIPTION_PLANS,
   SUBSCRIPTION_ASSIGNMENTS,
+  NUTRITIONIST,
 } from './dev-seed-data.js';
+import { seedNutritionist } from './dev-seed-nutritionist.js';
 import { Roles } from '../../src/constants/roles.js';
 import {
   TrainingStatus,
@@ -363,6 +365,13 @@ async function main() {
     });
     students.push(user);
   }
+
+  await seedNutritionist(prisma, {
+    passwordHash: hashPassword(NUTRITIONIST.password),
+    invitedByUserId: adminUser.id,
+    students,
+    now: NOW,
+  });
 
   // 4. ExerciseTemplates (15, public, owned by trainer).
   const templateByName = new Map();
@@ -774,6 +783,7 @@ async function main() {
   console.log(`  ✓ ${counts('Trainer', 1)} — ${TRAINER.email} / ${TRAINER.password} [DIAMOND]`);
   console.log(`  ✓ DIAMOND trainer — ${TRAINER_DIAMOND.email} / ${TRAINER_DIAMOND.password}`);
   console.log(`  ✓ PLATINUM trainer — ${TRAINER_PLATINUM.email} / ${TRAINER_PLATINUM.password} (50 students, 5 AI events)`);
+  console.log(`  ✓ Nutritionist — ${NUTRITIONIST.email} / ${NUTRITIONIST.password} (patients: aluno1…aluno${NUTRITIONIST.patientCount})`);
   console.log(`  ✓ ${counts('Students', students.length)} — aluno1@treinoway.local … aluno${students.length}@treinoway.local / aluno123`);
   console.log(`  ✓ 50 platinum students — platinum_aluno1@treinoway.local … platinum_aluno50@treinoway.local / aluno123`);
   console.log(`  ✓ ${counts('ExerciseTemplates', EXERCISE_TEMPLATES.length)} (public)`);

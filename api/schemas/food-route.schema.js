@@ -1,124 +1,122 @@
-import { errorResponseSchema } from './error-response.schema.js';
+import { foodSourceValues, FOOD_SEARCH_LIMIT_DEFAULT, FOOD_SEARCH_LIMIT_MAX } from '../../src/constants/nutrition.js';
+import {
+  badRequestErrorResponseSchema,
+  errorResponseSchema,
+  uuidParam,
+  foodSchema,
+  per100gInputSchema,
+  portionInputSchema,
+} from './nutrition-shared.schema.js';
 
-const foodGroupSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    name: { type: 'string' },
-    code: { type: 'string', nullable: true },
-    createdAt: { type: 'string', format: 'date-time' },
-  },
-};
-
-const foodSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string', format: 'uuid' },
-    foodGroupId: { type: 'string', format: 'uuid' },
-    name: { type: 'string' },
-    tacoId: { type: 'string', nullable: true },
-    tbcaId: { type: 'string', nullable: true },
-    source: { type: 'string' },
-    servingSizeG: { type: 'number', nullable: true },
-    servingSizeDescription: { type: 'string', nullable: true },
-    ediblePortionPercent: { type: 'number', nullable: true },
-    energyKcal: { type: 'number', nullable: true },
-    energyKj: { type: 'number', nullable: true },
-    proteinG: { type: 'number', nullable: true },
-    totalFatG: { type: 'number', nullable: true },
-    carbohydratesG: { type: 'number', nullable: true },
-    fiberG: { type: 'number', nullable: true },
-    ashG: { type: 'number', nullable: true },
-    saturatedFatG: { type: 'number', nullable: true },
-    monounsaturatedFatG: { type: 'number', nullable: true },
-    polyunsaturatedFatG: { type: 'number', nullable: true },
-    transFatG: { type: 'number', nullable: true },
-    cholesterolMg: { type: 'number', nullable: true },
-    calciumMg: { type: 'number', nullable: true },
-    phosphorusMg: { type: 'number', nullable: true },
-    ironMg: { type: 'number', nullable: true },
-    sodiumMg: { type: 'number', nullable: true },
-    potassiumMg: { type: 'number', nullable: true },
-    copperMg: { type: 'number', nullable: true },
-    magnesiumMg: { type: 'number', nullable: true },
-    manganeseMg: { type: 'number', nullable: true },
-    zincMg: { type: 'number', nullable: true },
-    seleniumUg: { type: 'number', nullable: true },
-    vitaminAUgRae: { type: 'number', nullable: true },
-    vitaminDUg: { type: 'number', nullable: true },
-    vitaminEMg: { type: 'number', nullable: true },
-    vitaminKUg: { type: 'number', nullable: true },
-    thiamineMg: { type: 'number', nullable: true },
-    riboflavinMg: { type: 'number', nullable: true },
-    niacinMg: { type: 'number', nullable: true },
-    vitaminB6Mg: { type: 'number', nullable: true },
-    folateUg: { type: 'number', nullable: true },
-    vitaminB12Ug: { type: 'number', nullable: true },
-    vitaminCMg: { type: 'number', nullable: true },
-    createdAt: { type: 'string', format: 'date-time' },
-    foodGroup: foodGroupSchema,
-  },
-};
+const MAX_FOOD_NAME_LENGTH = 255;
+const foodNameSchema = { type: 'string', minLength: 1, maxLength: MAX_FOOD_NAME_LENGTH };
+const security = [{ bearerAuth: [] }];
 
 export const searchFoodsSchema = {
   tags: ['Foods'],
-  summary: 'Search foods by name',
-  security: [{ bearerAuth: [] }],
+  summary: 'Search foods (TACO, TBCA and the caller own custom foods), accent/case-insensitive',
+  security,
   querystring: {
     type: 'object',
+    additionalProperties: false,
     properties: {
-      q: { type: 'string', description: 'Search query (partial match on name)' },
-      groupId: { type: 'string', format: 'uuid', description: 'Filter by food group ID' },
-      source: { type: 'string', enum: ['taco', 'tbca'], default: 'taco', description: 'Food database source (default: taco)' },
-      limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
-      offset: { type: 'integer', minimum: 0, default: 0 },
+      q: { type: 'string', maxLength: MAX_FOOD_NAME_LENGTH },
+      groupId: { type: 'string', format: 'uuid' },
+      sources: {
+        type: 'string',
+        description: `Comma separated: ${foodSourceValues.join(',')}. Defaults to all; custom returns only the caller's own foods.`,
+      },
+      limit: { type: 'integer', minimum: 1, maximum: FOOD_SEARCH_LIMIT_MAX, default: FOOD_SEARCH_LIMIT_DEFAULT },
     },
   },
   response: {
-    200: {
-      type: 'object',
-      properties: {
-        items: { type: 'array', items: foodSchema },
-        total: { type: 'integer' },
-      },
-    },
+    200: { type: 'object', properties: { items: { type: 'array', items: foodSchema } } },
+    400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
-    429: errorResponseSchema,
     500: errorResponseSchema,
   },
 };
 
 export const getFoodByIdSchema = {
   tags: ['Foods'],
-  summary: 'Get food by ID',
-  security: [{ bearerAuth: [] }],
-  params: {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-    },
-  },
-  response: {
-    200: foodSchema,
-    401: errorResponseSchema,
-    404: errorResponseSchema,
-    429: errorResponseSchema,
-    500: errorResponseSchema,
-  },
+  summary: 'Get a food by id',
+  security,
+  params: uuidParam('id'),
+  response: { 200: foodSchema, 400: badRequestErrorResponseSchema, 401: errorResponseSchema, 404: errorResponseSchema, 500: errorResponseSchema },
 };
 
 export const listFoodGroupsSchema = {
   tags: ['Foods'],
-  summary: 'List all food groups',
-  security: [{ bearerAuth: [] }],
+  summary: 'List food groups',
+  security,
   response: {
     200: {
-      type: 'array',
-      items: foodGroupSchema,
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, code: { type: 'string', nullable: true } },
+          },
+        },
+      },
     },
     401: errorResponseSchema,
-    429: errorResponseSchema,
     500: errorResponseSchema,
   },
+};
+
+const customFoodResponses = {
+  400: badRequestErrorResponseSchema,
+  401: errorResponseSchema,
+  403: errorResponseSchema,
+  404: errorResponseSchema,
+  409: errorResponseSchema,
+  500: errorResponseSchema,
+};
+
+export const createCustomFoodSchema = {
+  tags: ['Nutritionist - Foods'],
+  summary: 'Create a custom food ("Meus alimentos")',
+  security,
+  body: {
+    type: 'object',
+    required: ['name', 'groupId', 'portion', 'per100g'],
+    additionalProperties: false,
+    properties: {
+      name: foodNameSchema,
+      groupId: { type: 'string', format: 'uuid' },
+      portion: portionInputSchema,
+      per100g: per100gInputSchema,
+    },
+  },
+  response: { 201: foodSchema, ...customFoodResponses },
+};
+
+export const updateCustomFoodSchema = {
+  tags: ['Nutritionist - Foods'],
+  summary: 'Update an owned custom food (partial)',
+  security,
+  params: uuidParam('id'),
+  body: {
+    type: 'object',
+    minProperties: 1,
+    additionalProperties: false,
+    properties: {
+      name: foodNameSchema,
+      groupId: { type: 'string', format: 'uuid' },
+      portion: portionInputSchema,
+      per100g: per100gInputSchema,
+    },
+  },
+  response: { 200: foodSchema, ...customFoodResponses },
+};
+
+export const deleteCustomFoodSchema = {
+  tags: ['Nutritionist - Foods'],
+  summary: 'Delete an owned custom food',
+  security,
+  params: uuidParam('id'),
+  response: { 204: { type: 'null' }, ...customFoodResponses },
 };

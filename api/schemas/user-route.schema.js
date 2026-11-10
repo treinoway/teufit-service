@@ -407,7 +407,7 @@ export const becomeTrainerSchema = {
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: {
-      description: 'Forbidden — a trainer invite is required during the closed beta (invite.required)',
+      description: 'Forbidden — an invite is required during the closed beta (invite.required)',
       ...errorResponseSchema,
     },
     429: errorResponseSchema,
@@ -456,6 +456,10 @@ export const becomeNutritionistSchema = {
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
+    403: {
+      description: 'Forbidden — an invite is required during the closed beta (invite.required)',
+      ...errorResponseSchema,
+    },
     429: errorResponseSchema,
     500: errorResponseSchema,
   },
