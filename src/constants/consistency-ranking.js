@@ -67,3 +67,38 @@ export const ConsistencyMessageCode = Object.freeze({
   SEASON_NOT_FOUND: 'consistencyRanking.season.notFound',
   TRAINER_PROFILE_MISSING: 'trainer.notFound',
 });
+
+// Season band shown next to a student's average (AD-011)
+export const Faixa = Object.freeze({
+  FULL: 'full',
+  CONSTANT: 'constant',
+  STEADY: 'steady',
+  RESTARTING: 'restarting',
+  ENTERING: 'entering',
+});
+
+// Lower bounds of the Constant and Steady bands; below the Steady bound is Restarting
+export const FAIXA_THRESHOLDS = Object.freeze({ constant: 85, steady: 70 });
+
+export const SignalType = Object.freeze({
+  QUICK_COMPLETION: 'quick_completion',
+  BATCH_LOGGING: 'batch_logging',
+});
+
+// Order that breaks ties between equally weak pillars
+export const PILLAR_TIE_ORDER = Object.freeze([
+  Pillar.WORKOUTS,
+  Pillar.CARDIO,
+  Pillar.FEEDBACK,
+  Pillar.HYDRATION,
+  Pillar.DIET,
+]);
+
+// Defaults of the trainer panel rules (risk alert, quick completion, batch logging)
+export const PANEL_DEFAULTS = Object.freeze({
+  riskLimit: 70,
+  riskWeeks: 2,
+  minWorkoutMinutes: 10,
+  batchCount: 5,
+  batchMinutes: 30,
+});
