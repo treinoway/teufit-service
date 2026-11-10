@@ -295,7 +295,7 @@ describe('getStandings', () => {
     expect(result.rows).toEqual([
       { studentId: 'ana', name: 'Ana Lima', position: 1, eligible: true, average: new Decimal('97.5'), validWeeks: 4, weeksAt100: 2, streak: 2 },
     ]);
-    expect(result.entering).toEqual([{ studentId: 'new', name: 'Novo', validWeeks: 1, weeksMissing: 0 }]);
+    expect(result.entering).toEqual([{ studentId: 'new', name: 'Novo', validWeeks: 1, weeksMissing: 1 }]);
     expect(prisma.consistencySeasonStanding.findMany.mock.calls[0][0].where).toEqual({ seasonId: 's0' });
     expect(materializeTargets).not.toHaveBeenCalled();
   });

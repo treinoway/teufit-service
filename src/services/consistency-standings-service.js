@@ -176,7 +176,9 @@ function byPositionThenName(a, b) {
 }
 
 // Frozen standings of a closed season, read from the stored snapshot
-async function frozenStandings(prisma, season) {
+async function frozenStandings(prisma, trainerId, season, now) {
+  const config = await getConfig(prisma, trainerId, now);
+  const required = Math.min(config.minPodiumWeeks, season.weeks);
   const stored = await prisma.consistencySeasonStanding.findMany({
     where: { seasonId: season.id },
     include: { student: STUDENT_SELECT },
@@ -197,7 +199,7 @@ async function frozenStandings(prisma, season) {
     }));
   const entering = named
     .filter((row) => !row.eligible && row.validWeeks > 0)
-    .map((row) => ({ studentId: row.studentId, name: row.name, validWeeks: row.validWeeks, weeksMissing: 0 }));
+    .map((row) => ({ studentId: row.studentId, name: row.name, validWeeks: row.validWeeks, weeksMissing: Math.max(required - row.validWeeks, 0) }));
   return { season: summarizeSeason(season, season.weeks), rows, entering };
 }
 
@@ -220,6 +222,6 @@ async function resolveSeason(prisma, trainerId, seasonNumber, now) {
 export async function getStandings(prisma, trainerId, { seasonNumber, now = new Date() } = {}) {
   const season = await resolveSeason(prisma, trainerId, seasonNumber, now);
   if (!season) return { season: null, rows: [], entering: [] };
-  if (season.status === SeasonStatus.CLOSED) return frozenStandings(prisma, season);
+  if (season.status === SeasonStatus.CLOSED) return frozenStandings(prisma, trainerId, season, now);
   return liveStandings(prisma, trainerId, season, now);
 }
