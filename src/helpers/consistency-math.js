@@ -64,6 +64,17 @@ export function currentStreak(results) {
   return streak;
 }
 
+// Season figures of one student from stored results (most recent first): valid scores, valid weeks, weeks at 100 and streak
+export function seasonFigures(results, seasonId) {
+  const closedValid = results.filter((row) => row.seasonId === seasonId && row.status === WeekStatus.VALID);
+  return {
+    scores: closedValid.map((row) => row.score),
+    validWeeks: closedValid.length,
+    weeksAt100: closedValid.filter((row) => quantize(row.score).gte(FULL_SCORE)).length,
+    streak: currentStreak(results),
+  };
+}
+
 // Compares two rows by average, weeks at 100 and streak (descending), then by name
 function compareRows(a, b) {
   const byAverage = quantize(b.average).comparedTo(quantize(a.average));

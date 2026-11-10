@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { AppError } from '../errors/app-error.js';
 import {
   ConsistencyErrorCode,
@@ -7,7 +6,7 @@ import {
   SeasonStatus,
   WeekStatus,
 } from '../constants/consistency-ranking.js';
-import { currentStreak, isEligible, liveAverage, rankStandings, scoreWeek } from '../helpers/consistency-math.js';
+import { isEligible, liveAverage, rankStandings, scoreWeek, seasonFigures } from '../helpers/consistency-math.js';
 import { doneWindow, weekBounds, weekStartFor } from '../helpers/consistency-week.js';
 import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { countDone } from './consistency-progress-service.js';
@@ -15,10 +14,7 @@ import { pausesFor } from './consistency-pause-service.js';
 import { ensureCurrentSeason } from './consistency-season-service.js';
 import { materializeTargets } from './consistency-target-service.js';
 
-const { Decimal } = Prisma;
-
 const MS_PER_WEEK = 7 * 86400000;
-const FULL_SCORE = new Decimal(100);
 const NO_COUNTS = Object.freeze({ workouts: 0, cardio: 0 });
 const STUDENT_SELECT = { select: { firstName: true, lastName: true, username: true } };
 
@@ -122,19 +118,16 @@ async function readResultsByStudent(prisma, trainerId, studentIds, mondayDate) {
 
 // Season figures of one student from stored closed weeks plus the running week
 function summarizeStudent(link, results, week, { season, elapsed, minPodiumWeeks }) {
-  const closedValid = results.filter((row) => row.seasonId === season.id && row.status === WeekStatus.VALID);
-  const validWeeks = closedValid.length + (week.status === WeekStatus.VALID ? 1 : 0);
+  const figures = seasonFigures(results, season.id);
+  const validWeeks = figures.validWeeks + (week.status === WeekStatus.VALID ? 1 : 0);
   return {
     studentId: link.studentId,
     name: displayName(link.student),
     eligible: isEligible({ validWeeks, elapsedWeeks: elapsed, minPodiumWeeks }),
-    average: liveAverage(
-      closedValid.map((row) => row.score),
-      week.partial,
-    ),
+    average: liveAverage(figures.scores, week.partial),
     validWeeks,
-    weeksAt100: closedValid.filter((row) => new Decimal(row.score).gte(FULL_SCORE)).length,
-    streak: currentStreak(results),
+    weeksAt100: figures.weeksAt100,
+    streak: figures.streak,
     partialScore: week.partial,
     weekStatus: week.status,
     pillars: week.pillars,
