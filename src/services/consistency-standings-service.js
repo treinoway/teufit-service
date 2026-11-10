@@ -169,6 +169,12 @@ async function liveStandings(prisma, trainerId, season, now) {
   };
 }
 
+// Orders by stored position, then by name for tied students
+function byPositionThenName(a, b) {
+  if (a.position !== b.position) return (a.position ?? 0) - (b.position ?? 0);
+  return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+}
+
 // Frozen standings of a closed season, read from the stored snapshot
 async function frozenStandings(prisma, season) {
   const stored = await prisma.consistencySeasonStanding.findMany({
@@ -176,7 +182,7 @@ async function frozenStandings(prisma, season) {
     include: { student: STUDENT_SELECT },
     orderBy: { position: 'asc' },
   });
-  const named = stored.map((row) => ({ ...row, name: displayName(row.student) }));
+  const named = stored.map((row) => ({ ...row, name: displayName(row.student) })).sort(byPositionThenName);
   const rows = named
     .filter((row) => row.eligible)
     .map((row) => ({

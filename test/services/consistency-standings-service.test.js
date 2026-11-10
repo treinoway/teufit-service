@@ -300,6 +300,18 @@ describe('getStandings', () => {
     expect(materializeTargets).not.toHaveBeenCalled();
   });
 
+  it('RANK-23 lists tied frozen students alphabetically', async () => {
+    const closed = { ...SEASON, id: 's0', number: 1, status: SeasonStatus.CLOSED };
+    const { prisma } = setup();
+    prisma.consistencySeason.findFirst.mockResolvedValue(closed);
+    const tied = (studentId, firstName) => ({ studentId, position: 1, eligible: true, average: new Decimal('90'), validWeeks: 4, weeks100: 1, streak: 1, student: { firstName, lastName: null } });
+    prisma.consistencySeasonStanding.findMany.mockResolvedValue([tied('zed', 'Zed'), tied('mia', 'Mia'), tied('ana', 'Ana')]);
+
+    const { rows } = await getStandings(prisma, TRAINER_ID, { seasonNumber: 1, now: NOW });
+
+    expect(rows.map((row) => row.name)).toEqual(['Ana', 'Mia', 'Zed']);
+  });
+
   it('computes the active season live when its number is requested', async () => {
     const { prisma } = setup({ links: [link('ana', 'Ana')], results: perfect('ana', 2, 0) });
     prisma.consistencySeason.findFirst.mockResolvedValue(SEASON);
