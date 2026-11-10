@@ -495,6 +495,21 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       expect(malformed.statusCode).toBe(400);
     });
 
+    it('PAN-33 returns the frozen target of the running week per pillar and the adjusted value', async () => {
+      const { trainerId, token } = await createTrainerWithToken();
+      await createActiveSeason(trainerId, { startWeek: currentMonday() });
+      const joao = await createStudent(trainerId, 'João');
+      const read = async () => (await app.inject({ method: 'GET', url: `${STUDENTS_URL}/${joao.id}`, headers: bearer(token) })).json();
+
+      const before = await read();
+      const adjust = await app.inject({ method: 'PUT', url: `${STUDENTS_URL}/${joao.id}/targets`, headers: bearer(token), payload: { pillar: 'workouts', value: 0 } });
+      const after = await read();
+
+      expect(adjust.statusCode).toBe(200);
+      expect(before.currentTargets.map((target) => [target.pillar, target.adjusted])).toEqual([['workouts', null], ['cardio', null]]);
+      expect(after.currentTargets.find((target) => target.pillar === 'workouts')).toMatchObject({ expected: before.currentTargets[0].expected, adjusted: 0 });
+    });
+
     it('PAN-19 returns the student panel with risk, chart, pillars, weakest pillar and last contact', async () => {
       const { trainerId, token } = await createTrainerWithToken();
       const monday = currentMonday();

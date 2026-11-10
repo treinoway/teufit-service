@@ -4,11 +4,13 @@ import { getStudentPanel } from '../../src/services/consistency-student-panel-se
 import { getPanelStandings } from '../../src/services/consistency-standings-service.js';
 import { getConfig } from '../../src/services/consistency-config-service.js';
 import { ensureCurrentSeason } from '../../src/services/consistency-season-service.js';
+import { materializeTargets } from '../../src/services/consistency-target-service.js';
 import { Faixa, Pillar, SeasonStatus, WeekStatus } from '../../src/constants/consistency-ranking.js';
 
 vi.mock('../../src/services/consistency-standings-service.js', () => ({ getPanelStandings: vi.fn() }));
 vi.mock('../../src/services/consistency-config-service.js', () => ({ getConfig: vi.fn() }));
 vi.mock('../../src/services/consistency-season-service.js', () => ({ ensureCurrentSeason: vi.fn() }));
+vi.mock('../../src/services/consistency-target-service.js', () => ({ materializeTargets: vi.fn() }));
 
 const { Decimal } = Prisma;
 const TRAINER_ID = 'trainer-1';
@@ -64,7 +66,7 @@ function storedStanding(number, startWeek, average, eligible = true) {
 }
 
 // Wires the mocked prisma and services for one scenario
-function setup({ link, rows = [standingRow()], results = [], standings = [], contact = null, season = SEASON, config = {} } = {}) {
+function setup({ link, rows = [standingRow()], targets = [], results = [], standings = [], contact = null, season = SEASON, config = {} } = {}) {
   const prisma = {
     trainerStudent: {
       findFirst: vi.fn().mockResolvedValue(
@@ -76,6 +78,7 @@ function setup({ link, rows = [standingRow()], results = [], standings = [], con
     consistencyWeeklyResult: { findMany: vi.fn().mockResolvedValue(results) },
     consistencySeasonStanding: { findMany: vi.fn().mockResolvedValue(standings) },
     consistencyContactLog: { findFirst: vi.fn().mockResolvedValue(contact) },
+    consistencyWeeklyTarget: { findMany: vi.fn().mockResolvedValue(targets) },
   };
   getPanelStandings.mockResolvedValue({ season: null, rows, entering: [] });
   getConfig.mockResolvedValue(config);
@@ -97,6 +100,24 @@ describe('getStudentPanel', () => {
     expect(prisma.trainerStudent.findFirst.mock.calls[0][0].where).toEqual({ trainerId: TRAINER_ID, studentId: 'stranger' });
     expect(getPanelStandings).not.toHaveBeenCalled();
     expect(prisma.consistencyContactLog.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('PAN-33 returns the frozen and adjusted target of the running week per pillar', async () => {
+    const targets = [
+      { pillar: Pillar.WORKOUTS, expected: 4, adjusted: 2 },
+      { pillar: Pillar.CARDIO, expected: 3, adjusted: null },
+    ];
+    const prisma = setup({ targets });
+
+    const panel = await getStudentPanel(prisma, TRAINER_ID, STUDENT_ID, NOW);
+
+    expect(panel.currentTargets).toEqual(targets);
+    expect(materializeTargets).toHaveBeenCalledWith(prisma, TRAINER_ID, { year: 2026, month: 11, day: 9 }, [STUDENT_ID]);
+    expect(prisma.consistencyWeeklyTarget.findMany.mock.calls[0][0].where).toEqual({
+      trainerId: TRAINER_ID,
+      studentId: STUDENT_ID,
+      weekStart: new Date(Date.UTC(2026, 10, 9)),
+    });
   });
 
   it('PAN-20 returns the risk with the scores of the weeks that caused it', async () => {

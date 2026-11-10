@@ -515,6 +515,18 @@ const studentPanelResponseSchema = {
         },
       },
     },
+    currentTargets: {
+      type: 'array',
+      description: 'Frozen target of each adjustable pillar in the running week, with the lowered value when adjusted',
+      items: {
+        type: 'object',
+        properties: {
+          pillar: { type: 'string', enum: targetPillarValues },
+          expected: { type: 'integer' },
+          adjusted: { type: 'integer', nullable: true },
+        },
+      },
+    },
     previousSeasons: {
       type: 'array',
       items: {

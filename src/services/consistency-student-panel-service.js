@@ -1,13 +1,15 @@
 import { NotFoundAppError } from '../errors/app-error.js';
-import { DEFAULT_CONFIG, Faixa, PANEL_DEFAULTS, WeekStatus } from '../constants/consistency-ranking.js';
+import { DEFAULT_CONFIG, Faixa, PANEL_DEFAULTS, Pillar, WeekStatus } from '../constants/consistency-ranking.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { getConfig } from './consistency-config-service.js';
 import { lastContact } from './consistency-contact-service.js';
 import { faixaFor, weakestPillar } from './consistency-insights-service.js';
 import { ensureCurrentSeason } from './consistency-season-service.js';
 import { getPanelStandings } from './consistency-standings-service.js';
+import { materializeTargets } from './consistency-target-service.js';
 
 const MS_PER_WEEK = 7 * 86400000;
+const TARGET_PILLAR_ORDER = Object.freeze([Pillar.WORKOUTS, Pillar.CARDIO]);
 const STUDENT_NOT_FOUND = 'student.notFound';
 const WeekState = Object.freeze({ CLOSED: 'closed', CURRENT: 'current', FUTURE: 'future' });
 
@@ -40,6 +42,16 @@ async function readStudent(prisma, trainerId, studentId) {
 function currentMonday(now, config) {
   const { year, month, day } = weekStartFor(now, config.timeZone ?? DEFAULT_CONFIG.timeZone);
   return new Date(Date.UTC(year, month - 1, day));
+}
+
+// Frozen and adjusted target of each adjustable pillar in the running week, stored on first read
+async function readCurrentTargets(prisma, trainerId, studentId, monday) {
+  const weekStart = { year: monday.getUTCFullYear(), month: monday.getUTCMonth() + 1, day: monday.getUTCDate() };
+  await materializeTargets(prisma, trainerId, weekStart, [studentId]);
+  const rows = await prisma.consistencyWeeklyTarget.findMany({ where: { trainerId, studentId, weekStart: monday } });
+  return rows
+    .map(({ pillar, expected, adjusted }) => ({ pillar, expected, adjusted: adjusted ?? null }))
+    .sort((a, b) => TARGET_PILLAR_ORDER.indexOf(a.pillar) - TARGET_PILLAR_ORDER.indexOf(b.pillar));
 }
 
 // Stored closed weeks of the student in the season, keyed by "YYYY-MM-DD"
@@ -94,7 +106,7 @@ function standingOf(row, total) {
 }
 
 /**
- * Everything the student panel shows: standing, risk, week-by-week chart, season pillars, weakest pillar, previous seasons and last contact.
+ * Everything the student panel shows: standing, running-week targets, risk, week-by-week chart, season pillars, weakest pillar, previous seasons and last contact.
  *
  * @param {object} prisma
  * @param {string} trainerId - Trainer.id
@@ -113,7 +125,9 @@ export async function getStudentPanel(prisma, trainerId, studentId, now = new Da
   ]);
   const row = [...standings.rows, ...standings.entering].find((candidate) => candidate.studentId === studentId);
   const standing = standingOf(row, standings.rows.length);
-  const weeks = await buildWeeks(prisma, trainerId, studentId, season, { monday: currentMonday(now, config), row });
+  const monday = currentMonday(now, config);
+  const weeks = await buildWeeks(prisma, trainerId, studentId, season, { monday, row });
+  const currentTargets = await readCurrentTargets(prisma, trainerId, studentId, monday);
   return {
     studentId,
     firstName: student.firstName,
@@ -121,6 +135,7 @@ export async function getStudentPanel(prisma, trainerId, studentId, now = new Da
     ...standing,
     riskLimit: config.riskLimit ?? PANEL_DEFAULTS.riskLimit,
     weeks,
+    currentTargets,
     weakestPillar: weakestPillar(standing.seasonPillars),
     previousSeasons,
     lastContact: lastContactAt,
