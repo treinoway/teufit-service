@@ -504,17 +504,22 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
 
       const trainerRanking = await app.inject({ method: 'GET', url: '/trainer/ranking', headers: bearer(token) });
       const myRanking = await app.inject({ method: 'GET', url: '/my/ranking', headers: bearer(token) });
+
+      expect(trainerRanking.statusCode).toBe(410);
+      expect(myRanking.statusCode).toBe(410);
+      expect(trainerRanking.json().error).toBe('GLOBAL_RANKING_REMOVED');
+      expect(myRanking.json().error).toBe('GLOBAL_RANKING_REMOVED');
+    });
+
+    it('RANK-56 keeps /my/points live', async () => {
+      const { token } = await createTrainerWithToken();
+
       const myPoints = await app.inject({
         method: 'GET',
         url: '/my/points?challengeId=00000000-0000-4000-8000-000000000001',
         headers: bearer(token),
       });
 
-      expect(trainerRanking.statusCode).toBe(410);
-      expect(myRanking.statusCode).toBe(410);
-      expect(trainerRanking.json().error).toBe('GLOBAL_RANKING_REMOVED');
-      expect(myRanking.json().error).toBe('GLOBAL_RANKING_REMOVED');
-      // why: /my/points is a live challenge-scoped route today (not 410); the test pins that it stays untouched
       expect(myPoints.statusCode).toBe(404);
       expect(myPoints.json().messageCode).toBe('student.notTrainee');
     });
