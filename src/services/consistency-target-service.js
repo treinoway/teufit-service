@@ -1,7 +1,10 @@
-import { Pillar } from '../constants/consistency-ranking.js';
+import { AppError } from '../errors/app-error.js';
+import { ConsistencyErrorCode, ConsistencyMessageCode, Pillar } from '../constants/consistency-ranking.js';
 import { TrainingStatus } from '../constants/training.js';
-import { expectedFromProtocols, weekBounds } from '../helpers/consistency-week.js';
-import { ruleForWeek } from './consistency-config-service.js';
+import { formatDateOnly } from '../helpers/date-helpers.js';
+import { expectedFromProtocols, weekBounds, weekStartFor } from '../helpers/consistency-week.js';
+import { getConfig, ruleForWeek } from './consistency-config-service.js';
+import { assertStudentOfTrainer } from './consistency-student-access.js';
 
 const TARGET_PILLARS = Object.freeze([Pillar.WORKOUTS, Pillar.CARDIO]);
 
@@ -22,7 +25,7 @@ async function readStoredTargets(prisma, trainerId, weekStart, studentIds) {
   });
   const byStudent = new Map();
   for (const row of rows) {
-    byStudent.set(row.studentId, { ...byStudent.get(row.studentId), [row.pillar]: row.expected });
+    byStudent.set(row.studentId, { ...byStudent.get(row.studentId), [row.pillar]: row.adjusted ?? row.expected });
   }
   return byStudent;
 }
@@ -107,4 +110,50 @@ export async function materializeTargets(prisma, trainerId, weekStart, studentId
   const final = missing.length > 0 ? await readStoredTargets(prisma, trainerId, weekStart, studentIds) : stored;
   for (const studentId of studentIds) result.set(studentId, toExpected(final.get(studentId) ?? {}));
   return result;
+}
+
+// 409 for a target that cannot be set to the value: closed week, pillar without target or value outside 0..frozen target
+function targetNotEditableError(details) {
+  return new AppError({
+    httpStatus: 409,
+    error: ConsistencyErrorCode.TARGET_NOT_EDITABLE,
+    messageCode: ConsistencyMessageCode.TARGET_NOT_EDITABLE,
+    message: 'This target cannot be adjusted to that value',
+    details,
+  });
+}
+
+// Throws 409 once the week has passed its close instant or has a closed-week mark
+async function assertWeekOpen(prisma, trainerId, weekStart, now) {
+  const rule = await ruleForWeek(prisma, trainerId, weekStart);
+  const pastClose = weekBounds(weekStart, rule).closeInstant.getTime() <= now.getTime();
+  const closeMark = pastClose ? null : await prisma.consistencyWeekClose.findFirst({ where: { trainerId, weekStart: civilToDate(weekStart) } });
+  if (pastClose || closeMark) throw targetNotEditableError({ weekStart: formatDateOnly(civilToDate(weekStart)) });
+}
+
+/**
+ * Lowers the target of one pillar for the running week only, from 0 up to the frozen target (PAN-33, PAN-34).
+ *
+ * @param {object} prisma
+ * @param {string} trainerId - Trainer.id
+ * @param {string} studentId - User.id; 404 when not linked to the trainer
+ * @param {{ pillar: string, value: number }} adjustment
+ * @param {Date} [now]
+ * @returns {Promise<{ weekStart: string, pillar: string, expected: number, adjusted: number }>} 409 when the week is closed, the pillar has no target or the value is out of range
+ */
+export async function adjustTarget(prisma, trainerId, studentId, { pillar, value }, now = new Date()) {
+  await assertStudentOfTrainer(prisma, trainerId, studentId);
+  const config = await getConfig(prisma, trainerId, now);
+  const weekStart = weekStartFor(now, config.timeZone);
+  if (!TARGET_PILLARS.includes(pillar)) throw targetNotEditableError({ pillar });
+  await assertWeekOpen(prisma, trainerId, weekStart, now);
+  await materializeTargets(prisma, trainerId, weekStart, [studentId]);
+  const row = await prisma.consistencyWeeklyTarget.findFirst({
+    where: { trainerId, studentId, weekStart: civilToDate(weekStart), pillar },
+  });
+  if (!row || !Number.isInteger(value) || value < 0 || value > row.expected) {
+    throw targetNotEditableError({ pillar, value, expected: row?.expected ?? null });
+  }
+  await prisma.consistencyWeeklyTarget.update({ where: { id: row.id }, data: { adjusted: value, adjustedAt: now } });
+  return { weekStart: formatDateOnly(civilToDate(weekStart)), pillar, expected: row.expected, adjusted: value };
 }

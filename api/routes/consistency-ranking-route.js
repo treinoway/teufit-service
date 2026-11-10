@@ -2,6 +2,11 @@
  * Consistency Ranking Routes (trainer)
  *
  * GET    /trainer/consistency-ranking/standings
+ * GET    /trainer/consistency-ranking/students/:studentId
+ * POST   /trainer/consistency-ranking/students/:studentId/contacts
+ * PUT    /trainer/consistency-ranking/students/:studentId/targets
+ * GET    /trainer/consistency-ranking/history
+ * GET    /trainer/consistency-ranking/seasons
  * GET    /trainer/consistency-ranking/config
  * PUT    /trainer/consistency-ranking/config
  * POST   /trainer/consistency-ranking/pauses
@@ -16,13 +21,22 @@ import { ForbiddenAppError, ValidationAppError } from '../../src/errors/app-erro
 import { formatDateOnly } from '../../src/helpers/date-helpers.js';
 import { authenticate } from '../middleware/auth.js';
 import { getConfig, updateConfig } from '../../src/services/consistency-config-service.js';
+import { logContact } from '../../src/services/consistency-contact-service.js';
+import { getGeneralHistory, listSeasonSummaries } from '../../src/services/consistency-history-service.js';
 import { pauseWeek, resumeWeek } from '../../src/services/consistency-pause-service.js';
 import { ensureCurrentSeasonLocked, requestEarlyClose } from '../../src/services/consistency-season-service.js';
-import { getStandings } from '../../src/services/consistency-standings-service.js';
+import { getPanelStandings, getStandings } from '../../src/services/consistency-standings-service.js';
+import { getStudentPanel } from '../../src/services/consistency-student-panel-service.js';
+import { adjustTarget } from '../../src/services/consistency-target-service.js';
 import {
+  adjustTargetSchema,
   closeCurrentSeasonSchema,
   getConfigSchema,
-  getStandingsSchema,
+  getHistorySchema,
+  getSeasonsSchema,
+  getStandingsPanelSchema,
+  getStudentPanelSchema,
+  logContactSchema,
   pauseWeekSchema,
   resumeWeekSchema,
   updateConfigSchema,
@@ -103,13 +117,47 @@ export async function buildStandingsPayload(trainerId, seasonNumber) {
   return { ...standings, rows: standings.rows.map(serializeRow) };
 }
 
+// Standings payload for the trainer panel (current season, or the frozen one when seasonNumber is given), JSON-ready
+export async function buildPanelStandingsPayload(trainerId, { seasonNumber, filter, q }) {
+  const now = new Date();
+  if (seasonNumber === undefined) await ensureCurrentSeasonLocked(prisma, trainerId, now);
+  return getPanelStandings(prisma, trainerId, { seasonNumber, filter, q, now });
+}
+
 // Route plugin registering the trainer consistency ranking endpoints
 export async function consistencyRankingRoutes(fastify) {
   const preHandler = [authenticate];
 
-  fastify.get('/trainer/consistency-ranking/standings', { preHandler, schema: getStandingsSchema }, async (request, reply) => {
+  fastify.get('/trainer/consistency-ranking/standings', { preHandler, schema: getStandingsPanelSchema }, async (request, reply) => {
     const trainerId = await requireTrainerId(request.user.id);
-    return reply.send(await buildStandingsPayload(trainerId, request.query.season));
+    const { season, filter, q } = request.query;
+    return reply.send(await buildPanelStandingsPayload(trainerId, { seasonNumber: season, filter, q }));
+  });
+
+  fastify.get('/trainer/consistency-ranking/students/:studentId', { preHandler, schema: getStudentPanelSchema }, async (request, reply) => {
+    const trainerId = await requireTrainerId(request.user.id);
+    return reply.send(await getStudentPanel(prisma, trainerId, request.params.studentId, new Date()));
+  });
+
+  fastify.post('/trainer/consistency-ranking/students/:studentId/contacts', { preHandler, schema: logContactSchema }, async (request, reply) => {
+    const trainerId = await requireTrainerId(request.user.id);
+    const logged = await logContact(prisma, trainerId, request.params.studentId, request.body?.pillar, new Date());
+    return reply.code(201).send(logged);
+  });
+
+  fastify.put('/trainer/consistency-ranking/students/:studentId/targets', { preHandler, schema: adjustTargetSchema }, async (request, reply) => {
+    const trainerId = await requireTrainerId(request.user.id);
+    return reply.send(await adjustTarget(prisma, trainerId, request.params.studentId, request.body, new Date()));
+  });
+
+  fastify.get('/trainer/consistency-ranking/history', { preHandler, schema: getHistorySchema }, async (request, reply) => {
+    const trainerId = await requireTrainerId(request.user.id);
+    return reply.send(await getGeneralHistory(prisma, trainerId));
+  });
+
+  fastify.get('/trainer/consistency-ranking/seasons', { preHandler, schema: getSeasonsSchema }, async (request, reply) => {
+    const trainerId = await requireTrainerId(request.user.id);
+    return reply.send({ seasons: await listSeasonSummaries(prisma, trainerId) });
   });
 
   fastify.get('/trainer/consistency-ranking/config', { preHandler, schema: getConfigSchema }, async (request, reply) => {

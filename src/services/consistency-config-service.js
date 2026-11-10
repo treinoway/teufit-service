@@ -3,6 +3,8 @@ import {
   ConsistencyErrorCode,
   ConsistencyMessageCode,
   DEFAULT_CONFIG,
+  PANEL_DEFAULTS,
+  PANEL_RULE_RANGES,
   pillarValues,
 } from '../constants/consistency-ranking.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
@@ -15,7 +17,8 @@ const MAX_CLOSE_WEEKDAY = 6;
 const MAX_CLOSE_HOUR = 23;
 const DAYS_IN_WEEK = 7;
 const RULE_FIELDS = Object.freeze(['weights', 'activePillars', 'closeWeekday', 'closeHour', 'timeZone']);
-const SETTING_FIELDS = Object.freeze(['seasonWeeks', 'minPodiumWeeks']);
+const PANEL_RULE_FIELDS = Object.freeze(Object.keys(PANEL_RULE_RANGES));
+const SETTING_FIELDS = Object.freeze(['seasonWeeks', 'minPodiumWeeks', ...PANEL_RULE_FIELDS]);
 
 // Civil date -> midnight-UTC Date matching @db.Date columns
 function civilToDate({ year, month, day }) {
@@ -68,6 +71,7 @@ function toSettings(configRow) {
   return {
     seasonWeeks: configRow?.seasonWeeks ?? DEFAULT_CONFIG.seasonWeeks,
     minPodiumWeeks: configRow?.minPodiumWeeks ?? DEFAULT_CONFIG.minPodiumWeeks,
+    ...Object.fromEntries(PANEL_RULE_FIELDS.map((field) => [field, configRow?.[field] ?? PANEL_DEFAULTS[field]])),
   };
 }
 
@@ -77,7 +81,7 @@ function toSettings(configRow) {
  * @param {object} prisma
  * @param {string} trainerId
  * @param {Date} [now]
- * @returns {Promise<{ weights: object, activePillars: string[], closeWeekday: number, closeHour: number, timeZone: string, seasonWeeks: number, minPodiumWeeks: number }>}
+ * @returns {Promise<{ weights: object, activePillars: string[], closeWeekday: number, closeHour: number, timeZone: string, seasonWeeks: number, minPodiumWeeks: number, riskLimit: number, riskWeeks: number, minWorkoutMinutes: number, batchCount: number, batchMinutes: number }>}
  */
 export async function getConfig(prisma, trainerId, now = new Date()) {
   const [configRow, ruleRow] = await Promise.all([
@@ -135,9 +139,20 @@ function isValidPillarList(value) {
   );
 }
 
+// Reason per panel rule, or null when the rule is an integer inside its range
+function panelRuleProblems(input) {
+  return Object.fromEntries(
+    PANEL_RULE_FIELDS.map((field) => {
+      const { min, max } = PANEL_RULE_RANGES[field];
+      return [field, isIntegerInRange(input[field], min, max) ? null : 'invalid'];
+    }),
+  );
+}
+
 // Reason per provided field, or null when the field is valid
 function fieldProblems(input) {
   return {
+    ...panelRuleProblems(input),
     weights: weightsProblem(input.weights),
     activePillars: isValidPillarList(input.activePillars) ? null : 'invalid',
     seasonWeeks: SEASON_WEEK_OPTIONS.includes(input.seasonWeeks) ? null : 'invalid',
@@ -191,7 +206,7 @@ function upsertSettings(tx, trainerId, changes) {
  *
  * @param {object} prisma
  * @param {string} trainerId
- * @param {object} input - any of weights, activePillars, closeWeekday, closeHour, timeZone, seasonWeeks, minPodiumWeeks
+ * @param {object} input - any of weights, activePillars, closeWeekday, closeHour, timeZone, seasonWeeks, minPodiumWeeks, riskLimit, riskWeeks, minWorkoutMinutes, batchCount, batchMinutes
  * @param {Date} [now]
  * @returns {Promise<{ weights: object, activePillars: string[], closeWeekday: number, closeHour: number, timeZone: string, seasonWeeks: number, minPodiumWeeks: number, effectiveFrom: string|null }>} effectiveFrom is the "YYYY-MM-DD" Monday the rule fields take effect (null when none changed)
  */

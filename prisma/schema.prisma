@@ -66,6 +66,7 @@ model User {
   consistencyWeeklyResults   ConsistencyWeeklyResult[]
   consistencySeasonStandings ConsistencySeasonStanding[]
   consistencyWeekPauses      ConsistencyWeekPause[]
+  consistencyContactLogs     ConsistencyContactLog[]
 
   // Added for the manager backoffice user list (ORDER BY created_at DESC).
   @@index([createdAt])
@@ -155,6 +156,7 @@ model Trainer {
   consistencyWeekCloses      ConsistencyWeekClose[]
   consistencySeasonStandings ConsistencySeasonStanding[]
   consistencyWeekPauses      ConsistencyWeekPause[]
+  consistencyContactLogs     ConsistencyContactLog[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -1680,12 +1682,18 @@ model TrainingTemplateExerciseAdvancedTechnique {
 
 // Consistency ranking: references Trainer and User (never TrainerStudent) so history survives unlinking.
 model ConsistencyRankingConfig {
-  id             String    @id @default(uuid()) @db.Uuid
-  trainerId      String    @unique @map("trainer_id") @db.Uuid
-  minPodiumWeeks Int       @default(2) @map("min_podium_weeks")
-  seasonWeeks    Int       @default(4) @map("season_weeks")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(uuid()) @db.Uuid
+  trainerId         String    @unique @map("trainer_id") @db.Uuid
+  minPodiumWeeks    Int       @default(2) @map("min_podium_weeks")
+  seasonWeeks       Int       @default(4) @map("season_weeks")
+  // Panel rules (F2): risk alert, quick-completion threshold and batch-logging window
+  riskLimit         Int       @default(70) @map("risk_limit")
+  riskWeeks         Int       @default(2) @map("risk_weeks")
+  minWorkoutMinutes Int       @default(10) @map("min_workout_minutes")
+  batchCount        Int       @default(5) @map("batch_count")
+  batchMinutes      Int       @default(30) @map("batch_minutes")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
 
@@ -1729,13 +1737,16 @@ model ConsistencySeason {
 }
 
 model ConsistencyWeeklyTarget {
-  id        String   @id @default(uuid()) @db.Uuid
-  trainerId String   @map("trainer_id") @db.Uuid
-  studentId String   @map("student_id") @db.Uuid
-  weekStart DateTime @map("week_start") @db.Date
-  pillar    String   @db.Text
-  expected  Int
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String    @id @default(uuid()) @db.Uuid
+  trainerId  String    @map("trainer_id") @db.Uuid
+  studentId  String    @map("student_id") @db.Uuid
+  weekStart  DateTime  @map("week_start") @db.Date
+  pillar     String    @db.Text
+  expected   Int
+  // Target lowered by the trainer for the running week; null means the frozen expected value applies
+  adjusted   Int?
+  adjustedAt DateTime? @map("adjusted_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -1816,4 +1827,19 @@ model ConsistencyWeekPause {
 
   @@index([trainerId, weekStart])
   @@map("consistency_week_pauses")
+}
+
+// One row per use of "open on WhatsApp" in the trainer's ranking panel
+model ConsistencyContactLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  trainerId String   @map("trainer_id") @db.Uuid
+  studentId String   @map("student_id") @db.Uuid
+  pillar    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId, studentId, createdAt(sort: Desc)])
+  @@map("consistency_contact_logs")
 }

@@ -292,6 +292,7 @@ export default {
     'consistencyRanking.config.invalid': 'Invalid ranking configuration.',
     'consistencyRanking.pause.weekNotEditable': 'This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.',
     'consistencyRanking.season.notFound': 'Season not found.',
+    'consistencyRanking.target.notEditable': 'This target can only be lowered during the running week, down to zero and never above the original target.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercise not found in this training template.',

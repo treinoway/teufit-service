@@ -56,6 +56,11 @@ describe('getConfig', () => {
       closeWeekday: 0,
       closeHour: 21,
       timeZone: 'America/Sao_Paulo',
+      riskLimit: 70,
+      riskWeeks: 2,
+      minWorkoutMinutes: 10,
+      batchCount: 5,
+      batchMinutes: 30,
     });
   });
 
@@ -187,5 +192,77 @@ describe('updateConfig', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.consistencyScoringRule.upsert).toHaveBeenCalledTimes(1);
     expect(prisma.consistencyRankingConfig.upsert).toHaveBeenCalledTimes(1);
+  });
+});
+
+const PANEL_RULE_BOUNDS = [
+  ['riskLimit', 50, 90],
+  ['riskWeeks', 1, 4],
+  ['minWorkoutMinutes', 0, 60],
+  ['batchCount', 2, 20],
+  ['batchMinutes', 10, 120],
+];
+
+describe('panel rules', () => {
+  let prisma;
+
+  beforeEach(() => {
+    prisma = createPrisma();
+  });
+
+  it('PAN-41 returns the stored risk, quick completion and batch logging rules', async () => {
+    prisma.consistencyRankingConfig.findUnique.mockResolvedValue({
+      seasonWeeks: 4,
+      minPodiumWeeks: 2,
+      riskLimit: 60,
+      riskWeeks: 3,
+      minWorkoutMinutes: 15,
+      batchCount: 8,
+      batchMinutes: 45,
+    });
+
+    expect(await getConfig(prisma, TRAINER_ID, NOW)).toMatchObject({
+      riskLimit: 60,
+      riskWeeks: 3,
+      minWorkoutMinutes: 15,
+      batchCount: 8,
+      batchMinutes: 45,
+    });
+  });
+
+  it('PAN-41 saves the panel rules with immediate effect and no scheduled rule', async () => {
+    const input = { riskLimit: 60, riskWeeks: 3, minWorkoutMinutes: 15, batchCount: 8, batchMinutes: 45 };
+
+    const result = await updateConfig(prisma, TRAINER_ID, input, NOW);
+
+    expect(prisma.consistencyRankingConfig.upsert).toHaveBeenCalledWith({
+      where: { trainerId: TRAINER_ID },
+      create: { trainerId: TRAINER_ID, ...input },
+      update: input,
+    });
+    expect(prisma.consistencyScoringRule.upsert).not.toHaveBeenCalled();
+    expect(result).toMatchObject(input);
+    expect(result.effectiveFrom).toBeNull();
+  });
+
+  it('PAN-41 keeps the defaults of the rules that were not sent', async () => {
+    const result = await updateConfig(prisma, TRAINER_ID, { riskLimit: 65 }, NOW);
+
+    expect(result).toMatchObject({ riskLimit: 65, riskWeeks: 2, minWorkoutMinutes: 10, batchCount: 5, batchMinutes: 30 });
+  });
+
+  it.each(PANEL_RULE_BOUNDS)('PAN-41 accepts the limits of %s (%i to %i)', async (field, min, max) => {
+    await updateConfig(prisma, TRAINER_ID, { [field]: min }, NOW);
+    await updateConfig(prisma, TRAINER_ID, { [field]: max }, NOW);
+
+    expect(prisma.consistencyRankingConfig.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(PANEL_RULE_BOUNDS)('PAN-41 rejects %s outside %i to %i and non-integers', async (field, min, max) => {
+    for (const value of [min - 1, max + 1, min + 0.5, '60', null]) {
+      const error = await rejectedWith(prisma, { [field]: value });
+      expect(Object.keys(error.details)).toEqual([field]);
+    }
+    expectNoWrites(prisma);
   });
 });
