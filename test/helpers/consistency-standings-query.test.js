@@ -56,7 +56,7 @@ describe('filterStandings', () => {
     expect(names(filterStandings(rows, StandingsFilter.PAUSED))).toEqual(['Marcos T.']);
   });
 
-  it('PAN-58 counts a student with a closed paused week in the paused group', () => {
+  it('PAN-59 counts a student with a closed paused week in the paused group', () => {
     const rows = [row('ana', 'Ana'), row('marcos', 'Marcos T.', { closedPause: { weekStart: '2026-11-02', reason: 'viagem' } })];
 
     expect(names(filterStandings(rows, StandingsFilter.PAUSED))).toEqual(['Marcos T.']);
