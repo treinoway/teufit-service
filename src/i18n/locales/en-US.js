@@ -289,6 +289,9 @@ export default {
     'gamification.action.disabled': 'This action has been disabled by your trainer.',
     'gamification.ranking.insufficientStudents': 'At least 3 active students (last 14 days) are required to display the ranking.',
     'gamification.globalRankingRemoved': 'The global ranking has been discontinued. Use challenges instead.',
+    'consistencyRanking.config.invalid': 'Invalid ranking configuration.',
+    'consistencyRanking.pause.weekNotEditable': 'This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.',
+    'consistencyRanking.season.notFound': 'Season not found.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercise not found in this training template.',

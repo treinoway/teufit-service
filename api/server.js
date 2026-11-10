@@ -55,6 +55,8 @@ import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { consistencyRankingRoutes } from './routes/consistency-ranking-route.js';
+import { adminConsistencyRankingRoutes } from './routes/admin-consistency-ranking-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
@@ -68,6 +70,7 @@ import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
+import { startConsistencyCloseCron } from '../src/jobs/consistency-close-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { createSignedFileHook } from './hooks/signed-file-hook.js';
@@ -419,6 +422,8 @@ export async function buildServer(options = {}) {
     await fastify.register(studentSubscriptionRoutes);
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
+    await fastify.register(consistencyRankingRoutes);
+    await fastify.register(adminConsistencyRankingRoutes);
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);
@@ -449,6 +454,14 @@ export async function buildServer(options = {}) {
   if (subscriptionCycleCronEnabled) {
     startSubscriptionCycleCron(prisma, fastify.log);
     fastify.log.info('[cron:subscription-cycles] daily 03:00 America/Sao_Paulo generation scheduled');
+  }
+
+  const consistencyCloseCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_CONSISTENCY_RANKING_CRON, false);
+  if (consistencyCloseCronEnabled) {
+    startConsistencyCloseCron(prisma, fastify.log);
+    fastify.log.info('[cron:consistency-close] every-15-minutes UTC close scheduled');
   }
 
   return fastify;
