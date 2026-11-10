@@ -75,6 +75,19 @@ describe('sortForFilter', () => {
     expect(names(sortForFilter(atRisk, StandingsFilter.RISK))).toEqual(['João V.', 'Rafael D.', 'Larissa M.']);
   });
 
+  it('PAN-13 reproduces the Independent Test: the design sample at risk lists Rafael D., João V., Larissa M.', () => {
+    const designTeam = [
+      row('larissa', 'Larissa M.', { position: 17, average: 67, risk: RISK }),
+      row('joao', 'João V.', { position: 18, average: 61, risk: RISK }),
+      row('rafael', 'Rafael D.', { position: 19, average: 59, risk: RISK }),
+      row('ana', 'Ana Beatriz S.', { position: 1, average: 100 }),
+    ];
+
+    const atRisk = filterStandings(designTeam, StandingsFilter.RISK);
+
+    expect(names(sortForFilter(atRisk, StandingsFilter.RISK))).toEqual(['Rafael D.', 'João V.', 'Larissa M.']);
+  });
+
   it('PAN-13 sorts the other filters by position with entering students last', () => {
     const sorted = sortForFilter(team().reverse(), StandingsFilter.ALL);
 
@@ -110,6 +123,14 @@ describe('searchStandings', () => {
     const rows = [row('ana', 'Ana Beatriz S.', { name: 'Ana Beatriz Souza' })];
 
     expect(names(searchStandings(rows, 'souza'))).toEqual(['Ana Beatriz S.']);
+  });
+
+  it('PAN-15 does not match text that only exists across the short name and the full name', () => {
+    const rows = [row('ana', 'Ana Beatriz S.', { name: 'Ana Beatriz Souza' })];
+
+    expect(names(searchStandings(rows, 's. ana'))).toEqual([]);
+    expect(names(searchStandings(rows, 'ana beatriz souza'))).toEqual(['Ana Beatriz S.']);
+    expect(names(searchStandings(rows, 'beatriz s.'))).toEqual(['Ana Beatriz S.']);
   });
 
   it('PAN-15 returns every row for an empty or blank search', () => {

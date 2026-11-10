@@ -72,7 +72,7 @@ export function filterStandings(rows, filter) {
 export function searchStandings(rows, q) {
   const needle = normalizeText(q).trim();
   if (needle === '') return rows;
-  return rows.filter((row) => normalizeText(`${row.displayName} ${row.name ?? ''}`).includes(needle));
+  return rows.filter((row) => [row.displayName, row.name].some((field) => normalizeText(field).includes(needle)));
 }
 
 /**
