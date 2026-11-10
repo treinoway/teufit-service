@@ -2,6 +2,7 @@ import { NotFoundAppError } from '../errors/app-error.js';
 import { DEFAULT_CONFIG, Faixa, PANEL_DEFAULTS, WeekStatus } from '../constants/consistency-ranking.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { getConfig } from './consistency-config-service.js';
+import { lastContact } from './consistency-contact-service.js';
 import { faixaFor, weakestPillar } from './consistency-insights-service.js';
 import { ensureCurrentSeason } from './consistency-season-service.js';
 import { getPanelStandings } from './consistency-standings-service.js';
@@ -83,16 +84,6 @@ async function readPreviousSeasons(prisma, trainerId, studentId) {
     .sort((a, b) => b.number - a.number);
 }
 
-// Date of the last time the trainer opened WhatsApp for the student, or null
-async function readLastContact(prisma, trainerId, studentId) {
-  const last = await prisma.consistencyContactLog.findFirst({
-    where: { trainerId, studentId },
-    orderBy: { createdAt: 'desc' },
-    select: { createdAt: true },
-  });
-  return last?.createdAt ?? null;
-}
-
 // Standing fields of the student, or the entering defaults when the student has no valid week yet
 function standingOf(row, total) {
   if (!row) {
@@ -113,12 +104,12 @@ function standingOf(row, total) {
  */
 export async function getStudentPanel(prisma, trainerId, studentId, now = new Date()) {
   const student = await readStudent(prisma, trainerId, studentId);
-  const [standings, config, season, previousSeasons, lastContact] = await Promise.all([
+  const [standings, config, season, previousSeasons, lastContactAt] = await Promise.all([
     getPanelStandings(prisma, trainerId, { now }),
     getConfig(prisma, trainerId, now),
     ensureCurrentSeason(prisma, trainerId, now),
     readPreviousSeasons(prisma, trainerId, studentId),
-    readLastContact(prisma, trainerId, studentId),
+    lastContact(prisma, trainerId, studentId),
   ]);
   const row = [...standings.rows, ...standings.entering].find((candidate) => candidate.studentId === studentId);
   const standing = standingOf(row, standings.rows.length);
@@ -132,6 +123,6 @@ export async function getStudentPanel(prisma, trainerId, studentId, now = new Da
     weeks,
     weakestPillar: weakestPillar(standing.seasonPillars),
     previousSeasons,
-    lastContact,
+    lastContact: lastContactAt,
   };
 }
