@@ -274,20 +274,25 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
       const { userId, trainerId, token } = await createTrainerWithToken();
       await prisma.trainer.delete({ where: { id: trainerId } });
       expect(userId).toBeTruthy();
+      const student = await signUp('ranking-no-profile');
 
       const res = await getStandings(token);
+      const plainStudent = await getStandings(student.accessToken);
 
       expect(res.statusCode).toBe(403);
       expect(res.json().messageCode).toBe('trainer.notFound');
+      expect(plainStudent.statusCode).toBe(403);
+      expect(plainStudent.json().messageCode).toBe('trainer.notFound');
     });
 
-    it('rejects a student with 403 and an unauthenticated call with 401', async () => {
+    it('rejects a student with 403 trainer.notFound and an unauthenticated call with 401', async () => {
       const student = await signUp('ranking-plain');
 
       const forbidden = await getStandings(student.accessToken);
       const anonymous = await app.inject({ method: 'GET', url: STANDINGS_URL });
 
       expect(forbidden.statusCode).toBe(403);
+      expect(forbidden.json().messageCode).toBe('trainer.notFound');
       expect(anonymous.statusCode).toBe(401);
     });
 

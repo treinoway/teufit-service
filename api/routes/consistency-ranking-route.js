@@ -8,14 +8,13 @@
  * DELETE /trainer/consistency-ranking/pauses
  * POST   /trainer/consistency-ranking/seasons/current/close
  *
- * Auth: authenticate + requireRole(TRAINER)
+ * Auth: authenticate; the trainer profile lookup is the authorization (403 trainer.notFound)
  */
 
-import { Roles } from '../../src/constants/roles.js';
 import { ConsistencyErrorCode, ConsistencyMessageCode } from '../../src/constants/consistency-ranking.js';
 import { ForbiddenAppError, ValidationAppError } from '../../src/errors/app-error.js';
 import { formatDateOnly } from '../../src/helpers/date-helpers.js';
-import { authenticate, requireRole } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { getConfig, updateConfig } from '../../src/services/consistency-config-service.js';
 import { pauseWeek, resumeWeek } from '../../src/services/consistency-pause-service.js';
 import { ensureCurrentSeasonLocked, requestEarlyClose } from '../../src/services/consistency-season-service.js';
@@ -106,7 +105,7 @@ export async function buildStandingsPayload(trainerId, seasonNumber) {
 
 // Route plugin registering the trainer consistency ranking endpoints
 export async function consistencyRankingRoutes(fastify) {
-  const preHandler = [authenticate, requireRole(Roles.TRAINER)];
+  const preHandler = [authenticate];
 
   fastify.get('/trainer/consistency-ranking/standings', { preHandler, schema: getStandingsSchema }, async (request, reply) => {
     const trainerId = await requireTrainerId(request.user.id);
