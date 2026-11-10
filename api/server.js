@@ -68,6 +68,7 @@ import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
+import { startConsistencyCloseCron } from '../src/jobs/consistency-close-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { createSignedFileHook } from './hooks/signed-file-hook.js';
@@ -449,6 +450,14 @@ export async function buildServer(options = {}) {
   if (subscriptionCycleCronEnabled) {
     startSubscriptionCycleCron(prisma, fastify.log);
     fastify.log.info('[cron:subscription-cycles] daily 03:00 America/Sao_Paulo generation scheduled');
+  }
+
+  const consistencyCloseCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_CONSISTENCY_RANKING_CRON, false);
+  if (consistencyCloseCronEnabled) {
+    startConsistencyCloseCron(prisma, fastify.log);
+    fastify.log.info('[cron:consistency-close] every-15-minutes UTC close scheduled');
   }
 
   return fastify;
