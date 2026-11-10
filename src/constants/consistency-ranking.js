@@ -102,3 +102,14 @@ export const PANEL_DEFAULTS = Object.freeze({
   batchCount: 5,
   batchMinutes: 30,
 });
+
+// Groups of the standings filter chips
+export const StandingsFilter = Object.freeze({
+  ALL: 'all',
+  RISK: 'risk',
+  SIGNAL: 'signal',
+  ENTERING: 'entering',
+  PAUSED: 'paused',
+});
+
+export const standingsFilterValues = Object.freeze(Object.values(StandingsFilter));
