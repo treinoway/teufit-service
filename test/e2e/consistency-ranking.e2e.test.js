@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { createAdminWithToken } from '../helpers/admin-users.js';
 import { prisma } from '../../src/db.js';
 import { weekStartFor } from '../../src/helpers/consistency-week.js';
 import { SeasonStatus } from '../../src/constants/consistency-ranking.js';
@@ -19,6 +20,7 @@ const STANDINGS_URL = '/trainer/consistency-ranking/standings';
 const CONFIG_URL = '/trainer/consistency-ranking/config';
 const PAUSES_URL = '/trainer/consistency-ranking/pauses';
 const CLOSE_URL = '/trainer/consistency-ranking/seasons/current/close';
+const ADMIN_STANDINGS_PREFIX = '/admin/consistency-ranking/trainers';
 
 let counter = 0;
 
@@ -312,6 +314,182 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
       const seasons = await prisma.consistencySeason.findMany({ where: { trainerId } });
       expect(seasons).toHaveLength(1);
       expect(seasons[0].number).toBe(1);
+    });
+  });
+
+  describe('GET /admin/consistency-ranking/trainers/:trainerId/standings', () => {
+    function getAdminStandings(token, trainerId, query = '') {
+      return app.inject({ method: 'GET', url: `${ADMIN_STANDINGS_PREFIX}/${trainerId}/standings${query}`, headers: bearer(token) });
+    }
+
+    it('RANK-28 returns the standings payload', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+      const { trainerId } = await createTrainerWithToken();
+      const monday = currentMonday();
+      await createActiveSeason(trainerId);
+      const camila = await createStudent(trainerId, 'Camila');
+      const bruno = await createStudent(trainerId, 'Bruno');
+      const diego = await createStudent(trainerId, 'Diego');
+      await completeSession(diego, TrainingCategory.STRENGTH, mondayMorning(monday));
+      await completeSession(diego, TrainingCategory.FUNCTIONAL, mondayMorning(monday));
+      await completeSession(diego, TrainingCategory.CARDIO, mondayMorning(monday));
+      await completeSession(camila, TrainingCategory.STRENGTH, mondayMorning(monday));
+      await completeSession(camila, TrainingCategory.FUNCTIONAL, mondayMorning(monday));
+      await completeSession(bruno, TrainingCategory.CARDIO, mondayMorning(monday));
+
+      const res = await getAdminStandings(adminToken, trainerId);
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.season).toEqual({
+        number: 1,
+        startWeek: dateKey(monday),
+        endWeek: dateKey(shiftWeeks(monday, 3)),
+        weeks: 4,
+        currentWeek: 1,
+        status: 'active',
+      });
+      expect(body.entering).toEqual([]);
+      expect(body.rows).toEqual([
+        {
+          studentId: diego.id,
+          name: 'Diego',
+          position: 1,
+          eligible: true,
+          average: 100,
+          validWeeks: 1,
+          weeksAt100: 0,
+          streak: 0,
+          partialScore: 100,
+          weekStatus: 'valid',
+          pillars: { workouts: { expected: 2, done: 2 }, cardio: { expected: 1, done: 1 } },
+        },
+        {
+          studentId: camila.id,
+          name: 'Camila',
+          position: 2,
+          eligible: true,
+          average: 66.6667,
+          validWeeks: 1,
+          weeksAt100: 0,
+          streak: 0,
+          partialScore: 66.6667,
+          weekStatus: 'valid',
+          pillars: { workouts: { expected: 2, done: 2 }, cardio: { expected: 1, done: 0 } },
+        },
+        {
+          studentId: bruno.id,
+          name: 'Bruno',
+          position: 3,
+          eligible: true,
+          average: 33.3333,
+          validWeeks: 1,
+          weeksAt100: 0,
+          streak: 0,
+          partialScore: 33.3333,
+          weekStatus: 'valid',
+          pillars: { workouts: { expected: 2, done: 0 }, cardio: { expected: 1, done: 1 } },
+        },
+      ]);
+      expect(typeof body.rows[0].average).toBe('number');
+      expect(typeof body.rows[0].partialScore).toBe('number');
+    });
+
+    it('RANK-28 serves any trainer team, not the admin own', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+      const first = await createTrainerWithToken();
+      const second = await createTrainerWithToken();
+      await createActiveSeason(first.trainerId);
+      await createActiveSeason(second.trainerId);
+      const ana = await createStudent(first.trainerId, 'Ana');
+      const zeca = await createStudent(second.trainerId, 'Zeca');
+
+      const firstBody = (await getAdminStandings(adminToken, first.trainerId)).json();
+      const secondBody = (await getAdminStandings(adminToken, second.trainerId)).json();
+
+      expect(firstBody.rows.map((row) => row.studentId)).toEqual([ana.id]);
+      expect(secondBody.rows.map((row) => row.studentId)).toEqual([zeca.id]);
+    });
+
+    it('returns frozen values for a closed season through season=', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+      const { trainerId } = await createTrainerWithToken();
+      const monday = currentMonday();
+      const closedStart = shiftWeeks(monday, -4);
+      const closed = await createActiveSeason(trainerId, { number: 1, startWeek: closedStart });
+      await prisma.consistencySeason.update({
+        where: { id: closed.id },
+        data: { status: SeasonStatus.CLOSED, closedAt: new Date(monday.getTime() - DAY_MS) },
+      });
+      await createActiveSeason(trainerId, { number: 2 });
+      const camila = await createStudent(trainerId, 'Camila');
+      await prisma.consistencySeasonStanding.create({
+        data: {
+          seasonId: closed.id,
+          trainerId,
+          studentId: camila.id,
+          position: 1,
+          eligible: true,
+          average: '87.5000',
+          validWeeks: 4,
+          weeks100: 1,
+          streak: 2,
+          frozenAt: new Date(monday.getTime() - DAY_MS),
+        },
+      });
+
+      const res = await getAdminStandings(adminToken, trainerId, '?season=1');
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.season).toEqual({
+        number: 1,
+        startWeek: dateKey(closedStart),
+        endWeek: dateKey(shiftWeeks(closedStart, 3)),
+        weeks: 4,
+        currentWeek: 4,
+        status: 'closed',
+      });
+      expect(body.rows).toEqual([
+        { studentId: camila.id, name: 'Camila', position: 1, eligible: true, average: 87.5, validWeeks: 4, weeksAt100: 1, streak: 2 },
+      ]);
+    });
+
+    it('RANK-32 rejects a non-admin with 403', async () => {
+      const { trainerId, token } = await createTrainerWithToken();
+      const student = await signUp('ranking-plain-admin');
+
+      const asTrainer = await getAdminStandings(token, trainerId);
+      const asStudent = await getAdminStandings(student.accessToken, trainerId);
+
+      expect(asTrainer.statusCode).toBe(403);
+      expect(asStudent.statusCode).toBe(403);
+    });
+
+    it('answers 401 to an anonymous call', async () => {
+      const { trainerId } = await createTrainerWithToken();
+
+      const res = await app.inject({ method: 'GET', url: `${ADMIN_STANDINGS_PREFIX}/${trainerId}/standings` });
+
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('answers 404 for an unknown trainerId', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+
+      const res = await getAdminStandings(adminToken, '00000000-0000-4000-8000-000000000099');
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json().messageCode).toBe('resource.notFound');
+    });
+
+    it('answers 400 for a non-uuid trainerId', async () => {
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+
+      const res = await getAdminStandings(adminToken, 'not-a-uuid');
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().messageCode).toBe('validation.failed');
     });
   });
 

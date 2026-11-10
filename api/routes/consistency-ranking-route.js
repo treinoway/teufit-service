@@ -96,17 +96,21 @@ function serializeClosedRequest(season) {
   };
 }
 
+// Standings payload of a trainer's team (current season, or the frozen one when seasonNumber is given), JSON-ready
+export async function buildStandingsPayload(trainerId, seasonNumber) {
+  const now = new Date();
+  if (seasonNumber === undefined) await ensureCurrentSeasonLocked(prisma, trainerId, now);
+  const standings = await getStandings(prisma, trainerId, { seasonNumber, now });
+  return { ...standings, rows: standings.rows.map(serializeRow) };
+}
+
 // Route plugin registering the trainer consistency ranking endpoints
 export async function consistencyRankingRoutes(fastify) {
   const preHandler = [authenticate, requireRole(Roles.TRAINER)];
 
   fastify.get('/trainer/consistency-ranking/standings', { preHandler, schema: getStandingsSchema }, async (request, reply) => {
     const trainerId = await requireTrainerId(request.user.id);
-    const seasonNumber = request.query.season;
-    const now = new Date();
-    if (seasonNumber === undefined) await ensureCurrentSeasonLocked(prisma, trainerId, now);
-    const standings = await getStandings(prisma, trainerId, { seasonNumber, now });
-    return reply.send({ ...standings, rows: standings.rows.map(serializeRow) });
+    return reply.send(await buildStandingsPayload(trainerId, request.query.season));
   });
 
   fastify.get('/trainer/consistency-ranking/config', { preHandler, schema: getConfigSchema }, async (request, reply) => {
