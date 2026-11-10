@@ -58,10 +58,12 @@ export const ConsistencyErrorCode = Object.freeze({
   CONFIG_INVALID: 'CONSISTENCY_CONFIG_INVALID',
   PAUSE_WEEK_NOT_EDITABLE: 'CONSISTENCY_PAUSE_WEEK_NOT_EDITABLE',
   SEASON_NOT_FOUND: 'CONSISTENCY_SEASON_NOT_FOUND',
+  TRAINER_PROFILE_MISSING: 'CONSISTENCY_TRAINER_PROFILE_MISSING',
 });
 
 export const ConsistencyMessageCode = Object.freeze({
   CONFIG_INVALID: 'consistencyRanking.config.invalid',
   PAUSE_WEEK_NOT_EDITABLE: 'consistencyRanking.pause.weekNotEditable',
   SEASON_NOT_FOUND: 'consistencyRanking.season.notFound',
+  TRAINER_PROFILE_MISSING: 'trainer.notFound',
 });

@@ -300,6 +300,17 @@ export const resumeWeekSchema = {
   },
 };
 
+const closeRequestResponseSchema = {
+  type: 'object',
+  properties: {
+    number: { type: 'integer' },
+    startWeek: { type: 'string', pattern: dateOnlyPattern },
+    weeks: { type: 'integer' },
+    status: { type: 'string', enum: ['active', 'closed'] },
+    closeRequestedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
 export const closeCurrentSeasonSchema = {
   tags: ['consistency-ranking'],
   summary: 'Request the early close of the current season',
@@ -308,7 +319,7 @@ export const closeCurrentSeasonSchema = {
   security: [{ bearerAuth: [] }],
   headers: authHeaders,
   response: {
-    200: seasonSchema,
+    200: closeRequestResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

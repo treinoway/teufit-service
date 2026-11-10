@@ -6,6 +6,8 @@ import { getConfig } from './consistency-config-service.js';
 const LAUNCH_WEEK_ENV = 'CONSISTENCY_RANKING_LAUNCH_WEEK';
 const DAYS_IN_WEEK = 7;
 const MS_PER_DAY = 86400000;
+const SEASON_LOCK_KEY_PREFIX = 'consistency-season';
+const TRANSACTION_OPTIONS = Object.freeze({ maxWait: 10000, timeout: 120000 });
 const LAUNCH_WEEK_FORMAT = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 // Midnight-UTC millisecond key of a civil date, comparable with @db.Date values
@@ -63,6 +65,24 @@ export async function ensureCurrentSeason(prisma, trainerId, now) {
   const lastSeason = await prisma.consistencySeason.findFirst({ where: { trainerId }, orderBy: { number: 'desc' } });
   if (isBeforeNextSeasonMonday(lastSeason, weekStartKey, config.timeZone)) return null;
   return createNextSeason(prisma, trainerId, weekStartKey, config.seasonWeeks, lastSeason);
+}
+
+/**
+ * Same as ensureCurrentSeason, but creates the season under a per-trainer advisory lock so concurrent callers cannot number it twice.
+ *
+ * @param {object} prisma
+ * @param {string} trainerId
+ * @param {Date} now
+ * @returns {Promise<object|null>}
+ */
+export async function ensureCurrentSeasonLocked(prisma, trainerId, now) {
+  const active = await findActiveSeason(prisma, trainerId);
+  if (active) return active;
+  const key = `${SEASON_LOCK_KEY_PREFIX}:${trainerId}`;
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    return ensureCurrentSeason(tx, trainerId, now);
+  }, TRANSACTION_OPTIONS);
 }
 
 /**

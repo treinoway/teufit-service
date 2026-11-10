@@ -55,6 +55,7 @@ import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { consistencyRankingRoutes } from './routes/consistency-ranking-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
@@ -420,6 +421,7 @@ export async function buildServer(options = {}) {
     await fastify.register(studentSubscriptionRoutes);
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
+    await fastify.register(consistencyRankingRoutes);
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);

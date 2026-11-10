@@ -4,11 +4,10 @@ import { doneWindow, weekBounds, weekStartFor } from '../helpers/consistency-wee
 import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { pausesFor } from './consistency-pause-service.js';
 import { countDone } from './consistency-progress-service.js';
-import { ensureCurrentSeason } from './consistency-season-service.js';
+import { ensureCurrentSeasonLocked } from './consistency-season-service.js';
 import { materializeTargets } from './consistency-target-service.js';
 
 const LOCK_KEY_PREFIX = 'consistency-close';
-const SEASON_LOCK_KEY_PREFIX = 'consistency-season';
 const MS_PER_WEEK = 7 * 86400000;
 const NO_COUNTS = Object.freeze({ workouts: 0, cardio: 0 });
 const TRANSACTION_OPTIONS = Object.freeze({ maxWait: 10000, timeout: 120000 });
@@ -278,15 +277,6 @@ export async function closeDueWeeks(prisma, logger, now = new Date()) {
   }
 }
 
-// Current season of the trainer, created under a per-trainer advisory lock so two racers cannot both number the next season
-function ensureSeasonOnce(prisma, trainerId, now) {
-  const key = `${SEASON_LOCK_KEY_PREFIX}:${trainerId}`;
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
-    return ensureCurrentSeason(tx, trainerId, now);
-  }, TRANSACTION_OPTIONS);
-}
-
 // Whether the Monday falls inside the season's weeks
 function isWithinSeason(season, weekStart) {
   const offset = dbDateOf(weekStart).getTime() - season.startWeek.getTime();
@@ -295,7 +285,7 @@ function isWithinSeason(season, weekStart) {
 
 // Ensures the season and freezes the running week's targets of one trainer's active students
 async function prepareTrainer(prisma, trainerId, studentIds, now) {
-  const season = await ensureSeasonOnce(prisma, trainerId, now);
+  const season = await ensureCurrentSeasonLocked(prisma, trainerId, now);
   if (!season) return;
   const config = await getConfig(prisma, trainerId, now);
   const weekStart = weekStartFor(now, config.timeZone);
