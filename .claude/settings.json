@@ -5,6 +5,17 @@
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash($CLAUDE_PROJECT_DIR/.claude/hooks/trigger-agents.sh)"
+    ],
+    "deny": [
+      "Bash(gh api *pulls/*/merge*)",
+      "Bash(gh pr merge *)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git push origin HEAD:master*)",
+      "Bash(git push origin HEAD:staging*)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin master*)",
+      "Bash(git push origin staging*)",
+      "Bash(git tag *)"
     ]
   },
   "hooks": {
