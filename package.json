@@ -29,6 +29,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'test/e2e/**'",
     "ai:eval": "node scripts/ai-eval.js",
+  "openapi:export": "node scripts/export-openapi.js",
     "test:watch": "vitest",
     "test:e2e": "bash scripts/test-e2e.sh",
     "measure:memory": "node --expose-gc --optimize-for-size scripts/measure-memory.js"

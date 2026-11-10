@@ -1,0 +1,54 @@
+name: OpenAPI contract
+
+on:
+  pull_request:
+
+jobs:
+  contract:
+    name: Snapshot is current and change is backward compatible
+    runs-on: ubuntu-latest
+
+    env:
+      DISABLE_EMAIL: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerate the OpenAPI document from the code
+        run: node scripts/export-openapi.js openapi/generated.json
+
+      - name: Committed snapshot must match the code
+        run: |
+          if ! diff -q openapi/openapi.json openapi/generated.json >/dev/null; then
+            echo "::error::openapi/openapi.json is out of date. Run 'npm run openapi:export' and commit the result."
+            diff <(jq -S . openapi/openapi.json) <(jq -S . openapi/generated.json) | head -60 || true
+            exit 1
+          fi
+
+      - name: Fetch the base snapshot
+        id: base
+        run: |
+          if git show "origin/${{ github.base_ref }}:openapi/openapi.json" > openapi/base.json 2>/dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No snapshot on ${{ github.base_ref }} yet; skipping the breaking-change check for this PR."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail on breaking changes
+        if: steps.base.outputs.found == 'true'
+        run: |
+          docker run --rm -v "$PWD/openapi:/spec" tufin/oasdiff:latest \
+            breaking /spec/base.json /spec/generated.json --fail-on ERR
