@@ -450,6 +450,31 @@ describe('getPanelStandings', () => {
     expect(rows[0].currentWeekScore).toBeNull();
   });
 
+  it('PAN-08 returns the closed paused week of the season with its reason and keeps pause empty', async () => {
+    const results = [...history('marcos', [['s1', WeekStatus.VALID, 100], ['s1', WeekStatus.PAUSED, null]])];
+    const { prisma } = setup({ links: [link('marcos', 'Marcos'), link('ana', 'Ana')], results: [...results, ...perfect('ana', 2, 0)] });
+    pauseReasonsFor.mockImplementation(async (_p, _t, week) => ({
+      team: null,
+      students: new Map(week.day === 26 ? [['marcos', 'viagem']] : []),
+    }));
+
+    const { rows } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
+    const marcos = rows.find((row) => row.studentId === 'marcos');
+    const ana = rows.find((row) => row.studentId === 'ana');
+
+    expect(marcos.pause).toBeNull();
+    expect(marcos.closedPause).toEqual({ weekStart: '2026-10-26', reason: 'viagem' });
+    expect(ana.closedPause).toBeNull();
+  });
+
+  it('PAN-08 ignores a paused week of an earlier season', async () => {
+    const { prisma } = setup({ links: [link('marcos', 'Marcos')], results: history('marcos', [['s1', WeekStatus.VALID, 100], ['s0', WeekStatus.PAUSED, null]]) });
+
+    const { rows } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
+
+    expect(rows[0].closedPause).toBeNull();
+  });
+
   it('PAN-46 gives a team pause its reason', async () => {
     const { prisma } = setup({ links: [link('ana', 'Ana')], results: perfect('ana', 2, 0), team: true, pauseReasons: { team: 'feriado' } });
 

@@ -13,7 +13,7 @@ const FILTER_PREDICATES = Object.freeze({
   [StandingsFilter.RISK]: (row) => row.risk !== null && row.risk !== undefined,
   [StandingsFilter.SIGNAL]: (row) => (row.signals ?? []).length > 0,
   [StandingsFilter.ENTERING]: (row) => row.entering !== null && row.entering !== undefined,
-  [StandingsFilter.PAUSED]: (row) => row.pause !== null && row.pause !== undefined,
+  [StandingsFilter.PAUSED]: (row) => (row.pause ?? row.closedPause ?? null) !== null,
 });
 
 // Lowercase text without accents, for comparisons

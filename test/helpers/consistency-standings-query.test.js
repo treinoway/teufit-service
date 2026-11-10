@@ -56,6 +56,13 @@ describe('filterStandings', () => {
     expect(names(filterStandings(rows, StandingsFilter.PAUSED))).toEqual(['Marcos T.']);
   });
 
+  it('PAN-08 counts a student with a closed paused week in the paused group', () => {
+    const rows = [row('ana', 'Ana'), row('marcos', 'Marcos T.', { closedPause: { weekStart: '2026-11-02', reason: 'viagem' } })];
+
+    expect(names(filterStandings(rows, StandingsFilter.PAUSED))).toEqual(['Marcos T.']);
+    expect(countFilters(rows).paused).toBe(1);
+  });
+
   it('PAN-12 returns nothing for a group with no student', () => {
     expect(filterStandings([row('ana', 'Ana')], StandingsFilter.RISK)).toEqual([]);
   });

@@ -410,6 +410,11 @@ const pauseInfoSchema = {
   },
 };
 
+const closedPauseInfoSchema = {
+  ...pauseInfoSchema,
+  description: 'Newest paused week of the season that is already closed',
+};
+
 const enteringInfoSchema = {
   type: 'object',
   nullable: true,
@@ -434,6 +439,7 @@ const panelRowSchema = {
     risk: riskSchema,
     signals: { type: 'array', items: signalSchema },
     pause: pauseInfoSchema,
+    closedPause: closedPauseInfoSchema,
     entering: enteringInfoSchema,
   },
 };

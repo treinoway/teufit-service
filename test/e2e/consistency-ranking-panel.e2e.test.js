@@ -416,6 +416,35 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       expect(body.counts.paused).toBe(1);
     });
 
+    it('PAN-08 returns a closed paused week of the season with its reason and counts it as paused', async () => {
+      const { trainerId, token } = await createTrainerWithToken();
+      const monday = currentMonday();
+      const season = await createActiveSeason(trainerId, { startWeek: shiftWeeks(monday, -2) });
+      const marcos = await createStudent(trainerId, 'Marcos');
+      await createClosedResults(trainerId, marcos.id, season.id, monday, [100]);
+      const pausedWeek = shiftWeeks(monday, -2);
+      await prisma.consistencyWeeklyResult.create({
+        data: {
+          trainerId,
+          studentId: marcos.id,
+          seasonId: season.id,
+          weekStart: pausedWeek,
+          status: 'paused',
+          score: null,
+          pillars: {},
+          weights: { weights: DEFAULT_CONFIG.weights, activePillars: DEFAULT_CONFIG.activePillars },
+          closedAt: new Date(),
+        },
+      });
+      await prisma.consistencyWeekPause.create({ data: { trainerId, studentId: marcos.id, weekStart: pausedWeek, reason: 'viagem' } });
+
+      const body = (await getStandings(token)).json();
+
+      expect(body.rows[0].pause).toBeNull();
+      expect(body.rows[0].closedPause).toEqual({ weekStart: dateKey(pausedWeek), reason: 'viagem' });
+      expect(body.counts.paused).toBe(1);
+    });
+
     it('PAN-46 lists a student still entering with progress and no position', async () => {
       const { trainerId, token } = await createTrainerWithToken();
       const monday = currentMonday();

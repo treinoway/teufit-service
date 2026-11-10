@@ -304,8 +304,31 @@ function pauseOf(student, mondayDate, reasons) {
   return { weekStart: dateKey(mondayDate), reason: reason ?? null };
 }
 
+// Newest paused week already closed in the season, or null (results are newest first)
+function lastClosedPauseRow(closed, seasonId) {
+  return closed.find((result) => result.seasonId === seasonId && result.status === WeekStatus.PAUSED) ?? null;
+}
+
+// Reasons of the closed paused weeks, keyed by week start
+async function closedPauseReasons(prisma, trainerId, results, seasonId) {
+  const rows = [...results.values()].map((closed) => lastClosedPauseRow(closed, seasonId)).filter(Boolean);
+  const weeks = new Map(rows.map((row) => [dateKey(row.weekStart), civilOf(row.weekStart)]));
+  const entries = await Promise.all([...weeks].map(async ([key, week]) => [key, await pauseReasonsFor(prisma, trainerId, week)]));
+  return new Map(entries);
+}
+
+// Newest closed paused week of the student with its reason, or null
+function closedPauseOf(studentId, closed, seasonId, closedReasons) {
+  const row = lastClosedPauseRow(closed, seasonId);
+  if (!row) return null;
+  const weekStart = dateKey(row.weekStart);
+  const reasons = closedReasons.get(weekStart);
+  const reason = reasons.students.has(studentId) ? reasons.students.get(studentId) : reasons.team;
+  return { weekStart, reason: reason ?? null };
+}
+
 // Panel row of one student from the live figures and the panel context
-function livePanelRow(student, position, { users, results, reasons, signals, rules, mondayDate, season, required }) {
+function livePanelRow(student, position, { users, results, reasons, closedReasons, signals, rules, mondayDate, season, required }) {
   const closed = results.get(student.studentId) ?? [];
   const risk = riskFor(closed, rules);
   return {
@@ -328,6 +351,7 @@ function livePanelRow(student, position, { users, results, reasons, signals, rul
     risk: risk.atRisk ? { weeks: risk.scores.length, scores: risk.scores } : null,
     signals: signals.get(student.studentId) ?? [],
     pause: pauseOf(student, mondayDate, reasons),
+    closedPause: closedPauseOf(student.studentId, closed, season.id, closedReasons),
     entering: student.eligible ? null : { validWeeks: student.validWeeks, required },
     ...(student.eligible ? {} : { weeksMissing: required - student.validWeeks }),
   };
@@ -344,14 +368,16 @@ async function livePanelData(prisma, trainerId, data) {
   const { season, config, mondayDate, elapsed, results, students } = data.context;
   const rules = panelRulesOf(config);
   const ids = students.map((student) => student.studentId);
-  const [{ byStudent, closesAt }, reasons] = await Promise.all([
+  const [{ byStudent, closesAt }, reasons, closedReasons] = await Promise.all([
     readSignals(prisma, trainerId, ids, mondayDate, rules),
     pauseReasonsFor(prisma, trainerId, civilOf(mondayDate)),
+    closedPauseReasons(prisma, trainerId, results, season.id),
   ]);
   const shared = {
     users: new Map(data.context.links.map((link) => [link.studentId, link.student])),
     results,
     reasons,
+    closedReasons,
     signals: byStudent,
     rules,
     mondayDate,
@@ -382,6 +408,7 @@ function frozenPanelRow(row, required) {
     risk: null,
     signals: [],
     pause: null,
+    closedPause: null,
     entering: row.eligible ? null : { validWeeks: row.validWeeks, required },
     ...(row.eligible ? {} : { weeksMissing: Math.max(required - row.validWeeks, 0) }),
   };
