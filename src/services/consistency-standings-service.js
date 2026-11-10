@@ -153,7 +153,7 @@ function enteringList(students, required) {
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
 }
 
-// Live data of the active season: ranked rows, students still entering and the context the panel fields need
+// Live data of the active season: ranked rows, students still entering (RANK-25 leaves out those without a valid week) and the context the panel fields need, where every active student appears
 async function liveData(prisma, trainerId, season, now) {
   const config = await getConfig(prisma, trainerId, now);
   const mondayDate = dbDateOf(weekStartFor(now, config.timeZone));
@@ -173,14 +173,13 @@ async function liveData(prisma, trainerId, season, now) {
     readResultsByStudent(prisma, trainerId, ids, mondayDate),
   ]);
   const context = { season, elapsed, minPodiumWeeks: config.minPodiumWeeks };
-  const students = links
-    .map((link) => summarizeStudent(link, results.get(link.studentId) ?? [], weeks.get(link.studentId), context))
-    .filter((student) => student.validWeeks > 0);
+  const everyone = links.map((link) => summarizeStudent(link, results.get(link.studentId) ?? [], weeks.get(link.studentId), context));
+  const students = everyone.filter((student) => student.validWeeks > 0);
   return {
     season: summarizeSeason(season, elapsed),
     rows: rankStandings(students.filter((student) => student.eligible)),
     entering: enteringList(students, Math.min(config.minPodiumWeeks, elapsed)),
-    context: { season, config, mondayDate, elapsed, links, results, weeks, students },
+    context: { season, config, mondayDate, elapsed, links, results, weeks, students: everyone },
   };
 }
 

@@ -500,6 +500,28 @@ describe('getPanelStandings', () => {
     });
   });
 
+  it('PAN-53 counts active students without a valid week: they are entering, so the team is not empty', async () => {
+    const links = [link('joined', 'Joined', { createdAt: new Date('2026-11-10T12:00:00Z') }), link('paused', 'Paused')];
+    const { prisma } = setup({ links, studentPauses: { paused: true } });
+
+    const { rows, entering, counts } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
+
+    expect(rows).toEqual([]);
+    expect(entering.map((row) => row.studentId).sort()).toEqual(['joined', 'paused']);
+    expect(entering[0]).toMatchObject({ position: null, faixa: Faixa.ENTERING, entering: { validWeeks: 0, required: 2 }, weeksMissing: 2 });
+    expect(counts).toEqual({ all: 2, risk: 0, signal: 0, entering: 2, paused: 1 });
+  });
+
+  it('PAN-53 still leaves students without a valid week out of the F1 standings', async () => {
+    const links = [link('joined', 'Joined', { createdAt: new Date('2026-11-10T12:00:00Z') })];
+    const { prisma } = setup({ links });
+
+    const result = await getStandings(prisma, TRAINER_ID, { now: NOW });
+
+    expect(result.rows).toEqual([]);
+    expect(result.entering).toEqual([]);
+  });
+
   it('PAN-46 applies the panel rule defaults when the config carries none', async () => {
     const { links, results, done } = riskyStudent();
     const { prisma } = setup({ links, results, done, config: CONFIG });
