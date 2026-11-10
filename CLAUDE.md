@@ -3,7 +3,7 @@
 ## MUST FOLLOW RULES
 - NEVER ignore CLAUDE.md. Always read and respect its content, this is not a suggestion.
 - NEVER accept my plans or suggestions blindly. You MUST be skeptic and always try to find flaws or non-covered edge cases. Avoid Sycophancy.
-- The `backend-engineer` agent MUST always invoke the `test-writer` agent to write/update tests for any code it changes. No exceptions — implementation is not complete until tests are written.
+- Every code change ships with tests; implementation is not complete until tests are written. In the `/feature` flow, `test-writer` writes the tests first and they are locked before implementation. In a single-repo session, the main session runs `test-writer` before `backend-engineer`. Subagents never spawn other agents.
 
 
 ## Admin Role
@@ -67,7 +67,7 @@ All error responses follow this contract — never deviate:
 
 Follow the existing pattern of the surrounding code. When you must break a convention, make it explicit and visible:
 - Mark it with `// deviation: <reason>` or `eslint-disable-next-line <rule> -- <reason>` (reason required; a blanket `eslint-disable` is never acceptable).
-- Tell the user in your final message. The Stop hook lists every new deviation once and blocks until you do.
+- Tell the user in your final message. The Stop hook blocks until each new deviation is named in your final message.
 
 ### Lint ratchet
 
@@ -89,6 +89,7 @@ newField: data.newField !== undefined ? data.newField : template.newField,
 
 - Update `postman/Treinoway.postman_collection.json`
 - Swagger docs auto-generated from route JSON schemas — keep schemas complete
+- Run `npm run openapi:export` and commit `openapi/openapi.json`. The Stop hook and the `OpenAPI contract` CI job fail when it is stale, and CI fails on any breaking change against the base branch (removed or renamed field, endpoint, enum value; `messageCode` stays stable).
 
 ## Required for Every New Feature
 

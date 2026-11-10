@@ -54,6 +54,21 @@ describe('exercise-library-match', () => {
       expect(findLibraryExercise(indexOf([ownWithoutMedia, publicWithGif]), 'Supino reto').id).toBe('pub')
     })
 
+    it('counts an uploaded video file as media', () => {
+      const ownWithoutMedia = { id: 'own', trainerId: TRAINER_ID, name: 'Supino reto', videoUrl: null, gifUrl: null }
+      const publicWithFile = { id: 'pub', trainerId: OTHER_TRAINER_ID, name: 'Supino reto', videoFileKey: 'exercise-videos/admin-trainer/a.mp4' }
+
+      expect(findLibraryExercise(indexOf([ownWithoutMedia, publicWithFile]), 'Supino reto').id).toBe('pub')
+    })
+
+    it('selects the uploaded video key', async () => {
+      const prisma = { exerciseTemplate: { findMany: vi.fn().mockResolvedValue([]) } }
+
+      await loadExerciseLibraryIndex(prisma, TRAINER_ID)
+
+      expect(prisma.exerciseTemplate.findMany.mock.calls[0][0].select.videoFileKey).toBe(true)
+    })
+
     it('prefers the trainer own template when both have media', () => {
       const publicWithGif = { id: 'pub', trainerId: OTHER_TRAINER_ID, name: 'Supino reto', gifUrl: 'g' }
       const ownWithVideo = { id: 'own', trainerId: TRAINER_ID, name: 'Supino reto', videoUrl: 'v' }
@@ -73,7 +88,18 @@ describe('exercise-library-match', () => {
     it('returns the template link and media of a match', () => {
       const match = { id: 't1', trainerId: OTHER_TRAINER_ID, name: 'Agachamento livre', videoUrl: 'v', gifUrl: 'g' }
 
-      expect(libraryExerciseFields(match)).toEqual({ exerciseTemplateId: 't1', videoUrl: 'v', gifUrl: 'g' })
+      expect(libraryExerciseFields(match)).toEqual({ exerciseTemplateId: 't1', videoUrl: 'v', gifUrl: 'g', videoFileKey: null })
+    })
+
+    it('copies the uploaded video key of a match', () => {
+      const match = { id: 't1', trainerId: OTHER_TRAINER_ID, name: 'Agachamento livre', videoFileKey: 'exercise-videos/admin-trainer/a.mp4' }
+
+      expect(libraryExerciseFields(match)).toEqual({
+        exerciseTemplateId: 't1',
+        videoUrl: null,
+        gifUrl: null,
+        videoFileKey: 'exercise-videos/admin-trainer/a.mp4',
+      })
     })
 
     it('returns no fields without a match', () => {

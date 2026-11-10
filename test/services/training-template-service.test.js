@@ -408,6 +408,114 @@ describe('training-template-service', () => {
     });
   });
 
+  describe('videoFileKey', () => {
+    const TEMPLATE_KEY = 'exercise-videos/t1/11111111-1111-4111-8111-111111111111.mp4';
+    const CALLER_KEY = 'exercise-videos/t1/22222222-2222-4222-8222-222222222222.webm';
+    const FOREIGN_KEY = 'exercise-videos/t2/33333333-3333-4333-8333-333333333333.mp4';
+    const INVALID_KEY_MESSAGE_CODE = 'exerciseVideo.invalidFileKey';
+
+    function mockOwnership() {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.trainingTemplate.findUnique.mockResolvedValue({ id: 'tt1', trainerId: 't1', deletedAt: null });
+      prisma.trainingTemplateExerciseTemplate.findFirst.mockResolvedValue(null);
+    }
+
+    function makeTx(createdTemplate) {
+      return {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        exerciseTemplate: { create: vi.fn().mockResolvedValue(createdTemplate) },
+        trainingTemplateExerciseTemplate: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({ id: 'jte1' }),
+        },
+      };
+    }
+
+    async function createWithLibraryTemplate(exerciseInput = {}) {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([
+        { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null, videoFileKey: TEMPLATE_KEY },
+      ]);
+      prisma.trainingTemplate.create.mockResolvedValue({ id: 'tt1', trainingTemplateExerciseTemplates: [] });
+
+      await createTrainingTemplate('u1', {
+        name: 'Leg Day',
+        category: 'strength',
+        exerciseTemplates: [{ exerciseTemplateId: 'et1', ...exerciseInput }],
+      });
+
+      return prisma.trainingTemplate.create.mock.calls[0][0].data.trainingTemplateExerciseTemplates.create[0];
+    }
+
+    it('createTrainingTemplate junction rows inherit videoFileKey from the library template', async () => {
+      const junctionRow = await createWithLibraryTemplate();
+
+      expect(junctionRow.videoFileKey).toBe(TEMPLATE_KEY);
+    });
+
+    it('createTrainingTemplate junction rows prefer a caller-supplied videoFileKey', async () => {
+      const junctionRow = await createWithLibraryTemplate({ videoFileKey: CALLER_KEY });
+
+      expect(junctionRow.videoFileKey).toBe(CALLER_KEY);
+    });
+
+    it('createTrainingTemplate junction rows honour an explicit null videoFileKey', async () => {
+      const junctionRow = await createWithLibraryTemplate({ videoFileKey: null });
+
+      expect(junctionRow.videoFileKey).toBeNull();
+    });
+
+    it('createTrainingTemplate rejects a caller key of another trainer', async () => {
+      prisma.trainer.findUnique.mockResolvedValue({ id: 't1' });
+      prisma.exerciseTemplate.findMany.mockResolvedValue([
+        { id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null, videoFileKey: null },
+      ]);
+
+      await expect(
+        createTrainingTemplate('u1', {
+          name: 'Leg Day',
+          category: 'strength',
+          exerciseTemplates: [{ exerciseTemplateId: 'et1', videoFileKey: FOREIGN_KEY }],
+        }),
+      ).rejects.toMatchObject({ statusCode: 400, messageCode: INVALID_KEY_MESSAGE_CODE });
+      expect(prisma.trainingTemplate.create).not.toHaveBeenCalled();
+    });
+
+    it('createTrainingTemplateExerciseFromTemplate snapshots the library videoFileKey onto the junction row', async () => {
+      mockOwnership();
+      prisma.exerciseTemplate.findUnique.mockResolvedValue({
+        id: 'et1', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null, videoFileKey: TEMPLATE_KEY,
+        trainerId: 't1', isPublic: false, deletedAt: null,
+      });
+      prisma.trainingTemplateExerciseTemplate.create.mockResolvedValue({ id: 'jte1' });
+
+      await createTrainingTemplateExerciseFromTemplate('u1', 'tt1', { exerciseTemplateId: 'et1' });
+
+      expect(prisma.trainingTemplateExerciseTemplate.create.mock.calls[0][0].data.videoFileKey).toBe(TEMPLATE_KEY);
+    });
+
+    it('createTrainingTemplateExercise persists videoFileKey on both the library template and the junction row', async () => {
+      mockOwnership();
+      const txMock = makeTx({ id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null, videoFileKey: CALLER_KEY });
+      prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
+
+      await createTrainingTemplateExercise('u1', 'tt1', { name: 'Squat', type: 'strength', videoFileKey: CALLER_KEY });
+
+      expect(txMock.exerciseTemplate.create.mock.calls[0][0].data.videoFileKey).toBe(CALLER_KEY);
+      expect(txMock.trainingTemplateExerciseTemplate.create.mock.calls[0][0].data.videoFileKey).toBe(CALLER_KEY);
+    });
+
+    it('createTrainingTemplateExercise stores videoFileKey null when not provided', async () => {
+      mockOwnership();
+      const txMock = makeTx({ id: 'et-new', name: 'Squat', type: 'strength', videoUrl: null, gifUrl: null, videoFileKey: null });
+      prisma.$transaction = vi.fn().mockImplementation(async (fn) => fn(txMock));
+
+      await createTrainingTemplateExercise('u1', 'tt1', { name: 'Squat', type: 'strength' });
+
+      expect(txMock.exerciseTemplate.create.mock.calls[0][0].data.videoFileKey).toBeNull();
+    });
+  });
+
   describe('getTrainingTemplatesByTrainer', () => {
     it('throws TRAINER_PROFILE_MISSING when trainer does not exist', async () => {
       prisma.trainer.findUnique.mockResolvedValue(null);

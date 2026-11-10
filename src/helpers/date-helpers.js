@@ -102,7 +102,7 @@ const MS_PER_DAY = 86400000;
  * @param {string} timeZone
  * @returns {{ year: number, month: number, day: number }} month is 1-12
  */
-function civilDateInTimeZone(instant, timeZone) {
+export function civilDateInTimeZone(instant, timeZone) {
 	const parts = new Intl.DateTimeFormat('en-CA', {
 		timeZone,
 		year: 'numeric',

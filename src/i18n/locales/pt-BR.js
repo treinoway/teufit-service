@@ -150,6 +150,11 @@ export default {
       semiannual: 'Semestral',
       annual: 'Anual',
     },
+    feedbackCategory: {
+      BUG: 'Problema',
+      SUGGESTION: 'Sugestão',
+      PRAISE: 'Elogio',
+    },
     subscriptionStatus: {
       active: 'Ativo',
       cancelled: 'Cancelado',
@@ -249,6 +254,10 @@ export default {
     'gamification.action.disabled': 'Esta ação está desativada pelo treinador.',
     'gamification.ranking.insufficientStudents': 'São necessários pelo menos 3 alunos ativos (últimos 14 dias) para exibir o ranking.',
     'gamification.globalRankingRemoved': 'O ranking global foi descontinuado. Use os campeonatos.',
+    'consistencyRanking.config.invalid': 'Configuração do ranking inválida.',
+    'consistencyRanking.pause.weekNotEditable': 'Esta semana já foi encerrada ou está a mais de 12 semanas à frente, e não pode ser pausada nem reativada.',
+    'consistencyRanking.season.notFound': 'Temporada não encontrada.',
+    'consistencyRanking.target.notEditable': 'A meta só pode ser reduzida na semana em andamento, de zero até a meta original.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercício não encontrado neste modelo de treino.',
@@ -384,6 +393,9 @@ export default {
     'tutorial.videoTooLarge': 'O vídeo excede o tamanho máximo de 500 MB.',
     'tutorial.invalidVideoKey': 'Arquivo de vídeo inválido. Envie o vídeo novamente.',
     'tutorial.invalidOrder': 'A nova ordem dos tutoriais é inválida.',
+
+    // Exercise video upload
+    'exerciseVideo.invalidFileKey': 'Arquivo de vídeo inválido. Envie o vídeo novamente.',
 
     // Video library
     'video.notFound': 'Vídeo não encontrado.',

@@ -146,6 +146,11 @@ export default {
       semiannual: 'Semiannual',
       annual: 'Annual',
     },
+    feedbackCategory: {
+      BUG: 'Problem',
+      SUGGESTION: 'Suggestion',
+      PRAISE: 'Praise',
+    },
     subscriptionStatus: {
       active: 'Active',
       cancelled: 'Cancelled',
@@ -245,6 +250,10 @@ export default {
     'gamification.action.disabled': 'This action has been disabled by your trainer.',
     'gamification.ranking.insufficientStudents': 'At least 3 active students (last 14 days) are required to display the ranking.',
     'gamification.globalRankingRemoved': 'The global ranking has been discontinued. Use challenges instead.',
+    'consistencyRanking.config.invalid': 'Invalid ranking configuration.',
+    'consistencyRanking.pause.weekNotEditable': 'This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.',
+    'consistencyRanking.season.notFound': 'Season not found.',
+    'consistencyRanking.target.notEditable': 'This target can only be lowered during the running week, down to zero and never above the original target.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercise not found in this training template.',
@@ -380,6 +389,9 @@ export default {
     'tutorial.videoTooLarge': 'The video exceeds the 500 MB size limit.',
     'tutorial.invalidVideoKey': 'Invalid video file. Please upload the video again.',
     'tutorial.invalidOrder': 'The new tutorial order is invalid.',
+
+    // Exercise video upload
+    'exerciseVideo.invalidFileKey': 'Invalid video file. Please upload the video again.',
 
     // Video library
     'video.notFound': 'Video not found.',

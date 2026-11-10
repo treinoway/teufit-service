@@ -3275,7 +3275,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tríceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\",\n          \"advancedTechniqueIds\": [\n            \"{{advancedTechniqueId}}\"\n          ],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 0,\n          \"supersetRestInterval\": 90,\n          \"substitutes\": [\n            {\n              \"name\": \"Supino Inclinado com Halteres\",\n              \"type\": \"strength\",\n              \"sets\": 4,\n              \"prescriptionMode\": \"reps\",\n              \"repetitions\": {\n                \"min\": 8,\n                \"max\": 12\n              },\n              \"hasLoad\": true\n            }\n          ]\n        },\n        {\n          \"name\": \"Tríceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60,\n          \"advancedTechniqueIds\": [],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 1,\n          \"supersetRestInterval\": 90\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"assigneeId\": \"{{assigneeId}}\",\n  \"name\": \"Protocolo de Hipertrofia\",\n  \"description\": \"Protocolo focado em ganho de massa muscular\",\n  \"status\": \"active\",\n  \"startDate\": \"2026-01-01\",\n  \"expirationDate\": \"2026-06-30\",\n  \"genderOrdination\": \"male\",\n  \"trainingLevel\": \"intermediate\",\n  \"type\": \"strength\",\n  \"trainings\": [\n    {\n      \"name\": \"Treino A - Peito e Tríceps\",\n      \"description\": \"Foco em empurrar\",\n      \"category\": \"strength\",\n      \"bodySegment\": \"upper\",\n      \"weekDay\": \"monday\",\n      \"order\": 0,\n      \"exercises\": [\n        {\n          \"name\": \"Supino Reto\",\n          \"type\": \"strength\",\n          \"order\": 0,\n          \"sets\": 4,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 8,\n            \"max\": 12\n          },\n          \"hasLoad\": true,\n          \"suggestedLoad\": 60,\n          \"restInterval\": 90,\n          \"notes\": \"Descer controlado\",\n          \"advancedTechniqueIds\": [\n            \"{{advancedTechniqueId}}\"\n          ],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 0,\n          \"supersetRestInterval\": 90,\n          \"substitutes\": [\n            {\n              \"name\": \"Supino Inclinado com Halteres\",\n              \"type\": \"strength\",\n              \"sets\": 4,\n              \"prescriptionMode\": \"reps\",\n              \"repetitions\": {\n                \"min\": 8,\n                \"max\": 12\n              },\n              \"hasLoad\": true,\n              \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n            }\n          ],\n          \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n        },\n        {\n          \"name\": \"Tríceps Pulley\",\n          \"type\": \"strength\",\n          \"order\": 1,\n          \"sets\": 3,\n          \"prescriptionMode\": \"reps\",\n          \"repetitions\": {\n            \"min\": 12,\n            \"max\": 15\n          },\n          \"hasLoad\": true,\n          \"restInterval\": 60,\n          \"advancedTechniqueIds\": [],\n          \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n          \"supersetOrder\": 1,\n          \"supersetRestInterval\": 90\n        }\n      ]\n    },\n    {\n      \"name\": \"Treino B - Cardio\",\n      \"category\": \"cardio\",\n      \"order\": 1,\n      \"exercises\": [\n        {\n          \"name\": \"Esteira\",\n          \"type\": \"cardio\",\n          \"order\": 0,\n          \"sets\": 1,\n          \"prescriptionMode\": \"duration\",\n          \"duration\": 1800,\n          \"intensity\": \"moderate\"\n        }\n      ]\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3293,7 +3293,7 @@
                 "with-trainings"
               ]
             },
-            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}].\n\nSupersets: exercises sharing the same supersetGroupId (uuid chosen by the client) form a group; supersetOrder and supersetRestInterval (int >= 0) are optional. substitutes[] items take exercise fields without order/superset fields, plus optional exerciseTemplateId (uuid; must be owned by or public to the trainer, else 403 EXERCISE_TEMPLATE_NOT_OWNED / protocol.exerciseTemplateNotOwned) and advancedTechniqueIds (uuid[], max 5, unique; same rules as principals: omitted inherits the substitute's template techniques, [] or a list overrides; invalid selection returns 400 advancedTechnique.invalidSelection). Techniques are linked to the substitute only; principal and substitute lists are independent. Invalid groups return 400 VALIDATION_ERROR with messageCode exercise.supersetMinMembers, exercise.supersetMaxMembers or exercise.supersetMembershipInvalid."
+            "description": "Atomically create a training protocol together with all its trainings and exercises in a single request. Replaces the sequential waterfall of POST /trainer/protocols + T× POST trainings + T×E× POST exercises. Rate limited: 10 requests/minute. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}].\n\nSupersets: exercises sharing the same supersetGroupId (uuid chosen by the client) form a group; supersetOrder and supersetRestInterval (int >= 0) are optional. substitutes[] items take exercise fields without order/superset fields, plus optional exerciseTemplateId (uuid; must be owned by or public to the trainer, else 403 EXERCISE_TEMPLATE_NOT_OWNED / protocol.exerciseTemplateNotOwned) and advancedTechniqueIds (uuid[], max 5, unique; same rules as principals: omitted inherits the substitute's template techniques, [] or a list overrides; invalid selection returns 400 advancedTechnique.invalidSelection). Techniques are linked to the substitute only; principal and substitute lists are independent. Invalid groups return 400 VALIDATION_ERROR with messageCode exercise.supersetMinMembers, exercise.supersetMaxMembers or exercise.supersetMembershipInvalid. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4031,7 +4031,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\n    \"compound\",\n    \"strength\",\n    \"upper body\"\n  ],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"name\": \"Bench Press\",\n      \"type\": \"strength\",\n      \"sets\": 4,\n      \"repetitions\": {\n        \"min\": 8,\n        \"max\": 12\n      },\n      \"hasLoad\": true,\n      \"suggestedLoad\": 80,\n      \"restInterval\": 90,\n      \"notes\": \"Keep elbows at 45 degrees\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ]\n    },\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid-2>\",\n      \"order\": 1\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"Upper Body Strength\",\n  \"description\": \"Focus on upper body compound movements\",\n  \"category\": \"strength\",\n  \"bodySegment\": \"upper\",\n  \"tags\": [\n    \"compound\",\n    \"strength\",\n    \"upper body\"\n  ],\n  \"isPublic\": false,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"name\": \"Bench Press\",\n      \"type\": \"strength\",\n      \"sets\": 4,\n      \"repetitions\": {\n        \"min\": 8,\n        \"max\": 12\n      },\n      \"hasLoad\": true,\n      \"suggestedLoad\": 80,\n      \"restInterval\": 90,\n      \"notes\": \"Keep elbows at 45 degrees\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ],\n      \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n    },\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid-2>\",\n      \"order\": 1\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4048,7 +4048,7 @@
                 "training-templates"
               ]
             },
-            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create a reusable training template. Requires TRAINER role. Can be private or public. Optionally include 'exerciseTemplates' array with objects { exerciseTemplateId (uuid), order (optional), and optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes }. If snapshot fields are omitted, values are copied from the ExerciseTemplate at link time. All exercise templates must belong to the same trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4160,7 +4160,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\n    \"cardio\",\n    \"endurance\"\n  ],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"sets\": 3,\n      \"repetitions\": {\n        \"min\": 12,\n        \"max\": 15\n      },\n      \"restInterval\": 60,\n      \"notes\": \"Controlled tempo\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ]\n    }\n  ]\n}",
+              "raw": "{\n  \"name\": \"Updated Template Name\",\n  \"description\": \"Updated description\",\n  \"category\": \"cardio\",\n  \"bodySegment\": \"lower\",\n  \"tags\": [\n    \"cardio\",\n    \"endurance\"\n  ],\n  \"isPublic\": true,\n  \"exerciseTemplates\": [\n    {\n      \"exerciseTemplateId\": \"<exercise-template-uuid>\",\n      \"order\": 0,\n      \"sets\": 3,\n      \"repetitions\": {\n        \"min\": 12,\n        \"max\": 15\n      },\n      \"restInterval\": 60,\n      \"notes\": \"Controlled tempo\",\n      \"advancedTechniqueIds\": [\n        \"{{advancedTechniqueId}}\"\n      ],\n      \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4185,7 +4185,7 @@
                 }
               ]
             },
-            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Update a training template. All fields are optional. Pass 'exerciseTemplates' array to replace linked exercise templates (objects: exerciseTemplateId, optional order, optional snapshot overrides: name, type, videoUrl, gifUrl, sets, repetitions, duration, hasLoad, suggestedLoad, restInterval, notes). If snapshot fields are omitted, values are copied from the ExerciseTemplate. Only accessible by the template's trainer. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4201,7 +4201,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\",\n  \"intensity\": \"moderate\"\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Incline Bench Press\",\n  \"type\": \"strength\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\n    \"min\": 8,\n    \"max\": 12\n  },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"notes\": \"Warm up first\",\n  \"intensity\": \"moderate\",\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4227,7 +4227,7 @@
                 }
               ]
             },
-            "description": "Create a brand-new ExerciseTemplate and attach it to the training template via a junction row. Runs in a transaction. The junction row snapshot mirrors the new ExerciseTemplate. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create a brand-new ExerciseTemplate and attach it to the training template via a junction row. Runs in a transaction. The junction row snapshot mirrors the new ExerciseTemplate. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4320,7 +4320,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"sets\": 4,\n  \"repetitions\": { \"min\": 8, \"max\": 12 },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 80,\n  \"restInterval\": 90,\n  \"notes\": \"Keep elbows tucked\"\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"sets\": 4,\n  \"repetitions\": {\n    \"min\": 8,\n    \"max\": 12\n  },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 80,\n  \"restInterval\": 90,\n  \"notes\": \"Keep elbows tucked\",\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4352,9 +4352,214 @@
                 }
               ]
             },
-            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Update a single exercise (junction row) inside a training template. Modifies only the snapshot fields on the junction row — the global ExerciseTemplate record is untouched. At least one field is required. Requires TRAINER role and template ownership. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
+        },
+        {
+          "name": "Create Template Superset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exerciseIds\": [\n    \"b1b2c3d4-0000-4000-8000-000000000011\",\n    \"b1b2c3d4-0000-4000-8000-000000000012\"\n  ],\n  \"restInterval\": 90\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                }
+              ]
+            },
+            "description": "Group 2-6 exercises (junction row ids, TrainingTemplateExerciseTemplate.id) of a training template into a superset (bi-set/tri-set), in superset order. Optional restInterval (seconds, int >= 0, nullable) is the rest between rounds; omitted or null stores no round rest, 0 is kept as 0. Requires TRAINER role and template ownership. Returns the updated template. Errors: 400 VALIDATION_ERROR (exercise.supersetMinMembers / exercise.supersetMaxMembers / exercise.supersetMembershipInvalid / validation.failed), 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND, 409 EXERCISE_ALREADY_IN_SUPERSET (exercise.alreadyInSuperset)."
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 0,\n      \"supersetRestInterval\": 90\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 1,\n      \"supersetRestInterval\": 90\n    }\n  ]\n}"
+            },
+            {
+              "name": "Exercise already in superset",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EXERCISE_ALREADY_IN_SUPERSET\",\n  \"messageCode\": \"exercise.alreadyInSuperset\",\n  \"message\": \"Exercise already belongs to a superset\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Template Superset Rest Interval",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restInterval\": 120\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Update the round rest (seconds, int >= 0; null clears it) of an existing superset group of a training template. restInterval is required. Requires TRAINER role and template ownership. Returns the updated template. Errors: 400 VALIDATION_ERROR, 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND / SUPERSET_GROUP_NOT_FOUND (exercise.supersetGroupNotFound)."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 0,\n      \"supersetRestInterval\": 120\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": \"3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f\",\n      \"supersetOrder\": 1,\n      \"supersetRestInterval\": 120\n    }\n  ]\n}"
+            },
+            {
+              "name": "Superset group not found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SUPERSET_GROUP_NOT_FOUND\",\n  \"messageCode\": \"exercise.supersetGroupNotFound\",\n  \"message\": \"Superset group not found\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Dissolve Template Superset",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/training-templates/:templateId/supersets/:groupId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "training-templates",
+                ":templateId",
+                "supersets",
+                ":groupId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "Training template UUID"
+                },
+                {
+                  "key": "groupId",
+                  "value": "",
+                  "description": "Superset group UUID (supersetGroupId)"
+                }
+              ]
+            },
+            "description": "Dissolve a superset group of a training template; members stay in the template, ungrouped. Requires TRAINER role and template ownership. Returns the updated template. Errors: 403 FORBIDDEN_NOT_TEMPLATE_OWNER, 404 TEMPLATE_NOT_FOUND / SUPERSET_GROUP_NOT_FOUND."
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c1b2c3d4-0000-4000-8000-000000000001\",\n  \"name\": \"Upper A\",\n  \"exercises\": [\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000011\",\n      \"name\": \"Supino Reto\",\n      \"supersetGroupId\": null,\n      \"supersetOrder\": null,\n      \"supersetRestInterval\": null\n    },\n    {\n      \"id\": \"b1b2c3d4-0000-4000-8000-000000000012\",\n      \"name\": \"Crucifixo\",\n      \"supersetGroupId\": null,\n      \"supersetOrder\": null,\n      \"supersetRestInterval\": null\n    }\n  ]\n}"
+            }
+          ]
         },
         {
           "name": "Delete Training Template",
@@ -4434,7 +4639,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"isPublic\": false\n}",
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat\",\n  \"gifUrl\": \"https://example.com/squat.gif\",\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\",\n  \"isPublic\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4451,7 +4656,7 @@
                 "exercise-templates"
               ]
             },
-            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create a reusable exercise template (identity only: name, type, videoUrl, gifUrl, isPublic). Prescription fields live on the junction row when the template is attached to a training template. Requires TRAINER role. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4557,7 +4762,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"isPublic\": true\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Updated Squat\",\n  \"type\": \"strength\",\n  \"videoUrl\": \"https://example.com/squat-v2\",\n  \"gifUrl\": \"https://example.com/squat-v2.gif\",\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\",\n  \"isPublic\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercise-templates/:id",
@@ -4577,7 +4782,7 @@
                 }
               ]
             },
-            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Update exercise template identity fields (name, type, videoUrl, gifUrl, isPublic). All fields are optional. Only accessible by owner. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -4641,6 +4846,102 @@
             "description": "Batch soft-delete multiple exercise templates by ID. Non-owned IDs are silently skipped. Returns the count of actually deleted records. Accepts 1–200 UUIDs. Requires TRAINER role."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exercise Videos",
+      "item": [
+        {
+          "name": "Get Exercise Video Upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"video/mp4\",\n  \"sizeBytes\": 15728640\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/exercise-videos/upload-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "exercise-videos",
+                "upload-url"
+              ]
+            },
+            "description": "Issue a presigned PUT URL to upload an exercise video directly to storage. Requires TRAINER role (403 otherwise). Body: contentType (video/mp4, video/quicktime or video/webm) and sizeBytes (integer 1..104857600, i.e. max 100 MB); anything else returns 400. Rate limited: 20 requests/minute. Flow: 1) call this endpoint; 2) PUT the file to uploadUrl using the returned method and headers (Content-Type must match); 3) send the returned key as videoFileKey when creating/updating an exercise, exercise template or training template. The URL expires at expiresAt (15 minutes)."
+          },
+          "response": [
+            {
+              "name": "200 — Upload URL issued",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/exercise-videos/upload-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "exercise-videos",
+                    "upload-url"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"key\": \"exercise-videos/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d.mp4\",\n  \"uploadUrl\": \"https://bucket.s3.amazonaws.com/exercise-videos/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d.mp4?X-Amz-Signature=abc123\",\n  \"method\": \"PUT\",\n  \"headers\": {\n    \"Content-Type\": \"video/mp4\"\n  },\n  \"expiresAt\": \"2026-11-03T15:15:00.000Z\"\n}"
+            },
+            {
+              "name": "400 — Validation error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/exercise-videos/upload-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "exercise-videos",
+                    "upload-url"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": \"Bad Request\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"body/sizeBytes must be <= 104857600\",\n  \"details\": {}\n}"
+            }
+          ]
         }
       ]
     },
@@ -5190,7 +5491,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12},\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Barbell Squat\",\n  \"type\": \"strength\",\n  \"order\": 1,\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 4,\n  \"repetitions\": {\n    \"min\": 8,\n    \"max\": 12\n  },\n  \"hasLoad\": true,\n  \"suggestedLoad\": 60,\n  \"restInterval\": 90,\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/trainings/:trainingId/exercises",
@@ -5211,7 +5512,7 @@
                 }
               ]
             },
-            "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create exercise in a training. Type: strength, cardio, mobility, stretching. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": [
             {
@@ -5264,7 +5565,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\"\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"trainingId\": \"{{trainingId}}\",\n  \"templateId\": \"{{exerciseTemplateId}}\",\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/from-template",
@@ -5277,7 +5578,7 @@
                 "from-template"
               ]
             },
-            "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create exercise in training from exercise template. Can override name, order, sets, reps, etc. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -5348,7 +5649,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Front Squat\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\"min\": 5, \"max\": 5},\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Front Squat\",\n  \"prescriptionMode\": \"reps\",\n  \"sets\": 5,\n  \"repetitions\": {\n    \"min\": 5,\n    \"max\": 5\n  },\n  \"duration\": null,\n  \"suggestedLoad\": null,\n  \"restInterval\": null,\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id",
@@ -5368,7 +5669,7 @@
                 }
               ]
             },
-            "description": "Update exercise. Requires protocol ownership. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Update exercise. Requires protocol ownership. Nullable fields (sets, duration, suggestedLoad, restInterval, repetitions, repetitions.min, repetitions.max) accept null to clear the value. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -5415,7 +5716,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"advancedTechniqueIds\": [\"{{advancedTechniqueId}}\"],\n  \"name\": \"Dumbbell Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": {\"min\": 8, \"max\": 12}\n}"
+              "raw": "{\n  \"advancedTechniqueIds\": [\n    \"{{advancedTechniqueId}}\"\n  ],\n  \"name\": \"Dumbbell Press\",\n  \"type\": \"strength\",\n  \"sets\": 4,\n  \"repetitions\": {\n    \"min\": 8,\n    \"max\": 12\n  },\n  \"videoFileKey\": \"exercise-videos/{{trainerId}}/3f6c1d2e-8a4b-4c1e-9d57-1b2a3c4d5e6f.mp4\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/trainer/exercises/:id/substitutes",
@@ -5436,7 +5737,7 @@
                 }
               ]
             },
-            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes). Optional exerciseTemplateId (uuid): links the substitute to that library template (owned or public) instead of find-or-creating a private copy by name+type; absent videoUrl/gifUrl fall back to the template media and an omitted advancedTechniqueIds inherits the template techniques in order (deleted/foreign-private dropped, reindexed); an explicit list or [] wins. Not found or deleted: 404 EXERCISE_TEMPLATE_NOT_FOUND; another trainer's private template: 403 FORBIDDEN_PRIVATE_TEMPLATE. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]."
+            "description": "Create a substitute exercise under a principal exercise. The substitute inherits the same training as the principal. Cannot chain substitutes (a substitute cannot itself have substitutes). Optional exerciseTemplateId (uuid): links the substitute to that library template (owned or public) instead of find-or-creating a private copy by name+type; absent videoUrl/gifUrl fall back to the template media and an omitted advancedTechniqueIds inherits the template techniques in order (deleted/foreign-private dropped, reindexed); an explicit list or [] wins. Not found or deleted: 404 EXERCISE_TEMPLATE_NOT_FOUND; another trainer's private template: 403 FORBIDDEN_PRIVATE_TEMPLATE. Optional advancedTechniqueIds (array of UUIDs, max 5, unique, order = array order): omitted = unchanged (inherits from the template on create-from-template); [] = clear. Invalid selection (unknown, soft-deleted or foreign technique, duplicates, >5) returns 400 ADVANCED_TECHNIQUE_INVALID_SELECTION / advancedTechnique.invalidSelection. Response carries advancedTechniques: [{id,key,name,description,videoUrl,gifUrl,isDeleted,order}]. Optional videoFileKey (string|null): key returned by POST /trainer/exercise-videos/upload-url after the PUT upload; must be under exercise-videos/<your trainerId>/, otherwise 400 exerciseVideo.invalidFileKey. null clears it. Responses carry videoFileKey and videoFileUrl (string|null, signed URL) alongside videoUrl."
           },
           "response": []
         },
@@ -20963,6 +21264,1820 @@
                 }
               ],
               "body": "{\n  \"items\": [\n    {\n      \"id\": \"c3a1f6a2-5b7e-4d0a-9a55-1d2e3f4a5b6c\",\n      \"title\": \"Como criar seu primeiro protocolo\",\n      \"description\": \"Passo a passo para montar um protocolo de treino.\",\n      \"videoSource\": \"link\",\n      \"videoUrl\": \"https://www.youtube.com/watch?v=IODxDxX7oi4\",\n      \"order\": 0,\n      \"createdAt\": \"2026-10-01T12:00:00.000Z\",\n      \"updatedAt\": \"2026-10-01T12:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Feedback - Trainer",
+      "item": [
+        {
+          "name": "Send Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/feedback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "feedback"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"BUG\",\n  \"message\": \"O timer de descanso trava ao trocar de exercicio.\",\n  \"pagePath\": \"/trainer/students/123/protocols\",\n  \"viewport\": \"390x844\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Send beta feedback (closed beta). Requires TRAINER role. category: BUG | SUGGESTION | PRAISE; message required, non-blank, max 2000 chars; pagePath optional (max 300); viewport optional (max 20, e.g. 390x844). User-Agent is captured server-side. Rate limited: 10 requests/hour. Errors: 400 validation, 401, 403, 404 trainer.notFound, 429."
+          },
+          "response": [
+            {
+              "name": "Send Feedback - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/feedback",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "feedback"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"BUG\",\n  \"message\": \"O timer de descanso trava ao trocar de exercicio.\",\n  \"pagePath\": \"/trainer/students/123/protocols\",\n  \"viewport\": \"390x844\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f\",\n  \"createdAt\": \"2026-11-03T14:22:10.000Z\"\n}"
+            },
+            {
+              "name": "Send Feedback - 400 Bad Request",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/feedback",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "feedback"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"category\": \"BUG\",\n  \"message\": \"O timer de descanso trava ao trocar de exercicio.\",\n  \"pagePath\": \"/trainer/students/123/protocols\",\n  \"viewport\": \"390x844\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"BAD_REQUEST\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Request validation failed\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Feedback - Admin",
+      "item": [
+        {
+          "name": "List Feedbacks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/feedbacks?status=NEW&category=BUG&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "feedbacks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "NEW",
+                  "description": "NEW | READ (optional)"
+                },
+                {
+                  "key": "category",
+                  "value": "BUG",
+                  "description": "BUG | SUGGESTION | PRAISE (optional)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Default 1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "description": "Default 20, max 100"
+                }
+              ]
+            },
+            "description": "List trainer beta feedback, paginated. Requires ADMIN role. Optional filters: status (NEW | READ), category (BUG | SUGGESTION | PRAISE). pageSize max 100. Errors: 400, 401, 403."
+          },
+          "response": [
+            {
+              "name": "List Feedbacks - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/feedbacks?status=NEW&category=BUG&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "feedbacks"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "NEW",
+                      "description": "NEW | READ (optional)"
+                    },
+                    {
+                      "key": "category",
+                      "value": "BUG",
+                      "description": "BUG | SUGGESTION | PRAISE (optional)"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Default 1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Default 20, max 100"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f\",\n      \"category\": \"BUG\",\n      \"categoryLabel\": \"Bug\",\n      \"message\": \"O timer de descanso trava ao trocar de exercicio.\",\n      \"pagePath\": \"/trainer/students/123/protocols\",\n      \"viewport\": \"390x844\",\n      \"userAgent\": \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)\",\n      \"status\": \"NEW\",\n      \"createdAt\": \"2026-11-03T14:22:10.000Z\",\n      \"readAt\": null,\n      \"trainer\": {\n        \"id\": \"a1b2c3d4-1111-4222-8333-444455556666\",\n        \"name\": \"Carlos Silva\",\n        \"email\": \"carlos.silva@example.com\",\n        \"tier\": \"FREE\"\n      }\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            },
+            {
+              "name": "List Feedbacks - 403 Forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/feedbacks?status=NEW&category=BUG&page=1&pageSize=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "feedbacks"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "NEW",
+                      "description": "NEW | READ (optional)"
+                    },
+                    {
+                      "key": "category",
+                      "value": "BUG",
+                      "description": "BUG | SUGGESTION | PRAISE (optional)"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Default 1"
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "description": "Default 20, max 100"
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"FORBIDDEN\",\n  \"messageCode\": \"auth.forbidden\",\n  \"message\": \"Insufficient permissions\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Feedback Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/feedbacks/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "feedbacks",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f",
+                  "description": "Feedback UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"READ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Mark a feedback as READ or back to NEW. Requires ADMIN role. Errors: 400, 401, 403, 404 FEEDBACK_NOT_FOUND."
+          },
+          "response": [
+            {
+              "name": "Update Feedback Status - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/feedbacks/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "feedbacks",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f",
+                      "description": "Feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"READ\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f\",\n  \"category\": \"BUG\",\n  \"categoryLabel\": \"Bug\",\n  \"message\": \"O timer de descanso trava ao trocar de exercicio.\",\n  \"pagePath\": \"/trainer/students/123/protocols\",\n  \"viewport\": \"390x844\",\n  \"userAgent\": \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)\",\n  \"status\": \"READ\",\n  \"createdAt\": \"2026-11-03T14:22:10.000Z\",\n  \"readAt\": \"2026-11-04T09:00:00.000Z\",\n  \"trainer\": {\n    \"id\": \"a1b2c3d4-1111-4222-8333-444455556666\",\n    \"name\": \"Carlos Silva\",\n    \"email\": \"carlos.silva@example.com\",\n    \"tier\": \"FREE\"\n  }\n}"
+            },
+            {
+              "name": "Update Feedback Status - 404 Not Found",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/feedbacks/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "feedbacks",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c1e2f90-3b4a-4d5e-8f60-1a2b3c4d5e6f",
+                      "description": "Feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"READ\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"FEEDBACK_NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Feedback not found\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consistency Ranking",
+      "item": [
+        {
+          "name": "Get Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "standings"
+              ],
+              "query": [
+                {
+                  "key": "season",
+                  "value": "1",
+                  "description": "Season number (optional, min 1). Omit for the current season",
+                  "disabled": true
+                },
+                {
+                  "key": "filter",
+                  "value": "risk",
+                  "description": "Group: all (default), risk, signal, entering, paused. risk orders by ascending average",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "joao",
+                  "description": "Student name search, ignoring case and accents (max 100)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consistency ranking standings of the trainer with the panel fields: season (with closesAt), the four summary numbers, the count of every filter, ranked students in rows and students still entering in entering. Each student carries faixa, season pillars, risk, review signals, pause and entering progress. filter and q narrow the lists; the counts and the summary stay global. Without season returns the current season; season selects a closed one (closed seasons omit partialScore, weekStatus and pillars). Before the ranking launches season is null and the lists are empty. Requires TRAINER role. Errors: 400 validation (unknown filter), 401, 403 trainer.notFound, 404 consistencyRanking.season.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Standings - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    },
+                    {
+                      "key": "filter",
+                      "value": "risk",
+                      "description": "Group: all (default), risk, signal, entering, paused. risk orders by ascending average",
+                      "disabled": true
+                    },
+                    {
+                      "key": "q",
+                      "value": "joao",
+                      "description": "Student name search, ignoring case and accents (max 100)",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"season\": {\n    \"number\": 3,\n    \"startWeek\": \"2026-10-26\",\n    \"endWeek\": \"2026-11-16\",\n    \"weeks\": 4,\n    \"currentWeek\": 3,\n    \"status\": \"active\",\n    \"closesAt\": \"2026-11-16T00:00:00.000Z\"\n  },\n  \"summary\": {\n    \"teamAverage\": 85.12,\n    \"lastClosedWeekAverage\": 84,\n    \"fullLastWeek\": 4,\n    \"validLastWeek\": 17,\n    \"atRisk\": 3,\n    \"withSignal\": 2\n  },\n  \"counts\": {\n    \"all\": 19,\n    \"risk\": 3,\n    \"signal\": 2,\n    \"entering\": 1,\n    \"paused\": 1\n  },\n  \"rows\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n      \"name\": \"Joao Vieira\",\n      \"displayName\": \"Joao V.\",\n      \"initials\": \"JV\",\n      \"position\": 5,\n      \"eligible\": true,\n      \"faixa\": \"restarting\",\n      \"average\": 61,\n      \"validWeeks\": 2,\n      \"weeksAt100\": 0,\n      \"weeks100\": 0,\n      \"streak\": 0,\n      \"partialScore\": 40,\n      \"currentWeekScore\": 40,\n      \"weekStatus\": \"valid\",\n      \"pillars\": {\n        \"workouts\": {\n          \"expected\": 4,\n          \"done\": 2\n        },\n        \"cardio\": {\n          \"expected\": 2,\n          \"done\": 0\n        }\n      },\n      \"seasonPillars\": [\n        {\n          \"pillar\": \"workouts\",\n          \"done\": 5,\n          \"expected\": 8,\n          \"adherence\": 62.5\n        },\n        {\n          \"pillar\": \"cardio\",\n          \"done\": 1,\n          \"expected\": 4,\n          \"adherence\": 25\n        }\n      ],\n      \"risk\": {\n        \"weeks\": 2,\n        \"scores\": [\n          64,\n          58\n        ]\n      },\n      \"signals\": [\n        {\n          \"type\": \"quick_completion\",\n          \"sessionId\": \"c3d4e5f6-0000-0000-0000-000000000099\",\n          \"finishedAt\": \"2026-11-10T12:00:00.000Z\",\n          \"durationSeconds\": 240\n        }\n      ],\n      \"pause\": null,\n      \"entering\": null\n    }\n  ],\n  \"entering\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000012\",\n      \"name\": \"Rafael Lima\",\n      \"displayName\": \"Rafael L.\",\n      \"initials\": \"RL\",\n      \"position\": null,\n      \"eligible\": false,\n      \"faixa\": \"entering\",\n      \"average\": 61,\n      \"validWeeks\": 2,\n      \"weeksAt100\": 0,\n      \"weeks100\": 0,\n      \"streak\": 0,\n      \"partialScore\": 40,\n      \"currentWeekScore\": 40,\n      \"weekStatus\": \"valid\",\n      \"pillars\": {\n        \"workouts\": {\n          \"expected\": 4,\n          \"done\": 2\n        },\n        \"cardio\": {\n          \"expected\": 2,\n          \"done\": 0\n        }\n      },\n      \"seasonPillars\": [\n        {\n          \"pillar\": \"workouts\",\n          \"done\": 5,\n          \"expected\": 8,\n          \"adherence\": 62.5\n        },\n        {\n          \"pillar\": \"cardio\",\n          \"done\": 1,\n          \"expected\": 4,\n          \"adherence\": 25\n        }\n      ],\n      \"risk\": null,\n      \"signals\": [],\n      \"pause\": null,\n      \"entering\": {\n        \"validWeeks\": 1,\n        \"required\": 2\n      },\n      \"weeksMissing\": 1\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Standings - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    },
+                    {
+                      "key": "filter",
+                      "value": "risk",
+                      "description": "Group: all (default), risk, signal, entering, paused. risk orders by ascending average",
+                      "disabled": true
+                    },
+                    {
+                      "key": "q",
+                      "value": "joao",
+                      "description": "Student name search, ignoring case and accents (max 100)",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"consistencyRanking.season.notFound\",\n  \"message\": \"Season not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Panel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "students",
+                "b1c2d3e4-0000-0000-0000-000000000011"
+              ]
+            },
+            "description": "Panel of one student: standing, risk, week-by-week chart (closed, current and future weeks), season pillars, weakest pillar, previous seasons and last WhatsApp contact. Requires TRAINER role. Errors: 400 validation (studentId not a uuid), 401, 403 trainer.notFound, 404 student.notFound (student of another trainer), 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Panel - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"firstName\": \"Joao\",\n  \"whatsapp\": \"+5511999990000\",\n  \"displayName\": \"Joao V.\",\n  \"initials\": \"JV\",\n  \"position\": 5,\n  \"total\": 18,\n  \"average\": 61,\n  \"faixa\": \"restarting\",\n  \"risk\": {\n    \"weeks\": 2,\n    \"scores\": [\n      64,\n      58\n    ]\n  },\n  \"pause\": null,\n  \"signals\": [],\n  \"seasonPillars\": [\n    {\n      \"pillar\": \"workouts\",\n      \"done\": 5,\n      \"expected\": 8,\n      \"adherence\": 62.5\n    },\n    {\n      \"pillar\": \"cardio\",\n      \"done\": 1,\n      \"expected\": 4,\n      \"adherence\": 25\n    }\n  ],\n  \"weakestPillar\": \"cardio\",\n  \"riskLimit\": 70,\n  \"weeks\": [\n    {\n      \"weekStart\": \"2026-10-26\",\n      \"number\": 1,\n      \"state\": \"closed\",\n      \"status\": \"valid\",\n      \"score\": 64\n    },\n    {\n      \"weekStart\": \"2026-11-02\",\n      \"number\": 2,\n      \"state\": \"closed\",\n      \"status\": \"valid\",\n      \"score\": 58\n    },\n    {\n      \"weekStart\": \"2026-11-09\",\n      \"number\": 3,\n      \"state\": \"current\",\n      \"status\": \"valid\",\n      \"score\": 40\n    },\n    {\n      \"weekStart\": \"2026-11-16\",\n      \"number\": 4,\n      \"state\": \"future\",\n      \"status\": null,\n      \"score\": null\n    }\n  ],\n  \"previousSeasons\": [\n    {\n      \"number\": 2,\n      \"startWeek\": \"2026-09-28\",\n      \"endWeek\": \"2026-10-19\",\n      \"average\": 90,\n      \"faixa\": \"constant\"\n    }\n  ],\n  \"lastContact\": \"2026-11-05T13:00:00.000Z\"\n}"
+            },
+            {
+              "name": "Get Student Panel - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"student.notFound\",\n  \"message\": \"Student not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Log Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/contacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "students",
+                "b1c2d3e4-0000-0000-0000-000000000011",
+                "contacts"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pillar\": \"cardio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Logs one use of \"open on WhatsApp\" for a student; every call is stored with trainer, student, pillar and date. pillar is optional. Requires TRAINER role. Errors: 400 validation (unknown pillar), 401, 403 trainer.notFound, 404 student.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Log Contact - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/contacts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011",
+                    "contacts"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pillar\": \"cardio\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"pillar\": \"cardio\",\n  \"createdAt\": \"2026-11-11T15:00:00.000Z\"\n}"
+            },
+            {
+              "name": "Log Contact - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/contacts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011",
+                    "contacts"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pillar\": \"cardio\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"student.notFound\",\n  \"message\": \"Student not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Adjust Target",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/targets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "students",
+                "b1c2d3e4-0000-0000-0000-000000000011",
+                "targets"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pillar\": \"workouts\",\n  \"value\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Lowers the target of one pillar (workouts or cardio) for the running week only, from 0 up to the frozen target. Requires TRAINER role. Errors: 400 validation (negative value, unknown pillar), 401, 403 trainer.notFound, 404 student.notFound, 409 consistencyRanking.target.notEditable (closed week or value above the frozen target), 500."
+          },
+          "response": [
+            {
+              "name": "Adjust Target - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/targets",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011",
+                    "targets"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pillar\": \"workouts\",\n  \"value\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weekStart\": \"2026-11-09\",\n  \"pillar\": \"workouts\",\n  \"expected\": 2,\n  \"adjusted\": 1\n}"
+            },
+            {
+              "name": "Adjust Target - 409 Conflict",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/targets",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011",
+                    "targets"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pillar\": \"workouts\",\n  \"value\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONSISTENCY_TARGET_NOT_EDITABLE\",\n  \"messageCode\": \"consistencyRanking.target.notEditable\",\n  \"message\": \"This target cannot be adjusted to that value.\",\n  \"details\": {\n    \"pillar\": \"workouts\",\n    \"value\": 5,\n    \"expected\": 2\n  }\n}"
+            },
+            {
+              "name": "Adjust Target - 404 Not Found",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/students/b1c2d3e4-0000-0000-0000-000000000011/targets",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "students",
+                    "b1c2d3e4-0000-0000-0000-000000000011",
+                    "targets"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pillar\": \"workouts\",\n  \"value\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"student.notFound\",\n  \"message\": \"Student not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "history"
+              ]
+            },
+            "description": "General history: students with 4 or more valid weeks, with the average of every valid week since the join, weeks at 100 and the longest run at 100, ordered by average. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get History - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "history"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"rows\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n      \"displayName\": \"Ana S.\",\n      \"initials\": \"AS\",\n      \"validWeeks\": 6,\n      \"average\": 95.5,\n      \"weeks100\": 4,\n      \"longestStreak\": 3\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Seasons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "seasons"
+              ]
+            },
+            "description": "Closed seasons of the trainer with number, dates, participants and average, newest first. Open the frozen standings with Get Standings and season=<number>. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "List Seasons - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "seasons"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"seasons\": [\n    {\n      \"number\": 2,\n      \"startWeek\": \"2026-09-28\",\n      \"endWeek\": \"2026-10-19\",\n      \"weeks\": 4,\n      \"participants\": 18,\n      \"average\": 84.5\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "config"
+              ]
+            },
+            "description": "Scoring configuration of the trainer (weights summing to 100, active pillars, season length, minimum weeks to podium, weekly close day/hour and time zone). closeWeekday: 0 = Sunday. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500. Panel rules (immediate effect): riskLimit 50-90, riskWeeks 1-4, minWorkoutMinutes 0-60, batchCount 2-20, batchMinutes 10-120."
+          },
+          "response": [
+            {
+              "name": "Get Config - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\",\n  \"riskLimit\": 70,\n  \"riskWeeks\": 2,\n  \"minWorkoutMinutes\": 10,\n  \"batchCount\": 5,\n  \"batchMinutes\": 30\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Update the scoring configuration (all fields optional). weights must sum to 100; seasonWeeks: 4 | 8 | 12; minPodiumWeeks 1-4; closeWeekday 0-6 (0 = Sunday); closeHour 0-23; timeZone is an IANA name. Returns the config plus effectiveFrom, the Monday from which the new scoring rule applies (null when no rule changed). Requires TRAINER role. Errors: 400 consistencyRanking.config.invalid or validation, 401, 403 trainer.notFound, 500. Panel rules (immediate effect): riskLimit 50-90, riskWeeks 1-4, minWorkoutMinutes 0-60, batchCount 2-20, batchMinutes 10-120."
+          },
+          "response": [
+            {
+              "name": "Update Config - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\",\n  \"effectiveFrom\": \"2026-11-16\",\n  \"riskLimit\": 70,\n  \"riskWeeks\": 2,\n  \"minWorkoutMinutes\": 10,\n  \"batchCount\": 5,\n  \"batchMinutes\": 30\n}"
+            },
+            {
+              "name": "Update Config - 400 Bad Request",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weights\": {\n    \"workouts\": 30,\n    \"diet\": 30,\n    \"cardio\": 15,\n    \"feedback\": 15,\n    \"hydration\": 10\n  },\n  \"activePillars\": [\n    \"workouts\",\n    \"diet\",\n    \"cardio\",\n    \"feedback\",\n    \"hydration\"\n  ],\n  \"seasonWeeks\": 4,\n  \"minPodiumWeeks\": 2,\n  \"closeWeekday\": 0,\n  \"closeHour\": 21,\n  \"timeZone\": \"America/Sao_Paulo\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"BAD_REQUEST\",\n  \"messageCode\": \"consistencyRanking.config.invalid\",\n  \"message\": \"Invalid ranking configuration.\",\n  \"details\": {\n    \"weights\": \"sum\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Pause Week",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "pauses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Pause a week (Monday) so it does not count in the ranking. Omit studentId to pause the whole team. weekStart must be a real Monday (YYYY-MM-DD); reason is optional (max 255). Requires TRAINER role. Errors: 400 validation (weekStart not a date or not a Monday), 401, 403 trainer.notFound, 404 student.notFound, 409 consistencyRanking.pause.weekNotEditable (week closed or more than 12 weeks ahead), 500."
+          },
+          "response": [
+            {
+              "name": "Pause Week - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"paused\": true,\n  \"reason\": \"Viagem\"\n}"
+            },
+            {
+              "name": "Pause Week - 409 Conflict",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"reason\": \"Viagem\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"consistencyRanking.pause.weekNotEditable\",\n  \"message\": \"This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.\",\n  \"details\": {\n    \"weekStart\": \"2026-11-16\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Resume Week",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "pauses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Resume (unpause) a week. DELETE with a JSON body: send Content-Type application/json. Omit studentId to resume the whole team (this also removes individual pauses of that week). weekStart must be a real Monday. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 student.notFound, 409 consistencyRanking.pause.weekNotEditable, 500."
+          },
+          "response": [
+            {
+              "name": "Resume Week - 200 OK",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n  \"paused\": false\n}"
+            },
+            {
+              "name": "Resume Week - 409 Conflict",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/pauses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "pauses"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"weekStart\": \"2026-11-16\",\n  \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"CONFLICT\",\n  \"messageCode\": \"consistencyRanking.pause.weekNotEditable\",\n  \"message\": \"This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.\",\n  \"details\": {\n    \"weekStart\": \"2026-11-16\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Close Current Season",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "consistency-ranking",
+                "seasons",
+                "current",
+                "close"
+              ]
+            },
+            "description": "Request the early close of the current season; it ends after the first due week is closed. No body. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 404 consistencyRanking.season.notFound (no active season), 500."
+          },
+          "response": [
+            {
+              "name": "Close Current Season - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "seasons",
+                    "current",
+                    "close"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"number\": 1,\n  \"startWeek\": \"2026-11-09\",\n  \"weeks\": 4,\n  \"status\": \"active\",\n  \"closeRequestedAt\": \"2026-11-12T15:00:00.000Z\"\n}"
+            },
+            {
+              "name": "Close Current Season - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/consistency-ranking/seasons/current/close",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "consistency-ranking",
+                    "seasons",
+                    "current",
+                    "close"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"consistencyRanking.season.notFound\",\n  \"message\": \"Season not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consistency Ranking - Admin",
+      "item": [
+        {
+          "name": "Get Trainer Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "consistency-ranking",
+                "trainers",
+                "{{trainerId}}",
+                "standings"
+              ],
+              "query": [
+                {
+                  "key": "season",
+                  "value": "1",
+                  "description": "Season number (optional, min 1). Omit for the current season",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Consistency ranking standings of a given trainer (same payload as the trainer route). Set the trainerId collection variable. Without season it creates/locks the trainer current season, like the trainer read. Requires ADMIN role. Errors: 400 validation, 401, 403, 404 resource.notFound (unknown trainer) or consistencyRanking.season.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Trainer Standings - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "consistency-ranking",
+                    "trainers",
+                    "{{trainerId}}",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"season\": {\n    \"number\": 1,\n    \"startWeek\": \"2026-11-09\",\n    \"endWeek\": \"2026-11-30\",\n    \"weeks\": 4,\n    \"currentWeek\": 1,\n    \"status\": \"active\"\n  },\n  \"rows\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000011\",\n      \"name\": \"Camila Souza\",\n      \"position\": 1,\n      \"eligible\": true,\n      \"average\": 92.5,\n      \"validWeeks\": 3,\n      \"weeksAt100\": 1,\n      \"streak\": 2,\n      \"partialScore\": 60,\n      \"weekStatus\": \"valid\",\n      \"pillars\": {\n        \"workouts\": {\n          \"expected\": 4,\n          \"done\": 3\n        },\n        \"cardio\": {\n          \"expected\": 2,\n          \"done\": 1\n        }\n      }\n    }\n  ],\n  \"entering\": [\n    {\n      \"studentId\": \"b1c2d3e4-0000-0000-0000-000000000012\",\n      \"name\": \"Rafael Lima\",\n      \"validWeeks\": 1,\n      \"weeksMissing\": 1\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Trainer Standings - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/consistency-ranking/trainers/{{trainerId}}/standings?season=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "consistency-ranking",
+                    "trainers",
+                    "{{trainerId}}",
+                    "standings"
+                  ],
+                  "query": [
+                    {
+                      "key": "season",
+                      "value": "1",
+                      "description": "Season number (optional, min 1). Omit for the current season",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Resource not found.\",\n  \"details\": {}\n}"
             }
           ]
         }

@@ -22,6 +22,7 @@ import {
 import { recomputeTrainingDuration } from '../helpers/workout-duration.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockTrainingForUpdate } from '../helpers/row-locks.js';
+import { assertVideoFileKeyAllowed } from '../helpers/exercise-video-key.js';
 import { randomUUID } from 'crypto';
 import {
   advancedTechniqueLinksInclude,
@@ -107,6 +108,7 @@ function buildExerciseData(data, trainingId, exerciseTemplateId = null, techniqu
     type: data.type,
     videoUrl: data.videoUrl || null,
     gifUrl: data.gifUrl || null,
+    videoFileKey: data.videoFileKey ?? null,
     order: data.order !== undefined ? data.order : 0,
     supersetGroupId: data.supersetGroupId ?? null,
     supersetOrder: data.supersetOrder ?? 0,
@@ -161,6 +163,7 @@ async function findOrCreateLibraryTemplate(tx, trainerId, data) {
       type: data.type,
       videoUrl: data.videoUrl || null,
       gifUrl: data.gifUrl || null,
+      videoFileKey: data.videoFileKey ?? null,
       isPublic: false,
     },
     select: { id: true },
@@ -209,6 +212,7 @@ export async function createExercise(userId, trainingId, data) {
   }
 
   await verifyTrainingOwnership(trainingId, trainer.id);
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey);
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
@@ -368,7 +372,9 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
 
   await verifyTrainingOwnership(trainingId, trainer.id);
 
+  
   const template = await findVisibleTemplate(prisma, trainer.id, templateId);
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, [template.videoFileKey]);
 
   const effectiveType = data.type || template.type;
   // Identity (name/type/video) comes from the library template; prescription comes from the
@@ -389,6 +395,7 @@ export async function createFromTemplate(userId, trainingId, templateId, data = 
     type: effectiveType,
     videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
     gifUrl: data.gifUrl !== undefined ? data.gifUrl : template.gifUrl,
+    videoFileKey: data.videoFileKey !== undefined ? data.videoFileKey : template.videoFileKey,
     order: data.order !== undefined ? data.order : 0,
     sets: data.sets ?? null,
     repetitions: data.repetitions ?? null,
@@ -483,7 +490,7 @@ export async function getExerciseById(userId, exerciseId, context) {
     where: { id: exerciseId },
     include: {
       training: { include: { trainingProtocol: true } },
-      exerciseTemplate: { select: { id: true, name: true, type: true, videoUrl: true, gifUrl: true } },
+      exerciseTemplate: { select: { id: true, name: true, type: true, videoUrl: true, gifUrl: true, videoFileKey: true } },
       ...advancedTechniqueLinksInclude,
       substitutes: {
         where: { deletedAt: null },
@@ -567,6 +574,7 @@ export async function updateExercise(userId, exerciseId, data) {
       message: 'supersetGroupId and substituteForExerciseId cannot be changed after creation',
     });
   }
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, [exercise.videoFileKey]);
 
   if (data.type) {
     validateExerciseType(data.type);
@@ -609,6 +617,7 @@ export async function updateExercise(userId, exerciseId, data) {
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
+  if (data.videoFileKey !== undefined) updateData.videoFileKey = data.videoFileKey;
   if (data.order !== undefined) updateData.order = data.order;
   if (data.sets !== undefined) updateData.sets = data.sets;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
@@ -922,12 +931,13 @@ export async function deleteExercise(userId, exerciseId) {
 
 // ─── Add substitute ──────────────────────────────────────────────────────────
 
-// Fill absent videoUrl/gifUrl from the linked library template.
+// Fill absent videoUrl/gifUrl/videoFileKey from the linked library template.
 function withTemplateMedia(data, template) {
   return {
     ...data,
     videoUrl: data.videoUrl !== undefined ? data.videoUrl : template.videoUrl,
     gifUrl: data.gifUrl !== undefined ? data.gifUrl : template.gifUrl,
+    videoFileKey: data.videoFileKey !== undefined ? data.videoFileKey : template.videoFileKey,
   };
 }
 
@@ -970,6 +980,7 @@ export async function addSubstitute(userId, principalId, data) {
   const template = data.exerciseTemplateId
     ? await findVisibleTemplate(prisma, trainer.id, data.exerciseTemplateId)
     : null;
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, template?.videoFileKey ? [template.videoFileKey] : []);
   const techniqueSelection = template
     ? await resolveSelectionOrInherit(prisma, trainer.id, data.advancedTechniqueIds, template.advancedTechniqueLinks)
     : await resolveAdvancedTechniqueSelection(prisma, trainer.id, data.advancedTechniqueIds);

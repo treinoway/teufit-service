@@ -98,3 +98,4 @@ All error responses must include `error`, `messageCode`, `message`, `details`. S
 - Nutritionist actions on own data: `/nutritionist/*`
 - Nutritionist actions on patient data: `/nutritionist/patients/:patientId/*`
 - Path params in Postman: `:paramName` format in raw URL, listed in `url.variable` array with key, value (empty string), description.
+- [Postman conventions](postman_conventions.md) — file format, collection-level bearer auth, folder naming, variables, example responses

@@ -17,6 +17,7 @@ function buildExampleExerciseRow({ exerciseTemplate, trainingTemplateId, order }
     type: exerciseTemplate.type,
     videoUrl: exerciseTemplate.videoUrl ?? null,
     gifUrl: exerciseTemplate.gifUrl ?? null,
+    videoFileKey: exerciseTemplate.videoFileKey ?? null,
     sets: EXAMPLE_SETS,
     repetitions: { ...EXAMPLE_REPETITIONS },
     prescriptionMode: PrescriptionMode.REPS,

@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../db.js';
+import { AppError } from '../errors/app-error.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
 import { lockTrainingTemplateForUpdate } from '../helpers/row-locks.js';
+import { assertVideoFileKeyAllowed } from '../helpers/exercise-video-key.js';
 import {
   buildError,
   validateCategory,
@@ -10,7 +13,14 @@ import {
   validatePrescriptionMode,
   applyPrescriptionModeExclusivity,
 } from '../helpers/training-validators.js';
-import { PrescriptionMode, ExerciseOrderBy, trainingCategoryValues, bodySegmentValues } from '../constants/training.js';
+import {
+  PrescriptionMode,
+  ExerciseOrderBy,
+  SupersetConstraints,
+  SupersetMessageCode,
+  trainingCategoryValues,
+  bodySegmentValues,
+} from '../constants/training.js';
 import {
   advancedTechniqueLinksInclude,
   replaceAdvancedTechniqueLinks,
@@ -24,6 +34,15 @@ import {
   resolveAdvancedTechniqueSelectionBatch,
   resolveSelectionOrInherit,
 } from './advanced-technique-service.js';
+
+// Validates each junction input's videoFileKey; a key inherited from the input's loaded library template is allowed.
+function assertJunctionVideoFileKeys(trainerId, junctionInputs, templatesById) {
+  junctionInputs.forEach((input) => assertVideoFileKeyAllowed(
+    trainerId,
+    input.videoFileKey,
+    [templatesById[input.exerciseTemplateId]?.videoFileKey],
+  ));
+}
 
 /**
  * Build junction row create data. Identity fields (name/type/videoUrl) fall back to the
@@ -52,6 +71,7 @@ function buildJunctionCreateData(e, index, template, techniqueSelection = []) {
     type: e.type !== undefined ? e.type : template.type,
     videoUrl: e.videoUrl !== undefined ? e.videoUrl : template.videoUrl,
     gifUrl: e.gifUrl !== undefined ? e.gifUrl : template.gifUrl,
+    videoFileKey: e.videoFileKey !== undefined ? e.videoFileKey : template.videoFileKey,
     sets: e.sets ?? null,
     repetitions,
     duration,
@@ -123,7 +143,6 @@ export async function createTrainingTemplate(userId, data) {
     ? data.exerciseTemplateIds.map((id) => ({ exerciseTemplateId: id }))
     : data.exerciseTemplates || [];
   const exerciseTemplatesInput = Array.isArray(rawList) ? rawList : [];
-
   let existingTemplatesById = {};
   if (exerciseTemplatesInput.length > 0) {
     const ids = [...new Set(exerciseTemplatesInput.map((e) => e.exerciseTemplateId))];
@@ -144,6 +163,7 @@ export async function createTrainingTemplate(userId, data) {
     // Index by id for O(1) lookup when building junction rows
     existingTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
   }
+  assertJunctionVideoFileKeys(trainer.id, exerciseTemplatesInput, existingTemplatesById);
 
   // 5. Build create data (omit trainingTemplateExerciseTemplates when empty so Prisma does not receive undefined)
   const createData = {
@@ -432,6 +452,7 @@ export async function updateTrainingTemplate(userId, templateId, data) {
       }
       updateTemplatesById = Object.fromEntries(existing.map((t) => [t.id, t]));
     }
+    assertJunctionVideoFileKeys(trainer.id, exerciseTemplatesInput, updateTemplatesById);
     const selections = await resolveJunctionTechniqueSelections(trainer.id, exerciseTemplatesInput, updateTemplatesById);
     updateData.trainingTemplateExerciseTemplates = {
       deleteMany: {},
@@ -553,12 +574,15 @@ export async function updateTrainingTemplateExercise(userId, templateId, exercis
     throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
   }
 
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey, [junctionRow.videoFileKey]);
+
   // 4. Build update data — only include fields explicitly provided by the caller
   const updateData = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
   if (data.videoUrl !== undefined) updateData.videoUrl = data.videoUrl;
   if (data.gifUrl !== undefined) updateData.gifUrl = data.gifUrl;
+  if (data.videoFileKey !== undefined) updateData.videoFileKey = data.videoFileKey;
   if (data.sets !== undefined) updateData.sets = data.sets;
   if (data.hasLoad !== undefined) updateData.hasLoad = data.hasLoad;
   if (data.suggestedLoad !== undefined) updateData.suggestedLoad = data.suggestedLoad;
@@ -653,6 +677,7 @@ async function resolveJunctionOrder(tx, templateId, explicitOrder) {
 export async function createTrainingTemplateExercise(userId, templateId, data) {
   const { trainer } = await assertTrainerOwnsTemplate(userId, templateId);
 
+  assertVideoFileKeyAllowed(trainer.id, data.videoFileKey);
   validateExerciseType(data.type);
   validatePrescriptionMode(data.prescriptionMode, data);
   validateRepetitions(data.repetitions);
@@ -671,6 +696,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         type: data.type,
         videoUrl: data.videoUrl ?? null,
         gifUrl: data.gifUrl ?? null,
+        videoFileKey: data.videoFileKey ?? null,
         isPublic: data.isPublic !== undefined ? data.isPublic : false,
       },
     });
@@ -687,6 +713,7 @@ export async function createTrainingTemplateExercise(userId, templateId, data) {
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
         gifUrl: exerciseTemplate.gifUrl,
+        videoFileKey: exerciseTemplate.videoFileKey,
         sets: data.sets ?? null,
         repetitions,
         duration,
@@ -759,6 +786,7 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
         type: exerciseTemplate.type,
         videoUrl: exerciseTemplate.videoUrl,
         gifUrl: exerciseTemplate.gifUrl,
+        videoFileKey: exerciseTemplate.videoFileKey,
         sets: data.sets ?? null,
         repetitions,
         duration,
@@ -790,18 +818,196 @@ export async function createTrainingTemplateExerciseFromTemplate(userId, templat
 export async function deleteTrainingTemplateExercise(userId, templateId, exerciseId) {
   await assertTrainerOwnsTemplate(userId, templateId);
 
-  const junctionRow = await prisma.trainingTemplateExerciseTemplate.findFirst({
-    where: { id: exerciseId, trainingTemplateId: templateId },
-    include: junctionInclude,
-  });
-
-  if (!junctionRow) {
-    throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
-  }
-
-  await prisma.trainingTemplateExerciseTemplate.delete({
-    where: { id: exerciseId },
-  });
+  const junctionRow = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingTemplateForUpdate(tx, templateId);
+    const found = await tx.trainingTemplateExerciseTemplate.findFirst({
+      where: { id: exerciseId, trainingTemplateId: templateId },
+      include: junctionInclude,
+    });
+    if (!found) {
+      throw buildError('TRAINING_TEMPLATE_EXERCISE_NOT_FOUND', 'Exercise not found in this training template', 404);
+    }
+    await tx.trainingTemplateExerciseTemplate.delete({ where: { id: exerciseId } });
+    if (found.supersetGroupId) await repairSupersetGroup(tx, templateId, found.supersetGroupId);
+    return found;
+  }));
 
   return withAdvancedTechniqueRefs(junctionRow);
+}
+
+// Ungroups the survivors when fewer than the minimum remain, otherwise renumbers supersetOrder 0..n-1.
+async function repairSupersetGroup(tx, templateId, supersetGroupId) {
+  const survivors = await tx.trainingTemplateExerciseTemplate.findMany({
+    where: { trainingTemplateId: templateId, supersetGroupId },
+    orderBy: { supersetOrder: 'asc' },
+  });
+  if (survivors.length === 0) return;
+  if (survivors.length < SupersetConstraints.MIN_MEMBERS) {
+    await ungroupTemplateSuperset(tx, templateId, supersetGroupId);
+    return;
+  }
+  for (const [index, survivor] of survivors.entries()) {
+    if (survivor.supersetOrder !== index) {
+      await tx.trainingTemplateExerciseTemplate.update({ where: { id: survivor.id }, data: { supersetOrder: index } });
+    }
+  }
+}
+
+// Resets every member of a group to ungrouped, supersetOrder 0 and no rest.
+function ungroupTemplateSuperset(tx, templateId, supersetGroupId) {
+  return tx.trainingTemplateExerciseTemplate.updateMany({
+    where: { trainingTemplateId: templateId, supersetGroupId },
+    data: { supersetGroupId: null, supersetOrder: 0, supersetRestInterval: null },
+  });
+}
+
+// Builds the 404 used when a superset group has no members in the template.
+function buildSupersetGroupNotFound() {
+  return new AppError({
+    httpStatus: 404,
+    error: 'SUPERSET_GROUP_NOT_FOUND',
+    messageCode: SupersetMessageCode.GROUP_NOT_FOUND,
+    message: 'Superset group not found or has no active members',
+  });
+}
+
+// Rejects a member count outside the allowed superset range.
+function assertSupersetMemberCount(exerciseIds) {
+  if (!exerciseIds || exerciseIds.length < SupersetConstraints.MIN_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MIN_MEMBERS,
+      message: `A superset group requires at least ${SupersetConstraints.MIN_MEMBERS} members`,
+    });
+  }
+  if (exerciseIds.length > SupersetConstraints.MAX_MEMBERS) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MAX_MEMBERS,
+      message: `A superset group cannot have more than ${SupersetConstraints.MAX_MEMBERS} members`,
+    });
+  }
+}
+
+// Resolves requested ids to junction rows of this template, rejecting unknown, duplicate or already-grouped ones.
+function resolveSupersetMembers(allRows, exerciseIds) {
+  const rowById = new Map(allRows.map((junction) => [junction.id, junction]));
+  const members = exerciseIds.map((id) => rowById.get(id));
+  if (members.some((member) => !member) || new Set(exerciseIds).size !== exerciseIds.length) {
+    throw new AppError({
+      httpStatus: 400,
+      error: 'VALIDATION_ERROR',
+      messageCode: SupersetMessageCode.MEMBERSHIP_INVALID,
+      message: 'Superset members must be distinct exercises of this training template',
+    });
+  }
+  if (members.some((member) => member.supersetGroupId !== null)) {
+    throw new AppError({
+      httpStatus: 409,
+      error: 'EXERCISE_ALREADY_IN_SUPERSET',
+      messageCode: SupersetMessageCode.ALREADY_IN_SUPERSET,
+      message: 'One or more exercises already belong to a superset group',
+    });
+  }
+  return members;
+}
+
+// Builds the final display sequence: non-members keep their display order and the block lands where its first-displayed member was.
+function buildSupersetSequence(allRows, members) {
+  const memberIds = new Set(members.map((member) => member.id));
+  const firstMemberIndex = allRows.findIndex((junction) => memberIds.has(junction.id));
+  const nonMembersBefore = allRows.slice(0, firstMemberIndex).filter((junction) => !memberIds.has(junction.id));
+  const nonMembersAfter = allRows.slice(firstMemberIndex).filter((junction) => !memberIds.has(junction.id));
+  return [...nonMembersBefore, ...members, ...nonMembersAfter];
+}
+
+/**
+ * Groups existing junction rows into a new contiguous superset starting at the members' lowest order.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} templateId - Training template ID
+ * @param {string[]} exerciseIds - Ordered junction row IDs (2-6)
+ * @param {number|null} [restInterval] - Round rest in seconds; omitted becomes null
+ * @returns {Promise<object>} The updated template (same shape as getTrainingTemplateById)
+ */
+export async function createTemplateSuperset(userId, templateId, exerciseIds, restInterval) {
+  await assertTrainerOwnsTemplate(userId, templateId);
+  assertSupersetMemberCount(exerciseIds);
+  const supersetGroupId = randomUUID();
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingTemplateForUpdate(tx, templateId);
+    const allRows = await tx.trainingTemplateExerciseTemplate.findMany({
+      where: { trainingTemplateId: templateId },
+      orderBy: ExerciseOrderBy,
+    });
+    const members = resolveSupersetMembers(allRows, exerciseIds);
+    const sequence = buildSupersetSequence(allRows, members);
+    const memberIndexById = new Map(members.map((member, index) => [member.id, index]));
+    for (const [position, junction] of sequence.entries()) {
+      const memberIndex = memberIndexById.get(junction.id);
+      const isMember = memberIndex !== undefined;
+      if (!isMember && junction.order === position) continue;
+      await tx.trainingTemplateExerciseTemplate.update({
+        where: { id: junction.id },
+        data: isMember
+          ? { supersetGroupId, supersetOrder: memberIndex, supersetRestInterval: restInterval ?? null, order: position }
+          : { order: position },
+      });
+    }
+  }));
+
+  return getTrainingTemplateById(userId, templateId);
+}
+
+/**
+ * Sets the round rest of every member of a template superset group.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} templateId - Training template ID
+ * @param {string} groupId - Superset group UUID
+ * @param {number|null} restInterval - Round rest in seconds, or null to clear
+ * @returns {Promise<object>} The updated template
+ */
+export async function updateTemplateSupersetRestInterval(userId, templateId, groupId, restInterval) {
+  await assertTrainerOwnsTemplate(userId, templateId);
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingTemplateForUpdate(tx, templateId);
+    const members = await tx.trainingTemplateExerciseTemplate.findMany({
+      where: { trainingTemplateId: templateId, supersetGroupId: groupId },
+    });
+    if (members.length === 0) throw buildSupersetGroupNotFound();
+    await tx.trainingTemplateExerciseTemplate.updateMany({
+      where: { trainingTemplateId: templateId, supersetGroupId: groupId },
+      data: { supersetRestInterval: restInterval },
+    });
+  }));
+
+  return getTrainingTemplateById(userId, templateId);
+}
+
+/**
+ * Dissolves a template superset group; its exercises stay in the template, ungrouped.
+ *
+ * @param {string} userId - Trainer user ID
+ * @param {string} templateId - Training template ID
+ * @param {string} groupId - Superset group UUID
+ * @returns {Promise<object>} The updated template
+ */
+export async function dissolveTemplateSuperset(userId, templateId, groupId) {
+  await assertTrainerOwnsTemplate(userId, templateId);
+
+  await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
+    await lockTrainingTemplateForUpdate(tx, templateId);
+    const members = await tx.trainingTemplateExerciseTemplate.findMany({
+      where: { trainingTemplateId: templateId, supersetGroupId: groupId },
+    });
+    if (members.length === 0) throw buildSupersetGroupNotFound();
+    await ungroupTemplateSuperset(tx, templateId, groupId);
+  }));
+
+  return getTrainingTemplateById(userId, templateId);
 }

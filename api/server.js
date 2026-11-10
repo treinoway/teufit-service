@@ -38,6 +38,7 @@ import { adminVideoRoutes } from './routes/admin-video-route.js';
 import { videoRoutes } from './routes/video-route.js';
 import { adminTutorialRoutes } from './routes/admin-tutorial-route.js';
 import { tutorialRoutes } from './routes/tutorial-route.js';
+import { exerciseVideoRoutes } from './routes/exercise-video-route.js';
 import { aiRoutes } from './routes/ai-route.js';
 import { trainerBrandingRoutes } from './routes/trainer-branding-route.js';
 import { gamificationRoutes } from './routes/gamification-route.js';
@@ -53,19 +54,27 @@ import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
+import { consistencyRankingRoutes } from './routes/consistency-ranking-route.js';
+import { adminConsistencyRankingRoutes } from './routes/admin-consistency-ranking-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminManagerRoutes } from './routes/admin-manager-route.js';
+import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
+import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
+import { startConsistencyCloseCron } from '../src/jobs/consistency-close-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
+import { createSignedFileHook } from './hooks/signed-file-hook.js';
+import s3BucketHandler from '../src/config/s3-bucket-handler.js';
+import { resolveExerciseVideoUrl } from '../src/helpers/exercise-video-key.js';
 import { healthRoutes } from './routes/health-route.js';
 import { checkLlmConfiguration } from '../src/llm/config.js';
 import { assertAsaasWebhookSecretConfigured } from '../src/helpers/asaas-webhook-helpers.js';
@@ -221,6 +230,8 @@ export async function buildServer(options = {}) {
   //    data responses on routes that use i18nField() / i18nArrayField() in their schemas.
   //    Early-returns for statusCode >= 400 (errors are handled above).
   fastify.addHook('preSerialization', applyLabelsPreSerializationHook);
+
+  fastify.addHook('preSerialization', createSignedFileHook((key) => resolveExerciseVideoUrl(s3BucketHandler, key)));
 
   // 4. Structured per-request access log (one line per completed request).
   //    Skipped for /health to avoid monitor-polling noise.
@@ -393,6 +404,7 @@ export async function buildServer(options = {}) {
     await fastify.register(videoRoutes);
     await fastify.register(adminTutorialRoutes);
     await fastify.register(tutorialRoutes);
+    await fastify.register(exerciseVideoRoutes);
     await fastify.register(aiRoutes);
     await fastify.register(trainerBrandingRoutes);
     await fastify.register(gamificationRoutes);
@@ -408,11 +420,15 @@ export async function buildServer(options = {}) {
     await fastify.register(studentSubscriptionRoutes);
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
+    await fastify.register(consistencyRankingRoutes);
+    await fastify.register(adminConsistencyRankingRoutes);
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
     await fastify.register(adminManagerRoutes);
+    await fastify.register(trainerFeedbackRoutes);
+    await fastify.register(adminFeedbackRoutes);
     await fastify.register(adminAiUsageRoutes);
     await fastify.register(adminDebugRoutes);
   });
@@ -436,6 +452,14 @@ export async function buildServer(options = {}) {
   if (subscriptionCycleCronEnabled) {
     startSubscriptionCycleCron(prisma, fastify.log);
     fastify.log.info('[cron:subscription-cycles] daily 03:00 America/Sao_Paulo generation scheduled');
+  }
+
+  const consistencyCloseCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_CONSISTENCY_RANKING_CRON, false);
+  if (consistencyCloseCronEnabled) {
+    startConsistencyCloseCron(prisma, fastify.log);
+    fastify.log.info('[cron:consistency-close] every-15-minutes UTC close scheduled');
   }
 
   return fastify;

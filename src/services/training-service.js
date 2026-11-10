@@ -385,6 +385,7 @@ export async function importFromTemplate(userId, protocolId, templateId, data = 
           type: junctionRow.type,
           videoUrl: junctionRow.videoUrl ?? null,
           gifUrl: junctionRow.gifUrl ?? null,
+          videoFileKey: junctionRow.videoFileKey ?? null,
           order: junctionRow.order,
           supersetGroupId: junctionRow.supersetGroupId
             ? supersetGroupIdMap.get(junctionRow.supersetGroupId)

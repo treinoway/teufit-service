@@ -1,8 +1,9 @@
-import { trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
+import { SupersetConstraints, trainingCategoryValues, bodySegmentValues, exerciseTypeValues, prescriptionModeValues, exerciseIntensityValues } from '../../src/constants/training.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 import { gifUrlRequestSchema, gifUrlResponseSchema } from './gif-url.schema.js';
 import { advancedTechniqueIdsRequestSchema, advancedTechniquesResponseSchema } from './advanced-technique.schema.js';
+import { videoFileKeyRequestSchema, videoFileResponseProperties } from './exercise-video.schema.js';
 
 // The linked library template carries only the exercise identity. Prescription lives on
 // the junction (trainingTemplateExerciseTemplateSchema), not here.
@@ -14,6 +15,7 @@ const exerciseTemplateRefSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     isPublic: { type: 'boolean' },
   },
@@ -34,6 +36,7 @@ const trainingTemplateExerciseTemplateSchema = {
     name: { type: 'string' },
     type: { type: 'string' },
     videoUrl: { type: 'string', nullable: true },
+    ...videoFileResponseProperties,
     gifUrl: gifUrlResponseSchema,
     prescriptionMode: { type: 'string', enum: prescriptionModeValues },
     sets: { type: 'integer', nullable: true },
@@ -144,6 +147,7 @@ export const createTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            videoFileKey: videoFileKeyRequestSchema,
             gifUrl: gifUrlRequestSchema,
             prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
@@ -315,6 +319,7 @@ export const updateTrainingTemplateSchema = {
             name: { type: 'string' },
             type: { type: 'string' },
             videoUrl: { type: 'string', nullable: true },
+            videoFileKey: videoFileKeyRequestSchema,
             gifUrl: gifUrlRequestSchema,
             prescriptionMode: { type: 'string', enum: prescriptionModeValues },
             sets: { type: 'integer', nullable: true },
@@ -388,6 +393,7 @@ export const createTrainingTemplateExerciseSchema = {
       type: { type: 'string', enum: exerciseTypeValues },
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
+      videoFileKey: videoFileKeyRequestSchema,
       gifUrl: gifUrlRequestSchema,
       isPublic: { type: 'boolean' },
       // Bi-set / superset grouping (C3)
@@ -522,6 +528,7 @@ export const updateTrainingTemplateExerciseSchema = {
       type: { type: 'string' },
       prescriptionMode: { type: 'string', enum: prescriptionModeValues },
       videoUrl: { type: 'string', nullable: true },
+      videoFileKey: videoFileKeyRequestSchema,
       gifUrl: gifUrlRequestSchema,
       // Bi-set / superset grouping (C3)
       supersetGroupId: { type: 'string', format: 'uuid', nullable: true },
@@ -549,6 +556,99 @@ export const updateTrainingTemplateExerciseSchema = {
   },
   response: {
     200: trainingTemplateExerciseTemplateSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+const templateSupersetParamsProperties = {
+  templateId: { type: 'string', format: 'uuid' },
+  groupId: { type: 'string', format: 'uuid' },
+};
+
+export const createTemplateSupersetSchema = {
+  tags: ['Training Templates'],
+  summary: 'Group template exercises into a superset (bi-set)',
+  description: 'exerciseIds are junction row ids in superset order. restInterval is optional; omitted or null stores no round rest, 0 is kept as 0. Returns the updated template.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId'],
+    properties: { templateId: templateSupersetParamsProperties.templateId },
+  },
+  body: {
+    type: 'object',
+    required: ['exerciseIds'],
+    properties: {
+      exerciseIds: {
+        type: 'array',
+        items: { type: 'string', format: 'uuid' },
+        minItems: SupersetConstraints.MIN_MEMBERS,
+        maxItems: SupersetConstraints.MAX_MEMBERS,
+      },
+      // why: Fastify coerces null to 0 for plain integers; nullable keeps null so the service stores no rest.
+      restInterval: { type: 'integer', minimum: 0, nullable: true },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    201: templateWithTrainerSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const updateTemplateSupersetRestIntervalSchema = {
+  tags: ['Training Templates'],
+  summary: 'Update the round rest of a template superset group',
+  description: 'restInterval is required; null clears the rest. Returns the updated template.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId', 'groupId'],
+    properties: templateSupersetParamsProperties,
+  },
+  body: {
+    type: 'object',
+    required: ['restInterval'],
+    properties: {
+      // why: Fastify coerces null to 0 for plain integers; nullable keeps null so the rest can be cleared.
+      restInterval: { type: 'integer', minimum: 0, nullable: true },
+    },
+    additionalProperties: false,
+  },
+  response: {
+    200: templateWithTrainerSchema,
+    400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+export const dissolveTemplateSupersetSchema = {
+  tags: ['Training Templates'],
+  summary: 'Dissolve a template superset group',
+  description: 'Members stay in the template, ungrouped. Returns the updated template.',
+  security: [{ bearerAuth: [] }],
+  params: {
+    type: 'object',
+    required: ['templateId', 'groupId'],
+    properties: templateSupersetParamsProperties,
+  },
+  response: {
+    200: templateWithTrainerSchema,
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
