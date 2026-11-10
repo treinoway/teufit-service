@@ -450,7 +450,7 @@ describe('getPanelStandings', () => {
     expect(rows[0].currentWeekScore).toBeNull();
   });
 
-  it('PAN-08 returns the closed paused week of the season with its reason and keeps pause empty', async () => {
+  it('PAN-58 returns the closed paused week of the season with its reason and keeps pause empty', async () => {
     const results = [...history('marcos', [['s1', WeekStatus.VALID, 100], ['s1', WeekStatus.PAUSED, null]])];
     const { prisma } = setup({ links: [link('marcos', 'Marcos'), link('ana', 'Ana')], results: [...results, ...perfect('ana', 2, 0)] });
     pauseReasonsFor.mockImplementation(async (_p, _t, week) => ({
@@ -467,7 +467,7 @@ describe('getPanelStandings', () => {
     expect(ana.closedPause).toBeNull();
   });
 
-  it('PAN-08 ignores a paused week of an earlier season', async () => {
+  it('PAN-58 ignores a paused week of an earlier season', async () => {
     const { prisma } = setup({ links: [link('marcos', 'Marcos')], results: history('marcos', [['s1', WeekStatus.VALID, 100], ['s0', WeekStatus.PAUSED, null]]) });
 
     const { rows } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });

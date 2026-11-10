@@ -432,7 +432,7 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       expect(body.counts.paused).toBe(1);
     });
 
-    it('PAN-08 returns a closed paused week of the season with its reason and counts it as paused', async () => {
+    it('PAN-58 returns a closed paused week of the season with its reason and counts it as paused', async () => {
       const { trainerId, token } = await createTrainerWithToken();
       const monday = currentMonday();
       const season = await createActiveSeason(trainerId, { startWeek: shiftWeeks(monday, -2) });
