@@ -6,6 +6,7 @@ import {
   isEligible,
   currentStreak,
   rankStandings,
+  seasonFigures,
 } from '../../src/helpers/consistency-math.js';
 import { Pillar, WeekStatus, DEFAULT_CONFIG } from '../../src/constants/consistency-ranking.js';
 
@@ -114,6 +115,18 @@ describe('liveAverage', () => {
     expect(num(liveAverage([new Decimal(100), new Decimal('85.2')], null))).toBe(92.6);
     expect(num(liveAverage([new Decimal(80)], null))).toBe(80);
     expect(liveAverage([], null)).toBeNull();
+
+    const results = [
+      { seasonId: 's1', status: WeekStatus.VALID, score: new Decimal(100) },
+      { seasonId: 's1', status: WeekStatus.PAUSED, score: null },
+      { seasonId: 's1', status: WeekStatus.NEUTRAL, score: null },
+      { seasonId: 's1', status: WeekStatus.VALID, score: new Decimal(50) },
+      { seasonId: 's0', status: WeekStatus.VALID, score: new Decimal(10) },
+    ];
+    const figures = seasonFigures(results, 's1');
+    expect(figures.validWeeks).toBe(2);
+    expect(figures.scores.map(num)).toEqual([100, 50]);
+    expect(num(liveAverage(figures.scores, null))).toBe(75);
   });
 
   it('RANK-19 never lowers the live average', () => {
