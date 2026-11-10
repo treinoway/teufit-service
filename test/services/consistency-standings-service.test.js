@@ -646,6 +646,10 @@ describe('getPanelStandings', () => {
     const closed = { ...SEASON, id: 's0', number: 1, status: SeasonStatus.CLOSED };
     const { prisma } = setup();
     prisma.consistencySeason.findFirst.mockResolvedValue(closed);
+    prisma.consistencyWeeklyResult.findMany.mockResolvedValue([
+      { studentId: 'ana', seasonId: 's0', status: WeekStatus.VALID, pillars: { workouts: { expected: 3, done: 3 }, cardio: { expected: 2, done: 1 } } },
+      { studentId: 'ana', seasonId: 's0', status: WeekStatus.PAUSED, pillars: {} },
+    ]);
     prisma.consistencySeasonStanding.findMany.mockResolvedValue([
       { studentId: 'ana', position: 1, eligible: true, average: new Decimal('97.5'), validWeeks: 4, weeks100: 2, streak: 2, student: { firstName: 'Ana', lastName: 'Lima' } },
       { studentId: 'new', position: null, eligible: false, average: new Decimal('50'), validWeeks: 1, weeks100: 0, streak: 0, student: { firstName: 'Novo', lastName: null } },
@@ -668,5 +672,11 @@ describe('getPanelStandings', () => {
     });
     expect(result.entering[0]).toMatchObject({ displayName: 'Novo', position: null, faixa: Faixa.ENTERING, entering: { validWeeks: 1, required: 2 } });
     expect(result.counts).toMatchObject({ all: 2, entering: 1 });
+    expect(prisma.consistencyWeeklyResult.findMany).toHaveBeenCalledWith({ where: { trainerId: TRAINER_ID, seasonId: 's0' } });
+    expect(result.rows[0].seasonPillars).toEqual([
+      { pillar: 'workouts', done: 3, expected: 3, adherence: 100 },
+      { pillar: 'cardio', done: 1, expected: 2, adherence: 50 },
+    ]);
+    expect(result.entering[0].seasonPillars).toEqual([]);
   });
 });

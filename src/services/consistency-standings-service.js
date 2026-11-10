@@ -389,8 +389,16 @@ async function livePanelData(prisma, trainerId, data) {
   return { rows, lastClosed: lastClosedWeekResults(results, season, mondayDate), closesAt };
 }
 
+// Season pillars of each student from the stored weeks of a closed season
+async function frozenSeasonPillars(prisma, trainerId, seasonId) {
+  const results = await prisma.consistencyWeeklyResult.findMany({ where: { trainerId, seasonId } });
+  const byStudent = new Map();
+  for (const result of results) byStudent.set(result.studentId, [...(byStudent.get(result.studentId) ?? []), result]);
+  return new Map([...byStudent].map(([studentId, closed]) => [studentId, seasonPillars(closed)]));
+}
+
 // Panel row of one frozen standing: a closed season has no risk, signals or pause
-function frozenPanelRow(row, required) {
+function frozenPanelRow(row, required, pillars) {
   return {
     studentId: row.studentId,
     name: row.name,
@@ -404,7 +412,7 @@ function frozenPanelRow(row, required) {
     weeks100: row.weeks100,
     weeksAt100: row.weeks100,
     streak: row.streak,
-    seasonPillars: [],
+    seasonPillars: pillars.get(row.studentId) ?? [],
     risk: null,
     signals: [],
     pause: null,
@@ -439,7 +447,8 @@ export async function getPanelStandings(prisma, trainerId, { seasonNumber, filte
   if (!season) return assemblePanel(null, [], { filter, q }, []);
   if (season.status === SeasonStatus.CLOSED) {
     const frozen = await frozenData(prisma, trainerId, season, now);
-    const rows = frozen.named.filter((row) => row.eligible || row.validWeeks > 0).map((row) => frozenPanelRow(row, frozen.required));
+    const pillars = await frozenSeasonPillars(prisma, trainerId, season.id);
+    const rows = frozen.named.filter((row) => row.eligible || row.validWeeks > 0).map((row) => frozenPanelRow(row, frozen.required, pillars));
     return assemblePanel({ ...frozen.season, closesAt: null }, rows, { filter, q }, []);
   }
   const data = await liveData(prisma, trainerId, season, now);

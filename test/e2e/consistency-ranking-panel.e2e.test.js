@@ -445,6 +445,28 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       expect(body.counts.paused).toBe(1);
     });
 
+    it('PAN-17 gives the frozen standings of a closed season the pillars of its stored weeks', async () => {
+      const { trainerId, token } = await createTrainerWithToken();
+      const monday = currentMonday();
+      const closedSeason = await prisma.consistencySeason.create({
+        data: { trainerId, number: 1, startWeek: shiftWeeks(monday, -6), weeks: 4, status: 'closed', closedAt: new Date() },
+      });
+      await createActiveSeason(trainerId, { number: 2, startWeek: shiftWeeks(monday, -2) });
+      const ana = await createStudent(trainerId, 'Ana');
+      await createClosedResults(trainerId, ana.id, closedSeason.id, shiftWeeks(monday, -4), [100, 90]);
+      await prisma.consistencySeasonStanding.create({
+        data: { seasonId: closedSeason.id, trainerId, studentId: ana.id, position: 1, eligible: true, average: 95, validWeeks: 2, weeks100: 1, streak: 0, frozenAt: new Date() },
+      });
+
+      const body = (await getStandings(token, '?season=1')).json();
+
+      expect(body.season).toMatchObject({ number: 1, status: 'closed' });
+      expect(body.rows[0].seasonPillars).toEqual([
+        { pillar: 'workouts', done: 2, expected: 4, adherence: 50 },
+        { pillar: 'cardio', done: 0, expected: 2, adherence: 0 },
+      ]);
+    });
+
     it('PAN-46 lists a student still entering with progress and no position', async () => {
       const { trainerId, token } = await createTrainerWithToken();
       const monday = currentMonday();
