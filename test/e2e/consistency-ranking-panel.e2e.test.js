@@ -8,7 +8,7 @@ import { prisma } from '../../src/db.js';
 import { weekBounds, weekStartFor } from '../../src/helpers/consistency-week.js';
 import { adjustTarget } from '../../src/services/consistency-target-service.js';
 import { getPanelStandings } from '../../src/services/consistency-standings-service.js';
-import { ConsistencyErrorCode, ConsistencyMessageCode, DEFAULT_CONFIG, Pillar, SeasonStatus } from '../../src/constants/consistency-ranking.js';
+import { ConsistencyErrorCode, ConsistencyMessageCode, DEFAULT_CONFIG, Pillar, SeasonStatus, WeekStatus } from '../../src/constants/consistency-ranking.js';
 import { TrainingCategory, TrainingStatus, WeekDays, WorkoutSessionStatus } from '../../src/constants/training.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -161,6 +161,22 @@ e2eDescribe('e2e: consistency ranking panel', () => {
         seasonId,
         weekStart: shiftWeeks(monday, index - scores.length),
         status: 'valid',
+        score,
+        pillars: { workouts: { expected: 2, done: 1 }, cardio: { expected: 1, done: 0 } },
+        weights: { weights: DEFAULT_CONFIG.weights, activePillars: DEFAULT_CONFIG.activePillars },
+        closedAt: new Date(),
+      })),
+    });
+  }
+
+  function createClosedWeeks(trainerId, studentId, seasonId, monday, entries) {
+    return prisma.consistencyWeeklyResult.createMany({
+      data: entries.map(([status, score], index) => ({
+        trainerId,
+        studentId,
+        seasonId,
+        weekStart: shiftWeeks(monday, index - entries.length),
+        status,
         score,
         pillars: { workouts: { expected: 2, done: 1 }, cardio: { expected: 1, done: 0 } },
         weights: { weights: DEFAULT_CONFIG.weights, activePillars: DEFAULT_CONFIG.activePillars },
@@ -678,16 +694,25 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       const { trainerId, token } = await createTrainerWithToken();
       const monday = currentMonday();
       const season = await createActiveSeason(trainerId, { startWeek: shiftWeeks(monday, -2) });
-      const veteran = await createStudent(trainerId, 'Ana', monday);
-      const rookie = await createStudent(trainerId, 'Bia', monday);
-      await createClosedResults(trainerId, veteran.id, season.id, shiftWeeks(monday, -2), [100, 100, 90, 100]);
-      await createClosedResults(trainerId, rookie.id, season.id, shiftWeeks(monday, -2), [100, 100, 100]);
+      const low = await createStudent(trainerId, 'Ana', monday);
+      const middle = await createStudent(trainerId, 'Bia', monday);
+      const top = await createStudent(trainerId, 'Caio', monday);
+      const rookie = await createStudent(trainerId, 'Dani', monday);
+      const gaps = await createStudent(trainerId, 'Edu', monday);
+      const valid = (score) => [WeekStatus.VALID, score];
+      await createClosedWeeks(trainerId, low.id, season.id, shiftWeeks(monday, -2), [valid(100), valid(70), valid(80), valid(70)]);
+      await createClosedWeeks(trainerId, middle.id, season.id, shiftWeeks(monday, -2), [valid(100), valid(100), valid(80), valid(80)]);
+      await createClosedWeeks(trainerId, top.id, season.id, shiftWeeks(monday, -2), [valid(100), valid(100), valid(100), valid(100)]);
+      await createClosedWeeks(trainerId, rookie.id, season.id, shiftWeeks(monday, -2), [valid(100), valid(100), valid(100)]);
+      await createClosedWeeks(trainerId, gaps.id, season.id, shiftWeeks(monday, -2), [valid(100), [WeekStatus.PAUSED, null], valid(100), [WeekStatus.NEUTRAL, null], valid(100)]);
 
       const res = await app.inject({ method: 'GET', url: HISTORY_URL, headers: bearer(token) });
 
       expect(res.statusCode).toBe(200);
       expect(res.json().rows).toEqual([
-        { studentId: veteran.id, displayName: 'Ana', initials: 'A', validWeeks: 4, average: 97.5, weeks100: 3, longestStreak: 2 },
+        { studentId: top.id, displayName: 'Caio', initials: 'C', validWeeks: 4, average: 100, weeks100: 4, longestStreak: 4 },
+        { studentId: middle.id, displayName: 'Bia', initials: 'B', validWeeks: 4, average: 90, weeks100: 2, longestStreak: 2 },
+        { studentId: low.id, displayName: 'Ana', initials: 'A', validWeeks: 4, average: 80, weeks100: 1, longestStreak: 1 },
       ]);
     });
 
@@ -704,14 +729,21 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       const monday = currentMonday();
       const ana = await createStudent(trainerId, 'Ana');
       const bia = await createStudent(trainerId, 'Bia');
-      const closed = await prisma.consistencySeason.create({
+      const carla = await createStudent(trainerId, 'Carla');
+      const older = await prisma.consistencySeason.create({
         data: { trainerId, number: 1, startWeek: shiftWeeks(monday, -8), weeks: 4, status: SeasonStatus.CLOSED, closedAt: new Date() },
       });
-      await createActiveSeason(trainerId, { number: 2 });
+      const newer = await prisma.consistencySeason.create({
+        data: { trainerId, number: 2, startWeek: shiftWeeks(monday, -4), weeks: 4, status: SeasonStatus.CLOSED, closedAt: new Date() },
+      });
+      await createActiveSeason(trainerId, { number: 3 });
+      const standing = (season, student, fields) => ({ seasonId: season.id, trainerId, studentId: student.id, frozenAt: new Date(), ...fields });
       await prisma.consistencySeasonStanding.createMany({
         data: [
-          { seasonId: closed.id, trainerId, studentId: ana.id, position: 1, eligible: true, average: 90, validWeeks: 4, weeks100: 2, streak: 2, frozenAt: new Date() },
-          { seasonId: closed.id, trainerId, studentId: bia.id, position: 2, eligible: true, average: 80, validWeeks: 4, weeks100: 1, streak: 1, frozenAt: new Date() },
+          standing(older, ana, { position: 1, eligible: true, average: 90, validWeeks: 4, weeks100: 2, streak: 2 }),
+          standing(older, bia, { position: 2, eligible: true, average: 80, validWeeks: 4, weeks100: 1, streak: 1 }),
+          standing(older, carla, { position: null, eligible: false, average: 10, validWeeks: 1, weeks100: 0, streak: 0 }),
+          standing(newer, ana, { position: 1, eligible: true, average: 70, validWeeks: 4, weeks100: 0, streak: 0 }),
         ],
       });
 
@@ -719,7 +751,8 @@ e2eDescribe('e2e: consistency ranking panel', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().seasons).toEqual([
-        { number: 1, startWeek: dateKey(shiftWeeks(monday, -8)), endWeek: dateKey(shiftWeeks(monday, -5)), weeks: 4, participants: 2, average: 85 },
+        { number: 2, startWeek: dateKey(shiftWeeks(monday, -4)), endWeek: dateKey(shiftWeeks(monday, -1)), weeks: 4, participants: 1, average: 70 },
+        { number: 1, startWeek: dateKey(shiftWeeks(monday, -8)), endWeek: dateKey(shiftWeeks(monday, -5)), weeks: 4, participants: 3, average: 85 },
       ]);
     });
 
