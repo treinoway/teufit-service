@@ -1,14 +1,4 @@
-import { NotFoundAppError } from '../errors/app-error.js';
-
-const STUDENT_NOT_FOUND = 'student.notFound';
-
-// Throws 404 student.notFound unless the student is linked to the trainer
-async function assertStudentOfTrainer(prisma, trainerId, studentId) {
-  const link = await prisma.trainerStudent.findFirst({ where: { trainerId, studentId }, select: { id: true } });
-  if (!link) {
-    throw new NotFoundAppError({ message: 'Student not found', messageCode: STUDENT_NOT_FOUND });
-  }
-}
+import { assertStudentOfTrainer } from './consistency-student-access.js';
 
 /**
  * Logs one use of "open on WhatsApp" for a student of the trainer; every use is kept.
