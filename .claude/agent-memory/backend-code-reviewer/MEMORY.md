@@ -12,3 +12,5 @@
 - [Verification state transitions](feedback_verification_state_transitions.md) — verified-gated side effects must fire on all unverified->verified paths; resend resets attempts; stale pending vs partial unique
 - [Enumeration via follow-up state](feedback_enumeration_state_oracles.md) — uniform entry endpoint, but verify/resend/latency of later public calls leak account existence
 - [Tx "mirror" helpers drift](feedback_tx_mirroring_helpers.md) — prefer optional `{ tx }` on the original helper over copying its steps into a tx-local function
+- [Billing cycle invariants](project_billing_cycle_invariants.md) — cancel/void filters key on cycleStartDate; check them whenever dueDate can differ from it
+- [Platform plan billing invariants](project_platform_plan_billing.md) — asaasSubscriptionId != paid; webhook never enforces the student cap on downgrade

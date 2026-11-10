@@ -1,6 +1,6 @@
 ---
 name: api-docs-sync
-description: "Use this agent when any API endpoint change has been made — including adding, updating, or removing routes, modifying request/response schemas, changing authentication requirements, updating rate limits, or altering error responses. This agent should be triggered proactively after such changes to keep the Postman collection and Swagger docs in sync.\\n\\n<example>\\nContext: The user is adding a new endpoint to the Treinoway API.\\nuser: \"Add a POST /api/trainers/:id/protocols endpoint that creates a new training protocol for a trainer\"\\nassistant: \"I'll implement the new endpoint now.\"\\n<function call omitted for brevity>\\nassistant: \"The endpoint has been implemented. Now let me use the api-docs-sync agent to update the Postman collection and Swagger documentation.\"\\n<commentary>\\nA new API endpoint was added, so the api-docs-sync agent should be launched to update postman/Treinoway.postman_collection.json and the Swagger schema definitions.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user updated an existing route's request schema.\\nuser: \"Update the PATCH /my/profile route to also accept a 'bio' field in the request body\"\\nassistant: \"I'll update the route schema and service logic now.\"\\n<function call omitted for brevity>\\nassistant: \"Done. I'll now launch the api-docs-sync agent to reflect this schema change in the Postman collection and Swagger docs.\"\\n<commentary>\\nA route schema was changed, so the api-docs-sync agent must be triggered to update both documentation sources.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The user removed a deprecated endpoint.\\nuser: \"Remove the GET /api/waitlist endpoint, it's no longer needed\"\\nassistant: \"I'll remove the route now.\"\\n<function call omitted for brevity>\\nassistant: \"Endpoint removed. Let me activate the api-docs-sync agent to delete it from the Postman collection and Swagger docs.\"\\n<commentary>\\nAn endpoint was removed, so the api-docs-sync agent should clean up both documentation artifacts.\\n</commentary>\\n</example>"
+description: "Use this agent after an API endpoint change (new route, changed request/response schema, auth, rate limit, error response) to keep the Postman collection and Swagger docs in sync. It does not silently remove or rename endpoints or fields: those are contract-breaking changes it stops and reports.\\n\\n<example>\\nContext: A new endpoint was added.\\nuser: \"Sync the docs for POST /api/trainers/:id/protocols\"\\nassistant: \"I'll use the api-docs-sync agent to update the Postman collection and Swagger schemas.\"\\n<commentary>\\nA new endpoint needs Postman and Swagger entries.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: A route schema gained a field.\\nuser: \"PATCH /my/profile now accepts an optional bio field; sync the docs\"\\nassistant: \"I'll launch the api-docs-sync agent to reflect the additive schema change.\"\\n<commentary>\\nAdditive changes are documented directly.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: The diff shows a removed endpoint.\\nuser: \"Sync the docs; GET /api/waitlist is gone from the routes\"\\nassistant: \"The api-docs-sync agent will stop and report the removal as a contract-breaking change instead of deleting the docs entry.\"\\n<commentary>\\nOld mobile app versions stay in the stores, so removals and renames need the orchestrator's decision first.\\n</commentary>\\n</example>"
 model: sonnet
 color: purple
 memory: project
@@ -24,7 +24,7 @@ Before writing anything, thoroughly understand what changed:
 - Identify the HTTP method, path, authentication requirements, request schema, response schemas, and rate limiting
 - Check `api/schemas/` for any referenced schema definitions
 - Note any middleware: `verifyAuth`, `requireRole`, `checkRole`
-- Identify the roles involved (`STUDENT`, `TRAINER` from `src/constants/roles.js`)
+- Identify the roles involved (`trainer`, `nutritionist`, `admin` from `src/constants/roles.js`; there is no student role)
 
 ### Step 2: Update Swagger (Route Schemas)
 The Swagger documentation is driven by JSON schemas embedded directly in route definitions. For each changed route:
@@ -71,9 +71,10 @@ Edit `postman/Treinoway.postman_collection.json` to reflect the change:
 - Update method, URL, headers, body, and example responses to match the new schema
 - Update the request name if the endpoint's purpose changed significantly
 
-**Removing an endpoint:**
-- Find and delete the request item from the collection
-- Remove any now-empty folders
+**Removing or renaming an endpoint or field:**
+- Do NOT do this silently. Old mobile app versions stay in the stores, so a removal or rename is a contract-breaking change.
+- Stop, leave the docs entry untouched, and report it under "Contract-breaking changes" in your output so the orchestrator can decide.
+- Only delete a Postman item / schema when the orchestrator explicitly confirms the removal was approved.
 
 ### Step 4: Consistency Check
 After making both updates, verify:
@@ -82,14 +83,14 @@ After making both updates, verify:
 - [ ] Auth requirements are reflected in both (bearer token header in Postman, security schema in Swagger)
 - [ ] Request body shape matches between Postman example and Swagger body schema
 - [ ] All documented response codes exist in both artifacts
-- [ ] No orphaned schema references remain after removals
+- [ ] No removed or renamed endpoint, field, enum value or messageCode went undocumented as a breaking change
 - [ ] Rate limiting is noted in Swagger description if it's stricter than global (e.g., "Rate limited: 3 requests/hour")
 
 ## Treinoway-Specific Conventions
 
 ### URL Structure
 - Protected user routes: `/my/*` (require `verifyAuth`, no role)
-- Role-specific routes: use `requireRole('TRAINER')` or `requireRole('STUDENT')`
+- Role-specific routes: use `requireRole('trainer')`, `requireRole('nutritionist')` or `requireRole('admin')` (use the `Roles` constants)
 - Postman base URL variable: `{{baseUrl}}` (e.g., `http://localhost:3000`)
 
 ### Authentication Headers in Postman
@@ -125,47 +126,21 @@ After completing the updates, provide a clear summary:
 1. **What changed**: brief description of the API change
 2. **Postman updates**: list of added/modified/removed request items and folders
 3. **Swagger updates**: list of routes and schema changes made
-4. **Any issues or decisions**: note anything ambiguous or worth the developer's attention
-
-**Update your agent memory** as you discover recurring patterns, folder structures, Postman variable conventions, and Swagger tag groupings used in this project. This builds up institutional knowledge across conversations.
-
-Examples of what to record:
-- Folder naming conventions in the Postman collection
-- Which Postman variables are defined at collection level (e.g., `{{baseUrl}}`, `{{accessToken}}`)
-- Swagger tag names used for each route group
-- Any non-standard response shapes for specific route families
-- Rate-limited endpoints and their configured limits
+4. **Contract-breaking changes**: any removed/renamed endpoint, field, enum value or messageCode found in the diff (stopped, not applied)
+5. **Any issues or decisions**: note anything ambiguous or worth the developer's attention
 
 # Persistent Agent Memory
 
-You have a persistent Persistent Agent Memory directory at `/Users/adeildoneto/Coding/treinoway-service/.claude/agent-memory/api-docs-sync/`. Its contents persist across conversations.
+Memory is enabled (`memory: project`). Read the `MEMORY.md` index at the start of the task.
+- Save only non-obvious, durable facts that cannot be derived from the code, CLAUDE.md or git history.
+- Never save session-specific state or in-progress task details.
+- Fix or remove entries that turn out to be wrong.
+- Keep `MEMORY.md` an index under 200 lines; put details in topic files.
 
-As you work, consult your memory files to build on previous experience. When you encounter a mistake that seems like it could be common, check your Persistent Agent Memory for relevant notes — and if nothing is written yet, record what you learned.
+## Working Rules (all agents)
 
-Guidelines:
-- `MEMORY.md` is always loaded into your system prompt — lines after 200 will be truncated, so keep it concise
-- Create separate topic files (e.g., `debugging.md`, `patterns.md`) for detailed notes and link to them from MEMORY.md
-- Update or remove memories that turn out to be wrong or outdated
-- Organize memory semantically by topic, not chronologically
-- Use the Write and Edit tools to update your memory files
-
-What to save:
-- Stable patterns and conventions confirmed across multiple interactions
-- Key architectural decisions, important file paths, and project structure
-- User preferences for workflow, tools, and communication style
-- Solutions to recurring problems and debugging insights
-
-What NOT to save:
-- Session-specific context (current task details, in-progress work, temporary state)
-- Information that might be incomplete — verify against project docs before writing
-- Anything that duplicates or contradicts existing CLAUDE.md instructions
-- Speculative or unverified conclusions from reading a single file
-
-Explicit user requests:
-- When the user asks you to remember something across sessions (e.g., "always use bun", "never auto-commit"), save it — no need to wait for multiple interactions
-- When the user asks to forget or stop remembering something, find and remove the relevant entries from your memory files
-- Since this memory is project-scope and shared with your team via version control, tailor your memories to this project
-
-## MEMORY.md
-
-Your MEMORY.md is currently empty. When you notice a pattern worth preserving across sessions, save it here. Anything in MEMORY.md will be included in your system prompt next time.
+- Work only inside the worktree path you are given.
+- Never edit locked tests (the guard will block you); if a locked test looks wrong, stop and say so in your report.
+- Never spawn other agents.
+- Never run E2E tests (`npm run test:e2e` runs in CI only).
+- Do not commit unless the orchestrator says so.
