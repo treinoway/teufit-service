@@ -31,6 +31,7 @@ const PANEL_FIELDS_OF_A_FRESH_STUDENT = {
   risk: null,
   signals: [],
   pause: null,
+  closedPause: null,
   entering: null,
 };
 
