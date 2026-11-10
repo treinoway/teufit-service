@@ -343,7 +343,7 @@ e2eDescribe('e2e: consistency ranking panel', () => {
         entering: null,
       });
       expect(body.rows[0].signals).toEqual([
-        { type: 'quick_completion', sessionId: quick.id, finishedAt: mondayMorning(monday).toISOString(), durationSeconds: QUICK_SECONDS },
+        { type: 'quick_completion', sessionId: quick.id, finishedAt: mondayMorning(monday).toISOString(), durationSeconds: QUICK_SECONDS, thresholdMinutes: 10 },
       ]);
       expect(body.entering).toEqual([]);
     });

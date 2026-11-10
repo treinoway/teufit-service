@@ -106556,6 +106556,10 @@
                                   "type": "integer",
                                   "description": "Quick completion only"
                                 },
+                                "thresholdMinutes": {
+                                  "type": "integer",
+                                  "description": "Quick completion only: the minimum workout time configured when the signal was raised"
+                                },
                                 "count": {
                                   "type": "integer",
                                   "description": "Batch logging only"
@@ -106564,6 +106568,15 @@
                                   "type": "string",
                                   "format": "date-time",
                                   "description": "Batch logging only"
+                                },
+                                "windowMinutes": {
+                                  "type": "integer",
+                                  "description": "Batch logging only: the minutes before the close that were counted"
+                                },
+                                "lastFinishedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Batch logging only: when the last session of the batch finished"
                                 }
                               }
                             }
@@ -106790,6 +106803,10 @@
                                   "type": "integer",
                                   "description": "Quick completion only"
                                 },
+                                "thresholdMinutes": {
+                                  "type": "integer",
+                                  "description": "Quick completion only: the minimum workout time configured when the signal was raised"
+                                },
                                 "count": {
                                   "type": "integer",
                                   "description": "Batch logging only"
@@ -106798,6 +106815,15 @@
                                   "type": "string",
                                   "format": "date-time",
                                   "description": "Batch logging only"
+                                },
+                                "windowMinutes": {
+                                  "type": "integer",
+                                  "description": "Batch logging only: the minutes before the close that were counted"
+                                },
+                                "lastFinishedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Batch logging only: when the last session of the batch finished"
                                 }
                               }
                             }
@@ -107251,6 +107277,10 @@
                             "type": "integer",
                             "description": "Quick completion only"
                           },
+                          "thresholdMinutes": {
+                            "type": "integer",
+                            "description": "Quick completion only: the minimum workout time configured when the signal was raised"
+                          },
                           "count": {
                             "type": "integer",
                             "description": "Batch logging only"
@@ -107259,6 +107289,15 @@
                             "type": "string",
                             "format": "date-time",
                             "description": "Batch logging only"
+                          },
+                          "windowMinutes": {
+                            "type": "integer",
+                            "description": "Batch logging only: the minutes before the close that were counted"
+                          },
+                          "lastFinishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Batch logging only: when the last session of the batch finished"
                           }
                         }
                       }

@@ -603,7 +603,7 @@ describe('getPanelStandings', () => {
     const { rows, counts, summary } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
 
     expect(rows[0].signals).toEqual([
-      { type: SignalType.QUICK_COMPLETION, sessionId: 'quick', finishedAt: quick.finishedAt, durationSeconds: 240 },
+      { type: SignalType.QUICK_COMPLETION, sessionId: 'quick', finishedAt: quick.finishedAt, durationSeconds: 240, thresholdMinutes: 10 },
     ]);
     expect(counts.signal).toBe(1);
     expect(summary.withSignal).toBe(1);
@@ -626,7 +626,9 @@ describe('getPanelStandings', () => {
 
     const { rows } = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
 
-    expect(rows[0].signals).toEqual([{ type: SignalType.BATCH_LOGGING, count: 5, closeInstant: PANEL_CLOSE_LAST }]);
+    expect(rows[0].signals).toEqual([
+      { type: SignalType.BATCH_LOGGING, count: 5, closeInstant: PANEL_CLOSE_LAST, windowMinutes: 30, lastFinishedAt: batch[0].finishedAt },
+    ]);
   });
 
   it('PAN-52 leaves average, week score, position and band unchanged for a student with a signal', async () => {

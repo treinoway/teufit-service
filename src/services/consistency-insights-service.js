@@ -27,18 +27,27 @@ export function faixaFor(average, eligible) {
   return Faixa.RESTARTING;
 }
 
+// Scores of the newest valid weeks in a row that stay below the limit (newest first)
+function consecutiveBelow(validResults, riskLimit) {
+  const scores = [];
+  for (const row of validResults) {
+    const score = Number(row.score);
+    if (score >= riskLimit) break;
+    scores.push(score);
+  }
+  return scores;
+}
+
 /**
  * Risk of a student: the last riskWeeks valid closed weeks all below riskLimit; neutral and paused weeks are skipped.
  *
  * @param {Array<{ status: string, score: * }>} closedResults - most recent first
  * @param {{ riskLimit: number, riskWeeks: number }} rules
- * @returns {{ atRisk: boolean, scores: number[] }} scores of the weeks that caused the risk, oldest first
+ * @returns {{ atRisk: boolean, scores: number[] }} scores of every valid week in a row below the limit (at least riskWeeks), oldest first
  */
 export function riskFor(closedResults, { riskLimit, riskWeeks }) {
-  const recent = closedResults.filter((row) => row.status === WeekStatus.VALID).slice(0, riskWeeks);
-  const scores = recent.map((row) => Number(row.score));
-  const atRisk = recent.length === riskWeeks && scores.every((score) => score < riskLimit);
-  return atRisk ? { atRisk, scores: scores.reverse() } : { atRisk: false, scores: [] };
+  const below = consecutiveBelow(closedResults.filter((row) => row.status === WeekStatus.VALID), riskLimit);
+  return below.length >= riskWeeks ? { atRisk: true, scores: below.reverse() } : { atRisk: false, scores: [] };
 }
 
 // Adds the counts of one valid week to the per-pillar totals, counting a week over target as the target
@@ -93,6 +102,7 @@ function quickCompletions(sessions, minWorkoutMinutes) {
       sessionId: session.id,
       finishedAt: session.finishedAt,
       durationSeconds: session.durationSeconds,
+      thresholdMinutes: minWorkoutMinutes,
     }));
 }
 
@@ -100,11 +110,14 @@ function quickCompletions(sessions, minWorkoutMinutes) {
 function batchLogging(sessions, closeInstant, { batchCount, batchMinutes }) {
   const closeMs = closeInstant.getTime();
   const windowStart = closeMs - batchMinutes * MS_PER_MINUTE;
-  const count = sessions.filter((session) => {
+  const inWindow = sessions.filter((session) => {
     const finished = session.finishedAt.getTime();
     return finished > windowStart && finished <= closeMs;
-  }).length;
-  return count >= batchCount ? [{ type: SignalType.BATCH_LOGGING, count, closeInstant }] : [];
+  });
+  const count = inWindow.length;
+  if (count < batchCount) return [];
+  const lastFinishedAt = new Date(Math.max(...inWindow.map((session) => session.finishedAt.getTime())));
+  return [{ type: SignalType.BATCH_LOGGING, count, closeInstant, windowMinutes: batchMinutes, lastFinishedAt }];
 }
 
 /**

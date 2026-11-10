@@ -395,8 +395,11 @@ const signalSchema = {
     sessionId: { type: 'string', format: 'uuid', description: 'Quick completion only' },
     finishedAt: { type: 'string', format: 'date-time', description: 'Quick completion only' },
     durationSeconds: { type: 'integer', description: 'Quick completion only' },
+    thresholdMinutes: { type: 'integer', description: 'Quick completion only: the minimum workout time configured when the signal was raised' },
     count: { type: 'integer', description: 'Batch logging only' },
     closeInstant: { type: 'string', format: 'date-time', description: 'Batch logging only' },
+    windowMinutes: { type: 'integer', description: 'Batch logging only: the minutes before the close that were counted' },
+    lastFinishedAt: { type: 'string', format: 'date-time', description: 'Batch logging only: when the last session of the batch finished' },
   },
 };
 

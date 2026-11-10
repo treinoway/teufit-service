@@ -84,6 +84,12 @@ describe('riskFor', () => {
     expect(riskFor(closed, { riskLimit: 70, riskWeeks: 3 })).toEqual({ atRisk: false, scores: [] });
   });
 
+  it('PAN-20 lists every week in a row below the limit, so "N semanas seguidas" is the real count', () => {
+    const closed = [result(WeekStatus.VALID, 60), result(WeekStatus.VALID, 62), result(WeekStatus.VALID, 65), result(WeekStatus.VALID, 90)];
+
+    expect(riskFor(closed, { riskLimit: 70, riskWeeks: 2 })).toEqual({ atRisk: true, scores: [65, 62, 60] });
+  });
+
   it('PAN-20 uses the configured limit', () => {
     const closed = [result(WeekStatus.VALID, 80), result(WeekStatus.VALID, 75)];
 
@@ -164,8 +170,8 @@ describe('signalsFor', () => {
     ];
 
     expect(signalsFor(sessions, CLOSE_INSTANT, RULES)).toEqual([
-      { type: SignalType.QUICK_COMPLETION, sessionId: 'quick', finishedAt: sessions[0].finishedAt, durationSeconds: 240 },
-      { type: SignalType.QUICK_COMPLETION, sessionId: 'edge', finishedAt: sessions[1].finishedAt, durationSeconds: 599 },
+      { type: SignalType.QUICK_COMPLETION, sessionId: 'quick', finishedAt: sessions[0].finishedAt, durationSeconds: 240, thresholdMinutes: 10 },
+      { type: SignalType.QUICK_COMPLETION, sessionId: 'edge', finishedAt: sessions[1].finishedAt, durationSeconds: 599, thresholdMinutes: 10 },
     ]);
   });
 
@@ -180,7 +186,7 @@ describe('signalsFor', () => {
     const sessions = [1, 5, 10, 20, 29].map((minutes) => sessionBeforeClose(`s${minutes}`, minutes));
 
     expect(signalsFor(sessions, CLOSE_INSTANT, RULES)).toEqual([
-      { type: SignalType.BATCH_LOGGING, count: 5, closeInstant: CLOSE_INSTANT },
+      { type: SignalType.BATCH_LOGGING, count: 5, closeInstant: CLOSE_INSTANT, windowMinutes: 30, lastFinishedAt: sessions[0].finishedAt },
     ]);
   });
 
@@ -196,11 +202,19 @@ describe('signalsFor', () => {
     expect(signalsFor(sessions, CLOSE_INSTANT, RULES)).toEqual([]);
   });
 
+  it('PAN-49 counts a session at the close and leaves out one exactly batchMinutes before it (the window is open at its start)', () => {
+    const atEdge = [0, 1, 2, 3, 30].map((minutes) => sessionBeforeClose(`s${minutes}`, minutes));
+    const insideEdge = [0, 1, 2, 3, 29.99].map((minutes) => sessionBeforeClose(`s${minutes}`, minutes));
+
+    expect(signalsFor(atEdge, CLOSE_INSTANT, RULES)).toEqual([]);
+    expect(signalsFor(insideEdge, CLOSE_INSTANT, RULES)).toHaveLength(1);
+  });
+
   it('PAN-49 uses the configured count and minutes', () => {
     const sessions = [1, 50, 90].map((minutes) => sessionBeforeClose(`s${minutes}`, minutes));
 
     expect(signalsFor(sessions, CLOSE_INSTANT, { ...RULES, batchCount: 3, batchMinutes: 120 })).toEqual([
-      { type: SignalType.BATCH_LOGGING, count: 3, closeInstant: CLOSE_INSTANT },
+      { type: SignalType.BATCH_LOGGING, count: 3, closeInstant: CLOSE_INSTANT, windowMinutes: 120, lastFinishedAt: sessions[0].finishedAt },
     ]);
   });
 
@@ -211,7 +225,7 @@ describe('signalsFor', () => {
     const signals = signalsFor(sessions, CLOSE_INSTANT, RULES);
 
     expect(signals).toHaveLength(1);
-    expect(Object.keys(signals[0]).sort()).toEqual(['durationSeconds', 'finishedAt', 'sessionId', 'type']);
+    expect(Object.keys(signals[0]).sort()).toEqual(['durationSeconds', 'finishedAt', 'sessionId', 'thresholdMinutes', 'type']);
     expect(sessions).toEqual([session]);
   });
 });
