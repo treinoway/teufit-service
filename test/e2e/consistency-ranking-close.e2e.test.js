@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { prisma } from '../../src/db.js';
 import { materializeTargets } from '../../src/services/consistency-target-service.js';
+import { countDone } from '../../src/services/consistency-progress-service.js';
 import { Pillar } from '../../src/constants/consistency-ranking.js';
-import { TrainingCategory, TrainingStatus, WeekDays } from '../../src/constants/training.js';
+import { TrainingCategory, TrainingStatus, WeekDays, WorkoutSessionStatus } from '../../src/constants/training.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -68,6 +69,37 @@ const BASE_TRAININGS = [
   { category: TrainingCategory.CARDIO, weekDay: null },
   { category: TrainingCategory.REST, weekDay: WeekDays.SUNDAY },
 ];
+
+const DONE_FROM = new Date('2030-01-07T03:00:00.000Z');
+const DONE_TO = new Date('2030-01-14T03:00:00.000Z');
+const INSIDE_WINDOW = new Date('2030-01-09T12:00:00.000Z');
+const BEFORE_WINDOW = new Date('2030-01-07T02:59:59.000Z');
+const AFTER_WINDOW = new Date('2030-01-14T03:00:01.000Z');
+
+// Trainings of a protocol keyed by category
+async function trainingByCategory(protocolId) {
+  const rows = await prisma.training.findMany({ where: { trainingProtocolId: protocolId } });
+  return Object.fromEntries(rows.map((row) => [row.category, row]));
+}
+
+// Creates a workout session of the student for a training
+function createSession({ trainingId, studentId, finishedAt, status = WorkoutSessionStatus.COMPLETED, ...overrides }) {
+  return prisma.workoutSession.create({ data: { trainingId, userId: studentId, status, finishedAt, ...overrides } });
+}
+
+// Creates a protocol with strength, cardio and rest trainings and returns them by category
+async function createDoneSetup({ trainerId, studentId }) {
+  const protocol = await createProtocol({
+    trainerId,
+    studentId,
+    trainings: [
+      { category: TrainingCategory.STRENGTH, weekDay: WeekDays.MONDAY },
+      { category: TrainingCategory.CARDIO, weekDay: null },
+      { category: TrainingCategory.REST, weekDay: WeekDays.SUNDAY },
+    ],
+  });
+  return trainingByCategory(protocol.id);
+}
 
 e2eDescribe('e2e: consistency ranking close', () => {
   beforeEach(async () => {
@@ -246,6 +278,97 @@ e2eDescribe('e2e: consistency ranking close', () => {
       const trainer = await createTrainer();
 
       const result = await materializeTargets(prisma, trainer.id, WEEK_START, []);
+
+      expect(result.size).toBe(0);
+    });
+  });
+
+  describe('countDone', () => {
+    const window = { from: DONE_FROM, to: DONE_TO };
+
+    it('RANK-04 counts completed sessions inside the done window', async () => {
+      const trainer = await createTrainer();
+      const student = await createUser('done-student');
+      const trainings = await createDoneSetup({ trainerId: trainer.id, studentId: student.id });
+      const base = { trainingId: trainings[TrainingCategory.STRENGTH].id, studentId: student.id };
+      await createSession({ ...base, finishedAt: INSIDE_WINDOW });
+      await createSession({ ...base, finishedAt: DONE_TO });
+      await createSession({ ...base, finishedAt: DONE_FROM });
+      await createSession({ ...base, finishedAt: BEFORE_WINDOW });
+      await createSession({ ...base, finishedAt: AFTER_WINDOW });
+      await createSession({ ...base, finishedAt: INSIDE_WINDOW, status: WorkoutSessionStatus.IN_PROGRESS });
+      await createSession({ ...base, finishedAt: INSIDE_WINDOW, deletedAt: INSIDE_WINDOW });
+
+      const result = await countDone(prisma, trainer.id, [student.id], window);
+
+      expect(result.get(student.id)).toEqual({ workouts: 2, cardio: 0 });
+    });
+
+    it("RANK-49 ignores sessions of another trainer's protocol", async () => {
+      const trainer = await createTrainer();
+      const otherTrainer = await createTrainer();
+      const student = await createUser('done-student');
+      const own = await createDoneSetup({ trainerId: trainer.id, studentId: student.id });
+      const other = await createDoneSetup({ trainerId: otherTrainer.id, studentId: student.id });
+      const base = { studentId: student.id, finishedAt: INSIDE_WINDOW };
+      await createSession({ ...base, trainingId: own[TrainingCategory.STRENGTH].id });
+      await createSession({ ...base, trainingId: other[TrainingCategory.STRENGTH].id });
+      await createSession({ ...base, trainingId: other[TrainingCategory.CARDIO].id });
+
+      const result = await countDone(prisma, trainer.id, [student.id], window);
+
+      expect(result.get(student.id)).toEqual({ workouts: 1, cardio: 0 });
+    });
+
+    it('RANK-50 counts a repeated training twice', async () => {
+      const trainer = await createTrainer();
+      const student = await createUser('done-student');
+      const trainings = await createDoneSetup({ trainerId: trainer.id, studentId: student.id });
+      const base = { trainingId: trainings[TrainingCategory.STRENGTH].id, studentId: student.id };
+      await createSession({ ...base, finishedAt: INSIDE_WINDOW });
+      await createSession({ ...base, finishedAt: new Date('2030-01-10T12:00:00.000Z') });
+
+      const result = await countDone(prisma, trainer.id, [student.id], window);
+
+      expect(result.get(student.id)).toEqual({ workouts: 2, cardio: 0 });
+    });
+
+    it('RANK-53 counts a cardio session as cardio and a rest session nowhere', async () => {
+      const trainer = await createTrainer();
+      const student = await createUser('done-student');
+      const trainings = await createDoneSetup({ trainerId: trainer.id, studentId: student.id });
+      const base = { studentId: student.id, finishedAt: INSIDE_WINDOW };
+      await createSession({ ...base, trainingId: trainings[TrainingCategory.CARDIO].id });
+      await createSession({ ...base, trainingId: trainings[TrainingCategory.REST].id });
+      await createSession({ ...base, trainingId: trainings[TrainingCategory.STRENGTH].id });
+
+      const result = await countDone(prisma, trainer.id, [student.id], window);
+
+      expect(result.get(student.id)).toEqual({ workouts: 1, cardio: 1 });
+    });
+
+    it('returns zeros for students without sessions and keeps students apart', async () => {
+      const trainer = await createTrainer();
+      const active = await createUser('done-active');
+      const idle = await createUser('done-idle');
+      const trainings = await createDoneSetup({ trainerId: trainer.id, studentId: active.id });
+      await createSession({
+        trainingId: trainings[TrainingCategory.CARDIO].id,
+        studentId: active.id,
+        finishedAt: INSIDE_WINDOW,
+      });
+
+      const result = await countDone(prisma, trainer.id, [active.id, idle.id], window);
+
+      expect(result.get(active.id)).toEqual({ workouts: 0, cardio: 1 });
+      expect(result.get(idle.id)).toEqual({ workouts: 0, cardio: 0 });
+      expect(result.size).toBe(2);
+    });
+
+    it('returns an empty map for no students', async () => {
+      const trainer = await createTrainer();
+
+      const result = await countDone(prisma, trainer.id, [], window);
 
       expect(result.size).toBe(0);
     });
