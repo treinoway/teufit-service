@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { pauseWeek, pausesFor, resumeWeek } from '../../src/services/consistency-pause-service.js';
+import { pauseReasonsFor, pauseWeek, pausesFor, resumeWeek } from '../../src/services/consistency-pause-service.js';
 import { liveAverage, seasonFigures } from '../../src/helpers/consistency-math.js';
 import { ConsistencyErrorCode, ConsistencyMessageCode, WeekStatus } from '../../src/constants/consistency-ranking.js';
 
@@ -249,5 +249,30 @@ describe('pausesFor', () => {
 
     expect((await pausesFor(prisma, TRAINER_ID, [])).size).toBe(0);
     expect(prisma.consistencyWeekPause.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('pauseReasonsFor', () => {
+  it('PAN-46 returns the reason of the team pause and of each paused student', async () => {
+    const prisma = createPrisma({
+      rows: [
+        { studentId: null, weekStart: CURRENT_WEEK_DATE, paused: true, reason: 'feriado' },
+        { studentId: STUDENT_ID, weekStart: CURRENT_WEEK_DATE, paused: true, reason: 'viagem' },
+        { studentId: 'student-2', weekStart: CURRENT_WEEK_DATE, paused: true, reason: null },
+      ],
+    });
+
+    const reasons = await pauseReasonsFor(prisma, TRAINER_ID, CURRENT_WEEK);
+
+    expect(prisma.consistencyWeekPause.findMany).toHaveBeenCalledWith({
+      where: { trainerId: TRAINER_ID, weekStart: CURRENT_WEEK_DATE, paused: true },
+    });
+    expect(reasons).toEqual({ team: 'feriado', students: new Map([[STUDENT_ID, 'viagem'], ['student-2', null]]) });
+  });
+
+  it('PAN-46 returns no reason when nothing is paused', async () => {
+    const prisma = createPrisma({ rows: [] });
+
+    expect(await pauseReasonsFor(prisma, TRAINER_ID, CURRENT_WEEK)).toEqual({ team: null, students: new Map() });
   });
 });

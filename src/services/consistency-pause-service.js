@@ -145,3 +145,21 @@ export async function pausesFor(prisma, trainerId, weekStarts) {
   }
   return result;
 }
+
+/**
+ * Reasons of the paused rows of one week: the team pause and each paused student (null when no reason was typed).
+ *
+ * @param {object} prisma
+ * @param {string} trainerId - Trainer.id
+ * @param {{ year: number, month: number, day: number }} weekStart - civil Monday
+ * @returns {Promise<{ team: string|null, students: Map<string, string|null> }>}
+ */
+export async function pauseReasonsFor(prisma, trainerId, weekStart) {
+  const rows = await prisma.consistencyWeekPause.findMany({ where: { trainerId, weekStart: toDbDate(weekStart), paused: true } });
+  const reasons = { team: null, students: new Map() };
+  for (const row of rows) {
+    if (row.studentId === null) reasons.team = row.reason ?? null;
+    else reasons.students.set(row.studentId, row.reason ?? null);
+  }
+  return reasons;
+}
