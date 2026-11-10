@@ -106241,11 +106241,11 @@
     },
     "/trainer/consistency-ranking/standings": {
       "get": {
-        "summary": "Get the consistency ranking standings of the trainer",
+        "summary": "Get the consistency ranking standings of the trainer with the panel fields",
         "tags": [
           "consistency-ranking"
         ],
-        "description": "Returns the season, the ranked students and the students still entering the ranking. Without `season` it returns the current season; `season` selects a closed one. Before the ranking launches `season` is null and the lists are empty. Closed seasons omit partialScore, weekStatus and pillars from each row.",
+        "description": "Returns the season, the four summary numbers, the count of every filter and the students: ranked ones in `rows`, students still entering in `entering`. Each student carries band, season pillars, risk, review signals, pause and entering progress. `filter` and `q` narrow the lists (the counts and the summary stay global); `filter=risk` orders by ascending average. Without `season` it returns the current season; `season` selects a closed one. Before the ranking launches `season` is null.",
         "parameters": [
           {
             "schema": {
@@ -106256,6 +106256,33 @@
             "name": "season",
             "required": false,
             "description": "Season number; omitted means the current season"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "risk",
+                "signal",
+                "entering",
+                "paused"
+              ],
+              "default": "all"
+            },
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "description": "Group of students to return"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "Student name search, ignoring case and accents"
           }
         ],
         "security": [
@@ -106273,6 +106300,7 @@
                   "properties": {
                     "season": {
                       "type": "object",
+                      "nullable": true,
                       "properties": {
                         "number": {
                           "type": "integer"
@@ -106300,10 +106328,59 @@
                             "active",
                             "closed"
                           ]
+                        },
+                        "closesAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true,
+                          "description": "Close instant of the running week; null on closed seasons"
                         }
-                      },
-                      "nullable": true,
-                      "description": "null before the ranking launches"
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "teamAverage": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "lastClosedWeekAverage": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "fullLastWeek": {
+                          "type": "integer"
+                        },
+                        "validLastWeek": {
+                          "type": "integer"
+                        },
+                        "atRisk": {
+                          "type": "integer"
+                        },
+                        "withSignal": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "all": {
+                          "type": "integer"
+                        },
+                        "risk": {
+                          "type": "integer"
+                        },
+                        "signal": {
+                          "type": "integer"
+                        },
+                        "entering": {
+                          "type": "integer"
+                        },
+                        "paused": {
+                          "type": "integer"
+                        }
+                      }
                     },
                     "rows": {
                       "type": "array",
@@ -106377,6 +106454,147 @@
                                 }
                               }
                             }
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "description": "First name and initial of the last name"
+                          },
+                          "initials": {
+                            "type": "string"
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ]
+                          },
+                          "currentWeekScore": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "weeks100": {
+                            "type": "integer"
+                          },
+                          "weeksMissing": {
+                            "type": "integer",
+                            "description": "Entering students only"
+                          },
+                          "seasonPillars": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "pillar": {
+                                  "type": "string",
+                                  "enum": [
+                                    "workouts",
+                                    "diet",
+                                    "cardio",
+                                    "feedback",
+                                    "hydration"
+                                  ]
+                                },
+                                "done": {
+                                  "type": "integer",
+                                  "description": "Sessions done in the closed weeks, each week capped at its target"
+                                },
+                                "expected": {
+                                  "type": "integer",
+                                  "description": "Sessions expected in the closed weeks"
+                                },
+                                "adherence": {
+                                  "type": "number",
+                                  "description": "Percentage 0-100"
+                                }
+                              }
+                            }
+                          },
+                          "risk": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the last valid closed weeks are below the risk limit",
+                            "properties": {
+                              "weeks": {
+                                "type": "integer"
+                              },
+                              "scores": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Scores of those weeks, oldest first"
+                              }
+                            }
+                          },
+                          "signals": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "quick_completion",
+                                    "batch_logging"
+                                  ]
+                                },
+                                "sessionId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "description": "Quick completion only"
+                                },
+                                "finishedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Quick completion only"
+                                },
+                                "durationSeconds": {
+                                  "type": "integer",
+                                  "description": "Quick completion only"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "description": "Batch logging only"
+                                },
+                                "closeInstant": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Batch logging only"
+                                }
+                              }
+                            }
+                          },
+                          "pause": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the running week is paused for the student",
+                            "properties": {
+                              "weekStart": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "entering": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the student lacks the valid weeks for the podium",
+                            "properties": {
+                              "validWeeks": {
+                                "type": "integer"
+                              },
+                              "required": {
+                                "type": "integer"
+                              }
+                            }
                           }
                         }
                       }
@@ -106393,11 +106611,209 @@
                           "name": {
                             "type": "string"
                           },
+                          "position": {
+                            "type": "integer",
+                            "nullable": true,
+                            "description": "Always null: students still entering have no position"
+                          },
+                          "eligible": {
+                            "type": "boolean"
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true
+                          },
                           "validWeeks": {
                             "type": "integer"
                           },
-                          "weeksMissing": {
+                          "weeksAt100": {
                             "type": "integer"
+                          },
+                          "streak": {
+                            "type": "integer"
+                          },
+                          "partialScore": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Running-week score; null when the week has no target. Absent on closed seasons"
+                          },
+                          "weekStatus": {
+                            "type": "string",
+                            "enum": [
+                              "valid",
+                              "neutral",
+                              "paused"
+                            ],
+                            "description": "Running-week status. Absent on closed seasons"
+                          },
+                          "pillars": {
+                            "type": "object",
+                            "description": "Running-week counts per pillar. Absent on closed seasons",
+                            "properties": {
+                              "workouts": {
+                                "type": "object",
+                                "properties": {
+                                  "expected": {
+                                    "type": "integer"
+                                  },
+                                  "done": {
+                                    "type": "integer"
+                                  }
+                                }
+                              },
+                              "cardio": {
+                                "type": "object",
+                                "properties": {
+                                  "expected": {
+                                    "type": "integer"
+                                  },
+                                  "done": {
+                                    "type": "integer"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "description": "First name and initial of the last name"
+                          },
+                          "initials": {
+                            "type": "string"
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ]
+                          },
+                          "currentWeekScore": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "weeks100": {
+                            "type": "integer"
+                          },
+                          "weeksMissing": {
+                            "type": "integer",
+                            "description": "Entering students only"
+                          },
+                          "seasonPillars": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "pillar": {
+                                  "type": "string",
+                                  "enum": [
+                                    "workouts",
+                                    "diet",
+                                    "cardio",
+                                    "feedback",
+                                    "hydration"
+                                  ]
+                                },
+                                "done": {
+                                  "type": "integer",
+                                  "description": "Sessions done in the closed weeks, each week capped at its target"
+                                },
+                                "expected": {
+                                  "type": "integer",
+                                  "description": "Sessions expected in the closed weeks"
+                                },
+                                "adherence": {
+                                  "type": "number",
+                                  "description": "Percentage 0-100"
+                                }
+                              }
+                            }
+                          },
+                          "risk": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the last valid closed weeks are below the risk limit",
+                            "properties": {
+                              "weeks": {
+                                "type": "integer"
+                              },
+                              "scores": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "description": "Scores of those weeks, oldest first"
+                              }
+                            }
+                          },
+                          "signals": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "quick_completion",
+                                    "batch_logging"
+                                  ]
+                                },
+                                "sessionId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "description": "Quick completion only"
+                                },
+                                "finishedAt": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Quick completion only"
+                                },
+                                "durationSeconds": {
+                                  "type": "integer",
+                                  "description": "Quick completion only"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "description": "Batch logging only"
+                                },
+                                "closeInstant": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "description": "Batch logging only"
+                                }
+                              }
+                            }
+                          },
+                          "pause": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the running week is paused for the student",
+                            "properties": {
+                              "weekStart": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "entering": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the student lacks the valid weeks for the podium",
+                            "properties": {
+                              "validWeeks": {
+                                "type": "integer"
+                              },
+                              "required": {
+                                "type": "integer"
+                              }
+                            }
                           }
                         }
                       }
@@ -106675,6 +107091,1725 @@
         }
       }
     },
+    "/trainer/consistency-ranking/students/{studentId}": {
+      "get": {
+        "summary": "Get the ranking panel of one student",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "description": "Standing, risk, week-by-week chart, season pillars, weakest pillar, previous seasons and last WhatsApp contact. Returns 404 for a student that is not linked to the trainer.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "studentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "studentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "firstName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "whatsapp": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displayName": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "initials": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "total": {
+                      "type": "integer",
+                      "description": "Ranked students"
+                    },
+                    "average": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "faixa": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "constant",
+                        "steady",
+                        "restarting",
+                        "entering"
+                      ]
+                    },
+                    "risk": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Present while the last valid closed weeks are below the risk limit",
+                      "properties": {
+                        "weeks": {
+                          "type": "integer"
+                        },
+                        "scores": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "description": "Scores of those weeks, oldest first"
+                        }
+                      }
+                    },
+                    "pause": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Present while the running week is paused for the student",
+                      "properties": {
+                        "weekStart": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "signals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "quick_completion",
+                              "batch_logging"
+                            ]
+                          },
+                          "sessionId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Quick completion only"
+                          },
+                          "finishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Quick completion only"
+                          },
+                          "durationSeconds": {
+                            "type": "integer",
+                            "description": "Quick completion only"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "description": "Batch logging only"
+                          },
+                          "closeInstant": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Batch logging only"
+                          }
+                        }
+                      }
+                    },
+                    "seasonPillars": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pillar": {
+                            "type": "string",
+                            "enum": [
+                              "workouts",
+                              "diet",
+                              "cardio",
+                              "feedback",
+                              "hydration"
+                            ]
+                          },
+                          "done": {
+                            "type": "integer",
+                            "description": "Sessions done in the closed weeks, each week capped at its target"
+                          },
+                          "expected": {
+                            "type": "integer",
+                            "description": "Sessions expected in the closed weeks"
+                          },
+                          "adherence": {
+                            "type": "number",
+                            "description": "Percentage 0-100"
+                          }
+                        }
+                      }
+                    },
+                    "weakestPillar": {
+                      "type": "string",
+                      "enum": [
+                        "workouts",
+                        "diet",
+                        "cardio",
+                        "feedback",
+                        "hydration"
+                      ],
+                      "nullable": true
+                    },
+                    "riskLimit": {
+                      "type": "integer"
+                    },
+                    "weeks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "weekStart": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "number": {
+                            "type": "integer"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "closed",
+                              "current",
+                              "future"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "valid",
+                              "neutral",
+                              "paused"
+                            ],
+                            "nullable": true
+                          },
+                          "score": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Closed weeks: stored score; current week: partial"
+                          }
+                        }
+                      }
+                    },
+                    "previousSeasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "number": {
+                            "type": "integer"
+                          },
+                          "startWeek": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "endWeek": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "lastContact": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/consistency-ranking/students/{studentId}/contacts": {
+      "post": {
+        "summary": "Log one use of \"open on WhatsApp\" for a student",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "description": "Every call is stored with trainer, student, pillar and date. Returns 404 for a student that is not linked to the trainer.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pillar": {
+                    "type": "string",
+                    "enum": [
+                      "workouts",
+                      "diet",
+                      "cardio",
+                      "feedback",
+                      "hydration"
+                    ],
+                    "description": "Weakest pillar the message was about"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "studentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "studentId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "pillar": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/consistency-ranking/students/{studentId}/targets": {
+      "put": {
+        "summary": "Lower the target of one pillar for the running week",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "description": "Sets the target of the pillar for the running week only, from 0 up to the frozen target. Returns 409 for a closed week or a value above the frozen target, and 404 for a student that is not linked to the trainer.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "pillar",
+                  "value"
+                ],
+                "properties": {
+                  "pillar": {
+                    "type": "string",
+                    "enum": [
+                      "workouts",
+                      "cardio"
+                    ]
+                  },
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "studentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "weekStart": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "pillar": {
+                      "type": "string",
+                      "enum": [
+                        "workouts",
+                        "cardio"
+                      ]
+                    },
+                    "expected": {
+                      "type": "integer",
+                      "description": "Frozen target"
+                    },
+                    "adjusted": {
+                      "type": "integer",
+                      "description": "Target now in force"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/consistency-ranking/history": {
+      "get": {
+        "summary": "Get the general history of the team",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "description": "Students with 4 or more valid weeks: average of every valid week since the join, weeks at 100 and longest run at 100, ordered by average.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "initials": {
+                            "type": "string"
+                          },
+                          "validWeeks": {
+                            "type": "integer"
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "weeks100": {
+                            "type": "integer"
+                          },
+                          "longestStreak": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/consistency-ranking/seasons": {
+      "get": {
+        "summary": "List the closed seasons of the trainer",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "description": "Number, dates, participants and average of each closed season, newest first. Open one with `standings?season=<number>`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "seasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "number": {
+                            "type": "integer"
+                          },
+                          "startWeek": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "endWeek": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "weeks": {
+                            "type": "integer"
+                          },
+                          "participants": {
+                            "type": "integer"
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Mean of the eligible students averages"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/trainer/consistency-ranking/config": {
       "get": {
         "summary": "Get the consistency ranking configuration of the trainer",
@@ -106765,6 +108900,36 @@
                     "timeZone": {
                       "type": "string",
                       "description": "IANA time zone (e.g., \"America/Sao_Paulo\")"
+                    },
+                    "riskLimit": {
+                      "type": "integer",
+                      "minimum": 50,
+                      "maximum": 90,
+                      "description": "Weekly score below which a week counts toward the risk alert"
+                    },
+                    "riskWeeks": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4,
+                      "description": "Valid closed weeks below the limit that raise the risk alert"
+                    },
+                    "minWorkoutMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 60,
+                      "description": "Sessions shorter than this raise the quick-completion signal"
+                    },
+                    "batchCount": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 20,
+                      "description": "Sessions finished together that raise the batch-logging signal"
+                    },
+                    "batchMinutes": {
+                      "type": "integer",
+                      "minimum": 10,
+                      "maximum": 120,
+                      "description": "Minutes before the weekly close in which the batch is counted"
                     }
                   }
                 }
@@ -107024,6 +109189,36 @@
                   "timeZone": {
                     "type": "string",
                     "description": "IANA time zone (e.g., \"America/Sao_Paulo\")"
+                  },
+                  "riskLimit": {
+                    "type": "integer",
+                    "minimum": 50,
+                    "maximum": 90,
+                    "description": "Weekly score below which a week counts toward the risk alert"
+                  },
+                  "riskWeeks": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4,
+                    "description": "Valid closed weeks below the limit that raise the risk alert"
+                  },
+                  "minWorkoutMinutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60,
+                    "description": "Sessions shorter than this raise the quick-completion signal"
+                  },
+                  "batchCount": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 20,
+                    "description": "Sessions finished together that raise the batch-logging signal"
+                  },
+                  "batchMinutes": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 120,
+                    "description": "Minutes before the weekly close in which the batch is counted"
                   }
                 },
                 "additionalProperties": false
@@ -107114,6 +109309,36 @@
                     "timeZone": {
                       "type": "string",
                       "description": "IANA time zone (e.g., \"America/Sao_Paulo\")"
+                    },
+                    "riskLimit": {
+                      "type": "integer",
+                      "minimum": 50,
+                      "maximum": 90,
+                      "description": "Weekly score below which a week counts toward the risk alert"
+                    },
+                    "riskWeeks": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4,
+                      "description": "Valid closed weeks below the limit that raise the risk alert"
+                    },
+                    "minWorkoutMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 60,
+                      "description": "Sessions shorter than this raise the quick-completion signal"
+                    },
+                    "batchCount": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 20,
+                      "description": "Sessions finished together that raise the batch-logging signal"
+                    },
+                    "batchMinutes": {
+                      "type": "integer",
+                      "minimum": 10,
+                      "maximum": 120,
+                      "description": "Minutes before the weekly close in which the batch is counted"
                     },
                     "effectiveFrom": {
                       "type": "string",

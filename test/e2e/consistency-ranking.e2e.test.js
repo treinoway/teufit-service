@@ -21,6 +21,18 @@ const CONFIG_URL = '/trainer/consistency-ranking/config';
 const PAUSES_URL = '/trainer/consistency-ranking/pauses';
 const CLOSE_URL = '/trainer/consistency-ranking/seasons/current/close';
 const ADMIN_STANDINGS_PREFIX = '/admin/consistency-ranking/trainers';
+// Fields the F2 panel adds to a student row of the trainer standings (Camila: no closed week, no signal, no pause)
+const PANEL_FIELDS_OF_A_FRESH_STUDENT = {
+  displayName: 'Camila',
+  initials: 'C',
+  faixa: 'restarting',
+  weeks100: 0,
+  seasonPillars: [],
+  risk: null,
+  signals: [],
+  pause: null,
+  entering: null,
+};
 
 let counter = 0;
 
@@ -190,6 +202,7 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         weeks: 4,
         currentWeek: 1,
         status: 'active',
+        closesAt: expect.any(String),
       });
       expect(body.entering).toEqual([]);
       expect(body.rows.map((row) => row.studentId)).toEqual([camila.id, bruno.id]);
@@ -206,6 +219,8 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         partialScore: 66.6667,
         weekStatus: 'valid',
         pillars: { workouts: { expected: 2, done: 2 }, cardio: { expected: 1, done: 0 } },
+        ...PANEL_FIELDS_OF_A_FRESH_STUDENT,
+        currentWeekScore: 66.6667,
       });
       expect(body.rows[1]).toEqual({
         studentId: bruno.id,
@@ -219,6 +234,10 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         partialScore: 0,
         weekStatus: 'valid',
         pillars: { workouts: { expected: 2, done: 0 }, cardio: { expected: 1, done: 0 } },
+        ...PANEL_FIELDS_OF_A_FRESH_STUDENT,
+        currentWeekScore: 0,
+        displayName: 'Bruno',
+        initials: 'B',
       });
       expect(typeof body.rows[0].average).toBe('number');
       expect(typeof body.rows[0].partialScore).toBe('number');
@@ -255,10 +274,39 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         weeks: 4,
         currentWeek: 4,
         status: 'closed',
+        closesAt: null,
       });
       expect(body.rows).toEqual([
-        { studentId: camila.id, name: 'Camila', position: 1, eligible: true, average: 87.5, validWeeks: 4, weeksAt100: 1, streak: 2 },
-        { studentId: bruno.id, name: 'Bruno', position: 2, eligible: true, average: 60.25, validWeeks: 3, weeksAt100: 0, streak: 0 },
+        {
+          ...PANEL_FIELDS_OF_A_FRESH_STUDENT,
+          studentId: camila.id,
+          name: 'Camila',
+          position: 1,
+          eligible: true,
+          faixa: 'constant',
+          average: 87.5,
+          currentWeekScore: null,
+          validWeeks: 4,
+          weeks100: 1,
+          weeksAt100: 1,
+          streak: 2,
+        },
+        {
+          ...PANEL_FIELDS_OF_A_FRESH_STUDENT,
+          studentId: bruno.id,
+          name: 'Bruno',
+          displayName: 'Bruno',
+          initials: 'B',
+          position: 2,
+          eligible: true,
+          faixa: 'restarting',
+          average: 60.25,
+          currentWeekScore: null,
+          validWeeks: 3,
+          weeks100: 0,
+          weeksAt100: 0,
+          streak: 0,
+        },
       ]);
 
       const current = (await getStandings(token)).json();
@@ -304,7 +352,13 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
       const res = await getStandings(token);
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ season: null, rows: [], entering: [] });
+      expect(res.json()).toEqual({
+        season: null,
+        summary: { teamAverage: null, lastClosedWeekAverage: null, fullLastWeek: 0, validLastWeek: 0, atRisk: 0, withSignal: 0 },
+        counts: { all: 0, risk: 0, signal: 0, entering: 0, paused: 0 },
+        rows: [],
+        entering: [],
+      });
     });
 
     it('creates the season once when concurrent reads race to open it', async () => {
@@ -540,6 +594,11 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         closeWeekday: 0,
         closeHour: 21,
         timeZone: BUSINESS_ZONE,
+        riskLimit: 70,
+        riskWeeks: 2,
+        minWorkoutMinutes: 10,
+        batchCount: 5,
+        batchMinutes: 30,
       });
     });
 

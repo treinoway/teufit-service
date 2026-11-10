@@ -16,6 +16,7 @@ import {
   sortForFilter,
   teamSummary,
 } from '../helpers/consistency-standings-query.js';
+import { shortNameOf } from '../helpers/consistency-names.js';
 import { doneWindow, weekBounds, weekStartFor } from '../helpers/consistency-week.js';
 import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { faixaFor, riskFor, seasonPillars, signalsFor } from './consistency-insights-service.js';
@@ -259,16 +260,6 @@ function numberOrNull(value) {
   return value === null || value === undefined ? null : Number(value);
 }
 
-// Short display name ("First L.") and initials of a student user; the initial comes from the last word of the last name
-function shortNameOf(user) {
-  const first = (user?.firstName ?? '').trim() || user?.username || '';
-  const lastWord = (user?.lastName ?? '').trim().split(/\s+/).filter(Boolean).pop();
-  const firstInitial = first.charAt(0).toUpperCase();
-  if (!lastWord) return { displayName: first, initials: firstInitial };
-  const lastInitial = lastWord.charAt(0).toUpperCase();
-  return { displayName: `${first} ${lastInitial}.`, initials: `${firstInitial}${lastInitial}` };
-}
-
 // Panel rules of the config, falling back to the defaults for the ones it does not carry
 function panelRulesOf(config) {
   return Object.fromEntries(Object.entries(PANEL_DEFAULTS).map(([rule, fallback]) => [rule, config[rule] ?? fallback]));
@@ -322,18 +313,23 @@ function livePanelRow(student, position, { users, results, reasons, signals, rul
     name: student.name,
     ...shortNameOf(users.get(student.studentId)),
     position,
+    eligible: student.eligible,
     faixa: faixaFor(student.average, student.eligible),
     average: numberOrNull(student.average),
     currentWeekScore: numberOrNull(student.partialScore),
+    partialScore: numberOrNull(student.partialScore),
     weekStatus: student.weekStatus,
+    pillars: student.pillars,
     validWeeks: student.validWeeks,
     weeks100: student.weeksAt100,
+    weeksAt100: student.weeksAt100,
     streak: student.streak,
     seasonPillars: seasonPillars(closed.filter((row) => row.seasonId === season.id)),
     risk: risk.atRisk ? { weeks: risk.scores.length, scores: risk.scores } : null,
     signals: signals.get(student.studentId) ?? [],
     pause: pauseOf(student, mondayDate, reasons),
     entering: student.eligible ? null : { validWeeks: student.validWeeks, required },
+    ...(student.eligible ? {} : { weeksMissing: required - student.validWeeks }),
   };
 }
 
@@ -374,18 +370,20 @@ function frozenPanelRow(row, required) {
     name: row.name,
     ...shortNameOf(row.student),
     position: row.eligible ? row.position : null,
+    eligible: row.eligible,
     faixa: faixaFor(row.average, row.eligible),
     average: numberOrNull(row.average),
     currentWeekScore: null,
-    weekStatus: null,
     validWeeks: row.validWeeks,
     weeks100: row.weeks100,
+    weeksAt100: row.weeks100,
     streak: row.streak,
     seasonPillars: [],
     risk: null,
     signals: [],
     pause: null,
     entering: row.eligible ? null : { validWeeks: row.validWeeks, required },
+    ...(row.eligible ? {} : { weeksMissing: Math.max(required - row.validWeeks, 0) }),
   };
 }
 
