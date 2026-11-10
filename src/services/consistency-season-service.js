@@ -30,11 +30,15 @@ function findActiveSeason(prisma, trainerId) {
   return prisma.consistencySeason.findFirst({ where: { trainerId, status: SeasonStatus.ACTIVE } });
 }
 
-// Whether the previous season closed so recently that its following Monday is still ahead
-function isBeforeNextSeasonMonday(lastSeason, weekStartKey, timeZone) {
+// Whether the Monday after the previous season's last closed week is still ahead of the given Monday
+async function isBeforeNextSeasonMonday(prisma, lastSeason, weekStartKey) {
   if (!lastSeason?.closedAt) return false;
-  const closedMonday = weekStartFor(lastSeason.closedAt, timeZone);
-  return civilKey(closedMonday) + DAYS_IN_WEEK * MS_PER_DAY > weekStartKey;
+  const lastClose = await prisma.consistencyWeekClose.findFirst({
+    where: { trainerId: lastSeason.trainerId, weekStart: { gte: lastSeason.startWeek } },
+    orderBy: { weekStart: 'desc' },
+  });
+  if (!lastClose) return false;
+  return lastClose.weekStart.getTime() + DAYS_IN_WEEK * MS_PER_DAY > weekStartKey;
 }
 
 // Creates the next season starting on the given Monday, numbered after the last one
@@ -63,7 +67,7 @@ export async function ensureCurrentSeason(prisma, trainerId, now) {
   const activeStudents = await prisma.trainerStudent.count({ where: { trainerId, activeOnPlan: true } });
   if (activeStudents === 0) return null;
   const lastSeason = await prisma.consistencySeason.findFirst({ where: { trainerId }, orderBy: { number: 'desc' } });
-  if (isBeforeNextSeasonMonday(lastSeason, weekStartKey, config.timeZone)) return null;
+  if (await isBeforeNextSeasonMonday(prisma, lastSeason, weekStartKey)) return null;
   return createNextSeason(prisma, trainerId, weekStartKey, config.seasonWeeks, lastSeason);
 }
 

@@ -13,13 +13,19 @@ const NOW = new Date('2026-11-11T15:00:00Z');
 const CURRENT_MONDAY = new Date(Date.UTC(2026, 10, 9));
 
 // Builds a prisma mock backed by an in-memory list of seasons
-function createPrisma({ seasons = [], activeStudents = 1, configRow = null, ruleRow = null } = {}) {
+function createPrisma({ seasons = [], closes = [], activeStudents = 1, configRow = null, ruleRow = null } = {}) {
   const store = seasons.map((row) => ({ ...row }));
   return {
     store,
     consistencyRankingConfig: { findUnique: vi.fn().mockResolvedValue(configRow) },
     consistencyScoringRule: { findFirst: vi.fn().mockResolvedValue(ruleRow) },
     trainerStudent: { count: vi.fn().mockResolvedValue(activeStudents) },
+    consistencyWeekClose: {
+      findFirst: vi.fn(async ({ where }) => {
+        const matches = closes.filter((row) => row.weekStart >= where.weekStart.gte).sort((a, b) => b.weekStart - a.weekStart);
+        return matches[0] ?? null;
+      }),
+    },
     consistencySeason: {
       findFirst: vi.fn(async ({ where, orderBy }) => {
         const matches = store.filter((row) => !where.status || row.status === where.status);
@@ -151,7 +157,8 @@ describe('ensureCurrentSeason', () => {
   it('numbers the next season after the last closed one and uses the length in force now', async () => {
     const closed = season({ number: 2, status: SeasonStatus.CLOSED, closedAt: new Date('2026-11-02T03:00:00Z') });
     const older = season({ id: 'old', number: 1, status: SeasonStatus.CLOSED });
-    const prisma = createPrisma({ seasons: [closed, older], configRow: { seasonWeeks: 12 } });
+    const closes = [{ weekStart: new Date(Date.UTC(2026, 9, 26)) }];
+    const prisma = createPrisma({ seasons: [closed, older], closes, configRow: { seasonWeeks: 12 } });
 
     const created = await ensureCurrentSeason(prisma, TRAINER_ID, NOW);
 
@@ -160,10 +167,38 @@ describe('ensureCurrentSeason', () => {
 
   it('does not open the next season before the Monday after the previous one closed', async () => {
     const closedSunday = season({ number: 1, status: SeasonStatus.CLOSED, closedAt: new Date('2026-11-15T23:00:00Z') });
-    const prisma = createPrisma({ seasons: [closedSunday] });
+    const closes = [{ weekStart: new Date(Date.UTC(2026, 10, 9)) }];
+    const prisma = createPrisma({ seasons: [closedSunday], closes });
     const sundayAfterClose = new Date('2026-11-16T02:30:00Z');
 
     expect(await ensureCurrentSeason(prisma, TRAINER_ID, sundayAfterClose)).toBeNull();
+    expect(prisma.consistencySeason.create).not.toHaveBeenCalled();
+  });
+
+  it('RANK-17 opens the next season on the current Monday when the previous one closed late', async () => {
+    vi.stubEnv(LAUNCH_ENV, '2030-01-07');
+    const lateClose = season({
+      number: 1,
+      startWeek: new Date(Date.UTC(2030, 0, 7)),
+      weeks: 1,
+      status: SeasonStatus.CLOSED,
+      closedAt: new Date('2030-01-15T15:00:00Z'),
+    });
+    const closes = [{ weekStart: new Date(Date.UTC(2030, 0, 7)) }];
+    const prisma = createPrisma({ seasons: [lateClose], closes });
+
+    const created = await ensureCurrentSeason(prisma, TRAINER_ID, new Date('2030-01-15T15:00:00Z'));
+
+    expect(created).toMatchObject({ number: 2, startWeek: new Date(Date.UTC(2030, 0, 14)) });
+  });
+
+  it('never opens on a Monday that is not after the last closed week', async () => {
+    vi.stubEnv(LAUNCH_ENV, '2030-01-07');
+    const closed = season({ number: 1, startWeek: new Date(Date.UTC(2030, 0, 7)), weeks: 2, status: SeasonStatus.CLOSED, closedAt: new Date('2030-01-15T15:00:00Z') });
+    const closes = [{ weekStart: new Date(Date.UTC(2030, 0, 7)) }, { weekStart: new Date(Date.UTC(2030, 0, 14)) }];
+    const prisma = createPrisma({ seasons: [closed], closes });
+
+    expect(await ensureCurrentSeason(prisma, TRAINER_ID, new Date('2030-01-15T15:00:00Z'))).toBeNull();
     expect(prisma.consistencySeason.create).not.toHaveBeenCalled();
   });
 });

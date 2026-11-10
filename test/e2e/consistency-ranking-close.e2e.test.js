@@ -757,6 +757,21 @@ e2eDescribe('e2e: consistency ranking close', () => {
       expect(Object.fromEntries(nextTargets.map((row) => [row.pillar, row.expected]))).toEqual({ workouts: 2, cardio: 1 });
     });
 
+    it('RANK-17 opens the next season on the current Monday after a late close', async () => {
+      const { trainer } = await createTrainerWithSeason({ weeks: 1 });
+      const student = await createLinkedStudent(trainer.id);
+      await completeSessions(student, { strength: 2, cardio: 1, at: SESSION_A });
+      const lateTuesday = new Date('2030-01-15T15:00:00.000Z');
+
+      await closeDueWeeks(prisma, createLogger(), lateTuesday);
+      await prepareCurrentWeek(prisma, lateTuesday);
+
+      const seasons = await prisma.consistencySeason.findMany({ where: { trainerId: trainer.id }, orderBy: { number: 'asc' } });
+      expect(seasons).toHaveLength(2);
+      expect(seasons[0]).toMatchObject({ status: SeasonStatus.CLOSED, closedAt: lateTuesday });
+      expect(seasons[1]).toMatchObject({ number: 2, startWeek: WEEK_B_DATE, status: SeasonStatus.ACTIVE });
+    });
+
     it('RANK-45 ends the season at the next close and opens the next one on Monday', async () => {
       const { trainer, season } = await createTrainerWithSeason({ weeks: 4 });
       const student = await createLinkedStudent(trainer.id);
