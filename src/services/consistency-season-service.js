@@ -1,5 +1,6 @@
 import { AppError } from '../errors/app-error.js';
-import { ConsistencyErrorCode, ConsistencyMessageCode, SeasonStatus } from '../constants/consistency-ranking.js';
+import { ConsistencyErrorCode, ConsistencyMessageCode, SeasonNotStartedReason, SeasonStatus } from '../constants/consistency-ranking.js';
+import { formatDateOnly } from '../helpers/date-helpers.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { getConfig } from './consistency-config-service.js';
 
@@ -30,15 +31,15 @@ function findActiveSeason(prisma, trainerId) {
   return prisma.consistencySeason.findFirst({ where: { trainerId, status: SeasonStatus.ACTIVE } });
 }
 
-// Whether the Monday after the previous season's last closed week is still ahead of the given Monday
-async function isBeforeNextSeasonMonday(prisma, lastSeason, weekStartKey) {
-  if (!lastSeason?.closedAt) return false;
+// Monday after the previous season's last closed week as a millisecond key, or null when it never closed a week
+async function nextSeasonMondayKey(prisma, lastSeason) {
+  if (!lastSeason?.closedAt) return null;
   const lastClose = await prisma.consistencyWeekClose.findFirst({
     where: { trainerId: lastSeason.trainerId, weekStart: { gte: lastSeason.startWeek } },
     orderBy: { weekStart: 'desc' },
   });
-  if (!lastClose) return false;
-  return lastClose.weekStart.getTime() + DAYS_IN_WEEK * MS_PER_DAY > weekStartKey;
+  if (!lastClose) return null;
+  return lastClose.weekStart.getTime() + DAYS_IN_WEEK * MS_PER_DAY;
 }
 
 // Creates the next season starting on the given Monday, numbered after the last one
@@ -46,6 +47,28 @@ function createNextSeason(prisma, trainerId, startKey, weeks, lastSeason) {
   return prisma.consistencySeason.create({
     data: { trainerId, number: (lastSeason?.number ?? 0) + 1, startWeek: new Date(startKey), weeks },
   });
+}
+
+// Assessment saying why no season can run now; startsOn is the Monday it can start (YYYY-MM-DD) or null
+function notStarted(reason, startsOnKey = null) {
+  return { notStarted: { reason, startsOn: startsOnKey === null ? null : formatDateOnly(new Date(startsOnKey)) } };
+}
+
+// Single source of the season rules: { active } when one runs, { notStarted } when none can start, or { next } with what the new season needs
+async function assessCurrentSeason(prisma, trainerId, now) {
+  const active = await findActiveSeason(prisma, trainerId);
+  if (active) return { active };
+  const launchWeek = readLaunchWeek();
+  if (!launchWeek) return notStarted(SeasonNotStartedReason.LAUNCH_PENDING);
+  const config = await getConfig(prisma, trainerId, now);
+  const weekStartKey = civilKey(weekStartFor(now, config.timeZone));
+  if (weekStartKey < civilKey(launchWeek)) return notStarted(SeasonNotStartedReason.LAUNCH_PENDING, civilKey(launchWeek));
+  const activeStudents = await prisma.trainerStudent.count({ where: { trainerId, activeOnPlan: true } });
+  if (activeStudents === 0) return notStarted(SeasonNotStartedReason.NO_ACTIVE_STUDENT);
+  const lastSeason = await prisma.consistencySeason.findFirst({ where: { trainerId }, orderBy: { number: 'desc' } });
+  const nextMondayKey = await nextSeasonMondayKey(prisma, lastSeason);
+  if (nextMondayKey !== null && nextMondayKey > weekStartKey) return notStarted(SeasonNotStartedReason.BETWEEN_SEASONS, nextMondayKey);
+  return { next: { startKey: weekStartKey, weeks: config.seasonWeeks, lastSeason } };
 }
 
 /**
@@ -57,18 +80,23 @@ function createNextSeason(prisma, trainerId, startKey, weeks, lastSeason) {
  * @returns {Promise<{ id: string, trainerId: string, number: number, startWeek: Date, weeks: number, status: string, closeRequestedAt: Date|null, closedAt: Date|null }|null>}
  */
 export async function ensureCurrentSeason(prisma, trainerId, now) {
-  const active = await findActiveSeason(prisma, trainerId);
+  const { active, next } = await assessCurrentSeason(prisma, trainerId, now);
   if (active) return active;
-  const launchWeek = readLaunchWeek();
-  if (!launchWeek) return null;
-  const config = await getConfig(prisma, trainerId, now);
-  const weekStartKey = civilKey(weekStartFor(now, config.timeZone));
-  if (weekStartKey < civilKey(launchWeek)) return null;
-  const activeStudents = await prisma.trainerStudent.count({ where: { trainerId, activeOnPlan: true } });
-  if (activeStudents === 0) return null;
-  const lastSeason = await prisma.consistencySeason.findFirst({ where: { trainerId }, orderBy: { number: 'desc' } });
-  if (await isBeforeNextSeasonMonday(prisma, lastSeason, weekStartKey)) return null;
-  return createNextSeason(prisma, trainerId, weekStartKey, config.seasonWeeks, lastSeason);
+  if (!next) return null;
+  return createNextSeason(prisma, trainerId, next.startKey, next.weeks, next.lastSeason);
+}
+
+/**
+ * Why the trainer has no current season, without creating one: launchPending, noActiveStudent or betweenSeasons with the Monday it can start; null when a season runs or is due.
+ *
+ * @param {object} prisma
+ * @param {string} trainerId
+ * @param {Date} now
+ * @returns {Promise<{ reason: string, startsOn: string|null }|null>} startsOn as YYYY-MM-DD
+ */
+export async function seasonNotStartedReason(prisma, trainerId, now) {
+  const { notStarted: reason } = await assessCurrentSeason(prisma, trainerId, now);
+  return reason ?? null;
 }
 
 /**

@@ -22,7 +22,7 @@ import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { faixaFor, riskFor, seasonPillars, signalsFor } from './consistency-insights-service.js';
 import { countDone, listSessions } from './consistency-progress-service.js';
 import { pauseReasonsFor, pausesFor } from './consistency-pause-service.js';
-import { ensureCurrentSeason } from './consistency-season-service.js';
+import { ensureCurrentSeason, seasonNotStartedReason } from './consistency-season-service.js';
 import { materializeTargets } from './consistency-target-service.js';
 
 const MS_PER_WEEK = 7 * 86400000;
@@ -439,18 +439,21 @@ function assemblePanel(season, rows, { filter, q }, lastClosed) {
  * @param {object} prisma
  * @param {string} trainerId - Trainer.id
  * @param {{ seasonNumber?: number, filter?: string, q?: string, now?: Date }} [options]
- * @returns {Promise<{ season: object|null, summary: object, counts: object, rows: object[], entering: object[] }>}
+ * @returns {Promise<{ season: object|null, summary: object, counts: object, rows: object[], entering: object[], notStarted: { reason: string, startsOn: string|null }|null }>}
  */
 export async function getPanelStandings(prisma, trainerId, { seasonNumber, filter = PANEL_FILTER_DEFAULT, q, now = new Date() } = {}) {
   const season = await resolveSeason(prisma, trainerId, seasonNumber, now);
-  if (!season) return assemblePanel(null, [], { filter, q }, []);
+  if (!season) {
+    const notStarted = await seasonNotStartedReason(prisma, trainerId, now);
+    return { ...assemblePanel(null, [], { filter, q }, []), notStarted };
+  }
   if (season.status === SeasonStatus.CLOSED) {
     const frozen = await frozenData(prisma, trainerId, season, now);
     const pillars = await frozenSeasonPillars(prisma, trainerId, season.id);
     const rows = frozen.named.filter((row) => row.eligible || row.validWeeks > 0).map((row) => frozenPanelRow(row, frozen.required, pillars));
-    return assemblePanel({ ...frozen.season, closesAt: null }, rows, { filter, q }, []);
+    return { ...assemblePanel({ ...frozen.season, closesAt: null }, rows, { filter, q }, []), notStarted: null };
   }
   const data = await liveData(prisma, trainerId, season, now);
   const { rows, lastClosed, closesAt } = await livePanelData(prisma, trainerId, data);
-  return assemblePanel({ ...data.season, closesAt }, rows, { filter, q }, lastClosed);
+  return { ...assemblePanel({ ...data.season, closesAt }, rows, { filter, q }, lastClosed), notStarted: null };
 }

@@ -6,6 +6,7 @@ import {
   StandingsFilter,
   WeekStatus,
   pillarValues,
+  seasonNotStartedReasonValues,
   standingsFilterValues,
 } from '../../src/constants/consistency-ranking.js';
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
@@ -484,6 +485,21 @@ const panelStandingsResponseSchema = {
     },
     rows: { type: 'array', items: panelRowSchema },
     entering: { type: 'array', items: panelEnteringRowSchema },
+    notStarted: {
+      type: 'object',
+      nullable: true,
+      description: 'Why there is no current season; null whenever `season` is not null',
+      required: ['reason', 'startsOn'],
+      properties: {
+        reason: { type: 'string', enum: [...seasonNotStartedReasonValues] },
+        startsOn: {
+          type: 'string',
+          pattern: dateOnlyPattern,
+          nullable: true,
+          description: 'Monday (YYYY-MM-DD) the season can start: the launch Monday or the Monday after the closing week; null when unknown',
+        },
+      },
+    },
   },
 };
 
@@ -560,7 +576,7 @@ export const getStandingsPanelSchema = {
     'Returns the season, the four summary numbers, the count of every filter and the students: ranked ones in `rows`, ' +
     'students still entering in `entering`. Each student carries band, season pillars, risk, review signals, pause and entering progress. ' +
     '`filter` and `q` narrow the lists (the counts and the summary stay global); `filter=risk` orders by ascending average. ' +
-    'Without `season` it returns the current season; `season` selects a closed one. Before the ranking launches `season` is null.',
+    'Without `season` it returns the current season; `season` selects a closed one. Before the ranking launches `season` is null. When `season` is null, `notStarted` says why (launchPending, noActiveStudent, betweenSeasons) and when it can start.',
   security: [{ bearerAuth: [] }],
   headers: authHeaders,
   querystring: panelStandingsQuerystring,
