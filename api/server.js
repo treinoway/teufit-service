@@ -64,6 +64,7 @@ import { adminManagerRoutes } from './routes/admin-manager-route.js';
 import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
 import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
+import { getLlmProvider } from '../src/llm/index.js';
 import { createAiTracer } from '../src/observability/ai-tracer.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
@@ -124,6 +125,20 @@ function decorateAiTracer(fastify, injectedTracer) {
   });
 }
 
+// Decorates the single shared LLM provider (injected override or built once); null when the provider is misconfigured.
+function decorateLlmProvider(fastify, injectedProvider) {
+  let llmProvider = injectedProvider ?? null;
+  if (!llmProvider) {
+    try {
+      llmProvider = getLlmProvider();
+    } catch {
+      // why: checkLlmConfiguration already logged the misconfiguration; a null provider makes the AI routes answer 503.
+      llmProvider = null;
+    }
+  }
+  fastify.decorate('llmProvider', llmProvider);
+}
+
 export async function buildServer(options = {}) {
   // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
   // production/staging, boot without a webhook secret must not succeed — otherwise
@@ -156,6 +171,7 @@ export async function buildServer(options = {}) {
   fastify.decorate('prisma', prisma);
   decorateAdminDb(fastify, options.adminDb);
   decorateAiTracer(fastify, options.aiTracer);
+  decorateLlmProvider(fastify, options.llmProvider);
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);

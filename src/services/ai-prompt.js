@@ -253,7 +253,7 @@ ${formatPerformance(performance)}
 }
 
 /**
- * Returns the system prompt as [cached static block, dynamic context block].
+ * Returns the system prompt as [static block, dynamic context block], both cache breakpoints.
  *
  * @param {object} context - Trainer context from buildTrainerContext()
  * @param {object | null} studentFocus - Optional student focus (anamnesis + performance)
@@ -262,6 +262,6 @@ ${formatPerformance(performance)}
 export function buildSystemPrompt(context, studentFocus = null) {
   return [
     { type: "text", text: STATIC_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-    { type: "text", text: buildDynamicContext(context, studentFocus) },
+    { type: "text", text: buildDynamicContext(context, studentFocus), cache_control: { type: "ephemeral" } },
   ];
 }

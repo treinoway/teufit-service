@@ -197,11 +197,11 @@ describe('formatStudentFocus', () => {
 })
 
 describe('buildSystemPrompt', () => {
-  it('should return a cached static block followed by an uncached dynamic block', () => {
+  it('should return a cached static block followed by a cached dynamic block', () => {
     const [staticBlock, dynamicBlock] = buildSystemPrompt(EMPTY_CONTEXT)
 
     expect(staticBlock).toMatchObject({ text: STATIC_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } })
-    expect(dynamicBlock.cache_control).toBeUndefined()
+    expect(dynamicBlock.cache_control).toEqual({ type: 'ephemeral' })
   })
 
   it('should keep volatile data out of the cached block', () => {
