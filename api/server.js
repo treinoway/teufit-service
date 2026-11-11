@@ -64,6 +64,7 @@ import { adminManagerRoutes } from './routes/admin-manager-route.js';
 import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
 import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
+import { createAiTracer } from '../src/observability/ai-tracer.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
@@ -114,6 +115,15 @@ function decorateAdminDb(fastify, injectedAdminDb) {
   });
 }
 
+// Decorates the iArnold tracer (injected override or built from config) and flushes it on shutdown.
+function decorateAiTracer(fastify, injectedTracer) {
+  const aiTracer = injectedTracer ?? createAiTracer({ config, logger: fastify.log });
+  fastify.decorate('aiTracer', aiTracer);
+  fastify.addHook('onClose', async () => {
+    await aiTracer.shutdown();
+  });
+}
+
 export async function buildServer(options = {}) {
   // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
   // production/staging, boot without a webhook secret must not succeed — otherwise
@@ -145,6 +155,7 @@ export async function buildServer(options = {}) {
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
   decorateAdminDb(fastify, options.adminDb);
+  decorateAiTracer(fastify, options.aiTracer);
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);

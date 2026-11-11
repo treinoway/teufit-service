@@ -21,4 +21,8 @@ export default {
   rollbar: {
     accessToken: null,
   },
+  // Never trace from tests, even with Langfuse keys in a local .env.
+  langfuse: {
+    enabled: false,
+  },
 };
