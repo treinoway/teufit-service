@@ -17,7 +17,10 @@ import {
 } from '../../src/constants/consistency-ranking.js';
 
 vi.mock('../../src/services/consistency-config-service.js', () => ({ getConfig: vi.fn(), ruleForWeek: vi.fn() }));
-vi.mock('../../src/services/consistency-season-service.js', () => ({ ensureCurrentSeason: vi.fn() }));
+vi.mock('../../src/services/consistency-season-service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ensureCurrentSeason: vi.fn(),
+}));
 vi.mock('../../src/services/consistency-target-service.js', () => ({ materializeTargets: vi.fn() }));
 vi.mock('../../src/services/consistency-progress-service.js', () => ({ countDone: vi.fn(), listSessions: vi.fn() }));
 vi.mock('../../src/services/consistency-pause-service.js', () => ({ pausesFor: vi.fn(), pauseReasonsFor: vi.fn() }));
@@ -87,7 +90,9 @@ function setup({
   const prisma = {
     trainerStudent: {
       findMany: vi.fn(async ({ where }) => links.filter((row) => row.activeOnPlan === where.activeOnPlan)),
+      count: vi.fn(async ({ where }) => links.filter((row) => row.activeOnPlan === where.activeOnPlan).length),
     },
+    consistencyWeekClose: { findFirst: vi.fn().mockResolvedValue(null) },
     consistencyWeeklyResult: {
       findMany: vi.fn(async ({ where }) =>
         results
@@ -664,6 +669,28 @@ describe('getPanelStandings', () => {
     expect(result.season).toBeNull();
     expect(result.rows).toEqual([]);
     expect(result.counts.all).toBe(0);
+  });
+
+  it('PAN-60 returns notStarted null with an active season', async () => {
+    const { prisma } = setup({ links: [link('ana', 'Ana')] });
+
+    const result = await getPanelStandings(prisma, TRAINER_ID, { now: NOW });
+
+    expect(result.season).toMatchObject({ number: 1, status: SeasonStatus.ACTIVE });
+    expect(result).toHaveProperty('notStarted', null);
+  });
+
+  it('PAN-60 returns notStarted null for a closed season asked by number', async () => {
+    const closed = { ...SEASON, id: 's0', number: 1, status: SeasonStatus.CLOSED };
+    const { prisma } = setup();
+    prisma.consistencySeason.findFirst.mockResolvedValue(closed);
+    prisma.consistencyWeeklyResult.findMany.mockResolvedValue([]);
+    prisma.consistencySeasonStanding.findMany.mockResolvedValue([]);
+
+    const result = await getPanelStandings(prisma, TRAINER_ID, { seasonNumber: 1, now: NOW });
+
+    expect(result.season).toMatchObject({ number: 1, status: SeasonStatus.CLOSED });
+    expect(result).toHaveProperty('notStarted', null);
   });
 
   it('PAN-46 gives the frozen standings of a closed season the band and short name', async () => {
