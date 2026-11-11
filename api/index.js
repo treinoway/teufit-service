@@ -1,6 +1,8 @@
 import { buildServer } from './server.js';
+import { registerShutdownHandlers } from './shutdown.js';
 
 const fastify = await buildServer();
+registerShutdownHandlers(fastify);
 
 // Start server
 const start = async () => {

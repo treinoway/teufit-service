@@ -93,7 +93,7 @@ export async function aiRoutes(fastify) {
     async (request, reply) => {
       const controller = abortOnClientDisconnect(reply)
       try {
-        const result = await processAiChat(request.user.id, request.body, { signal: controller.signal, language: request.language })
+        const result = await processAiChat(request.user.id, request.body, { signal: controller.signal, language: request.language, tracer: fastify.aiTracer, requestId: request.id })
         if (controller.signal.aborted) return abandonReply(request, reply)
         return reply.send(result)
       } catch (err) {
@@ -112,7 +112,7 @@ export async function aiRoutes(fastify) {
     },
     async (request, reply) => {
       const controller = abortOnClientDisconnect(reply)
-      const turn = processAiChatStream(request.user.id, request.body, { signal: controller.signal, language: request.language })
+      const turn = processAiChatStream(request.user.id, request.body, { signal: controller.signal, language: request.language, tracer: fastify.aiTracer, requestId: request.id })
 
       // why: the first event is only yielded after availability, ownership and plan checks
       // passed, so a refusal here is still a regular JSON error (403/404/503), not an SSE one.
