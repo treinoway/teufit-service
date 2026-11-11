@@ -35,6 +35,15 @@ export const SeasonStatus = Object.freeze({
   CLOSED: 'closed',
 });
 
+// Why the trainer panel has no current season (PAN-60), mirroring the order of the season rules
+export const SeasonNotStartedReason = Object.freeze({
+  LAUNCH_PENDING: 'launchPending',
+  NO_ACTIVE_STUDENT: 'noActiveStudent',
+  BETWEEN_SEASONS: 'betweenSeasons',
+});
+
+export const seasonNotStartedReasonValues = Object.freeze(Object.values(SeasonNotStartedReason));
+
 export const DEFAULT_CONFIG = Object.freeze({
   weights: Object.freeze({
     [Pillar.WORKOUTS]: 30,
