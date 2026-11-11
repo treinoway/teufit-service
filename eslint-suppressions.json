@@ -598,10 +598,10 @@
   },
   "src/services/ai-training-service.js": {
     "local/function-header-comment": {
-      "count": 26
+      "count": 23
     },
     "local/no-comments-in-function": {
-      "count": 63
+      "count": 59
     },
     "no-restricted-imports": {
       "count": 1
@@ -1107,10 +1107,10 @@
   },
   "test/e2e/global-setup.js": {
     "local/function-header-comment": {
-      "count": 2
+      "count": 1
     },
     "local/no-comments-in-function": {
-      "count": 5
+      "count": 4
     }
   },
   "test/e2e/google-mobile-auth.e2e.test.js": {
@@ -1289,9 +1289,6 @@
   "test/helpers/db-cleanup.js": {
     "local/function-header-comment": {
       "count": 1
-    },
-    "local/no-comments-in-function": {
-      "count": 3
     }
   },
   "test/helpers/email-lookup.test.js": {

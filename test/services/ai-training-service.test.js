@@ -1831,12 +1831,12 @@ describe('ai-training-service', () => {
       expect(staticBlock.cache_control).toEqual({ type: 'ephemeral' })
     })
 
-    it('second block has no cache_control', async () => {
+    it('second block has cache_control', async () => {
       setupMinimalContext()
       await processAiChat('user-1', { message: 'Olá' })
 
       const [, dynamicBlock] = anthropicCreate.mock.calls[0][0].system
-      expect(dynamicBlock.cache_control).toBeUndefined()
+      expect(dynamicBlock.cache_control).toEqual({ type: 'ephemeral' })
     })
 
     it('first block contains static rules, second block contains DATA ATUAL', async () => {

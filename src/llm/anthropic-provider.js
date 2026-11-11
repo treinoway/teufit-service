@@ -1,6 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { LlmProvider } from './llm-provider.js'
 import { AI_MODELS, AI_LIMITS } from '../constants/ai.js'
+import { resolveEffort } from './config.js'
+
+const MAX_CACHED_SYSTEM_BLOCKS = 2
+
+// Returns a copy of a request block without its cache_control marker.
+function withoutCacheControl(block) {
+  const { cache_control: _cache, ...rest } = block
+  return rest
+}
 
 // Maps Anthropic stop reasons to the facade's; anything unlisted is a normal end of turn.
 const STOP_REASONS = {
@@ -55,6 +64,7 @@ export class AnthropicProvider extends LlmProvider {
     normalized.status = err.status
     normalized.type = err.type
     normalized.code = err.code
+    normalized.retryAfter = err.headers?.get?.('retry-after') ?? err.headers?.['retry-after']
     normalized.aborted = Boolean(signal?.aborted) || this._isAbortError(err)
     normalized.timedOut = !normalized.aborted && this._isTimeoutError(err)
     throw normalized
@@ -71,9 +81,49 @@ export class AnthropicProvider extends LlmProvider {
   _applyToolCache(tools) {
     if (!tools || tools.length === 0) return tools
     return [
-      ...tools.slice(0, -1),
+      ...tools.slice(0, -1).map(withoutCacheControl),
       { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } },
     ]
+  }
+
+  // Keeps the caller's cache_control on at most the last two system blocks and strips it from earlier ones.
+  _limitSystemCache(system) {
+    if (!Array.isArray(system)) return system
+    const firstKept = Math.max(system.length - MAX_CACHED_SYSTEM_BLOCKS, 0)
+    if (!system.slice(0, firstKept).some((block) => block.cache_control)) return system
+    return system.map((block, index) => (index < firstKept ? withoutCacheControl(block) : block))
+  }
+
+  // Returns a copy of the messages with the cache breakpoint on the last content block (never mutates the input).
+  _applyTailCache(messages) {
+    if (!messages || messages.length === 0) return messages
+    const last = messages[messages.length - 1]
+    const blocks = typeof last.content === 'string' ? [{ type: 'text', text: last.content }] : last.content
+    if (!Array.isArray(blocks) || blocks.length === 0) return messages
+    const marked = [...blocks.slice(0, -1), { ...blocks[blocks.length - 1], cache_control: { type: 'ephemeral' } }]
+    return [...messages.slice(0, -1), { ...last, content: marked }]
+  }
+
+  // Strips cache markers from every message but the tail's so the request never exceeds the breakpoint budget.
+  _stripMessageCache(messages) {
+    return (messages ?? []).map((message) => {
+      if (!Array.isArray(message.content)) return message
+      return { ...message, content: message.content.map(withoutCacheControl) }
+    })
+  }
+
+  // Builds the request body shared by chat and chatStream.
+  _buildRequest({ system, tools, messages, maxTokens }) {
+    const effort = resolveEffort()
+    return {
+      model: this._resolveModel(),
+      max_tokens: maxTokens,
+      system: this._limitSystemCache(system),
+      tools: this._applyToolCache(tools),
+      ...this._toolChoice(tools),
+      messages: this._applyTailCache(this._stripMessageCache(messages)),
+      ...(effort && { output_config: { effort } }),
+    }
   }
 
   // Keeps the model to one tool call per response: a second unanswered tool_use would break the conversation.
@@ -87,14 +137,7 @@ export class AnthropicProvider extends LlmProvider {
 
     let response
     try {
-      response = await client.messages.create({
-        model: this._resolveModel(),
-        max_tokens: maxTokens,
-        system,
-        tools: this._applyToolCache(tools),
-        ...this._toolChoice(tools),
-        messages,
-      }, { signal })
+      response = await client.messages.create(this._buildRequest({ system, tools, messages, maxTokens }), { signal })
     } catch (err) {
       this._normalizeProviderError(err, signal)
     }
@@ -106,14 +149,7 @@ export class AnthropicProvider extends LlmProvider {
     const client = this._getClient()
 
     // .stream() is synchronous — errors only surface during async iteration
-    const stream = client.messages.stream({
-      model: this._resolveModel(),
-      max_tokens: maxTokens,
-      system,
-      tools: this._applyToolCache(tools),
-      ...this._toolChoice(tools),
-      messages,
-    }, { signal })
+    const stream = client.messages.stream(this._buildRequest({ system, tools, messages, maxTokens }), { signal })
 
     try {
       for await (const event of stream) {

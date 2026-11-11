@@ -66,7 +66,7 @@ import {
   stubExistingConversation,
   flattenSystemPrompt,
 } from '../helpers/ai-engine-fixtures.js'
-import { loadEvalFixtures, matchesExpected, validateCases, isSubset, buildEvalMessages } from './eval-lib.js'
+import { loadEvalFixtures, matchesExpected, validateCases, isSubset, buildEvalMessages, contextForCase, buildEvalSystem, historyToRows } from './eval-lib.js'
 
 const MIN_CASES = 15
 const { context, cases } = loadEvalFixtures()
@@ -95,13 +95,14 @@ describe('iArnold eval fixtures', () => {
 
   it('should cover every tool-selection family and every non-tool outcome', () => {
     const kinds = new Set(cases.map((evalCase) => evalCase.expected.kind))
-    expect([...kinds].sort()).toEqual(['clarify', 'no_tool', 'propose', 'read', 'tool'])
+    ;['clarify', 'followup', 'no_tool', 'no_write', 'propose', 'read', 'tool'].forEach((kind) => expect(kinds).toContain(kind))
   })
 
   it('should cover both edit and create tools for students and for the library', () => {
     const tools = new Set(cases.flatMap((evalCase) => (evalCase.expected.tool ? [evalCase.expected.tool] : [])))
-    expect(tools).toEqual(new Set([
+    const required = [
       AI_TOOLS.GET_STUDENT_PERFORMANCE,
+      AI_TOOLS.SEARCH_EXERCISE_LIBRARY,
       AI_TOOLS.UPDATE_EXERCISE,
       AI_TOOLS.UPDATE_TRAINING,
       AI_TOOLS.UPDATE_PROTOCOL,
@@ -113,7 +114,8 @@ describe('iArnold eval fixtures', () => {
       AI_TOOLS.CREATE_PROTOCOL_TEMPLATE,
       AI_TOOLS.UPDATE_PROTOCOL_TEMPLATE,
       AI_TOOLS.UPDATE_EXERCISE_TEMPLATE,
-    ]))
+    ]
+    required.forEach((tool) => expect(tools).toContain(tool))
   })
 
   it('should reject a malformed case', () => {
@@ -177,20 +179,41 @@ describe('replay through the turn engine (wiring only, not model accuracy)', () 
     stubTrainerContext(prisma, context)
   })
 
+  it('should render the case-specific context and student focus into the prompt', () => {
+    const large = cases.find((evalCase) => evalCase.context === 'context-large.json')
+    const focused = cases.find((evalCase) => evalCase.studentFocus)
+
+    expect(buildEvalSystem(large, context)[1].text).toContain('Lista truncada')
+    expect(buildEvalSystem(focused, context)[1].text).toContain('ALUNO EM FOCO')
+  })
+
+  it('should feed a followup tool result back as a tool_result turn', () => {
+    const followup = cases.find((evalCase) => evalCase.expected.kind === 'followup')
+    const messages = buildEvalMessages(followup)
+
+    expect(messages.at(-2).content[0]).toMatchObject({ type: 'tool_use', name: followup.toolCall.name })
+    expect(messages.at(-1).content[0]).toMatchObject({ type: 'tool_result', tool_use_id: messages.at(-2).content[0].id })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
   it.each(cases.map((evalCase) => [evalCase.id, evalCase]))('should route the scripted answer of %s through the engine as expected', async (_id, evalCase) => {
-    if (evalCase.history.length > 0) stubExistingConversation(prisma, { messages: evalCase.history })
+    stubTrainerContext(prisma, contextForCase(evalCase, context))
+    const savedHistory = historyToRows(evalCase.history)
+    if (savedHistory.length > 0) stubExistingConversation(prisma, { messages: savedHistory })
     else stubNewConversation(prisma)
     mockChat.mockResolvedValue(replayResponse(evalCase))
 
     const result = await processAiChat(USER_ID, {
       message: evalCase.message,
-      ...(evalCase.history.length > 0 && { conversationId: CONVERSATION_ID }),
+      ...(savedHistory.length > 0 && { conversationId: CONVERSATION_ID }),
     })
 
+    if (evalCase.history.some((entry) => typeof entry.content !== 'string')) {
+      expect(JSON.stringify(mockChat.mock.calls[0][0].messages)).toContain('"type":"tool_result"')
+    }
     const sentPrompt = flattenSystemPrompt(mockChat.mock.calls[0][0].system)
     expect(sentPrompt).toContain('student-ana')
     const called = result.actionsExecuted.map((action) => ({ name: action.tool, input: evalCase.replay.toolCall?.input }))
