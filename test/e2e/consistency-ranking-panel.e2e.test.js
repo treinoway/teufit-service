@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
@@ -520,6 +520,96 @@ e2eDescribe('e2e: consistency ranking panel', () => {
       expect(body.season).toBeNull();
       expect(body.rows).toEqual([]);
       expect(body.counts).toEqual({ all: 0, risk: 0, signal: 0, entering: 0, paused: 0 });
+    });
+  });
+
+  describe('GET /trainer/consistency-ranking/standings notStarted', () => {
+    const originalLaunchWeek = process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
+
+    afterEach(() => {
+      if (originalLaunchWeek === undefined) delete process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
+      else process.env.CONSISTENCY_RANKING_LAUNCH_WEEK = originalLaunchWeek;
+    });
+
+    it('PAN-60 says the launch is pending without a date when the launch week env is unset', async () => {
+      delete process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
+      const { trainerId, token } = await createTrainerWithToken();
+      await createStudent(trainerId, 'Camila');
+
+      const res = await getStandings(token);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().season).toBeNull();
+      expect(res.json().notStarted).toEqual({ reason: 'launchPending', startsOn: null });
+    });
+
+    it('PAN-60 says the launch is pending with the launch Monday before the launch week', async () => {
+      const launchMonday = dateKey(shiftWeeks(currentMonday(), 1));
+      process.env.CONSISTENCY_RANKING_LAUNCH_WEEK = launchMonday;
+      const { trainerId, token } = await createTrainerWithToken();
+      await createStudent(trainerId, 'Camila');
+
+      const body = (await getStandings(token)).json();
+
+      expect(body.season).toBeNull();
+      expect(body.notStarted).toEqual({ reason: 'launchPending', startsOn: launchMonday });
+    });
+
+    it('PAN-60 says there is no active student once launched without an active-on-plan student', async () => {
+      process.env.CONSISTENCY_RANKING_LAUNCH_WEEK = dateKey(shiftWeeks(currentMonday(), -1));
+      const { trainerId, token } = await createTrainerWithToken();
+      const student = await createStudent(trainerId, 'Camila');
+      await prisma.trainerStudent.update({
+        where: { trainerId_studentId: { trainerId, studentId: student.id } },
+        data: { activeOnPlan: false },
+      });
+
+      const body = (await getStandings(token)).json();
+
+      expect(body.season).toBeNull();
+      expect(body.notStarted).toEqual({ reason: 'noActiveStudent', startsOn: null });
+      expect(await prisma.consistencySeason.count({ where: { trainerId } })).toBe(0);
+    });
+
+    it('PAN-60 says it is between seasons with the next Monday while the closing week still runs', async () => {
+      const monday = currentMonday();
+      process.env.CONSISTENCY_RANKING_LAUNCH_WEEK = dateKey(shiftWeeks(monday, -3));
+      const { trainerId, token } = await createTrainerWithToken();
+      await createStudent(trainerId, 'Camila');
+      await prisma.consistencySeason.create({
+        data: { trainerId, number: 1, startWeek: shiftWeeks(monday, -3), weeks: 4, status: SeasonStatus.CLOSED, closedAt: new Date() },
+      });
+      await prisma.consistencyWeekClose.create({ data: { trainerId, weekStart: monday, closedAt: new Date(), studentsCount: 1 } });
+
+      const body = (await getStandings(token)).json();
+
+      expect(body.season).toBeNull();
+      expect(body.notStarted).toEqual({ reason: 'betweenSeasons', startsOn: dateKey(shiftWeeks(monday, 1)) });
+      expect(await prisma.consistencySeason.count({ where: { trainerId } })).toBe(1);
+    });
+
+    it('PAN-60 returns notStarted null with an active season', async () => {
+      const { trainerId, token } = await createTrainerWithToken();
+      await createActiveSeason(trainerId);
+      await createStudent(trainerId, 'Camila');
+
+      const body = (await getStandings(token)).json();
+
+      expect(body.season).toMatchObject({ number: 1, status: SeasonStatus.ACTIVE });
+      expect(body).toHaveProperty('notStarted', null);
+    });
+
+    it('PAN-60 returns notStarted null for a closed season asked by number', async () => {
+      delete process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
+      const { trainerId, token } = await createTrainerWithToken();
+      await prisma.consistencySeason.create({
+        data: { trainerId, number: 1, startWeek: shiftWeeks(currentMonday(), -6), weeks: 4, status: SeasonStatus.CLOSED, closedAt: new Date() },
+      });
+
+      const body = (await getStandings(token, '?season=1')).json();
+
+      expect(body.season).toMatchObject({ number: 1, status: SeasonStatus.CLOSED });
+      expect(body).toHaveProperty('notStarted', null);
     });
   });
 

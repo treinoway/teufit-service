@@ -345,7 +345,7 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
       expect(anonymous.statusCode).toBe(401);
     });
 
-    it('returns a null season and empty lists before the ranking launches', async () => {
+    it('PAN-60 returns a null season, empty lists and the pending launch before the ranking launches', async () => {
       delete process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
       const { trainerId, token } = await createTrainerWithToken();
       await createStudent(trainerId, 'Camila');
@@ -359,6 +359,7 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
         counts: { all: 0, risk: 0, signal: 0, entering: 0, paused: 0 },
         rows: [],
         entering: [],
+        notStarted: { reason: 'launchPending', startsOn: null },
       });
     });
 
@@ -524,6 +525,18 @@ e2eDescribe('e2e: consistency ranking trainer routes', () => {
 
       expect(asTrainer.statusCode).toBe(403);
       expect(asStudent.statusCode).toBe(403);
+    });
+
+    it('PAN-60 keeps the admin payload unchanged before launch: no notStarted field', async () => {
+      delete process.env.CONSISTENCY_RANKING_LAUNCH_WEEK;
+      const { accessToken: adminToken } = await createAdminWithToken(app);
+      const { trainerId } = await createTrainerWithToken();
+      await createStudent(trainerId, 'Camila');
+
+      const res = await getAdminStandings(adminToken, trainerId);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ season: null, rows: [], entering: [] });
     });
 
     it('answers 401 to an anonymous call', async () => {
