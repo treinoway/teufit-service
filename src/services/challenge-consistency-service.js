@@ -217,8 +217,15 @@ function notFound(error, messageCode, message) {
   return new AppError({ httpStatus: 404, error, messageCode, message });
 }
 
-// Championship owned by the authenticated trainer (404 unknown, 403 another trainer's)
-async function ownedChallenge(prisma, trainerUserId, challengeId) {
+/**
+ * Championship owned by the authenticated trainer (404 unknown trainer or championship, 403 another trainer's).
+ *
+ * @param {object} prisma
+ * @param {string} trainerUserId - authenticated trainer's user id
+ * @param {string} challengeId
+ * @returns {Promise<object>} stored championship
+ */
+export async function ownedChallenge(prisma, trainerUserId, challengeId) {
   const trainer = await prisma.trainer.findUnique({ where: { userId: trainerUserId }, select: { id: true } });
   if (!trainer) {
     throw notFound(ChallengeErrorCode.TRAINER_PROFILE_MISSING, ChallengeMessageCode.TRAINER_PROFILE_MISSING, 'Trainer profile not found');
