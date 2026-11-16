@@ -150,6 +150,9 @@ const weeklyRecord = (overrides = {}) => makeChallengeRecord({
   ...overrides,
 });
 
+// Stored row the mocked challenge.update merges its data into
+let currentRecord;
+
 describe('challenge-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -956,6 +959,336 @@ describe('challenge-service', () => {
       });
 
       expect(result.map((c) => c.id)).toEqual(['weekly-closed']);
+    });
+  });
+
+  describe('updateChallenge (weekly format)', () => {
+    beforeEach(() => {
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => ({ ...currentRecord, ...data }));
+      mockPrisma.challengeParticipant.count.mockResolvedValue(3);
+    });
+
+    it('CAMP-39 edits every field of a scheduled weekly championship with the creation validations', async () => {
+      currentRecord = weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') });
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+
+      const result = await updateChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        now: WEDNESDAY_SP,
+        data: {
+          name: '  Inverno  ',
+          description: 'Nova descrição',
+          startWeek: '2026-11-30',
+          weeks: 2,
+          minPodiumWeeks: 1,
+          anonymousRanking: true,
+          visibility: 'position',
+          ptsWorkoutCompleted: 20,
+          dailyPointsCap: 80,
+        },
+      });
+
+      expect(mockPrisma.challenge.update).toHaveBeenCalledWith({
+        where: { id: CHALLENGE_ID },
+        data: {
+          name: 'Inverno',
+          description: 'Nova descrição',
+          anonymousRanking: true,
+          visibility: 'position',
+          ptsWorkoutCompleted: 20,
+          dailyPointsCap: 80,
+          weeks: 2,
+          minPodiumWeeks: 1,
+          startDate: dateOnly('2026-11-30'),
+          endDate: dateOnly('2026-12-13'),
+        },
+      });
+      expect(result).toMatchObject({
+        startDate: '2026-11-30',
+        endDate: '2026-12-13',
+        weeks: 2,
+        status: ChallengeStatus.SCHEDULED,
+        participantCount: 3,
+      });
+    });
+
+    it('CAMP-39 keeps the stored start when only the weeks change', async () => {
+      currentRecord = weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') });
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+
+      await updateChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        now: WEDNESDAY_SP,
+        data: { weeks: 12 },
+      });
+
+      expect(mockPrisma.challenge.update.mock.calls[0][0].data).toEqual({
+        weeks: 12,
+        minPodiumWeeks: 2,
+        startDate: dateOnly('2026-11-23'),
+        endDate: dateOnly('2027-02-14'),
+      });
+    });
+
+    it('CAMP-39 rejects invalid weeks, podium minimum or free dates on a scheduled championship', async () => {
+      currentRecord = weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') });
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+      const update = (data) => updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
+      });
+
+      await expect(update({ weeks: 13 })).rejects.toMatchObject({
+        httpStatus: 400, error: ChallengeErrorCode.CHALLENGE_INVALID_WEEKS,
+      });
+      await expect(update({ startWeek: '2026-11-25' })).rejects.toMatchObject({
+        httpStatus: 400, error: ChallengeErrorCode.CHALLENGE_INVALID_WEEKS,
+      });
+      await expect(update({ minPodiumWeeks: 5 })).rejects.toMatchObject({
+        httpStatus: 400, error: ChallengeErrorCode.CHALLENGE_INVALID_MIN_PODIUM,
+      });
+      await expect(update({ endDate: '2026-12-31' })).rejects.toMatchObject({
+        httpStatus: 400, error: ChallengeErrorCode.CHALLENGE_INVALID_WEEKS,
+      });
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+
+    it('CAMP-40 edits name, description, anonymous ranking and visibility while running', async () => {
+      currentRecord = weeklyRecord();
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+
+      const result = await updateChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        now: WEDNESDAY_SP,
+        data: { name: 'Novo nome', description: 'Prêmio novo', anonymousRanking: true, visibility: 'off' },
+      });
+
+      expect(mockPrisma.challenge.update).toHaveBeenCalledWith({
+        where: { id: CHALLENGE_ID },
+        data: { name: 'Novo nome', description: 'Prêmio novo', anonymousRanking: true, visibility: 'off' },
+      });
+      expect(result).toMatchObject({ status: ChallengeStatus.ACTIVE, currentWeek: 2, name: 'Novo nome' });
+    });
+
+    it('CAMP-41 answers 409 for start, weeks, end, minimum or points while running', async () => {
+      currentRecord = weeklyRecord();
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+      const forbidden = [
+        { startWeek: '2026-11-23' },
+        { weeks: 6 },
+        { startDate: '2026-11-23' },
+        { endDate: '2026-12-31' },
+        { minPodiumWeeks: 1 },
+        { ptsWorkoutCompleted: 30 },
+        { dailyPointsCap: 50 },
+        { name: 'Junto', weeks: 6 },
+      ];
+
+      for (const data of forbidden) {
+        await expect(updateChallenge({
+          prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
+        })).rejects.toMatchObject({
+          httpStatus: 409,
+          error: ChallengeErrorCode.CHALLENGE_ALREADY_STARTED,
+          messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_STARTED,
+        });
+      }
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+
+    it('CAMP-45 answers 409 to edit a closed or cancelled weekly championship', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ closedAt: new Date('2026-11-16T00:10:00.000Z') }));
+      await expect(updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data: { name: 'X' },
+      })).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED });
+
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ cancelledAt: new Date('2026-11-17T10:00:00.000Z') }));
+      await expect(updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data: { name: 'X' },
+      })).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_CANCELLED });
+
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+
+    it('CAMP-47 still moves the end of a running dates championship', async () => {
+      const running = makeActiveChallenge();
+      mockPrisma.challenge.findUnique.mockResolvedValue(running);
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => ({ ...running, ...data }));
+      const newEnd = futureDate(20);
+
+      const result = await updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, data: { endDate: newEnd },
+      });
+
+      expect(result.endDate).toBe(newEnd);
+      expect(result.status).toBe(ChallengeStatus.ACTIVE);
+      expect(mockPrisma.consistencyRankingConfig.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelChallenge (weekly format)', () => {
+    it('CAMP-43 cancels a scheduled or running weekly championship without final standings', async () => {
+      for (const record of [weeklyRecord(), weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') })]) {
+        mockPrisma.challenge.findUnique.mockResolvedValueOnce(record);
+        mockPrisma.challenge.update.mockImplementationOnce(async ({ data }) => ({ ...record, ...data }));
+
+        const result = await cancelChallenge({
+          prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+        });
+
+        expect(result.status).toBe(ChallengeStatus.CANCELLED);
+        expect(result.closedAt).toBeNull();
+      }
+      expect(mockPrisma.challenge.update).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.challenge.update.mock.calls[0][0]).toEqual({
+        where: { id: CHALLENGE_ID },
+        data: { cancelledAt: expect.any(Date) },
+      });
+    });
+
+    it('CAMP-43 cancels a weekly championship whose last Sunday passed but which is not closed yet', async () => {
+      const record = weeklyRecord({ startDate: dateOnly('2026-10-19'), endDate: dateOnly('2026-11-15'), weeks: 4 });
+      mockPrisma.challenge.findUnique.mockResolvedValue(record);
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => ({ ...record, ...data }));
+
+      const result = await cancelChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+      });
+
+      expect(result.status).toBe(ChallengeStatus.CANCELLED);
+    });
+
+    it('CAMP-45 answers 409 to cancel a closed or cancelled weekly championship', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ closedAt: new Date('2026-11-16T00:10:00.000Z') }));
+      await expect(cancelChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+      })).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED });
+
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ cancelledAt: new Date('2026-11-17T10:00:00.000Z') }));
+      await expect(cancelChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+      })).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_CANCELLED });
+
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteChallenge (weekly format)', () => {
+    it('CAMP-44 deletes a weekly championship still scheduled in the trainer time zone', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValue(
+        weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') }),
+      );
+      mockPrisma.challenge.delete.mockResolvedValue({});
+
+      await deleteChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        now: new Date('2026-11-23T02:00:00.000Z'),
+      });
+
+      expect(mockPrisma.challenge.delete).toHaveBeenCalledWith({ where: { id: CHALLENGE_ID } });
+    });
+
+    it('CAMP-44 refuses to delete a running or closed weekly championship', async () => {
+      for (const record of [weeklyRecord(), weeklyRecord({ closedAt: new Date('2026-11-16T00:10:00.000Z') })]) {
+        mockPrisma.challenge.findUnique.mockResolvedValueOnce(record);
+        await expect(deleteChallenge({
+          prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+        })).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_NOT_DELETABLE });
+      }
+      expect(mockPrisma.challenge.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('participants (weekly format)', () => {
+    const ended = () => [
+      [weeklyRecord({ closedAt: new Date('2026-11-16T00:10:00.000Z') }), ChallengeErrorCode.CHALLENGE_ALREADY_ENDED],
+      [weeklyRecord({ cancelledAt: new Date('2026-11-17T10:00:00.000Z') }), ChallengeErrorCode.CHALLENGE_ALREADY_CANCELLED],
+    ];
+
+    it('CAMP-18 answers 409 when adding participants to a closed or cancelled weekly championship', async () => {
+      for (const [record, code] of ended()) {
+        mockPrisma.challenge.findUnique.mockResolvedValueOnce(record);
+        await expect(addParticipants({
+          prisma: mockPrisma,
+          trainerUserId: TRAINER_USER_ID,
+          challengeId: CHALLENGE_ID,
+          studentIds: [STUDENT_ID_1],
+          now: WEDNESDAY_SP,
+        })).rejects.toMatchObject({ httpStatus: 409, error: code });
+      }
+      expect(mockTx.challengeParticipant.createMany).not.toHaveBeenCalled();
+    });
+
+    it('CAMP-18 answers 409 when removing a participant of a closed or cancelled weekly championship', async () => {
+      for (const [record, code] of ended()) {
+        mockPrisma.challenge.findUnique.mockResolvedValueOnce(record);
+        mockPrisma.challengeParticipant.findUnique.mockResolvedValueOnce({ challengeId: CHALLENGE_ID, studentId: STUDENT_ID_1 });
+        await expect(removeParticipant({
+          prisma: mockPrisma,
+          trainerUserId: TRAINER_USER_ID,
+          challengeId: CHALLENGE_ID,
+          studentId: STUDENT_ID_1,
+          now: WEDNESDAY_SP,
+        })).rejects.toMatchObject({ httpStatus: 409, error: code });
+      }
+      expect(mockPrisma.challengeParticipant.delete).not.toHaveBeenCalled();
+    });
+
+    it('CAMP-15 adds and CAMP-16 removes participants of a running weekly championship', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValue(weeklyRecord());
+      mockPrisma.trainerStudent.findMany.mockResolvedValue([{ studentId: STUDENT_ID_2 }]);
+      mockPrisma.challengeParticipant.findMany.mockResolvedValue([]);
+      mockPrisma.challengeParticipant.count.mockResolvedValue(2);
+      mockTx.challengeParticipant.createMany.mockResolvedValue({ count: 1 });
+
+      const added = await addParticipants({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        studentIds: [STUDENT_ID_2],
+        now: WEDNESDAY_SP,
+      });
+      expect(added).toEqual({ added: 1, participantCount: 2 });
+      expect(mockTx.challengeParticipant.createMany).toHaveBeenCalledWith({
+        data: [{ challengeId: CHALLENGE_ID, studentId: STUDENT_ID_2 }],
+      });
+
+      mockPrisma.challengeParticipant.findUnique.mockResolvedValue({ challengeId: CHALLENGE_ID, studentId: STUDENT_ID_2 });
+      await removeParticipant({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        studentId: STUDENT_ID_2,
+        now: WEDNESDAY_SP,
+      });
+      expect(mockPrisma.challengeParticipant.delete).toHaveBeenCalledWith({
+        where: { challengeId_studentId: { challengeId: CHALLENGE_ID, studentId: STUDENT_ID_2 } },
+      });
+    });
+
+    it('keeps adding participants to a completed dates championship as today', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValue(makeCompletedChallenge());
+      mockPrisma.trainerStudent.findMany.mockResolvedValue([{ studentId: STUDENT_ID_1 }]);
+      mockPrisma.challengeParticipant.findMany.mockResolvedValue([]);
+      mockPrisma.challengeParticipant.count.mockResolvedValue(1);
+      mockTx.challengeParticipant.createMany.mockResolvedValue({ count: 1 });
+
+      const added = await addParticipants({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        challengeId: CHALLENGE_ID,
+        studentIds: [STUDENT_ID_1],
+      });
+
+      expect(added).toEqual({ added: 1, participantCount: 1 });
+      expect(mockPrisma.consistencyRankingConfig.findUnique).not.toHaveBeenCalled();
     });
   });
 });

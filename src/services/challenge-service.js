@@ -15,6 +15,19 @@ import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
 import { getConfig } from './consistency-config-service.js';
 import { assertCanCreateChallenge } from './platform-plan-service.js';
 
+const POINT_RULE_FIELDS = Object.freeze([
+  'ptsWorkoutCompleted',
+  'ptsStreak7Days',
+  'ptsStreak30Days',
+  'ptsDailyCheckin',
+  'ptsEvolutionRecord',
+  'ptsWorkoutFeedback',
+  'dailyPointsCap',
+]);
+const WEEKLY_OPEN_FIELDS = Object.freeze(['name', 'description', 'anonymousRanking', 'visibility']);
+const WEEKLY_SCHEDULE_FIELDS = Object.freeze(['startWeek', 'weeks', 'minPodiumWeeks']);
+const FREE_DATE_FIELDS = Object.freeze(['startDate', 'endDate']);
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -296,6 +309,102 @@ async function resolveWeeklyFields(prisma, trainerId, data, now) {
     },
     weeklyContext: { now, timeZone: config.timeZone },
   };
+}
+
+// The fields of `data` that are present, restricted to the given names
+function pickDefined(data, fields) {
+  return Object.fromEntries(fields.filter((field) => data[field] !== undefined).map((field) => [field, data[field]]));
+}
+
+// 409 when a weekly championship is cancelled or already closed
+function assertWeeklyOpen(status) {
+  if (status === ChallengeStatus.CANCELLED) {
+    throw new AppError({
+      httpStatus: 409,
+      error: ChallengeErrorCode.CHALLENGE_ALREADY_CANCELLED,
+      messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_CANCELLED,
+      message: 'The championship is cancelled',
+    });
+  }
+  if (status === ChallengeStatus.COMPLETED) {
+    throw new AppError({
+      httpStatus: 409,
+      error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED,
+      messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_ENDED,
+      message: 'The championship is already closed',
+    });
+  }
+}
+
+// Status of a weekly championship after checking it is still open (409 otherwise); undefined for the dates format
+async function assertOpenIfWeekly(prisma, challenge, now) {
+  if (!isWeekly(challenge)) return undefined;
+  const weeklyContext = await weeklyContextFor(prisma, challenge.trainerId, now);
+  assertWeeklyOpen(weeklyStatus(challenge, weeklyContext));
+  return weeklyContext;
+}
+
+// 409 when a running weekly championship would change its schedule, podium minimum or point rules
+function assertWeeklyScheduleLocked(data) {
+  const touched = [...WEEKLY_SCHEDULE_FIELDS, ...FREE_DATE_FIELDS, ...POINT_RULE_FIELDS].some((field) => data[field] !== undefined);
+  if (touched) {
+    throw new AppError({
+      httpStatus: 409,
+      error: ChallengeErrorCode.CHALLENGE_ALREADY_STARTED,
+      messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_STARTED,
+      message: 'Start, weeks, end, podium minimum and point rules cannot change after the championship starts',
+    });
+  }
+}
+
+// Schedule and point-rule columns of a scheduled weekly championship, validated like the creation
+async function weeklyScheduleChanges(prisma, challenge, data, now) {
+  if (FREE_DATE_FIELDS.some((field) => data[field] !== undefined)) {
+    throw new AppError({
+      httpStatus: 400,
+      error: ChallengeErrorCode.CHALLENGE_INVALID_WEEKS,
+      messageCode: ChallengeMessageCode.CHALLENGE_INVALID_WEEKS,
+      message: 'Weekly championships are scheduled with startWeek and weeks, not free dates',
+    });
+  }
+  const pointRules = pickDefined(data, POINT_RULE_FIELDS);
+  if (!WEEKLY_SCHEDULE_FIELDS.some((field) => data[field] !== undefined)) return pointRules;
+  const { fields } = await resolveWeeklyFields(prisma, challenge.trainerId, {
+    startWeek: data.startWeek ?? formatDateOnly(challenge.startDate),
+    weeks: data.weeks ?? challenge.weeks,
+    minPodiumWeeks: data.minPodiumWeeks ?? challenge.minPodiumWeeks,
+  }, now);
+  const { weeks, minPodiumWeeks, startDate, endDate } = fields;
+  return { ...pointRules, weeks, minPodiumWeeks, startDate, endDate };
+}
+
+/**
+ * Update a weekly championship: everything while scheduled, only name, description, anonymous ranking and visibility while running.
+ *
+ * @param {object} prisma
+ * @param {object} challenge - stored weekly championship
+ * @param {object} data - request body
+ * @param {Date} now
+ * @returns {Promise<object>} formatted championship
+ */
+async function updateWeeklyChallenge(prisma, challenge, data, now) {
+  const weeklyContext = await weeklyContextFor(prisma, challenge.trainerId, now);
+  const status = weeklyStatus(challenge, weeklyContext);
+  assertWeeklyOpen(status);
+  if (status !== ChallengeStatus.SCHEDULED) assertWeeklyScheduleLocked(data);
+
+  const openFields = pickDefined(data, WEEKLY_OPEN_FIELDS);
+  if (openFields.name !== undefined) openFields.name = openFields.name.trim();
+  const scheduleFields = status === ChallengeStatus.SCHEDULED
+    ? await weeklyScheduleChanges(prisma, challenge, data, now)
+    : {};
+
+  const updated = await prisma.challenge.update({
+    where: { id: challenge.id },
+    data: { ...openFields, ...scheduleFields },
+  });
+  const participantCount = await prisma.challengeParticipant.count({ where: { challengeId: challenge.id } });
+  return formatChallenge(updated, participantCount, weeklyContext);
 }
 
 /**
@@ -591,9 +700,11 @@ export async function getChallenge({ prisma, trainerUserId, challengeId, now = n
  * - startDate is locked once the challenge has started
  * - endDate cannot be moved before today
  */
-export async function updateChallenge({ prisma, trainerUserId, challengeId, data }) {
+export async function updateChallenge({ prisma, trainerUserId, challengeId, data, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
   const challenge = await resolveChallenge(prisma, challengeId, trainer.id);
+
+  if (isWeekly(challenge)) return updateWeeklyChallenge(prisma, challenge, data, now);
 
   if (challenge.cancelledAt) {
     throw new AppError({
@@ -693,7 +804,7 @@ export async function updateChallenge({ prisma, trainerUserId, challengeId, data
 /**
  * Cancel a challenge (sets cancelledAt).
  */
-export async function cancelChallenge({ prisma, trainerUserId, challengeId }) {
+export async function cancelChallenge({ prisma, trainerUserId, challengeId, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
   const challenge = await resolveChallenge(prisma, challengeId, trainer.id);
 
@@ -706,7 +817,8 @@ export async function cancelChallenge({ prisma, trainerUserId, challengeId }) {
     });
   }
 
-  const currentStatus = deriveStatus(challenge);
+  const weeklyContext = await weeklyContextOf(prisma, challenge, now);
+  const currentStatus = statusOf(challenge, weeklyContext);
 
   if (currentStatus === ChallengeStatus.COMPLETED) {
     throw new AppError({
@@ -722,17 +834,17 @@ export async function cancelChallenge({ prisma, trainerUserId, challengeId }) {
     data: { cancelledAt: new Date() },
   });
 
-  return formatChallenge(updated);
+  return formatChallenge(updated, undefined, weeklyContext);
 }
 
 /**
  * Hard-delete a challenge. Only allowed if status is "scheduled".
  */
-export async function deleteChallenge({ prisma, trainerUserId, challengeId }) {
+export async function deleteChallenge({ prisma, trainerUserId, challengeId, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
   const challenge = await resolveChallenge(prisma, challengeId, trainer.id);
 
-  const currentStatus = deriveStatus(challenge);
+  const currentStatus = statusOf(challenge, await weeklyContextOf(prisma, challenge, now));
 
   if (currentStatus !== ChallengeStatus.SCHEDULED) {
     throw new AppError({
@@ -780,9 +892,10 @@ export async function listParticipants({ prisma, trainerUserId, challengeId }) {
  * All studentIds must be trainees of the trainer.
  * Throws on any duplicate (409).
  */
-export async function addParticipants({ prisma, trainerUserId, challengeId, studentIds }) {
+export async function addParticipants({ prisma, trainerUserId, challengeId, studentIds, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
-  await resolveChallenge(prisma, challengeId, trainer.id);
+  const challenge = await resolveChallenge(prisma, challengeId, trainer.id);
+  await assertOpenIfWeekly(prisma, challenge, now);
 
   // Validate all IDs are trainees
   const valid = await prisma.trainerStudent.findMany({
@@ -839,9 +952,10 @@ export async function addParticipants({ prisma, trainerUserId, challengeId, stud
  * Note: removing after start is allowed (per design). Their PointTransactions
  * remain in the global ranking but they leave this challenge's leaderboard.
  */
-export async function removeParticipant({ prisma, trainerUserId, challengeId, studentId }) {
+export async function removeParticipant({ prisma, trainerUserId, challengeId, studentId, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
-  await resolveChallenge(prisma, challengeId, trainer.id);
+  const challenge = await resolveChallenge(prisma, challengeId, trainer.id);
+  await assertOpenIfWeekly(prisma, challenge, now);
 
   const participant = await prisma.challengeParticipant.findUnique({
     where: { challengeId_studentId: { challengeId, studentId } },
