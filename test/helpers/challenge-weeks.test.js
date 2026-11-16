@@ -57,13 +57,13 @@ function weekly(overrides = {}) {
 }
 
 describe('weeksSpan', () => {
-  it('starts on the chosen Monday and ends on the Sunday of the last week', () => {
+  it('CAMP-04 starts on the chosen Monday and ends on the Sunday of the last week', () => {
     const span = weeksSpan({ startWeek: '2026-11-23', weeks: 8 });
     expect(span.startDate).toEqual(dateOnly('2026-11-23'));
     expect(span.endDate).toEqual(dateOnly('2027-01-17'));
   });
 
-  it('spans Monday to Sunday of the same week for a 1 week championship', () => {
+  it('CAMP-04 spans Monday to Sunday of the same week for a 1 week championship', () => {
     const span = weeksSpan({ startWeek: '2026-11-16', weeks: 1 });
     expect(span.startDate).toEqual(dateOnly('2026-11-16'));
     expect(span.endDate).toEqual(dateOnly('2026-11-22'));
@@ -141,12 +141,12 @@ describe('weeklyStatus', () => {
       .toBe(ChallengeStatus.ACTIVE);
   });
 
-  it('stays active after the last Sunday until the championship is closed', () => {
+  it('CAMP-36 stays active after the last Sunday until the championship is closed', () => {
     const afterEnd = new Date('2026-12-21T15:00:00.000Z');
     expect(weeklyStatus(weekly(), { now: afterEnd, timeZone: SP })).toBe(ChallengeStatus.ACTIVE);
   });
 
-  it('reports completed once closed and cancelled above everything else', () => {
+  it('CAMP-36 reports completed once closed and cancelled above everything else', () => {
     const during = new Date('2026-11-25T15:00:00.000Z');
     expect(weeklyStatus(weekly({ closedAt: new Date('2026-12-21T00:10:00.000Z') }), { now: during, timeZone: SP }))
       .toBe(ChallengeStatus.COMPLETED);
@@ -160,14 +160,14 @@ describe('weeklyStatus', () => {
 });
 
 describe('currentWeekOf', () => {
-  it('numbers the championship week of a Monday from 1 to the number of weeks', () => {
+  it('CAMP-49 numbers the championship week of a Monday from 1 to the number of weeks', () => {
     const challenge = weekly();
     expect(currentWeekOf(challenge, dateOnly('2026-11-23'))).toBe(1);
     expect(currentWeekOf(challenge, dateOnly('2026-11-30'))).toBe(2);
     expect(currentWeekOf(challenge, dateOnly('2026-12-14'))).toBe(4);
   });
 
-  it('returns 0 before the start and the last week after the end', () => {
+  it('CAMP-49 returns 0 before the start and the last week after the end', () => {
     const challenge = weekly();
     expect(currentWeekOf(challenge, dateOnly('2026-11-16'))).toBe(0);
     expect(currentWeekOf(challenge, dateOnly('2026-12-21'))).toBe(4);

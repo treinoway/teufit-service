@@ -801,7 +801,7 @@ describe('challenge-service', () => {
       expect(stored.trainerId).toBe(TRAINER_ID);
     });
 
-    it('defaults the podium minimum to the trainer config, capped at the number of weeks', async () => {
+    it('CAMP-07 defaults the podium minimum to the trainer config, capped at the number of weeks', async () => {
       mockPrisma.consistencyRankingConfig.findUnique.mockResolvedValue({ minPodiumWeeks: 2 });
 
       await createChallenge({
@@ -946,7 +946,7 @@ describe('challenge-service', () => {
       expect(mockPrisma.consistencyRankingConfig.findUnique).toHaveBeenCalledTimes(1);
     });
 
-    it('filters weekly championships by their derived status', async () => {
+    it('CAMP-36 filters weekly championships by their derived status', async () => {
       const running = weeklyRecord({ id: 'weekly-running' });
       const closed = weeklyRecord({ id: 'weekly-closed', closedAt: new Date('2026-11-16T00:10:00.000Z') });
       mockPrisma.challenge.findMany.mockResolvedValue([running, closed].map((c) => ({ ...c, _count: { participants: 0 } })));
@@ -1273,7 +1273,7 @@ describe('challenge-service', () => {
       });
     });
 
-    it('keeps adding participants to a completed dates championship as today', async () => {
+    it('CAMP-71 keeps adding participants to a completed dates championship as today', async () => {
       mockPrisma.challenge.findUnique.mockResolvedValue(makeCompletedChallenge());
       mockPrisma.trainerStudent.findMany.mockResolvedValue([{ studentId: STUDENT_ID_1 }]);
       mockPrisma.challengeParticipant.findMany.mockResolvedValue([]);
