@@ -160,6 +160,9 @@ export async function requestEarlyClose(prisma, trainerUserId, challengeId, now 
 
   const monday = weekStartFor(now, timeZone);
   const mondayDate = dbDateOf(monday);
+  const rule = await ruleForWeek(prisma, challenge.trainerId, monday);
+  // why: between the week's close (e.g. Sunday 21h) and Monday 00h the calendar week has already closed, so it can no longer become the last one
+  if (weekBounds(monday, rule).closeInstant.getTime() <= now.getTime()) throw notClosable();
   if (mondayDate.getTime() > lastMondayOf(challenge).getTime()) throw notClosable();
   const weeks = currentWeekOf(challenge, mondayDate);
   const endDate = new Date(mondayDate.getTime() + DAYS_TO_SUNDAY * MS_PER_DAY);
@@ -167,7 +170,6 @@ export async function requestEarlyClose(prisma, trainerUserId, challengeId, now 
     where: { id: challenge.id },
     data: { weeks, endDate, closeRequestedAt: now },
   });
-  const rule = await ruleForWeek(prisma, challenge.trainerId, monday);
   return {
     id: updated.id,
     status,
