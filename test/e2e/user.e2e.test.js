@@ -974,22 +974,28 @@ e2eDescribe('e2e: user profile flows', () => {
       });
     }
 
-    async function linkNutritionistPatient(nutritionistToken, patientEmail) {
+    async function linkNutritionistPatient(nutritionistToken, patientEmail, patientToken) {
       const response = await app.inject({
         method: 'POST',
-        url: '/nutritionist/patients',
+        url: '/nutritionist/patient-invites',
         headers: { authorization: `Bearer ${nutritionistToken}` },
         payload: { email: patientEmail },
       });
       expect(response.statusCode).toBe(201);
+      const accepted = await app.inject({
+        method: 'POST',
+        url: `/my/nutrition/invites/${response.json().invite.id}/accept`,
+        headers: { authorization: `Bearer ${patientToken}` },
+      });
+      expect(accepted.statusCode).toBe(200);
     }
 
     async function setMetabolicProfile(nutritionistToken, patientId) {
       const response = await app.inject({
         method: 'PUT',
-        url: `/nutritionist/patients/${patientId}/metabolic-profile`,
+        url: `/nutritionist/patients/${patientId}/sheet`,
         headers: { authorization: `Bearer ${nutritionistToken}` },
-        payload: { weightKg: 70, heightCm: 170 },
+        payload: { sex: 'male', weightKg: 70, heightCm: 170 },
       });
       expect(response.statusCode).toBe(200);
     }
@@ -1187,7 +1193,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const { accessToken: nutritionistToken } = await createNutritionistWithToken('nutri-cascade');
       const { userId, email, accessToken } = await signup('nutri-cascade');
 
-      await linkNutritionistPatient(nutritionistToken, email);
+      await linkNutritionistPatient(nutritionistToken, email, accessToken);
       await setMetabolicProfile(nutritionistToken, userId);
 
       expect(await prisma.nutritionistPatient.findFirst({ where: { patientId: userId } })).not.toBeNull();

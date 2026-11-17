@@ -24,6 +24,11 @@ export default {
         ? process.env.ROLLBAR_ACCESS_TOKEN || null
         : null,
     },
+    // Langfuse desligado em dev, a não ser que LANGFUSE_FORCE_LOCAL=true e as duas chaves existam.
+    langfuse: {
+      enabled: parseBool(process.env.LANGFUSE_FORCE_LOCAL, false)
+        && Boolean(process.env.LANGFUSE_PUBLIC_KEY?.trim() && process.env.LANGFUSE_SECRET_KEY?.trim()),
+    },
     rateLimit: {
         global: { max: 10000, timeWindow: '1 minute' },
         globalPerUser: { max: 10000, timeWindow: '1 minute' },
@@ -74,6 +79,10 @@ export default {
         trainer: {
           inviteStudent: { max: 1000, timeWindow: '1 minute' },
           resendStudentInvite: { max: 1000, timeWindow: '1 minute' },
+        },
+        nutritionist: {
+          invitePatient: { max: 1000, timeWindow: '1 minute' },
+          resendPatientInvite: { max: 1000, timeWindow: '1 minute' },
         },
         exerciseTemplate: {
           create: { max: 1000, timeWindow: '1 minute' },

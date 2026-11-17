@@ -9,13 +9,8 @@
 import 'dotenv/config';
 import * as Sentry from '@sentry/node';
 import config from './config/index.js';
+import { buildSentryOptions } from './src/observability/sentry-options.js';
 
 if (config.sentry.dsn) {
-  Sentry.init({
-    dsn: config.sentry.dsn,
-    environment: config.sentry.environment,
-    // Distributed tracing. Env-driven (config.sentry.tracesSampleRate): staging
-    // runs at 1.0 (SENTRY_TRACES_SAMPLE_RATE=1.0), prod defaults to 0.1.
-    tracesSampleRate: config.sentry.tracesSampleRate,
-  });
+  Sentry.init(buildSentryOptions(config));
 }

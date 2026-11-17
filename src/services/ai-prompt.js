@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AI_LIMITS, TRAINER_TIME_ZONE } from "../constants/ai.js";
 
 /**
@@ -54,6 +55,9 @@ FIDELIDADE DESCRICAO -> TOOL CALL: a tool call deve conter exatamente o que voce
 - Portugues brasileiro, conciso (ate 3-4 linhas em conversa). Nao repita o que o treinador ja sabe.
 - Nunca exiba IDs, UUIDs ou tags de REF. Nunca exiba nomes tecnicos de campos (hasLoad, restInterval, repetitions.min, camelCase, JSON): diga "com carga", "60s de descanso", "10 a 12 repeticoes".
 - Analises de desempenho: use so os dados retornados, cite numeros reais e sugira ajustes concretos.`;
+
+// Short hash of the static system prompt, recorded on traces to tell prompt revisions apart.
+export const PROMPT_VERSION = createHash("sha256").update(STATIC_SYSTEM_PROMPT).digest("hex").slice(0, 12);
 
 // Strips <user_input> tags a message tries to smuggle in.
 export function sanitizeUserMessage(message) {
@@ -249,7 +253,7 @@ ${formatPerformance(performance)}
 }
 
 /**
- * Returns the system prompt as [cached static block, dynamic context block].
+ * Returns the system prompt as [static block, dynamic context block], both cache breakpoints.
  *
  * @param {object} context - Trainer context from buildTrainerContext()
  * @param {object | null} studentFocus - Optional student focus (anamnesis + performance)
@@ -258,6 +262,6 @@ ${formatPerformance(performance)}
 export function buildSystemPrompt(context, studentFocus = null) {
   return [
     { type: "text", text: STATIC_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-    { type: "text", text: buildDynamicContext(context, studentFocus) },
+    { type: "text", text: buildDynamicContext(context, studentFocus), cache_control: { type: "ephemeral" } },
   ];
 }

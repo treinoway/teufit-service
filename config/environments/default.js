@@ -1,4 +1,5 @@
 import { parseBool } from '../../src/helpers/env.js';
+import { LANGFUSE_CONTENT_MODES, LANGFUSE_DEFAULTS } from '../../src/constants/ai-tracing.js';
 
 // Comma-separated list → normalized (trimmed, lowercased), non-empty emails.
 // Used to parse BETA_TESTER_EMAILS below.
@@ -14,6 +15,17 @@ function parseEmailAllowlist(raw) {
 function parsePositiveInt(raw, fallback) {
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// Resolves LANGFUSE_CONTENT_MODE, falling back to masked for unset or invalid values.
+function parseLangfuseContentMode(raw) {
+  const mode = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return Object.values(LANGFUSE_CONTENT_MODES).includes(mode) ? mode : LANGFUSE_DEFAULTS.CONTENT_MODE;
+}
+
+// Tells whether both Langfuse keys are present and not blank.
+function hasLangfuseKeys() {
+  return Boolean(process.env.LANGFUSE_PUBLIC_KEY?.trim() && process.env.LANGFUSE_SECRET_KEY?.trim());
 }
 
 export default {
@@ -55,6 +67,20 @@ export default {
     tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE
       ? Number(process.env.SENTRY_TRACES_SAMPLE_RATE)
       : 0.1,
+  },
+  langfuse: {
+    // On only in staging/production with both keys; development opts in via LANGFUSE_FORCE_LOCAL
+    // (development.js) and test never does (test.js).
+    enabled: LANGFUSE_DEFAULTS.ENABLED_NODE_ENVS.includes(process.env.NODE_ENV) && hasLangfuseKeys(),
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY?.trim() || null,
+    secretKey: process.env.LANGFUSE_SECRET_KEY?.trim() || null,
+    baseUrl: process.env.LANGFUSE_BASE_URL?.trim() || LANGFUSE_DEFAULTS.BASE_URL,
+    environment: process.env.LANGFUSE_TRACING_ENVIRONMENT?.trim() || process.env.NODE_ENV || 'development',
+    release: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    contentMode: parseLangfuseContentMode(process.env.LANGFUSE_CONTENT_MODE),
+    flushAt: LANGFUSE_DEFAULTS.FLUSH_AT,
+    flushIntervalSeconds: LANGFUSE_DEFAULTS.FLUSH_INTERVAL_SECONDS,
+    maxQueueSize: parsePositiveInt(process.env.LANGFUSE_MAX_QUEUE_SIZE, LANGFUSE_DEFAULTS.MAX_QUEUE_SIZE),
   },
   rollbar: {
     // Optional — src/rollbar.js exports null (every call is skipped) when the token is absent.
@@ -220,6 +246,16 @@ export default {
       create: { max: 10, timeWindow: '1 hour' },
     },
     adminManager: { max: 60, timeWindow: '1 minute' },
+    nutritionist: {
+      invitePatient: {
+        max: 20,
+        timeWindow: '1 minute',
+      },
+      resendPatientInvite: {
+        max: 10,
+        timeWindow: '1 minute',
+      },
+    },
     platformPlan: {
       checkout: { max: 5, timeWindow: '1 minute' },
       cancel: { max: 5, timeWindow: '1 minute' },

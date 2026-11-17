@@ -88,6 +88,26 @@ ADMIN_DB_STATEMENT_TIMEOUT_MS=5000       # default 5000; queries above this (or 
 (read-only, statement timeout) would be silently dropped. Use a direct or session-mode connection.
 All 8 manager routes share one rate-limit bucket (60 req/min per client).
 
+### Langfuse (iArnold tracing)
+
+One Langfuse project; the `environment` field separates staging from production. Tracing turns on only when `NODE_ENV` is `staging`/`production` and both keys are set.
+
+| Variable | staging | production |
+|---|---|---|
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | keys of the shared project | same keys |
+| `LANGFUSE_BASE_URL` | `https://us.cloud.langfuse.com` (US — same jurisdiction as Anthropic; keys must come from a US-region project. Unset = SDK default EU) | same |
+| `LANGFUSE_TRACING_ENVIRONMENT` | optional (defaults to `staging`) | optional (defaults to `production`) |
+| `LANGFUSE_CONTENT_MODE` | `full` allowed | `masked` (default; never `full` without LGPD sign-off) |
+
+What each `LANGFUSE_CONTENT_MODE` exports:
+- `masked`: the student-focus block (anamnesis), student names in the trainer roster and in the active-protocol assignee lines, and e-mail addresses are redacted (REF ids kept). User messages, conversation history, model replies and tool inputs/outputs are exported as is: they can contain student names and free text typed by the trainer. Error status messages carry only error name, status and codes, never the raw message.
+- `full`: everything as is, including raw error messages.
+- `off`: no input or output is exported (metadata, usage, timings and levels only).
+
+Railway's deployment draining time (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` / the service draining setting) must be at least 10 s on staging and production, or buffered spans are lost on deploy.
+
+`LANGFUSE_FORCE_LOCAL` is for local debugging only. Check that Railway staging runs `NODE_ENV=staging` before relying on this.
+
 ### Do NOT set
 - `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — the app never reads them
   (only `DATABASE_URL`; the `POSTGRES_*` are docker-compose-local only). Staging

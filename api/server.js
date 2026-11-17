@@ -46,10 +46,9 @@ import { challengeRoutes } from './routes/challenge-route.js';
 import { workoutsTodayRoutes } from './routes/workouts-today-route.js';
 import { nutritionistPatientRoutes } from './routes/nutritionist-patient-route.js';
 import { foodRoutes } from './routes/food-route.js';
-import { dietProtocolTemplateRoutes } from './routes/diet-protocol-template-route.js';
-import { dietProtocolRoutes } from './routes/diet-protocol-route.js';
-import { dietMealRoutes } from './routes/diet-meal-route.js';
-import { dietFoodItemRoutes } from './routes/diet-food-item-route.js';
+import { nutritionPlanRoutes } from './routes/nutrition-plan-route.js';
+import { nutritionTodayRoutes } from './routes/nutrition-today-route.js';
+import { nutritionInviteRoutes } from './routes/nutrition-invite-route.js';
 import { studentDashboardRoutes } from './routes/student-dashboard-route.js';
 import { subscriptionPlanRoutes } from './routes/subscription-plan-route.js';
 import { studentSubscriptionRoutes } from './routes/student-subscription-route.js';
@@ -65,6 +64,8 @@ import { adminManagerRoutes } from './routes/admin-manager-route.js';
 import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
 import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
+import { getLlmProvider } from '../src/llm/index.js';
+import { createAiTracer } from '../src/observability/ai-tracer.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
@@ -115,6 +116,29 @@ function decorateAdminDb(fastify, injectedAdminDb) {
   });
 }
 
+// Decorates the iArnold tracer (injected override or built from config) and flushes it on shutdown.
+function decorateAiTracer(fastify, injectedTracer) {
+  const aiTracer = injectedTracer ?? createAiTracer({ config, logger: fastify.log });
+  fastify.decorate('aiTracer', aiTracer);
+  fastify.addHook('onClose', async () => {
+    await aiTracer.shutdown();
+  });
+}
+
+// Decorates the single shared LLM provider (injected override or built once); null when the provider is misconfigured.
+function decorateLlmProvider(fastify, injectedProvider) {
+  let llmProvider = injectedProvider ?? null;
+  if (!llmProvider) {
+    try {
+      llmProvider = getLlmProvider();
+    } catch {
+      // why: checkLlmConfiguration already logged the misconfiguration; a null provider makes the AI routes answer 503.
+      llmProvider = null;
+    }
+  }
+  fastify.decorate('llmProvider', llmProvider);
+}
+
 export async function buildServer(options = {}) {
   // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
   // production/staging, boot without a webhook secret must not succeed — otherwise
@@ -146,6 +170,8 @@ export async function buildServer(options = {}) {
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
   decorateAdminDb(fastify, options.adminDb);
+  decorateAiTracer(fastify, options.aiTracer);
+  decorateLlmProvider(fastify, options.llmProvider);
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);
@@ -413,10 +439,9 @@ export async function buildServer(options = {}) {
     await fastify.register(workoutsTodayRoutes);
     await fastify.register(nutritionistPatientRoutes);
     await fastify.register(foodRoutes);
-    await fastify.register(dietProtocolTemplateRoutes);
-    await fastify.register(dietProtocolRoutes);
-    await fastify.register(dietMealRoutes);
-    await fastify.register(dietFoodItemRoutes);
+    await fastify.register(nutritionPlanRoutes);
+    await fastify.register(nutritionTodayRoutes);
+    await fastify.register(nutritionInviteRoutes);
     await fastify.register(studentDashboardRoutes);
     await fastify.register(subscriptionPlanRoutes);
     await fastify.register(studentSubscriptionRoutes);

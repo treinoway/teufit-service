@@ -1,0 +1,71 @@
+name: iArnold AI eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      effort:
+        description: 'ANTHROPIC_EFFORT for this run (low, medium, high or max); empty keeps the model default'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - low
+          - medium
+          - high
+          - max
+  schedule:
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Real-model eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check the API key
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set; the scheduled eval cannot run."
+            exit 1
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY secret is not set; skipping the real-model eval."
+          fi
+
+      - name: Checkout
+        if: steps.key.outputs.has_key == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.key.outputs.has_key == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.key.outputs.has_key == 'true'
+        run: npm ci
+
+      - name: Run the eval
+        if: steps.key.outputs.has_key == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_EVAL_RUNS: '3'
+          AI_EVAL_MIN_ACCURACY: ${{ vars.AI_EVAL_MIN_ACCURACY || '0.85' }}
+          ANTHROPIC_EFFORT: ${{ inputs.effort }}
+        run: npm run ai:eval

@@ -7,6 +7,8 @@ export const LLM_PROVIDERS = Object.freeze({
   ANTHROPIC: 'anthropic',
 })
 
+export const LLM_EFFORTS = Object.freeze(['low', 'medium', 'high', 'max'])
+
 export const AI_TOOLS = Object.freeze({
   IMPORT_FROM_TEMPLATE: 'import_from_template',
   ADD_TRAINING_TO_PROTOCOL: 'add_training_to_protocol',

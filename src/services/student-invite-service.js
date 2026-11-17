@@ -596,10 +596,7 @@ async function acceptSingleInvite(prisma, { invite, user }) {
 }
 
 /**
- * Accepts every pending, unexpired invite addressed to the user's (verified)
- * email; expired pending invites are flipped to `expired`.
- * Never throws: failures are logged so signup/verification is never broken.
- * Queries: 1 lookup + ~5 per accepted invite (typically 1 invite per email).
+ * Accepts the pending student invites of the user's verified email (patient invites need explicit consent); never throws.
  *
  * @returns {Promise<number>} number of invites accepted
  */
