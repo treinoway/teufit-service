@@ -19,6 +19,8 @@ import {
   getChallengeRankingForTrainer,
   getChallengeRankingForStudent,
 } from '../../src/services/challenge-ranking-service.js';
+import { getChallengeConsistency } from '../../src/services/challenge-consistency-service.js';
+import { requestEarlyClose } from '../../src/services/challenge-close-service.js';
 import {
   createChallengeSchema,
   listChallengesSchema,
@@ -34,6 +36,8 @@ import {
   listMyChallengesSchema,
   getMyChallengSchema,
   getMyChallengeRankingSchema,
+  closeChallengeSchema,
+  getChallengeConsistencySchema,
 } from '../schemas/challenge-route.schema.js';
 
 export async function challengeRoutes(fastify) {
@@ -133,6 +137,35 @@ export async function challengeRoutes(fastify) {
         challengeId: request.params.id,
       });
       return reply.status(204).send();
+    },
+  );
+
+  fastify.post(
+    '/trainer/challenges/:id/close',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: closeChallengeSchema,
+    },
+    async (request, reply) => {
+      const { closesAt } = await requestEarlyClose(prisma, request.user.id, request.params.id);
+      const challenge = await getChallenge({
+        prisma,
+        trainerUserId: request.user.id,
+        challengeId: request.params.id,
+      });
+      return reply.send({ ...challenge, closesAt });
+    },
+  );
+
+  fastify.get(
+    '/trainer/challenges/:id/consistency',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: getChallengeConsistencySchema,
+    },
+    async (request, reply) => {
+      const standings = await getChallengeConsistency(prisma, request.user.id, request.params.id);
+      return reply.send(standings);
     },
   );
 
