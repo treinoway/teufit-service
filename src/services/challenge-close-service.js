@@ -40,7 +40,7 @@ async function lastWeekClosePassed(prisma, challenge, now) {
   return weekBounds(lastMonday, rule).closeInstant.getTime() <= now.getTime();
 }
 
-// Whether the last week is closed: the trainer's closed-week mark exists, or, with no active season (no mark is ever written), its close passed
+// Whether the last week is closed: the trainer's closed-week mark exists (written with or without an active season, CAMP-72), or, with no active season, its close passed
 async function isDue(prisma, challenge, now) {
   const mark = await prisma.consistencyWeekClose.findUnique({
     where: { trainerId_weekStart: { trainerId: challenge.trainerId, weekStart: lastMondayOf(challenge) } },

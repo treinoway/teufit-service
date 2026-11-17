@@ -7,6 +7,7 @@ import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 import { signupVerified } from '../helpers/signup-user.js';
 import { closeDueChallenges } from '../../src/services/challenge-close-service.js';
 import { computeChallengeStandings } from '../../src/services/challenge-consistency-service.js';
+import { closeDueWeeks } from '../../src/services/consistency-close-service.js';
 import { updateConfig } from '../../src/services/consistency-config-service.js';
 import { weekStartFor } from '../../src/helpers/consistency-week.js';
 import {
@@ -555,6 +556,57 @@ e2eDescribe('challenge weeks', () => {
       const closeLogs = loggers.flatMap((logger) => logger.info.mock.calls).filter(([fields]) => fields.challengeId === challenge.id);
       expect(closeLogs).toHaveLength(1);
       expect(loggers.flatMap((logger) => logger.error.mock.calls)).toEqual([]);
+    });
+
+    it('CAMP-72 counts both closed weeks in the final standings of a championship run without an active season', async () => {
+      const trainer = await createTrainer();
+      const ana = await createStudent(trainer.trainerId, { firstName: 'Ana', lastName: 'Lima', withProtocol: true });
+      const bia = await createStudent(trainer.trainerId, { firstName: 'Bia', lastName: 'Costa', withProtocol: true });
+      const carl = await createStudent(trainer.trainerId, { firstName: 'Carl', lastName: 'Reis', withProtocol: true });
+      const challenge = await seedWeeklyChallenge(trainer.trainerId, { start: mondayAt(-2), weeks: 2, studentIds: [ana.id, bia.id] });
+      const complete = (student, monday, category) =>
+        prisma.workoutSession.create({
+          data: {
+            trainingId: student.trainings[category].id,
+            userId: student.id,
+            status: WorkoutSessionStatus.COMPLETED,
+            finishedAt: new Date(monday.getTime() + 15 * 3600000),
+          },
+        });
+      for (const category of [TrainingCategory.STRENGTH, TrainingCategory.FUNCTIONAL, TrainingCategory.CARDIO]) {
+        await complete(ana, mondayAt(-2), category);
+        await complete(carl, mondayAt(-2), category);
+      }
+      await complete(ana, mondayAt(-1), TrainingCategory.STRENGTH);
+      await complete(bia, mondayAt(-1), TrainingCategory.STRENGTH);
+      await complete(bia, mondayAt(-1), TrainingCategory.CARDIO);
+      const afterFirstWeek = new Date(mondayAt(-1).getTime() + 15 * 3600000);
+      const runJob = async (now) => {
+        await closeDueWeeks(prisma, createLogger(), now);
+        await closeDueChallenges(prisma, createLogger(), now);
+      };
+
+      await runJob(afterFirstWeek);
+      expect((await prisma.challenge.findUnique({ where: { id: challenge.id } })).closedAt).toBeNull();
+      await runJob(new Date());
+
+      const results = await prisma.consistencyWeeklyResult.findMany({ where: { trainerId: trainer.trainerId }, orderBy: { weekStart: 'asc' } });
+      expect(await prisma.consistencySeason.count({ where: { trainerId: trainer.trainerId } })).toBe(0);
+      expect(results.every((row) => row.seasonId === null && row.status === WeekStatus.VALID)).toBe(true);
+      expect(results.map((row) => [row.studentId, dateKey(row.weekStart)]).sort()).toEqual(
+        [[ana.id, dateKey(mondayAt(-2))], [ana.id, dateKey(mondayAt(-1))], [bia.id, dateKey(mondayAt(-2))], [bia.id, dateKey(mondayAt(-1))]].sort(),
+      );
+      const meanOf = (studentId) => {
+        const scores = results.filter((row) => row.studentId === studentId).map((row) => Number(row.score));
+        return Math.round(((scores[0] + scores[1]) / 2) * 10000) / 10000;
+      };
+      expect((await prisma.challenge.findUnique({ where: { id: challenge.id } })).closedAt).not.toBeNull();
+      const standings = await prisma.challengeConsistencyStanding.findMany({ where: { challengeId: challenge.id }, orderBy: { position: 'asc' } });
+      expect(standings.map((row) => [row.studentId, row.position, Number(row.average), row.validWeeks, row.eligible])).toEqual([
+        [ana.id, 1, meanOf(ana.id), 2, true],
+        [bia.id, 2, meanOf(bia.id), 2, true],
+      ]);
+      expect(meanOf(ana.id)).toBeGreaterThan(meanOf(bia.id));
     });
 
     it('CAMP-37 keeps the final standings after later workouts and changes', async () => {
