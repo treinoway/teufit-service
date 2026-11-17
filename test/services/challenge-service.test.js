@@ -56,6 +56,7 @@ import {
   getStudentChallenge,
 } from '../../src/services/challenge-service.js';
 import { assertCanCreateChallenge } from '../../src/services/platform-plan-service.js';
+import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
 
 const TRAINER_ID = 'trainer-record-uuid';
 const TRAINER_USER_ID = 'trainer-user-uuid';
@@ -122,6 +123,11 @@ const weeklyBody = (overrides = {}) => ({
   studentIds: [],
   ...overrides,
 });
+
+// Fake findMany over stored championships: those whose fields equal every value of the where clause
+const storedMatching = (records) => async ({ where }) => records.filter((record) => (
+  Object.entries(where).every(([field, value]) => (record[field] ?? null) === value)
+));
 
 // Row Prisma would return for the created data
 const echoCreated = (data) => ({
@@ -897,6 +903,19 @@ describe('challenge-service', () => {
       expect(mockPrisma.user.findMany).toHaveBeenCalledTimes(1);
       expect(mockPrisma.challengeParticipant.createMany).not.toHaveBeenCalled();
       expect(mockTx.challengeParticipant.createMany).toHaveBeenCalledTimes(1);
+
+      const filterChampionship = echoCreated(mockTx.challenge.create.mock.calls[0][0].data);
+      const allModeChampionship = { ...filterChampionship, id: 'all-mode-uuid', participantMode: ChallengeParticipantMode.ALL };
+      mockPrisma.challenge.findMany.mockImplementation(storedMatching([filterChampionship, allModeChampionship]));
+      mockPrisma.challengeParticipant.createMany.mockResolvedValue({ count: 1 });
+
+      const joined = await joinAllModeChallenges(mockPrisma, TRAINER_ID, STUDENT_ID_2, WEDNESDAY_SP);
+
+      expect(joined).toBe(1);
+      expect(mockPrisma.challengeParticipant.createMany).toHaveBeenCalledWith({
+        data: [{ challengeId: 'all-mode-uuid', studentId: STUDENT_ID_2, createdAt: WEDNESDAY_SP }],
+        skipDuplicates: true,
+      });
     });
 
     it('CAMP-12 creates a dates championship as today when no weekly format is sent', async () => {
