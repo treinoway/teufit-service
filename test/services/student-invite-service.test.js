@@ -25,6 +25,9 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
 vi.mock('../../src/services/briefing-service.js', () => ({
   markBriefingDirty: vi.fn(),
 }));
+vi.mock('../../src/services/challenge-participant-sync.js', () => ({
+  joinAllModeChallenges: vi.fn(),
+}));
 
 import emailHandler from '../../src/config/email-handler.js';
 import {
@@ -38,6 +41,7 @@ import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 import { linkStudentByEmail } from '../../src/services/trainer-service.js';
 import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from '../../src/services/trainer-onboarding-service.js';
 import { markBriefingDirty } from '../../src/services/briefing-service.js';
+import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { PLATFORM_PLAN_ERRORS } from '../../src/constants/platform-plan.js';
 import {
@@ -159,6 +163,7 @@ describe('student-invite-service', () => {
     assertStudentCap.mockResolvedValue(undefined);
     maybeMarkFirstStudentLinked.mockResolvedValue(undefined);
     markBriefingDirty.mockResolvedValue(undefined);
+    joinAllModeChallenges.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -1359,6 +1364,55 @@ describe('student-invite-service', () => {
 
       await expect(acceptPendingInvitesForUser(prisma, user)).resolves.toBe(0);
       expect(console.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('claimInviteAndLink', () => {
+    const user = { id: 'student-1', email: STUDENT_EMAIL };
+    const pending = () => ({ id: INVITE_ID, trainerId: TRAINER_ID, expiresAt: new Date(NOW.getTime() + STUDENT_INVITE_TTL_MS) });
+
+    beforeEach(() => {
+      prisma.studentInvite.findMany.mockResolvedValue([pending()]);
+      prisma.studentInvite.updateMany.mockResolvedValue({ count: 1 });
+      prisma.trainerStudent.createMany.mockResolvedValue({ count: 1 });
+      prisma.user.update.mockResolvedValue({});
+    });
+
+    it('CAMP-13 adds the invited student to all-mode weekly championships', async () => {
+      joinAllModeChallenges.mockResolvedValue(2);
+
+      const accepted = await acceptPendingInvitesForUser(prisma, user);
+
+      expect(accepted).toBe(1);
+      expect(joinAllModeChallenges).toHaveBeenCalledWith(prisma, TRAINER_ID, 'student-1', NOW);
+      expect(joinAllModeChallenges.mock.invocationCallOrder[0])
+        .toBeGreaterThan(prisma.trainerStudent.createMany.mock.invocationCallOrder[0]);
+    });
+
+    it('CAMP-13 keeps the link and logs when joining the championships fails', async () => {
+      const failure = new Error('championships down');
+      joinAllModeChallenges.mockRejectedValue(failure);
+
+      const accepted = await acceptPendingInvitesForUser(prisma, user);
+
+      expect(accepted).toBe(1);
+      expect(prisma.trainerStudent.createMany).toHaveBeenCalledWith({
+        data: [{ trainerId: TRAINER_ID, studentId: 'student-1', activeOnPlan: true }],
+        skipDuplicates: true,
+      });
+      expect(markBriefingDirty).toHaveBeenCalledWith(prisma, TRAINER_ID);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({ trainerId: TRAINER_ID, studentId: 'student-1', err: failure }),
+        expect.any(String),
+      );
+    });
+
+    it('CAMP-13 does not touch the championships when the invite was no longer pending', async () => {
+      prisma.studentInvite.updateMany.mockResolvedValue({ count: 0 });
+
+      await acceptPendingInvitesForUser(prisma, user);
+
+      expect(joinAllModeChallenges).not.toHaveBeenCalled();
     });
   });
 });

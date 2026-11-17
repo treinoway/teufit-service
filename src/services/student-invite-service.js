@@ -22,6 +22,7 @@ import { assertStudentCap } from './platform-plan-service.js';
 import { linkStudentByEmail } from './trainer-service.js';
 import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
+import { joinAllModeChallenges } from './challenge-participant-sync.js';
 import {
   issueCodeRespectingLimits,
   markVerificationSendFailed,
@@ -547,11 +548,12 @@ async function hasStudentCapacity(prisma, trainerId) {
 
 /**
  * Atomically claims a pending invite (pending -> accepted) and creates the
- * TrainerStudent link. Returns false when the invite was no longer pending
- * (e.g. revoked concurrently), in which case nothing is linked.
+ * TrainerStudent link, then joins the student to the trainer's all-mode weekly
+ * championships outside the transaction. Returns false when the invite was no
+ * longer pending (e.g. revoked concurrently), in which case nothing is linked.
  */
 async function claimInviteAndLink(prisma, { invite, studentId, activeOnPlan }) {
-  return prisma.$transaction(async (tx) => {
+  const claimed = await prisma.$transaction(async (tx) => {
     const { count } = await tx.studentInvite.updateMany({
       where: { id: invite.id, status: StudentInviteStatus.PENDING },
       data: { status: StudentInviteStatus.ACCEPTED, studentId, acceptedAt: new Date() },
@@ -565,6 +567,20 @@ async function claimInviteAndLink(prisma, { invite, studentId, activeOnPlan }) {
     await tx.user.update({ where: { id: studentId }, data: { status: UserStatus.ACTIVE } });
     return true;
   });
+  if (claimed) await joinInvitedStudentToChallenges(prisma, invite.trainerId, studentId);
+  return claimed;
+}
+
+// Live "all" mode (CAMP-13): puts the invited student in the trainer's open all-mode weekly championships; a failure is logged and the link kept
+async function joinInvitedStudentToChallenges(prisma, trainerId, studentId) {
+  try {
+    await joinAllModeChallenges(prisma, trainerId, studentId, new Date());
+  } catch (err) {
+    console.error(
+      { trainerId, studentId, err },
+      `[challenge-sync] failed to add student ${studentId} to the all-mode championships of trainer ${trainerId}`,
+    );
+  }
 }
 
 async function acceptSingleInvite(prisma, { invite, user }) {
