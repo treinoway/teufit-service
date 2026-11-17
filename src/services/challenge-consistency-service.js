@@ -98,9 +98,9 @@ async function resultsByStudent(prisma, trainerId, studentIds, currentMonday) {
   return byStudent;
 }
 
-// Championship weeks that count for a participant: those starting (Monday 00:00) at or after the entry (CAMP-17)
-function countedWeeks(participant, mondays, rules) {
-  const entry = participant.createdAt.getTime();
+// Championship weeks that count for a participant: those starting (Monday 00:00) at or after the entry (CAMP-17) and after an edit moved the start (CAMP-11)
+function countedWeeks(participant, mondays, rules, startScheduledAt) {
+  const entry = startScheduledAt ? laterOf(participant.createdAt, startScheduledAt).getTime() : participant.createdAt.getTime();
   return new Set(
     mondays
       .filter((monday) => weekBounds(civilOf(monday), rules.get(formatDateOnly(monday))).startInstant.getTime() >= entry)
@@ -195,7 +195,7 @@ export async function computeChallengeStandings(prisma, challenge, now) {
     : new Map();
   const enriched = participants.map((row) => ({
     ...row,
-    counted: countedWeeks(row, mondays, rules),
+    counted: countedWeeks(row, mondays, rules, challenge.startScheduledAt),
     results: results.get(row.studentId) ?? [],
   }));
   const outcomes = await runningOutcomes(prisma, challenge.trainerId, runningMonday, enriched);

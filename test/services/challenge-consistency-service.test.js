@@ -137,6 +137,25 @@ describe('computeChallengeStandings', () => {
     expect(evaluateRunningWeek).not.toHaveBeenCalled();
   });
 
+  it('CAMP-11 makes the current week neutral when an edit moved the start into it after Monday 00:00', async () => {
+    const joinedTuesdayBefore = new Date('2026-11-10T13:00:00.000Z');
+    const movedWednesday = new Date('2026-11-18T13:00:00.000Z');
+    arrange({
+      participants: [participant('ana', 'Ana', 'Souza', joinedTuesdayBefore)],
+      runningWeek: { ana: running(80) },
+    });
+
+    const standings = await computeChallengeStandings(
+      prisma,
+      championship({ startDate: dateOnly('2026-11-16'), endDate: dateOnly('2026-11-29'), weeks: 2, startScheduledAt: movedWednesday }),
+      NOW,
+    );
+
+    expect(standings.rows).toEqual([]);
+    expect(standings.entering).toEqual([]);
+    expect(evaluateRunningWeek).not.toHaveBeenCalled();
+  });
+
   it('CAMP-15 counts an added participant from the entry', async () => {
     const addedSundayBeforeWeek2 = new Date('2026-11-08T20:00:00.000Z');
     arrange({

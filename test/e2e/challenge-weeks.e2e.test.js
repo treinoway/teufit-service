@@ -540,6 +540,23 @@ e2eDescribe('challenge weeks', () => {
       });
     });
 
+    it('CAMP-11 makes the current week neutral when an edit moves the start into it after Monday 00:00', async () => {
+      const trainer = await createTrainer();
+      const ana = await createStudent(trainer.trainerId, { firstName: 'Ana', lastName: 'Lima', withProtocol: true });
+      const scheduled = await seedWeeklyChallenge(trainer.trainerId, { start: mondayAt(1), weeks: 2, studentIds: [ana.id], minPodiumWeeks: 1 });
+      await prisma.challengeParticipant.updateMany({
+        where: { challengeId: scheduled.id },
+        data: { createdAt: new Date(mondayAt(-1).getTime() + MS_PER_DAY) },
+      });
+
+      const res = await call(trainer.token, 'PATCH', `/trainer/challenges/${scheduled.id}`, { startWeek: dateKey(mondayAt(0)) });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ startDate: dateKey(mondayAt(0)), status: ChallengeStatus.ACTIVE });
+      const consistency = (await call(trainer.token, 'GET', `/trainer/challenges/${scheduled.id}/consistency`)).json();
+      expect(consistency).toMatchObject({ status: ChallengeStatus.ACTIVE, currentWeek: 1, rows: [], entering: [] });
+    });
+
     it('CAMP-40 edits name, description, anonymous ranking and visibility while running', async () => {
       const trainer = await createTrainer();
       const created = (await createWeekly(trainer.token, { startWeek: dateKey(mondayAt(0)), weeks: 4 })).json();

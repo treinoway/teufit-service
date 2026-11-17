@@ -357,7 +357,7 @@ function assertWeeklyScheduleLocked(data) {
   }
 }
 
-// Schedule and point-rule columns of a scheduled weekly championship, validated like the creation
+// Schedule and point-rule columns of a scheduled weekly championship, validated like the creation; a start moved into the running week records when it moved (CAMP-11)
 async function weeklyScheduleChanges(prisma, challenge, data, now) {
   if (FREE_DATE_FIELDS.some((field) => data[field] !== undefined)) {
     throw new AppError({
@@ -369,13 +369,15 @@ async function weeklyScheduleChanges(prisma, challenge, data, now) {
   }
   const pointRules = pickDefined(data, POINT_RULE_FIELDS);
   if (!WEEKLY_SCHEDULE_FIELDS.some((field) => data[field] !== undefined)) return pointRules;
-  const { fields } = await resolveWeeklyFields(prisma, challenge.trainerId, {
+  const { fields, weeklyContext } = await resolveWeeklyFields(prisma, challenge.trainerId, {
     startWeek: data.startWeek ?? formatDateOnly(challenge.startDate),
     weeks: data.weeks ?? challenge.weeks,
     minPodiumWeeks: data.minPodiumWeeks ?? challenge.minPodiumWeeks,
   }, now);
   const { weeks, minPodiumWeeks, startDate, endDate } = fields;
-  return { ...pointRules, weeks, minPodiumWeeks, startDate, endDate };
+  const movedIntoRunningWeek = startDate.getTime() !== challenge.startDate.getTime()
+    && weeklyStatus({ startDate }, weeklyContext) === ChallengeStatus.ACTIVE;
+  return { ...pointRules, weeks, minPodiumWeeks, startDate, endDate, ...(movedIntoRunningWeek ? { startScheduledAt: now } : {}) };
 }
 
 /**
