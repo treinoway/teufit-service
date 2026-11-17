@@ -12750,6 +12750,45 @@
           "response": []
         },
         {
+          "name": "Create Weekly Championship",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"ptsWorkoutCompleted\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges"
+              ]
+            },
+            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored."
+          },
+          "response": []
+        },
+        {
           "name": "List Challenges",
           "request": {
             "method": "GET",
@@ -12855,7 +12894,7 @@
                 }
               ]
             },
-            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge."
+            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge.\n\nWeekly format: while scheduled every field (name, description, startWeek, weeks, minPodiumWeeks, anonymousRanking, visibility, point rules); while running only name, description, anonymousRanking and visibility (others answer 409)."
           },
           "response": []
         },
@@ -12889,6 +12928,39 @@
               ]
             },
             "description": "Cancel a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Close Weekly Championship Early",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "close"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "End a running weekly championship early: the running week becomes the last one, the end moves to its Sunday and the championship closes at that week close (`closesAt`). 409 challenge.notClosable when it is not a running weekly championship."
           },
           "response": []
         },
@@ -12954,6 +13026,39 @@
               ]
             },
             "description": "Get challenge leaderboard"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Challenge Consistency Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/consistency",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "consistency"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship."
           },
           "response": []
         },

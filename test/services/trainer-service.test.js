@@ -52,6 +52,10 @@ vi.mock('../../src/config/s3-bucket-handler.js', () => ({
   },
 }));
 
+vi.mock('../../src/services/challenge-participant-sync.js', () => ({
+  joinAllModeChallenges: vi.fn(),
+}));
+
 // Mock the email handler — sending is fire-and-forget and tested via the mock.
 vi.mock('../../src/config/email-handler.js', () => ({
   default: {
@@ -64,6 +68,7 @@ import s3BucketHandler from '../../src/config/s3-bucket-handler.js';
 import emailHandler from '../../src/config/email-handler.js';
 import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, getLinkedStudent, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
+import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
 import { buildAssignmentLockKey } from '../../src/helpers/subscription-helpers.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import {
@@ -476,6 +481,62 @@ describe('linkStudentByEmail', () => {
     ).rejects.toMatchObject({ messageCode: 'student.notFound' });
 
     expect(emailHandler.sendStudentLinkedEmail).not.toHaveBeenCalled();
+  });
+
+  it('CAMP-13 puts the newly linked student in the all-mode weekly championships after creating the link', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'user-student', email: 'student@example.com', firstName: 'Jane', lastName: 'Doe', avatarUrl: null })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+    prisma.$transaction.mockResolvedValue([]);
+    joinAllModeChallenges.mockResolvedValue(2);
+
+    await linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'student@example.com' });
+
+    expect(joinAllModeChallenges).toHaveBeenCalledWith(prisma, 'trainer1', 'user-student', expect.any(Date));
+    expect(joinAllModeChallenges.mock.invocationCallOrder[0])
+      .toBeGreaterThan(prisma.$transaction.mock.invocationCallOrder[0]);
+  });
+
+  it('CAMP-13 keeps the link and logs when joining the championships fails', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'user-student', email: 'student@example.com', firstName: 'Jane', lastName: 'Doe', avatarUrl: null })
+      .mockResolvedValueOnce({ firstName: 'John', lastName: 'Trainer' });
+    prisma.trainerStudent.findUnique.mockResolvedValue(null);
+    prisma.trainerStudent.create.mockResolvedValue({ id: 'link1' });
+    const failure = new Error('championships down');
+    joinAllModeChallenges.mockRejectedValue(failure);
+    const logger = { error: vi.fn() };
+
+    const result = await linkStudentByEmail({
+      trainerId: 'trainer1',
+      trainerUserId: 'user-trainer',
+      email: 'student@example.com',
+      logger,
+    });
+
+    expect(result).toMatchObject({ id: 'user-student', email: 'student@example.com' });
+    expect(prisma.trainerStudent.create).toHaveBeenCalledWith({
+      data: { trainerId: 'trainer1', studentId: 'user-student' },
+    });
+    expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ trainerId: 'trainer1', studentId: 'user-student', err: failure }),
+      expect.any(String),
+    );
+    expect(emailHandler.sendStudentLinkedEmail).toHaveBeenCalled();
+  });
+
+  it('CAMP-13 does not touch the championships when the student is already linked', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-student', email: 'student@example.com', firstName: 'Jane', lastName: 'Doe', avatarUrl: null });
+    prisma.trainerStudent.findUnique.mockResolvedValue({ id: 'link1' });
+
+    await expect(
+      linkStudentByEmail({ trainerId: 'trainer1', trainerUserId: 'user-trainer', email: 'student@example.com' }),
+    ).rejects.toMatchObject({ messageCode: 'student.alreadyLinked' });
+
+    expect(joinAllModeChallenges).not.toHaveBeenCalled();
   });
 });
 

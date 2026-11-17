@@ -30,47 +30,48 @@ model User {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  accounts                   Account[]
-  healthDetail               UserHealthDetail?
-  trainer                    Trainer?
-  address                    Address?
-  socials                    SocialNetwork?
-  refreshTokens              RefreshToken[]
-  passwordResetTokens        PasswordResetToken[]
-  nutritionist               Nutritionist?
-  preferences                UserPreferences?
-  protocolsAsAssignee        TrainingProtocol[]
-  trainers                   TrainerStudent[]
-  workoutSessions            WorkoutSession[]
-  studentAnamneses           StudentAnamnesis[]
-  anamnesisResponses         AnamnesisResponse[]         @relation("AnamnesisResponseStudent")
-  anamnesisResponsesFilled   AnamnesisResponse[]         @relation("AnamnesisResponseFiller")
-  aiConversations            AiConversation[]
-  challengeParticipants      ChallengeParticipant[]
-  pointTransactions          PointTransaction[]
-  pointBalances              PointBalance[]
-  nutritionistPatients       NutritionistPatient[]
-  metabolicProfiles          PatientMetabolicProfile[]
-  dietProtocolsAsPatient     DietProtocol[]
-  dietMealLogs               DietMealLog[]
-  dietSwapLogs               DietSwapLog[]
-  waterLogs                  WaterLog[]
-  patientInvitesAccepted     PatientInvite[]
-  videosCreated              Video[]
-  tutorialsCreated           Tutorial[]
-  studentSubscriptions       StudentSubscription[]
-  aiUsageEventsAsStudent     AiUsageEvent[]              @relation("aiUsageStudent")
-  aiTokenUsagesAsStudent     AiTokenUsage[]              @relation("aiTokenUsageStudent")
-  aiInteractionLogsAsStudent AiInteractionLog[]          @relation("aiInteractionLogStudent")
-  invitesSent                TrainerInvite[]             @relation("InvitesSent")
-  invitesRedeemed            TrainerInvite[]             @relation("InvitesRedeemed")
-  emailVerificationTokens    EmailVerificationToken[]
-  studentInvitesAccepted     StudentInvite[]
-  consistencyWeeklyTargets   ConsistencyWeeklyTarget[]
-  consistencyWeeklyResults   ConsistencyWeeklyResult[]
-  consistencySeasonStandings ConsistencySeasonStanding[]
-  consistencyWeekPauses      ConsistencyWeekPause[]
-  consistencyContactLogs     ConsistencyContactLog[]
+  accounts                      Account[]
+  healthDetail                  UserHealthDetail?
+  trainer                       Trainer?
+  address                       Address?
+  socials                       SocialNetwork?
+  refreshTokens                 RefreshToken[]
+  passwordResetTokens           PasswordResetToken[]
+  nutritionist                  Nutritionist?
+  preferences                   UserPreferences?
+  protocolsAsAssignee           TrainingProtocol[]
+  trainers                      TrainerStudent[]
+  workoutSessions               WorkoutSession[]
+  studentAnamneses              StudentAnamnesis[]
+  anamnesisResponses            AnamnesisResponse[]            @relation("AnamnesisResponseStudent")
+  anamnesisResponsesFilled      AnamnesisResponse[]            @relation("AnamnesisResponseFiller")
+  aiConversations               AiConversation[]
+  challengeParticipants         ChallengeParticipant[]
+  pointTransactions             PointTransaction[]
+  pointBalances                 PointBalance[]
+  nutritionistPatients          NutritionistPatient[]
+  metabolicProfiles             PatientMetabolicProfile[]
+  dietProtocolsAsPatient        DietProtocol[]
+  dietMealLogs                  DietMealLog[]
+  dietSwapLogs                  DietSwapLog[]
+  waterLogs                     WaterLog[]
+  patientInvitesAccepted        PatientInvite[]
+  videosCreated                 Video[]
+  tutorialsCreated              Tutorial[]
+  studentSubscriptions          StudentSubscription[]
+  aiUsageEventsAsStudent        AiUsageEvent[]                 @relation("aiUsageStudent")
+  aiTokenUsagesAsStudent        AiTokenUsage[]                 @relation("aiTokenUsageStudent")
+  aiInteractionLogsAsStudent    AiInteractionLog[]             @relation("aiInteractionLogStudent")
+  invitesSent                   TrainerInvite[]                @relation("InvitesSent")
+  invitesRedeemed               TrainerInvite[]                @relation("InvitesRedeemed")
+  emailVerificationTokens       EmailVerificationToken[]
+  studentInvitesAccepted        StudentInvite[]
+  consistencyWeeklyTargets      ConsistencyWeeklyTarget[]
+  consistencyWeeklyResults      ConsistencyWeeklyResult[]
+  consistencySeasonStandings    ConsistencySeasonStanding[]
+  challengeConsistencyStandings ChallengeConsistencyStanding[]
+  consistencyWeekPauses         ConsistencyWeekPause[]
+  consistencyContactLogs        ConsistencyContactLog[]
 
   // Added for the manager backoffice user list (ORDER BY created_at DESC).
   @@index([createdAt])
@@ -959,16 +960,49 @@ model Challenge {
   dailyPointsCap      Int?    @map("daily_points_cap")
   anonymousRanking    Boolean @default(false) @map("anonymous_ranking")
 
+  // Weekly format (consistency ranking): "dates" keeps the free-date XP-only behaviour
+  format           String    @default("dates") @db.Text
+  weeks            Int?
+  minPodiumWeeks   Int?      @map("min_podium_weeks")
+  description      String?   @db.Text
+  visibility       String    @default("full") @db.Text
+  ownerType        String    @default("trainer") @map("owner_type") @db.Text
+  closeRequestedAt DateTime? @map("close_requested_at") @db.Timestamptz(6)
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(6)
+  // Instant an edit last moved the start Monday; weeks started before it are neutral (CAMP-11)
+  startScheduledAt DateTime? @map("start_scheduled_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trainer           Trainer                @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainer           Trainer                        @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   participants      ChallengeParticipant[]
   pointTransactions PointTransaction[]
+  standings         ChallengeConsistencyStanding[]
 
   @@index([trainerId, startDate])
   @@index([trainerId, endDate])
+  @@index([format, closedAt])
   @@map("challenges")
+}
+
+model ChallengeConsistencyStanding {
+  id          String   @id @default(uuid()) @db.Uuid
+  challengeId String   @map("challenge_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  position    Int?
+  eligible    Boolean
+  average     Decimal? @db.Decimal(7, 4)
+  validWeeks  Int      @map("valid_weeks")
+  weeks100    Int      @map("weeks_100")
+  streak      Int
+  frozenAt    DateTime @map("frozen_at") @db.Timestamptz(6)
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, studentId])
+  @@map("challenge_consistency_standings")
 }
 
 model ChallengeParticipant {
@@ -1835,7 +1869,8 @@ model ConsistencyWeeklyResult {
   id        String   @id @default(uuid()) @db.Uuid
   trainerId String   @map("trainer_id") @db.Uuid
   studentId String   @map("student_id") @db.Uuid
-  seasonId  String   @map("season_id") @db.Uuid
+  // Null when the week closed without an active team season, for a weekly championship (CAMP-72)
+  seasonId  String?  @map("season_id") @db.Uuid
   weekStart DateTime @map("week_start") @db.Date
   status    String   @db.Text
   score     Decimal? @db.Decimal(7, 4)
@@ -1843,9 +1878,9 @@ model ConsistencyWeeklyResult {
   weights   Json
   closedAt  DateTime @map("closed_at") @db.Timestamptz(6)
 
-  trainer Trainer           @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  student User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  season  ConsistencySeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  trainer Trainer            @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  season  ConsistencySeason? @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
   @@unique([trainerId, studentId, weekStart])
   @@index([trainerId, seasonId])

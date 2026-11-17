@@ -276,6 +276,10 @@ export default {
     'challenge.filter.empty': 'Nenhum aluno atende aos critérios do filtro.',
     'challenge.durationExceeded': 'A duração do campeonato não pode ultrapassar 365 dias.',
     'challenge.notActive': 'Este campeonato não está ativo.',
+    'challenge.weeks.invalid': 'Início ou duração inválidos. Escolha uma segunda-feira a partir da semana atual e de 1 a 12 semanas.',
+    'challenge.minPodium.invalid': 'Mínimo de semanas para o pódio inválido. Use de 1 até o número de semanas do campeonato, no máximo 4.',
+    'challenge.notClosable': 'Só um campeonato em semanas em andamento pode ser encerrado antes.',
+    'challenge.notWeekly': 'Este campeonato não tem classificação de constância.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',

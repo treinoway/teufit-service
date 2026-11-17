@@ -5,6 +5,9 @@ vi.mock('../../src/services/consistency-close-service.js', () => ({
   prepareCurrentWeek: vi.fn(),
   closeDueWeeks: vi.fn(),
 }));
+vi.mock('../../src/services/challenge-close-service.js', () => ({
+  closeDueChallenges: vi.fn(),
+}));
 
 import cron from 'node-cron';
 import { startConsistencyCloseCron } from '../../src/jobs/consistency-close-cron.js';
@@ -12,6 +15,7 @@ import {
   prepareCurrentWeek,
   closeDueWeeks,
 } from '../../src/services/consistency-close-service.js';
+import { closeDueChallenges } from '../../src/services/challenge-close-service.js';
 
 const EVERY_15_MINUTES = '*/15 * * * *';
 const NOW = new Date('2026-06-15T03:15:00Z');
@@ -80,5 +84,40 @@ describe('startConsistencyCloseCron', () => {
 
     expect(prepareCurrentWeek).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith({ err: failure }, expect.any(String));
+  });
+
+  it('CAMP-32 closes the due championships after closing the weeks, at the tick time', async () => {
+    const order = [];
+    prepareCurrentWeek.mockImplementation(async () => order.push('prepare'));
+    closeDueWeeks.mockImplementation(async () => order.push('weeks'));
+    closeDueChallenges.mockImplementation(async () => order.push('championships'));
+    startConsistencyCloseCron(prisma, logger);
+
+    await runScheduledTask();
+
+    expect(closeDueChallenges).toHaveBeenCalledWith(prisma, logger, NOW);
+    expect(order).toEqual(['prepare', 'weeks', 'championships']);
+  });
+
+  it('CAMP-32 still closes the championships when closing the weeks fails', async () => {
+    const failure = new Error('close down');
+    closeDueWeeks.mockRejectedValue(failure);
+    startConsistencyCloseCron(prisma, logger);
+
+    await runScheduledTask();
+
+    expect(logger.error).toHaveBeenCalledWith({ err: failure }, expect.stringContaining('closeDueWeeks'));
+    expect(closeDueChallenges).toHaveBeenCalledWith(prisma, logger, NOW);
+  });
+
+  it('CAMP-35 logs a closeDueChallenges failure without crashing the tick', async () => {
+    const failure = new Error('championships down');
+    closeDueChallenges.mockRejectedValue(failure);
+    startConsistencyCloseCron(prisma, logger);
+
+    await expect(runScheduledTask()).resolves.toBeUndefined();
+
+    expect(closeDueWeeks).toHaveBeenCalledWith(prisma, logger, NOW);
+    expect(logger.error).toHaveBeenCalledWith({ err: failure }, expect.stringContaining('closeDueChallenges'));
   });
 });

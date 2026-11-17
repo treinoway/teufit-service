@@ -272,6 +272,10 @@ export default {
     'challenge.filter.empty': 'No students match the filter criteria.',
     'challenge.durationExceeded': 'Challenge duration cannot exceed 365 days.',
     'challenge.notActive': 'This challenge is not active.',
+    'challenge.weeks.invalid': 'Invalid start or length. Pick a Monday from the current week on and 1 to 12 weeks.',
+    'challenge.minPodium.invalid': 'Invalid podium minimum. Use 1 up to the championship weeks, at most 4.',
+    'challenge.notClosable': 'Only a running weekly championship can be closed early.',
+    'challenge.notWeekly': 'This championship has no consistency standings.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',

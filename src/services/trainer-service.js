@@ -12,6 +12,7 @@ import {
 import { markBriefingDirty } from './briefing-service.js';
 import { computeExpectedSessions } from '../helpers/adherence-helpers.js';
 import { assertStudentCap } from './platform-plan-service.js';
+import { joinAllModeChallenges } from './challenge-participant-sync.js';
 import { TrainingStatus } from '../constants/training.js';
 import {
   SubscriptionStatus,
@@ -178,17 +179,29 @@ export async function patch({ userId, trainer, address, socials }) {
 // Backwards-compatible alias used by older routes/tests.
 export const updateMyTrainerProfile = patch;
 
+// Live "all" mode (CAMP-13): puts a newly linked student in the trainer's open all-mode weekly championships; a failure is logged and the link kept
+async function joinNewStudentToChallenges(trainerId, studentId, logger) {
+  try {
+    await joinAllModeChallenges(prisma, trainerId, studentId, new Date());
+  } catch (err) {
+    logger.error(
+      { trainerId, studentId, err },
+      `[challenge-sync] failed to add student ${studentId} to the all-mode championships of trainer ${trainerId}`,
+    );
+  }
+}
+
 /**
  * Link a student to the authenticated trainer by the student's email.
  *
  * Contract:
- * - Input: trainerId (Trainer.id), trainerUserId (User.id of trainer), email (student's email)
+ * - Input: trainerId (Trainer.id), trainerUserId (User.id of trainer), email (student's email), optional logger (defaults to console)
  * - Throws NotFoundAppError if no user with that email exists
  * - Throws AppError (422) if trainer tries to link themselves
  * - Throws ConflictAppError if the student is already linked to this trainer
  * - Output: basic student profile { id, email, firstName, lastName, avatarUrl }
  */
-export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
+export async function linkStudentByEmail({ trainerId, trainerUserId, email, logger = console }) {
   const student = await prisma.user.findUnique({
     where: { email },
     select: { id: true, email: true, firstName: true, lastName: true, avatarUrl: true },
@@ -235,6 +248,8 @@ export async function linkStudentByEmail({ trainerId, trainerUserId, email }) {
   // extra latency is negligible vs. the risk of losing the dirty signal.
   // Hot-path mutations (set logs, sessions) use fire-and-forget instead.
   await markBriefingDirty(prisma, trainerId);
+
+  await joinNewStudentToChallenges(trainerId, student.id, logger);
 
   // Notify the student of the new link (closed beta welcome). Fire-and-forget:
   // an email failure must never break the link operation.

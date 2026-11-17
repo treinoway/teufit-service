@@ -99,8 +99,16 @@ function weekOutcome(link, ctx) {
   return partial === null ? neutral : { status: WeekStatus.VALID, partial, pillars };
 }
 
-// Evaluates the running week of every linked student with one read per kind
-async function evaluateRunningWeek(prisma, trainerId, mondayDate, links) {
+/**
+ * Evaluates the running week of every linked student with one read per kind (joined after Monday 00:00 -> neutral, paused, no target -> neutral).
+ *
+ * @param {object} prisma
+ * @param {string} trainerId - Trainer.id
+ * @param {Date} mondayDate - midnight-UTC Date of the running week's Monday
+ * @param {Array<{ studentId: string, createdAt: Date }>} links - createdAt is when the student started counting
+ * @returns {Promise<Map<string, { status: string, partial: object|null, pillars: object }>>} outcome per student id
+ */
+export async function evaluateRunningWeek(prisma, trainerId, mondayDate, links) {
   const weekStart = civilOf(mondayDate);
   const rule = await ruleForWeek(prisma, trainerId, weekStart);
   const previousRule = await ruleForWeek(prisma, trainerId, civilOf(new Date(mondayDate.getTime() - MS_PER_WEEK)));
