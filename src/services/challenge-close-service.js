@@ -160,6 +160,7 @@ export async function requestEarlyClose(prisma, trainerUserId, challengeId, now 
 
   const monday = weekStartFor(now, timeZone);
   const mondayDate = dbDateOf(monday);
+  if (mondayDate.getTime() > lastMondayOf(challenge).getTime()) throw notClosable();
   const weeks = currentWeekOf(challenge, mondayDate);
   const endDate = new Date(mondayDate.getTime() + DAYS_TO_SUNDAY * MS_PER_DAY);
   const updated = await prisma.challenge.update({

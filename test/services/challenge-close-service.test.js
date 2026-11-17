@@ -256,6 +256,18 @@ describe('requestEarlyClose', () => {
     expect(prisma.challenge.update).not.toHaveBeenCalled();
   });
 
+  it('CAMP-42 answers 409 challenge.notClosable after the last week ended and before the job closed it', async () => {
+    prisma.challenge.findUnique.mockResolvedValue(championship());
+    const mondayAfterTheEnd = new Date('2026-11-16T13:00:00.000Z');
+
+    await expect(requestEarlyClose(prisma, TRAINER_USER_ID, 'champ-a', mondayAfterTheEnd)).rejects.toMatchObject({
+      httpStatus: 409,
+      error: ChallengeErrorCode.CHALLENGE_NOT_CLOSABLE,
+      messageCode: ChallengeMessageCode.CHALLENGE_NOT_CLOSABLE,
+    });
+    expect(prisma.challenge.update).not.toHaveBeenCalled();
+  });
+
   it('CAMP-65 answers 403 when the championship belongs to another trainer', async () => {
     prisma.challenge.findUnique.mockResolvedValue(eightWeeks({ trainerId: 'other-trainer' }));
 
