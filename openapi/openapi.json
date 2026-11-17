@@ -82680,11 +82680,10 @@
                 "type": "object",
                 "required": [
                   "name",
-                  "startDate",
-                  "endDate",
                   "participantMode"
                 ],
                 "additionalProperties": false,
+                "description": "Without `format: \"weeks\"` the challenge uses free dates and needs startDate and endDate. Any owner type sent is ignored.",
                 "properties": {
                   "name": {
                     "type": "string",
@@ -82693,11 +82692,46 @@
                   },
                   "startDate": {
                     "type": "string",
-                    "format": "date"
+                    "format": "date",
+                    "description": "Dates format only (required there)"
                   },
                   "endDate": {
                     "type": "string",
-                    "format": "date"
+                    "format": "date",
+                    "description": "Dates format only (required there)"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "dates",
+                      "weeks"
+                    ]
+                  },
+                  "startWeek": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Weekly format: start Monday (YYYY-MM-DD, trainer time zone), the current week or a later one"
+                  },
+                  "weeks": {
+                    "type": "integer",
+                    "description": "Weekly format: 1 to 12 weeks"
+                  },
+                  "minPodiumWeeks": {
+                    "type": "integer",
+                    "description": "Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 280,
+                    "nullable": true
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "position",
+                      "full"
+                    ]
                   },
                   "participantMode": {
                     "type": "string",
@@ -82781,7 +82815,8 @@
               }
             }
           },
-          "required": true
+          "required": true,
+          "description": "Without `format: \"weeks\"` the challenge uses free dates and needs startDate and endDate. Any owner type sent is ignored."
         },
         "security": [
           {
@@ -82872,6 +82907,60 @@
                     },
                     "anonymousRanking": {
                       "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
                     },
                     "createdAt": {
                       "type": "string",
@@ -83267,6 +83356,60 @@
                       "anonymousRanking": {
                         "type": "boolean"
                       },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "dates",
+                          "weeks"
+                        ],
+                        "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                      },
+                      "weeks": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Number of weeks; weekly format only"
+                      },
+                      "currentWeek": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                      },
+                      "minPodiumWeeks": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Valid weeks needed for the podium; weekly format only"
+                      },
+                      "description": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "visibility": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "position",
+                          "full"
+                        ]
+                      },
+                      "ownerType": {
+                        "type": "string",
+                        "enum": [
+                          "trainer",
+                          "platform"
+                        ]
+                      },
+                      "closeRequestedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the trainer asked to end it early"
+                      },
+                      "closedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the final standings were frozen"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -83518,6 +83661,60 @@
                     "anonymousRanking": {
                       "type": "boolean"
                     },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -83703,7 +83900,7 @@
         }
       },
       "patch": {
-        "summary": "Update challenge name, dates, and/or point rules (pts fields only on scheduled)",
+        "summary": "Update a challenge; weekly format: every field while scheduled, only name, description, anonymous ranking and visibility while running",
         "tags": [
           "challenges"
         ],
@@ -83726,6 +83923,32 @@
                   "endDate": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "startWeek": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Weekly format: start Monday (YYYY-MM-DD, trainer time zone), the current week or a later one"
+                  },
+                  "weeks": {
+                    "type": "integer",
+                    "description": "Weekly format: 1 to 12 weeks"
+                  },
+                  "minPodiumWeeks": {
+                    "type": "integer",
+                    "description": "Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 280,
+                    "nullable": true
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "position",
+                      "full"
+                    ]
                   },
                   "ptsWorkoutCompleted": {
                     "type": "integer",
@@ -83870,6 +84093,60 @@
                     },
                     "anonymousRanking": {
                       "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
                     },
                     "createdAt": {
                       "type": "string",
@@ -84539,6 +84816,60 @@
                     "anonymousRanking": {
                       "type": "boolean"
                     },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -84547,6 +84878,897 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/challenges/{id}/close": {
+      "post": {
+        "summary": "End a running weekly championship early: the running week becomes the last one and it closes at that week close",
+        "tags": [
+          "challenges"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "trainerId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "startDate": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "endDate": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "status": {
+                      "type": "string",
+                      "x-i18n": "challengeStatus"
+                    },
+                    "statusLabel": {
+                      "type": "string"
+                    },
+                    "participantMode": {
+                      "type": "string",
+                      "x-i18n": "challengeParticipantMode"
+                    },
+                    "participantModeLabel": {
+                      "type": "string"
+                    },
+                    "filterCriteria": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "nullable": true
+                    },
+                    "cancelledAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "participantCount": {
+                      "type": "integer"
+                    },
+                    "ptsWorkoutCompleted": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ptsStreak7Days": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ptsStreak30Days": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ptsDailyCheckin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ptsEvolutionRecord": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "ptsWorkoutFeedback": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "dailyPointsCap": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "anonymousRanking": {
+                      "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "closesAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Close instant of the running week, when the championship closes"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/challenges/{id}/consistency": {
+      "get": {
+        "summary": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed",
+        "tags": [
+          "challenges"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challenge": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "startDate": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "weeks": {
+                          "type": "integer"
+                        },
+                        "minPodiumWeeks": {
+                          "type": "integer"
+                        },
+                        "anonymousRanking": {
+                          "type": "boolean"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "position",
+                            "full"
+                          ]
+                        },
+                        "closeRequestedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "closedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "participantCount": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "x-i18n": "challengeStatus"
+                    },
+                    "statusLabel": {
+                      "type": "string"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Week number while running; the number of weeks once closed"
+                    },
+                    "closesAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "Close instant of the running week"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Full name, also with anonymous ranking on"
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "description": "First name and initial of the last name"
+                          },
+                          "initials": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "nullable": true,
+                            "description": "Null for participants still entering"
+                          },
+                          "eligible": {
+                            "type": "boolean"
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ]
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Average over the championship valid weeks"
+                          },
+                          "validWeeks": {
+                            "type": "integer"
+                          },
+                          "weeks100": {
+                            "type": "integer"
+                          },
+                          "weeksAt100": {
+                            "type": "integer"
+                          },
+                          "streak": {
+                            "type": "integer"
+                          },
+                          "currentWeekScore": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Partial score of the running week; null once closed"
+                          },
+                          "weekStatus": {
+                            "type": "string",
+                            "enum": [
+                              "valid",
+                              "neutral",
+                              "paused"
+                            ],
+                            "nullable": true
+                          },
+                          "entering": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the participant lacks the valid weeks for the podium",
+                            "properties": {
+                              "validWeeks": {
+                                "type": "integer"
+                              },
+                              "required": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "weeksMissing": {
+                            "type": "integer",
+                            "description": "Valid weeks still missing for the podium"
+                          }
+                        }
+                      }
+                    },
+                    "entering": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Full name, also with anonymous ranking on"
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "description": "First name and initial of the last name"
+                          },
+                          "initials": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "nullable": true,
+                            "description": "Null for participants still entering"
+                          },
+                          "eligible": {
+                            "type": "boolean"
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ]
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Average over the championship valid weeks"
+                          },
+                          "validWeeks": {
+                            "type": "integer"
+                          },
+                          "weeks100": {
+                            "type": "integer"
+                          },
+                          "weeksAt100": {
+                            "type": "integer"
+                          },
+                          "streak": {
+                            "type": "integer"
+                          },
+                          "currentWeekScore": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Partial score of the running week; null once closed"
+                          },
+                          "weekStatus": {
+                            "type": "string",
+                            "enum": [
+                              "valid",
+                              "neutral",
+                              "paused"
+                            ],
+                            "nullable": true
+                          },
+                          "entering": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Present while the participant lacks the valid weeks for the podium",
+                            "properties": {
+                              "validWeeks": {
+                                "type": "integer"
+                              },
+                              "required": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "weeksMissing": {
+                            "type": "integer",
+                            "description": "Valid weeks still missing for the podium"
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -85764,6 +86986,48 @@
               }
             }
           },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "500": {
             "description": "Default Response",
             "content": {
@@ -86248,6 +87512,60 @@
                       "anonymousRanking": {
                         "type": "boolean"
                       },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "dates",
+                          "weeks"
+                        ],
+                        "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                      },
+                      "weeks": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Number of weeks; weekly format only"
+                      },
+                      "currentWeek": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                      },
+                      "minPodiumWeeks": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "Valid weeks needed for the podium; weekly format only"
+                      },
+                      "description": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "visibility": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "position",
+                          "full"
+                        ]
+                      },
+                      "ownerType": {
+                        "type": "string",
+                        "enum": [
+                          "trainer",
+                          "platform"
+                        ]
+                      },
+                      "closeRequestedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the trainer asked to end it early"
+                      },
+                      "closedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the final standings were frozen"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -86456,6 +87774,60 @@
                     },
                     "anonymousRanking": {
                       "type": "boolean"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "dates",
+                        "weeks"
+                      ],
+                      "description": "\"dates\" (free dates, points only) or \"weeks\" (Monday start, whole weeks, consistency standings)"
+                    },
+                    "weeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Number of weeks; weekly format only"
+                    },
+                    "currentWeek": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Running week number (\"Semana X de Y\"); weekly format while running"
+                    },
+                    "minPodiumWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Valid weeks needed for the podium; weekly format only"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ]
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "trainer",
+                        "platform"
+                      ]
+                    },
+                    "closeRequestedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the trainer asked to end it early"
+                    },
+                    "closedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "When the final standings were frozen"
                     },
                     "createdAt": {
                       "type": "string",
