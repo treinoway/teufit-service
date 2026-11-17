@@ -401,6 +401,51 @@ e2eDescribe('challenge weeks', () => {
       expect(after[0]).toBeGreaterThan(before[0]);
     });
 
+    it('CAMP-71 awards the XP of a completed workout in a weekly championship', async () => {
+      const trainer = await createTrainer();
+      const signupRes = await signupVerified(app, {
+        method: 'POST',
+        url: '/auth/signup',
+        payload: { email: `e2e+weeks-xp-${Date.now()}@example.com`, password: 'StrongPassw0rd!' },
+      });
+      const { user: { id: studentId }, token: { accessToken: studentToken } } = signupRes.json();
+      await prisma.trainerStudent.create({ data: { trainerId: trainer.trainerId, studentId } });
+      const protocol = await prisma.trainingProtocol.create({
+        data: {
+          trainerId: trainer.trainerId,
+          assigneeId: studentId,
+          name: 'Protocol',
+          status: TrainingStatus.ACTIVE,
+          startDate: mondayAt(-1),
+          trainings: { create: [{ name: 'Strength', category: TrainingCategory.STRENGTH, weekDay: WeekDays.MONDAY }] },
+        },
+        include: { trainings: true },
+      });
+      const created = await createWeekly(trainer.token, {
+        startWeek: dateKey(mondayAt(0)),
+        weeks: 2,
+        studentIds: [studentId],
+        ptsWorkoutCompleted: 25,
+      });
+      expect(created.json()).toMatchObject({ format: ChallengeFormat.WEEKS, status: ChallengeStatus.ACTIVE });
+      const challengeId = created.json().id;
+
+      const started = await call(studentToken, 'POST', `/my/trainings/${protocol.trainings[0].id}/workout-sessions`, {});
+      expect(started.statusCode).toBe(201);
+      const finished = await call(studentToken, 'PATCH', `/my/workout-sessions/${started.json().id}`, { status: WorkoutSessionStatus.COMPLETED });
+      expect(finished.statusCode).toBe(200);
+      await vi.waitFor(async () => {
+        expect(await prisma.pointTransaction.count({ where: { challengeId, studentId } })).toBe(1);
+      });
+
+      const ranking = (await call(trainer.token, 'GET', `/trainer/challenges/${challengeId}/ranking`)).json();
+      const mine = (await call(studentToken, 'GET', `/my/challenges/${challengeId}/ranking`)).json();
+      const myChallenges = (await call(studentToken, 'GET', '/my/challenges')).json();
+      expect(ranking).toEqual([expect.objectContaining({ studentId, points: 25 })]);
+      expect(mine).toMatchObject({ myPosition: 1, myPoints: 25 });
+      expect(myChallenges).toEqual([expect.objectContaining({ id: challengeId, format: ChallengeFormat.WEEKS, status: ChallengeStatus.ACTIVE })]);
+    });
+
     it('CAMP-68 applies a new time zone from the next week', async () => {
       const trainer = await createTrainer();
       const challenge = await seedWeeklyChallenge(trainer.trainerId, {
