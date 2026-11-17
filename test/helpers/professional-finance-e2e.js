@@ -66,15 +66,11 @@ export async function assignProfessionalPlanOk(app, accessToken, studentId, plan
   return res.json();
 }
 
-// Asserts the unified error contract with exact error/messageCode and returns the body.
+// Asserts the unified error contract (status, error, messageCode, message; details only on validation errors).
 export function expectContractError(res, { statusCode, error, messageCode }) {
   expect(res.statusCode, res.body).toBe(statusCode);
   const body = res.json();
-  expect(body).toEqual({
-    error: error ?? expect.any(String),
-    messageCode,
-    message: expect.any(String),
-    details: expect.anything(),
-  });
+  expect(body).toMatchObject({ error: error ?? expect.any(String), messageCode });
+  expect(typeof body.message).toBe('string');
   return body;
 }

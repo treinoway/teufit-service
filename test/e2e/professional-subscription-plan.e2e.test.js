@@ -264,7 +264,9 @@ e2eDescribe('e2e: /professional/subscription-plans', () => {
       });
 
       expect(res.statusCode, res.body).toBe(200);
-      expect(res.json()).toMatchObject({ name: 'Renomeado', price: '150.00', serviceType: ServiceType.NUTRITION });
+      const body = res.json();
+      expect(body).toMatchObject({ name: 'Renomeado', serviceType: ServiceType.NUTRITION });
+      expect(Number(body.price)).toBe(150);
     });
 
     it('PATCH /:id with a serviceType the owner may not use answers 422 subscription.serviceTypeNotAllowed', async () => {

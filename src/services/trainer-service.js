@@ -728,11 +728,18 @@ export async function getLinkedStudent({ trainerUserId, studentId }, prismaClien
   };
 }
 
+// Resolves the User.id of a trainer row, for internal callers that only know the Trainer.id.
+async function resolveTrainerUserId(trainerId) {
+  const trainer = await prisma.trainer.findUnique({ where: { id: trainerId }, select: { userId: true } });
+  return trainer.userId;
+}
+
 /**
  * Unlink a student from the authenticated trainer.
  *
  * Contract:
- * - Input: trainerId (Trainer.id), studentId (User.id of the student), userId (User.id of the trainer)
+ * - Input: trainerId (Trainer.id), studentId (User.id of the student), userId (User.id of the trainer, optional:
+ *   resolved from the trainer row when absent)
  * - Throws NotFoundAppError if no link exists between trainer and student
  * - Returns nothing (caller should respond with 204)
  */
@@ -752,14 +759,15 @@ export async function unlinkStudent({ trainerId, studentId, userId }) {
   // pending charges are voided, already-due ones stay pending as debt (visible in
   // the finance overview even after the unlink).
   const now = new Date();
+  const trainerUserId = userId ?? (await resolveTrainerUserId(trainerId));
   await prisma.$transaction(async (tx) => {
     // Same user-level key as assignPlanToStudent: waits for an in-flight assignment, and an
     // assignment starting afterwards re-checks the link and finds it gone.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildProfessionalAssignmentLockKey(userId, studentId)}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildProfessionalAssignmentLockKey(trainerUserId, studentId)}))`;
     await tx.trainerStudent.delete({
       where: { trainerId_studentId: { trainerId, studentId } },
     });
-    const owner = { ...(await resolveOwnerRows(tx, userId)), trainerId };
+    const owner = { ...(await resolveOwnerRows(tx, trainerUserId)), trainerId };
     await cancelSubscriptionsAfterUnlink(tx, {
       owner,
       studentId,

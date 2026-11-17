@@ -9,7 +9,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
-import { PaymentStatus } from '../../src/constants/subscription.js';
+import { PaymentStatus, SubscriptionRecurrence } from '../../src/constants/subscription.js';
 import {
   assignPlanViaApi,
   authHeader,
@@ -37,6 +37,10 @@ const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 
 const FORBIDDEN = 403;
 const GENERATOR_QUIET_CYCLE_INDEX = 1000;
+const UNKNOWN_ID = '00000000-0000-4000-8000-000000000001';
+// why: a schema-valid body, so the role check (403) answers instead of body validation (400).
+const VALID_PLAN_BODY = { name: 'Plano Mensal', recurrence: SubscriptionRecurrence.MONTHLY, price: 100 };
+const VALID_ASSIGN_BODY = { planId: UNKNOWN_ID, startDate: '2026-01-05' };
 
 e2eDescribe('e2e: /trainer billing compatibility', () => {
   let app;
@@ -163,19 +167,19 @@ e2eDescribe('e2e: /trainer billing compatibility', () => {
 
   describe('AC 12: nutritionist-only user on /trainer/* billing routes', () => {
     it.each([
-      ['GET', '/trainer/subscription-plans'],
-      ['POST', '/trainer/subscription-plans'],
-      ['GET', '/trainer/subscriptions'],
-      ['GET', '/trainer/finance/overview'],
-      ['GET', '/trainer/students/00000000-0000-4000-8000-000000000001/payments'],
-      ['POST', '/trainer/payments/00000000-0000-4000-8000-000000000001/mark-paid'],
-      ['POST', '/trainer/students/00000000-0000-4000-8000-000000000001/subscriptions'],
-    ])('%s %s answers 403', async (method, url) => {
+      ['GET', '/trainer/subscription-plans', undefined],
+      ['POST', '/trainer/subscription-plans', VALID_PLAN_BODY],
+      ['GET', '/trainer/subscriptions', undefined],
+      ['GET', '/trainer/finance/overview', undefined],
+      ['GET', `/trainer/students/${UNKNOWN_ID}/payments`, undefined],
+      ['POST', `/trainer/payments/${UNKNOWN_ID}/mark-paid`, {}],
+      ['POST', `/trainer/students/${UNKNOWN_ID}/subscriptions`, VALID_ASSIGN_BODY],
+    ])('%s %s answers 403', async (method, url, payload) => {
       const nutritionist = await createNutritionistProfessional(app);
 
-      const res = await call(method, nutritionist.accessToken, url, method === 'POST' ? {} : undefined);
+      const res = await call(method, nutritionist.accessToken, url, payload);
 
-      expect(res.statusCode).toBe(FORBIDDEN);
+      expect(res.statusCode, res.body).toBe(FORBIDDEN);
     });
 
     it('does not let the nutritionist touch trainer payments through /trainer/*', async () => {
