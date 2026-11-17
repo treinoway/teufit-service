@@ -20459,6 +20459,710 @@
       ]
     },
     {
+      "name": "Professional Billing",
+      "item": [
+        {
+          "name": "Create Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). serviceType (training|nutrition|both) is optional: defaults to training for users with a trainer row, nutrition for nutritionist-only users. training/both plans belong to the trainer row, nutrition to the nutritionist row. 422 subscription.serviceTypeNotAllowed when the caller lacks the row the type needs (both needs both rows).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Plano Nutricional\",\n  \"recurrence\": \"monthly\",\n  \"price\": 200,\n  \"serviceType\": \"nutrition\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans?includeArchived=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans"
+              ],
+              "query": [
+                {
+                  "key": "includeArchived",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). ?includeArchived=true includes archived plans. Items carry serviceType/serviceTypeLabel, nullable trainerId/nutritionistId, activeSubscriptionCount and activeSubscriptionCountByKind { students, patients } (a subscriber linked to the caller as trainer student counts as student, otherwise patient)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.planNotFound outside the caller's scope."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). serviceType may only switch within the same owner row (training <-> both for a trainer row); moving to or from nutrition returns 422 subscription.serviceTypeNotAllowed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Novo nome\",\n  \"serviceType\": \"both\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Archive Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}",
+                "archive"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Idempotent soft delete."
+          },
+          "response": []
+        },
+        {
+          "name": "Unarchive Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}/unarchive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}",
+                "unarchive"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Plan to Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Link rule by plan serviceType: training needs a trainer link, nutrition an active nutritionist-patient link, both either one (403 student.notLinked otherwise). Replaces the caller's active subscription with the same person through either owner row (reason replaced); other professionals' subscriptions are untouched. The trainer seat quota applies only to training plans and to both plans for people linked as trainer students.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{planId}}\",\n  \"startDate\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). History across both owner rows; no live link required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Student Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions",
+                "active"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 403 student.notLinked when the person has neither link to the caller; null when none is active."
+          },
+          "response": []
+        },
+        {
+          "name": "List Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Filters: status, planId."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.notFound outside the caller's scope."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "cancel"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Voids not-yet-due pending payments.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Alta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Next Payment Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Same rules as the trainer route.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Subscription Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.paymentNotFound for another professional's payment.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Pix\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment Paid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/mark-paid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "mark-paid"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paidAt\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment Pending",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/mark-pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "mark-pending"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Void Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/void",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "void"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Void Payment (DELETE alias)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 204; alias of void."
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). History and summary across both owner rows; rows carry serviceType/serviceTypeLabel."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/finance/overview?month=2026-11",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "finance",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-11",
+                  "description": "YYYY-MM (America/Sao_Paulo). Defaults to the current month."
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). KPIs and payment rows for a month across both owner rows; rows carry serviceType/serviceTypeLabel."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/finance/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "finance",
+                "summary"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Returns { overdueCount, overdueAmount } (2-decimal string) for the sidebar badge; does not generate cycles."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Platform Plan",
       "item": [
         {

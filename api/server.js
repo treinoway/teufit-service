@@ -58,6 +58,7 @@ import { consistencyRankingRoutes } from './routes/consistency-ranking-route.js'
 import { adminConsistencyRankingRoutes } from './routes/admin-consistency-ranking-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
+import { professionalRoutes } from './routes/professional-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminManagerRoutes } from './routes/admin-manager-route.js';
@@ -451,6 +452,7 @@ export async function buildServer(options = {}) {
     await fastify.register(adminConsistencyRankingRoutes);
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
+    await fastify.register(professionalRoutes);
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
     await fastify.register(adminManagerRoutes);

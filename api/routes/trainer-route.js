@@ -207,7 +207,7 @@ export async function trainerRoutes(fastify) {
         });
       }
 
-      await unlinkStudent({ trainerId: trainerRecord.id, studentId });
+      await unlinkStudent({ trainerId: trainerRecord.id, studentId, userId: request.user.id });
 
       return reply.status(204).send();
     },

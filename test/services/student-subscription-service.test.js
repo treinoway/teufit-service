@@ -21,6 +21,8 @@ vi.mock('../../src/services/platform-plan-service.js', () => ({
 const mockTx = {
   $queryRaw: vi.fn(),
   $executeRaw: vi.fn(),
+  trainer: { findUnique: vi.fn() },
+  nutritionist: { findFirst: vi.fn() },
   trainerStudent: { findFirst: vi.fn() },
   studentSubscription: {
     findMany: vi.fn(),
@@ -36,7 +38,6 @@ const mockTx = {
 };
 
 const mockPrisma = {
-  trainer: { findUnique: vi.fn() },
   trainerStudent: { findFirst: vi.fn() },
   subscriptionPlan: { findFirst: vi.fn() },
   studentSubscription: {
@@ -58,9 +59,10 @@ import {
   computeAmount,
 } from '../../src/services/student-subscription-service.js';
 import { assertStudentActiveOnPlan } from '../../src/services/platform-plan-service.js';
+import { expectedAssignmentLockKey } from '../helpers/subscription-owner-fixtures.js';
 
-const TRAINER_USER_ID = 'trainer-user-uuid';
 const TRAINER_ID = 'trainer-record-uuid';
+const OWNER = { userId: 'trainer-user-uuid', trainerId: TRAINER_ID, nutritionistId: null };
 const STUDENT_ID = 'student-uuid-1';
 const PLAN_ID = 'plan-uuid-1';
 const SUBSCRIPTION_ID = 'sub-uuid-1';
@@ -69,6 +71,8 @@ function makePlanRecord(overrides = {}) {
   return {
     id: PLAN_ID,
     trainerId: TRAINER_ID,
+    nutritionistId: null,
+    serviceType: 'training',
     name: 'Plano Mensal',
     recurrence: 'monthly',
     price: new Decimal('100.00'),
@@ -123,7 +127,6 @@ beforeEach(() => {
   vi.resetAllMocks();
   // Re-apply platform-plan-service mocks after resetAllMocks.
   assertStudentActiveOnPlan.mockResolvedValue(undefined);
-  mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   mockPrisma.trainerStudent.findFirst.mockResolvedValue({ id: 'link-uuid' });
   mockTx.$queryRaw.mockResolvedValue([{ locked: true }]);
   mockTx.$executeRaw.mockResolvedValue(0);
@@ -183,7 +186,7 @@ describe('assignPlanToStudent', () => {
   });
 
   it('creates subscription and first payment in a transaction without replacing when none is active', async () => {
-    const result = await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+    const result = await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
     });
@@ -199,7 +202,7 @@ describe('assignPlanToStudent', () => {
 
   it('rejects a discountPercent override with more than 2 decimals before opening the transaction', async () => {
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
         discountPercent: 33.333,
@@ -213,7 +216,7 @@ describe('assignPlanToStudent', () => {
   });
 
   it('accepts a discountPercent override with exactly 2 decimals', async () => {
-    await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+    await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
       discountPercent: 33.33,
@@ -227,7 +230,7 @@ describe('assignPlanToStudent', () => {
     const now = new Date('2026-06-11T02:00:00Z');
 
     await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-10' }, now,
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-10' }, now,
     );
 
     expect(mockTx.studentSubscription.findMany).toHaveBeenCalledWith({
@@ -255,7 +258,7 @@ describe('assignPlanToStudent', () => {
     const now = new Date('2026-06-11T02:00:00Z'); // still Jun 10 in Sao Paulo
 
     await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-10' }, now,
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-10' }, now,
     );
 
     expect(mockTx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
@@ -279,7 +282,7 @@ describe('assignPlanToStudent', () => {
     const now = new Date('2026-06-10T15:00:00Z');
 
     await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-25' }, now,
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-06-25' }, now,
     );
 
     const { where } = mockTx.subscriptionPayment.updateMany.mock.calls[0][0];
@@ -315,7 +318,7 @@ describe('assignPlanToStudent', () => {
       mockLockThenLatestCycle();
 
       await assignPlanToStudent(
-        mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-20' }, NOW,
+        mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-20' }, NOW,
       );
 
       expect(mockTx.$executeRaw).toHaveBeenCalledOnce();
@@ -336,7 +339,7 @@ describe('assignPlanToStudent', () => {
 
       // New start == the old plan's next cycle start (2026-07-05): generation limit is 07-04.
       await assignPlanToStudent(
-        mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-05' }, NOW,
+        mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-05' }, NOW,
       );
 
       expect(mockTx.$executeRaw).not.toHaveBeenCalled();
@@ -348,7 +351,7 @@ describe('assignPlanToStudent', () => {
     ])('does not materialize anything when the new start is %s', async (_label, startDate) => {
       mockTx.studentSubscription.findMany.mockResolvedValue([REPLACED]);
 
-      await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate }, NOW);
+      await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate }, NOW);
 
       expect(mockTx.$executeRaw).not.toHaveBeenCalled();
       expect(mockTx.$queryRaw).toHaveBeenCalledOnce(); // advisory lock only
@@ -358,7 +361,7 @@ describe('assignPlanToStudent', () => {
       mockTx.studentSubscription.findMany.mockResolvedValue([]);
 
       await assignPlanToStudent(
-        mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-20' }, NOW,
+        mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-07-20' }, NOW,
       );
 
       expect(mockTx.$executeRaw).not.toHaveBeenCalled();
@@ -371,7 +374,7 @@ describe('assignPlanToStudent', () => {
     );
 
     await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID,
+      mockPrisma, OWNER, STUDENT_ID,
       { planId: PLAN_ID, startDate: '2026-01-31' },
       new Date('2026-01-31T15:00:00Z'),
     );
@@ -388,7 +391,7 @@ describe('assignPlanToStudent', () => {
     const now = new Date('2026-06-10T15:00:00Z');
 
     await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-03-15' }, now,
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-03-15' }, now,
     );
 
     const { data: paymentData } = mockTx.subscriptionPayment.create.mock.calls[0][0];
@@ -405,7 +408,7 @@ describe('assignPlanToStudent', () => {
 
     function assignOn(startDate, data = {}, now = NOW_OCT_10) {
       return assignPlanToStudent(
-        mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate, ...data }, now,
+        mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate, ...data }, now,
       );
     }
 
@@ -563,7 +566,7 @@ describe('assignPlanToStudent', () => {
     mockPrisma.$transaction.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -574,8 +577,8 @@ describe('assignPlanToStudent', () => {
     });
   });
 
-  it('takes the per-pair advisory try-lock before replacing or creating anything', async () => {
-    await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+  it('takes the per-professional-user advisory try-lock before replacing or creating anything', async () => {
+    await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
     });
@@ -583,15 +586,14 @@ describe('assignPlanToStudent', () => {
     expect(mockTx.$queryRaw).toHaveBeenCalledOnce();
     const [strings, lockKey] = mockTx.$queryRaw.mock.calls[0];
     expect(strings.join('?')).toContain('pg_try_advisory_xact_lock');
-    expect(lockKey).toContain(TRAINER_ID);
-    expect(lockKey).toContain(STUDENT_ID);
+    expect(lockKey).toBe(expectedAssignmentLockKey(OWNER.userId, STUDENT_ID));
     expect(mockTx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       mockTx.studentSubscription.findMany.mock.invocationCallOrder[0],
     );
   });
 
   it('re-checks the trainer-student link inside the transaction, after the lock and before any write', async () => {
-    await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+    await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
     });
@@ -609,7 +611,7 @@ describe('assignPlanToStudent', () => {
     mockTx.trainerStudent.findFirst.mockResolvedValue(null);
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -627,7 +629,7 @@ describe('assignPlanToStudent', () => {
     mockTx.$queryRaw.mockResolvedValue([{ locked: false }]);
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -644,7 +646,7 @@ describe('assignPlanToStudent', () => {
   });
 
   it('scopes the replacement to the same trainer (a second trainer\'s subscription is never cancelled)', async () => {
-    await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+    await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
     });
@@ -661,7 +663,7 @@ describe('assignPlanToStudent', () => {
     mockPrisma.$transaction.mockRejectedValue(boom);
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -670,7 +672,7 @@ describe('assignPlanToStudent', () => {
 
   it('rejects a discountAmount override with more than 2 decimals with 400 SUBSCRIPTION_INVALID_AMOUNT', async () => {
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
         discountAmount: 1.005,
@@ -680,7 +682,7 @@ describe('assignPlanToStudent', () => {
   });
 
   it('snapshots plan fields at attach time', async () => {
-    await assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+    await assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
       planId: PLAN_ID,
       startDate: '2026-05-01',
     });
@@ -690,22 +692,11 @@ describe('assignPlanToStudent', () => {
     expect(createCall.data.planId).toBe(PLAN_ID);
   });
 
-  it('throws 404 when trainer not found', async () => {
-    mockPrisma.trainer.findUnique.mockResolvedValue(null);
-
-    await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
-        planId: PLAN_ID,
-        startDate: '2026-05-01',
-      }),
-    ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.TRAINER_NOT_FOUND });
-  });
-
   it('throws 403 when student is not linked', async () => {
     mockPrisma.trainerStudent.findFirst.mockResolvedValue(null);
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -716,7 +707,7 @@ describe('assignPlanToStudent', () => {
     mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(null);
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -729,7 +720,7 @@ describe('assignPlanToStudent', () => {
     );
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
       }),
@@ -744,7 +735,7 @@ describe('assignPlanToStudent', () => {
     );
 
     await expect(
-      assignPlanToStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, {
+      assignPlanToStudent(mockPrisma, OWNER, STUDENT_ID, {
         planId: PLAN_ID,
         startDate: '2026-05-01',
         discountPercent: 0,
@@ -763,7 +754,7 @@ describe('listSubscriptionsByStudent', () => {
     const subs = [makeSubscriptionRecord(), makeSubscriptionRecord({ id: 'sub-2' })];
     mockPrisma.studentSubscription.findMany.mockResolvedValue(subs);
 
-    const result = await listSubscriptionsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await listSubscriptionsByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result).toHaveLength(2);
   });
@@ -772,7 +763,7 @@ describe('listSubscriptionsByStudent', () => {
     mockPrisma.trainerStudent.findFirst.mockResolvedValue(null);
     mockPrisma.studentSubscription.findMany.mockResolvedValue([makeSubscriptionRecord()]);
 
-    const result = await listSubscriptionsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await listSubscriptionsByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result).toHaveLength(1);
     expect(mockPrisma.trainerStudent.findFirst).not.toHaveBeenCalled();
@@ -786,7 +777,7 @@ describe('getActiveSubscriptionByStudent', () => {
     const sub = makeSubscriptionRecord();
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(sub);
 
-    const result = await getActiveSubscriptionByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await getActiveSubscriptionByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result).not.toBeNull();
     expect(result.status).toBe(SubscriptionStatus.ACTIVE);
@@ -795,7 +786,7 @@ describe('getActiveSubscriptionByStudent', () => {
   it('returns null when no active subscription', async () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(null);
 
-    const result = await getActiveSubscriptionByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await getActiveSubscriptionByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result).toBeNull();
   });
@@ -814,7 +805,7 @@ describe('cancelSubscription', () => {
     const now = new Date('2026-06-10T15:00:00Z');
 
     const result = await cancelSubscription(
-      mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, { reason: 'Student requested' }, now,
+      mockPrisma, OWNER, SUBSCRIPTION_ID, { reason: 'Student requested' }, now,
     );
 
     expect(mockTx.studentSubscription.updateMany).toHaveBeenCalledWith({
@@ -838,7 +829,7 @@ describe('cancelSubscription', () => {
     // 02:00 UTC on Jun 11 is still Jun 10 in Sao Paulo
     const now = new Date('2026-06-11T02:00:00Z');
 
-    await cancelSubscription(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, now);
+    await cancelSubscription(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, now);
 
     expect(mockPrisma.$transaction).toHaveBeenCalledOnce();
     expect(mockTx.subscriptionPayment.updateMany).toHaveBeenCalledOnce();
@@ -860,7 +851,7 @@ describe('cancelSubscription', () => {
     mockTx.studentSubscription.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
-      cancelSubscription(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID),
+      cancelSubscription(mockPrisma, OWNER, SUBSCRIPTION_ID),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.CANNOT_EDIT_CANCELLED,
@@ -874,7 +865,7 @@ describe('cancelSubscription', () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(cancelledRecord());
 
     await expect(
-      cancelSubscription(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID),
+      cancelSubscription(mockPrisma, OWNER, SUBSCRIPTION_ID),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.CANNOT_EDIT_CANCELLED,
@@ -887,7 +878,7 @@ describe('cancelSubscription', () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(null);
 
     await expect(
-      cancelSubscription(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID),
+      cancelSubscription(mockPrisma, OWNER, SUBSCRIPTION_ID),
     ).rejects.toMatchObject({
       httpStatus: 404,
       error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
@@ -914,7 +905,7 @@ describe('subscription responses expose the effective billingDay', () => {
     );
 
     const result = await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-10-10', billingDay: 5 },
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-10-10', billingDay: 5 },
     );
 
     expect(result.billingDay).toBe(5);
@@ -925,7 +916,7 @@ describe('subscription responses expose the effective billingDay', () => {
     mockTx.studentSubscription.create.mockResolvedValue(legacyRecord());
 
     const result = await assignPlanToStudent(
-      mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-05-17' },
+      mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate: '2026-05-17' },
     );
 
     expect(result.billingDay).toBe(LEGACY_START_DAY);
@@ -937,7 +928,7 @@ describe('subscription responses expose the effective billingDay', () => {
       { ...legacyRecord(), id: 'legacy' },
     ]);
 
-    const result = await listSubscriptionsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await listSubscriptionsByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result.map((subscription) => subscription.billingDay)).toEqual([31, LEGACY_START_DAY]);
   });
@@ -945,7 +936,7 @@ describe('subscription responses expose the effective billingDay', () => {
   it('getActiveSubscriptionByStudent returns the effective billingDay', async () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(legacyRecord());
 
-    const result = await getActiveSubscriptionByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID);
+    const result = await getActiveSubscriptionByStudent(mockPrisma, OWNER, STUDENT_ID);
 
     expect(result.billingDay).toBe(LEGACY_START_DAY);
   });

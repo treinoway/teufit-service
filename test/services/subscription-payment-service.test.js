@@ -15,7 +15,6 @@ const { Decimal } = Prisma;
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
 
 const mockPrisma = {
-  trainer: { findUnique: vi.fn() },
   studentSubscription: { findFirst: vi.fn() },
   trainerStudent: { findFirst: vi.fn() },
   subscriptionPayment: {
@@ -39,8 +38,8 @@ import {
   voidPayment,
 } from '../../src/services/subscription-payment-service.js';
 
-const TRAINER_USER_ID = 'trainer-user-uuid';
 const TRAINER_ID = 'trainer-record-uuid';
+const OWNER = { userId: 'trainer-user-uuid', trainerId: TRAINER_ID, nutritionistId: null };
 const SUBSCRIPTION_ID = 'sub-uuid-1';
 const PAYMENT_ID = 'payment-uuid-1';
 const STUDENT_ID = 'student-uuid-1';
@@ -125,7 +124,6 @@ function insertedRow() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   mockPrisma.studentSubscription.findFirst.mockResolvedValue(makeSubscriptionRecord());
 });
 
@@ -153,7 +151,7 @@ describe('createPayment', () => {
       );
       mockLastCycle(0);
 
-      const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+      const result = await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
       const row = insertedRow();
       expect(row.cycleIndex).toBe(1);
@@ -169,7 +167,7 @@ describe('createPayment', () => {
       );
       mockLastCycle(4);
 
-      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+      await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
       expect(insertedRow()).toMatchObject({
         cycleIndex: 5,
@@ -184,7 +182,7 @@ describe('createPayment', () => {
       );
       mockLastCycle(0);
 
-      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+      await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
       expect(insertedRow().cycleStartDate).toBe('2026-06-17');
     });
@@ -196,7 +194,7 @@ describe('createPayment', () => {
       mockLastCycle(0);
 
       await expect(
-        createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+        createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
       ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.CYCLE_NOT_DUE });
     });
 
@@ -206,7 +204,7 @@ describe('createPayment', () => {
       );
       mockLastCycle(0);
 
-      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, { dueDate: '2026-06-12' }, NOW);
+      await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, { dueDate: '2026-06-12' }, NOW);
 
       expect(insertedRow().dueDate).toBe('2026-06-12');
     });
@@ -217,7 +215,7 @@ describe('createPayment', () => {
       );
       mockLastCycle(0);
 
-      await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+      await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
       expect(insertedRow()).toMatchObject({ cycleStartDate: '2026-06-10', cycleEndDate: '2026-07-09', dueDate: '2026-06-10' });
     });
@@ -226,7 +224,7 @@ describe('createPayment', () => {
   it('creates the next cycle (index + 1) from the subscription anchor, ignoring any caller dates', async () => {
     mockLastCycle(0);
 
-    const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    const result = await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(insertedRow().cycleIndex).toBe(1);
     expect(result.cycleStartDate).toBe('2026-06-01');
@@ -237,7 +235,7 @@ describe('createPayment', () => {
   it('inserts through the conditional helper and reads the row back by (subscriptionId, cycleIndex)', async () => {
     mockLastCycle(0);
 
-    await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(mockPrisma.$executeRaw).toHaveBeenCalledOnce();
     expect(mockPrisma.subscriptionPayment.findUnique).toHaveBeenCalledWith({
@@ -251,7 +249,7 @@ describe('createPayment', () => {
     );
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
-    const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    const result = await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(result.cycleIndex).toBe(0);
     expect(result.cycleStartDate).toBe('2026-06-10');
@@ -263,7 +261,7 @@ describe('createPayment', () => {
     );
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
-    const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    const result = await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(result.cycleIndex).toBe(12);
     expect(result.cycleStartDate).toBe('2026-06-10');
@@ -272,7 +270,7 @@ describe('createPayment', () => {
   it('defaults dueDate to the cycle start date', async () => {
     mockLastCycle(0);
 
-    await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     const row = insertedRow();
     expect(row.dueDate).toBe(row.cycleStartDate);
@@ -283,7 +281,7 @@ describe('createPayment', () => {
 
     await createPayment(
       mockPrisma,
-      TRAINER_USER_ID,
+      OWNER,
       SUBSCRIPTION_ID,
       { dueDate: '2026-06-15', notes: 'pix' },
       NOW,
@@ -298,7 +296,7 @@ describe('createPayment', () => {
     );
     mockLastCycle(0);
 
-    await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(insertedRow().amount).toBe('66.60');
   });
@@ -309,7 +307,7 @@ describe('createPayment', () => {
     );
     mockLastCycle(0); // next starts 2026-06-17 = today + 7
 
-    const result = await createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW);
+    const result = await createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW);
 
     expect(result.cycleStartDate).toBe('2026-06-17');
   });
@@ -321,7 +319,7 @@ describe('createPayment', () => {
     mockLastCycle(0); // next starts 2026-06-18 = today + 8
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.CYCLE_NOT_DUE,
@@ -334,7 +332,7 @@ describe('createPayment', () => {
     mockLastCycle(1); // Jul 1 > today + 7
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.CYCLE_NOT_DUE });
     expect(mockPrisma.$executeRaw).not.toHaveBeenCalled();
   });
@@ -347,7 +345,7 @@ describe('createPayment', () => {
     const lateUtc = new Date('2026-06-10T00:30:00Z'); // SP: 2026-06-09 21:30 -> limit 2026-06-16
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, lateUtc),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, lateUtc),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.CYCLE_NOT_DUE });
   });
 
@@ -357,7 +355,7 @@ describe('createPayment', () => {
     mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePaymentRecord({ cycleIndex: 1 }));
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.CYCLE_ALREADY_EXISTS,
@@ -371,7 +369,7 @@ describe('createPayment', () => {
     mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(null);
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.SUBSCRIPTION_CANCELLED,
@@ -385,7 +383,7 @@ describe('createPayment', () => {
     mockPrisma.$executeRaw.mockRejectedValue(boom);
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toBe(boom);
   });
 
@@ -395,7 +393,7 @@ describe('createPayment', () => {
     );
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.SUBSCRIPTION_CANCELLED,
@@ -408,19 +406,11 @@ describe('createPayment', () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(null);
 
     await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
+      createPayment(mockPrisma, OWNER, SUBSCRIPTION_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 404,
       error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
     });
-  });
-
-  it('throws 404 when the trainer profile does not exist', async () => {
-    mockPrisma.trainer.findUnique.mockResolvedValue(null);
-
-    await expect(
-      createPayment(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, {}, NOW),
-    ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.TRAINER_NOT_FOUND });
   });
 });
 
@@ -434,7 +424,7 @@ describe('listPaymentsBySubscription', () => {
 
     const result = await listPaymentsBySubscription(
       mockPrisma,
-      TRAINER_USER_ID,
+      OWNER,
       SUBSCRIPTION_ID,
       NOW,
     );
@@ -449,7 +439,7 @@ describe('listPaymentsBySubscription', () => {
     mockPrisma.studentSubscription.findFirst.mockResolvedValue(null);
 
     await expect(
-      listPaymentsBySubscription(mockPrisma, TRAINER_USER_ID, SUBSCRIPTION_ID, NOW),
+      listPaymentsBySubscription(mockPrisma, OWNER, SUBSCRIPTION_ID, NOW),
     ).rejects.toMatchObject({
       httpStatus: 404,
       error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
@@ -476,7 +466,7 @@ describe('listPaymentsByStudent', () => {
   it('scopes by trainerId + studentId only (no live link) in a single query', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
 
-    await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW);
+    await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW);
 
     expect(mockPrisma.subscriptionPayment.findMany).toHaveBeenCalledOnce();
     expect(mockPrisma.subscriptionPayment.findMany.mock.calls[0][0].where).toEqual({
@@ -508,7 +498,7 @@ describe('listPaymentsByStudent', () => {
       ),
     ]);
 
-    const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW);
+    const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW);
 
     expect(result.summary).toEqual({
       totalReceived: '100.30',
@@ -522,7 +512,7 @@ describe('listPaymentsByStudent', () => {
   it('returns a zeroed summary and null customerSince when there are no payments', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
 
-    const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW);
+    const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW);
 
     expect(result).toEqual({
       student: null,
@@ -540,7 +530,7 @@ describe('listPaymentsByStudent', () => {
       payment.subscription.student = studentRow;
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue([payment]);
 
-      const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW, { resolveAvatarUrl });
+      const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW, { resolveAvatarUrl });
 
       expect(result.student).toEqual({ id: STUDENT_ID, name: 'Maria Silva', avatarUrl: 'https://cdn/avatar-key' });
       expect(mockPrisma.trainerStudent.findFirst).not.toHaveBeenCalled();
@@ -550,7 +540,7 @@ describe('listPaymentsByStudent', () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
       mockPrisma.trainerStudent.findFirst.mockResolvedValue({ student: studentRow });
 
-      const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW, { resolveAvatarUrl });
+      const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW, { resolveAvatarUrl });
 
       expect(result.student).toEqual({ id: STUDENT_ID, name: 'Maria Silva', avatarUrl: 'https://cdn/avatar-key' });
       expect(mockPrisma.trainerStudent.findFirst).toHaveBeenCalledWith({
@@ -563,7 +553,7 @@ describe('listPaymentsByStudent', () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
       mockPrisma.trainerStudent.findFirst.mockResolvedValue(null);
 
-      const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, 'stranger', NOW, { resolveAvatarUrl });
+      const result = await listPaymentsByStudent(mockPrisma, OWNER, 'stranger', NOW, { resolveAvatarUrl });
 
       expect(result.student).toBeNull();
       expect(resolveAvatarUrl).not.toHaveBeenCalled();
@@ -575,7 +565,7 @@ describe('listPaymentsByStudent', () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue([payment]);
       mockPrisma.trainerStudent.findFirst.mockResolvedValue(null);
 
-      const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW, { resolveAvatarUrl });
+      const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW, { resolveAvatarUrl });
 
       expect(result.student).toMatchObject({ id: STUDENT_ID, name: 'Maria Silva' });
     });
@@ -586,7 +576,7 @@ describe('listPaymentsByStudent', () => {
         student: { id: STUDENT_ID, firstName: 'Maria', lastName: null, avatarUrl: null },
       });
 
-      const result = await listPaymentsByStudent(mockPrisma, TRAINER_USER_ID, STUDENT_ID, NOW, { resolveAvatarUrl });
+      const result = await listPaymentsByStudent(mockPrisma, OWNER, STUDENT_ID, NOW, { resolveAvatarUrl });
 
       expect(result.student).toEqual({ id: STUDENT_ID, name: 'Maria', avatarUrl: null });
     });
@@ -603,7 +593,7 @@ describe('markPaymentPaid', () => {
   const lastUpdate = () => mockPrisma.subscriptionPayment.updateMany.mock.calls.at(-1)[0];
 
   it('conditionally sets status to paid and paidAt to now when no paidAt is supplied', async () => {
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(lastUpdate()).toEqual({
       where: { id: PAYMENT_ID, status: { in: [PaymentStatus.PENDING, PaymentStatus.CANCELLED] } },
@@ -616,7 +606,7 @@ describe('markPaymentPaid', () => {
     const existing = new Date('2026-06-01T10:00:00Z');
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: existing }));
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(result.paidAt).toEqual(existing);
     expect(mockPrisma.subscriptionPayment.updateMany).not.toHaveBeenCalled();
@@ -626,7 +616,7 @@ describe('markPaymentPaid', () => {
     const existing = new Date('2026-06-02T01:00:00Z'); // SP: 2026-06-01 22:00
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: existing }));
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-01' }, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-01' }, NOW);
 
     expect(result.paidAt).toEqual(existing);
     expect(mockPrisma.subscriptionPayment.updateMany).not.toHaveBeenCalled();
@@ -638,7 +628,7 @@ describe('markPaymentPaid', () => {
     );
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-02' }, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-02' }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID,
@@ -648,13 +638,13 @@ describe('markPaymentPaid', () => {
   });
 
   it('stores a retroactive paidAt at midday Sao Paulo of the requested day', async () => {
-    await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-05-31' }, NOW);
+    await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-05-31' }, NOW);
 
     expect(lastUpdate().data.paidAt).toEqual(new Date('2026-05-31T15:00:00Z'));
   });
 
   it('uses the real instant when paidAt is today in Sao Paulo', async () => {
-    await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: TODAY_SP }, NOW);
+    await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: TODAY_SP }, NOW);
 
     expect(lastUpdate().data.paidAt).toEqual(NOW);
   });
@@ -662,14 +652,14 @@ describe('markPaymentPaid', () => {
   it('accepts today as seen in Sao Paulo even though UTC already rolled over', async () => {
     const lateNight = new Date('2026-06-11T02:00:00Z'); // SP: 2026-06-10 23:00
 
-    await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-10' }, lateNight);
+    await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-10' }, lateNight);
 
     expect(lastUpdate().data.paidAt).toEqual(lateNight);
   });
 
   it('rejects a future paidAt with 400 SUBSCRIPTION_INVALID_PAID_AT', async () => {
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-11' }, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-11' }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 400,
       error: SubscriptionErrorCode.INVALID_PAID_AT,
@@ -681,14 +671,14 @@ describe('markPaymentPaid', () => {
   describe('paidAt lower bound (subscription.startDate minus PAID_AT_MAX_ADVANCE_MONTHS)', () => {
     // subscription.startDate in makePaymentRecord is 2026-05-01 -> lower bound 2025-05-01
     it('accepts a paidAt exactly on the lower bound', async () => {
-      await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2025-05-01' }, NOW);
+      await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2025-05-01' }, NOW);
 
       expect(lastUpdate().data.paidAt).toEqual(new Date('2025-05-01T15:00:00Z'));
     });
 
     it('rejects a paidAt one day before the lower bound with 400 SUBSCRIPTION_INVALID_PAID_AT', async () => {
       await expect(
-        markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2025-04-30' }, NOW),
+        markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2025-04-30' }, NOW),
       ).rejects.toMatchObject({
         httpStatus: 400,
         error: SubscriptionErrorCode.INVALID_PAID_AT,
@@ -698,7 +688,7 @@ describe('markPaymentPaid', () => {
     });
 
     it('accepts a paidAt before the subscription start but inside the 12-month allowance', async () => {
-      await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-04-15' }, NOW);
+      await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-04-15' }, NOW);
 
       expect(lastUpdate().data.paidAt).toEqual(new Date('2026-04-15T15:00:00Z'));
     });
@@ -707,7 +697,7 @@ describe('markPaymentPaid', () => {
   it('allows paying a voided (cancelled) payment', async () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.CANCELLED }));
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(result.status).toBe(PaymentStatus.PAID);
   });
@@ -719,7 +709,7 @@ describe('markPaymentPaid', () => {
       reloadedRow: makePaymentRecord({ status: PaymentStatus.PAID, paidAt }),
     });
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(result.status).toBe(PaymentStatus.PAID);
     expect(result.paidAt).toEqual(paidAt);
@@ -735,7 +725,7 @@ describe('markPaymentPaid', () => {
     });
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-05' }, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-05' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID });
   });
 
@@ -748,7 +738,7 @@ describe('markPaymentPaid', () => {
       .mockResolvedValueOnce(makePaymentRecord())
       .mockResolvedValueOnce(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: NOW }));
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledTimes(2);
     expect(result.status).toBe(PaymentStatus.PAID);
@@ -761,7 +751,7 @@ describe('markPaymentPaid', () => {
     });
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_CONFLICT,
@@ -773,7 +763,7 @@ describe('markPaymentPaid', () => {
   it('returns a paid row with null paidAt as-is (no 1970 epoch) when no paidAt was requested', async () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: null }));
 
-    const result = await markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    const result = await markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(result.paidAt).toBeNull();
     expect(mockPrisma.subscriptionPayment.updateMany).not.toHaveBeenCalled();
@@ -783,28 +773,30 @@ describe('markPaymentPaid', () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: null }));
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '1970-01-01' }, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '1970-01-01' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 400 });
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { paidAt: '2026-06-05' }, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, { paidAt: '2026-06-05' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID });
   });
 
-  it('throws 404 when the payment belongs to another trainer', async () => {
-    mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
-      makePaymentRecord({ subscription: { trainerId: 'someone-else' } }),
-    );
+  it('throws 404 when the payment belongs to another trainer (scoped out by the owner filter)', async () => {
+    mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW),
     ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.PAYMENT_NOT_FOUND });
+    expect(mockPrisma.subscriptionPayment.findFirst.mock.calls[0][0].where).toEqual({
+      id: PAYMENT_ID,
+      subscription: { trainerId: TRAINER_ID },
+    });
   });
 
   it('throws 404 when payment not found', async () => {
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
     await expect(
-      markPaymentPaid(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW),
+      markPaymentPaid(mockPrisma, OWNER, PAYMENT_ID, {}, NOW),
     ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.PAYMENT_NOT_FOUND });
   });
 });
@@ -824,7 +816,7 @@ describe('markPaymentPending', () => {
     stubPending(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: NOW }), 1);
     mockPrisma.subscriptionPayment.findUniqueOrThrow.mockResolvedValue(reopened);
 
-    const result = await markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    const result = await markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledTimes(1);
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledWith({
@@ -845,7 +837,7 @@ describe('markPaymentPending', () => {
       makePaymentRecord({ status: PaymentStatus.CANCELLED, paidAt: null }),
     );
 
-    const result = await markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    const result = await markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledTimes(2);
     expect(mockPrisma.subscriptionPayment.updateMany.mock.calls[1][0]).toEqual({
@@ -862,7 +854,7 @@ describe('markPaymentPending', () => {
       makePaymentRecord({ status: PaymentStatus.CANCELLED }),
     );
 
-    await markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    await markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(mockPrisma.studentSubscription.findFirst).not.toHaveBeenCalled();
   });
@@ -871,7 +863,7 @@ describe('markPaymentPending', () => {
     stubPending(makePaymentRecord({ status: PaymentStatus.CANCELLED }));
 
     await expect(
-      markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_CANCELLED,
@@ -884,7 +876,7 @@ describe('markPaymentPending', () => {
     stubPending(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: NOW }), 0, 0);
 
     await expect(
-      markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PAYMENT_CANCELLED });
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledTimes(2);
   });
@@ -893,7 +885,7 @@ describe('markPaymentPending', () => {
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
     await expect(
-      markPaymentPending(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      markPaymentPending(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.PAYMENT_NOT_FOUND });
   });
 });
@@ -907,7 +899,7 @@ describe('updatePayment', () => {
   it('updates only the provided fields on a pending payment (conditional on not cancelled)', async () => {
     stubStoredPayment(makePaymentRecord());
 
-    await updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { notes: 'updated' }, NOW);
+    await updatePayment(mockPrisma, OWNER, PAYMENT_ID, { notes: 'updated' }, NOW);
 
     const { where, data } = mockPrisma.subscriptionPayment.updateMany.mock.calls[0][0];
     expect(where).toEqual({ id: PAYMENT_ID, status: { not: PaymentStatus.CANCELLED } });
@@ -921,7 +913,7 @@ describe('updatePayment', () => {
 
     const result = await updatePayment(
       mockPrisma,
-      TRAINER_USER_ID,
+      OWNER,
       PAYMENT_ID,
       { amount: 80.5, dueDate: '2026-06-20' },
       NOW,
@@ -939,7 +931,7 @@ describe('updatePayment', () => {
     stubStoredPayment(paidPayment());
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { amount: 90 }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { amount: 90 }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID,
@@ -952,14 +944,14 @@ describe('updatePayment', () => {
     stubStoredPayment(paidPayment());
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { dueDate: '2026-06-30' }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { dueDate: '2026-06-30' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID });
   });
 
   it('allows notes-only edits on a paid payment', async () => {
     stubStoredPayment(paidPayment());
 
-    const result = await updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { notes: 'recibo 123' }, NOW);
+    const result = await updatePayment(mockPrisma, OWNER, PAYMENT_ID, { notes: 'recibo 123' }, NOW);
 
     expect(result.notes).toBe('recibo 123');
   });
@@ -969,7 +961,7 @@ describe('updatePayment', () => {
 
     await updatePayment(
       mockPrisma,
-      TRAINER_USER_ID,
+      OWNER,
       PAYMENT_ID,
       { amount: 100, dueDate: '2026-06-10', notes: 'x' },
       NOW,
@@ -984,7 +976,7 @@ describe('updatePayment', () => {
 
     const result = await updatePayment(
       mockPrisma,
-      TRAINER_USER_ID,
+      OWNER,
       PAYMENT_ID,
       { amount: 100, dueDate: '2026-06-10', notes: 'same' },
       NOW,
@@ -997,7 +989,7 @@ describe('updatePayment', () => {
   it('writes nothing for an empty patch on a cancelled-free pending payment', async () => {
     stubStoredPayment(makePaymentRecord());
 
-    await updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, {}, NOW);
+    await updatePayment(mockPrisma, OWNER, PAYMENT_ID, {}, NOW);
 
     expect(mockPrisma.subscriptionPayment.updateMany).not.toHaveBeenCalled();
   });
@@ -1006,7 +998,7 @@ describe('updatePayment', () => {
     stubStoredPayment(makePaymentRecord());
 
     await updatePayment(
-      mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { amount: 100, dueDate: '2026-06-20' }, NOW,
+      mockPrisma, OWNER, PAYMENT_ID, { amount: 100, dueDate: '2026-06-20' }, NOW,
     );
 
     const { data } = mockPrisma.subscriptionPayment.updateMany.mock.calls[0][0];
@@ -1017,7 +1009,7 @@ describe('updatePayment', () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.CANCELLED }));
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { notes: 'x' }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { notes: 'x' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 409, error: SubscriptionErrorCode.PAYMENT_CANCELLED });
     expect(mockPrisma.subscriptionPayment.updateMany).not.toHaveBeenCalled();
   });
@@ -1029,7 +1021,7 @@ describe('updatePayment', () => {
     });
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { notes: 'x' }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { notes: 'x' }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_CANCELLED,
@@ -1044,7 +1036,7 @@ describe('updatePayment', () => {
     });
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { amount: 90 }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { amount: 90 }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID,
@@ -1059,7 +1051,7 @@ describe('updatePayment', () => {
     stubStoredPayment(makePaymentRecord());
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { amount }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { amount }, NOW),
     ).rejects.toMatchObject({
       httpStatus: 400,
       error: SubscriptionErrorCode.INVALID_AMOUNT,
@@ -1071,7 +1063,7 @@ describe('updatePayment', () => {
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
     await expect(
-      updatePayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, { notes: 'x' }, NOW),
+      updatePayment(mockPrisma, OWNER, PAYMENT_ID, { notes: 'x' }, NOW),
     ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.PAYMENT_NOT_FOUND });
   });
 });
@@ -1082,7 +1074,7 @@ describe('voidPayment', () => {
   it('soft-voids a pending payment with a conditional write (status cancelled, never deleted)', async () => {
     stubStoredPayment(makePaymentRecord());
 
-    const result = await voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    const result = await voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(mockPrisma.subscriptionPayment.updateMany).toHaveBeenCalledWith({
       where: { id: PAYMENT_ID, status: PaymentStatus.PENDING },
@@ -1095,7 +1087,7 @@ describe('voidPayment', () => {
   it('voids an overdue pending payment', async () => {
     stubStoredPayment(makePaymentRecord({ dueDate: new Date('2026-05-01T00:00:00Z') }));
 
-    const result = await voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    const result = await voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(result.status).toBe(PaymentStatus.CANCELLED);
   });
@@ -1103,7 +1095,7 @@ describe('voidPayment', () => {
   it('is idempotent for an already voided payment (conditional write matches nothing, row returned as-is)', async () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.CANCELLED }), { updateCount: 0 });
 
-    const result = await voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW);
+    const result = await voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW);
 
     expect(result.status).toBe(PaymentStatus.CANCELLED);
   });
@@ -1112,7 +1104,7 @@ describe('voidPayment', () => {
     stubStoredPayment(makePaymentRecord({ status: PaymentStatus.PAID, paidAt: NOW }));
 
     await expect(
-      voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID,
@@ -1128,7 +1120,7 @@ describe('voidPayment', () => {
     });
 
     await expect(
-      voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({
       httpStatus: 409,
       error: SubscriptionErrorCode.PAYMENT_ALREADY_PAID,
@@ -1140,7 +1132,7 @@ describe('voidPayment', () => {
     mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
 
     await expect(
-      voidPayment(mockPrisma, TRAINER_USER_ID, PAYMENT_ID, NOW),
+      voidPayment(mockPrisma, OWNER, PAYMENT_ID, NOW),
     ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.PAYMENT_NOT_FOUND });
   });
 });

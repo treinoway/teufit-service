@@ -150,6 +150,11 @@ export default {
       semiannual: 'Semestral',
       annual: 'Anual',
     },
+    subscriptionServiceType: {
+      training: 'Treino',
+      nutrition: 'Nutrição',
+      both: 'Ambos',
+    },
     feedbackCategory: {
       BUG: 'Problema',
       SUGGESTION: 'Sugestão',
@@ -361,6 +366,8 @@ export default {
     'subscription.cycleAlreadyExists': 'Este ciclo de cobrança já existe.',
     'subscription.invalidAmount': 'Valor inválido. Use até duas casas decimais e no máximo 99.999.999,99.',
     'subscription.invalidPaidAt': 'Data de pagamento inválida: não pode ser futura nem anterior a um ano antes do início da assinatura.',
+    'subscription.serviceTypeNotAllowed': 'Seu perfil profissional não permite este tipo de serviço no plano.',
+    'professional.notFound': 'Perfil profissional não encontrado.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'Você atingiu o limite de alunos do seu plano. Atualize para liberar mais espaço.',

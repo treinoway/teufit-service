@@ -6,20 +6,26 @@ import {
   SubscriptionStatus,
   PaymentStatus,
   CANCELLATION_REASON_REPLACED,
+  ServiceType,
 } from '../constants/subscription.js';
 import { addDaysMs, formatDateOnly, parseDateOnlyAsUtc, todayInBusinessTz } from '../helpers/date-helpers.js';
 import {
   assertValidMoneyAmount,
   assertValidPercentage,
-  buildAssignmentLockKey,
   computeAmount,
   computeEffectiveStart,
   computeNextCycle,
   formatPayment,
 } from '../helpers/subscription-helpers.js';
+import {
+  buildProfessionalAssignmentLockKey,
+  ownerScopeWhere,
+  requiredLinkSatisfied,
+} from '../helpers/subscription-owner-helpers.js';
 import { cancelUpcomingPayments, materializeCycles } from './subscription-cycle-service.js';
 import { validateDiscount } from './subscription-plan-service.js';
 import { assertStudentActiveOnPlan } from './platform-plan-service.js';
+import { loadLinks, resolveOwnerRows } from './professional-owner-service.js';
 
 const { Decimal } = Prisma;
 const UNIQUE_VIOLATION_CODE = 'P2002';
@@ -29,30 +35,11 @@ export { computeAmount };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function resolveTrainerOrThrow(prisma, userId) {
-  const trainer = await prisma.trainer.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
+// Loads the live links and throws 403 student.notLinked unless they satisfy the service type.
+async function assertLinkedOrThrow(client, owner, studentId, serviceType) {
+  const links = await loadLinks(client, owner, studentId);
 
-  if (!trainer) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.TRAINER_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.TRAINER_NOT_FOUND,
-      message: 'Trainer profile not found',
-    });
-  }
-
-  return trainer;
-}
-
-async function verifyTrainerStudentLink(client, trainerId, studentId) {
-  const link = await client.trainerStudent.findFirst({
-    where: { trainerId, studentId },
-  });
-
-  if (!link) {
+  if (!requiredLinkSatisfied(serviceType, links)) {
     throw new AppError({
       httpStatus: 403,
       error: SubscriptionErrorCode.STUDENT_NOT_LINKED,
@@ -60,12 +47,62 @@ async function verifyTrainerStudentLink(client, trainerId, studentId) {
       message: 'This student is not linked to your account',
     });
   }
+
+  return links;
+}
+
+// Builds the 404 for a subscription outside the owner's scope.
+function subscriptionNotFoundError() {
+  return new AppError({
+    httpStatus: 404,
+    error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
+    messageCode: SubscriptionMessageCode.SUBSCRIPTION_NOT_FOUND,
+    message: 'Subscription not found',
+  });
+}
+
+// Loads a plan owned by any of the owner's rows and usable for a new assignment, or throws.
+async function findAssignablePlanOrThrow(prisma, owner, planId) {
+  const plan = await prisma.subscriptionPlan.findFirst({
+    where: { id: planId, ...ownerScopeWhere(owner) },
+  });
+
+  if (!plan) {
+    throw new AppError({
+      httpStatus: 404,
+      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
+      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
+      message: 'Subscription plan not found',
+    });
+  }
+
+  if (plan.deletedAt != null) {
+    throw new AppError({
+      httpStatus: 409,
+      error: SubscriptionErrorCode.PLAN_ARCHIVED,
+      messageCode: SubscriptionMessageCode.PLAN_ARCHIVED,
+      message: 'This plan is archived and cannot be used',
+    });
+  }
+
+  return plan;
+}
+
+// Consumes the trainer seat quota when the assignment bills a person who is the owner's trainer student.
+async function assertTrainerSeatIfNeeded(prisma, owner, studentId, serviceType, links) {
+  const billsTraining =
+    serviceType === ServiceType.TRAINING || (serviceType === ServiceType.BOTH && links.trainerLinked);
+  if (owner.trainerId && billsTraining) {
+    await assertStudentActiveOnPlan(prisma, owner.trainerId, studentId);
+  }
 }
 
 function formatSubscription(sub) {
   return {
     id: sub.id,
-    trainerId: sub.trainerId,
+    trainerId: sub.trainerId ?? null,
+    nutritionistId: sub.nutritionistId ?? null,
+    serviceType: sub.serviceType,
     studentId: sub.studentId,
     planId: sub.planId,
     recurrence: sub.recurrence,
@@ -92,50 +129,26 @@ function buildAlreadyActiveError() {
 }
 
 /**
- * Serialize assignments per trainer/student pair: only one assignment can be
+ * Serialize assignments per professional-user/student pair: only one assignment can be
  * in flight at a time. A concurrent one (double click, two tabs) gets a
  * deterministic 409 immediately instead of racing the replace-then-insert
  * sequence (which could otherwise create a duplicate due charge for the
  * subscription it just replaced). Assignments that do not overlap in time
  * replace the previous subscription as usual. The lock is transaction-scoped.
  */
-async function acquireAssignmentLockOrThrow(tx, trainerId, studentId) {
+async function acquireAssignmentLockOrThrow(tx, userId, studentId) {
   const [{ locked }] = await tx.$queryRaw`
-    SELECT pg_try_advisory_xact_lock(hashtext(${buildAssignmentLockKey(trainerId, studentId)})) AS locked
+    SELECT pg_try_advisory_xact_lock(hashtext(${buildProfessionalAssignmentLockKey(userId, studentId)})) AS locked
   `;
   if (!locked) throw buildAlreadyActiveError();
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
-export async function assignPlanToStudent(prisma, userId, studentId, data, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  await verifyTrainerStudentLink(prisma, trainer.id, studentId);
-  await assertStudentActiveOnPlan(prisma, trainer.id, studentId);
-
-  // Verify plan exists, belongs to trainer, and is not archived
-  const plan = await prisma.subscriptionPlan.findFirst({
-    where: { id: data.planId, trainerId: trainer.id },
-  });
-
-  if (!plan) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
-      message: 'Subscription plan not found',
-    });
-  }
-
-  if (plan.deletedAt != null) {
-    throw new AppError({
-      httpStatus: 409,
-      error: SubscriptionErrorCode.PLAN_ARCHIVED,
-      messageCode: SubscriptionMessageCode.PLAN_ARCHIVED,
-      message: 'This plan is archived and cannot be used',
-    });
-  }
+export async function assignPlanToStudent(prisma, owner, studentId, data, now = new Date()) {
+  const plan = await findAssignablePlanOrThrow(prisma, owner, data.planId);
+  const links = await assertLinkedOrThrow(prisma, owner, studentId, plan.serviceType);
+  await assertTrainerSeatIfNeeded(prisma, owner, studentId, plan.serviceType, links);
 
   // Resolve discount: override falls back to plan defaults
   const effectiveDiscountPercent =
@@ -161,13 +174,14 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-      await acquireAssignmentLockOrThrow(tx, trainer.id, studentId);
+      await acquireAssignmentLockOrThrow(tx, owner.userId, studentId);
       // Re-check inside the lock: an unlink may have committed since the first check.
-      await verifyTrainerStudentLink(tx, trainer.id, studentId);
+      await assertLinkedOrThrow(tx, owner, studentId, plan.serviceType);
 
-      // Replace the active subscription(s) of this student under this trainer.
+      // Replace the active subscription(s) of this student held by this professional user through any owner row.
+      const replacementOwner = await resolveOwnerRows(tx, owner.userId, owner);
       const replaced = await tx.studentSubscription.findMany({
-        where: { trainerId: trainer.id, studentId, status: SubscriptionStatus.ACTIVE },
+        where: { ...ownerScopeWhere(replacementOwner), studentId, status: SubscriptionStatus.ACTIVE },
         select: {
           id: true,
           startDate: true,
@@ -206,7 +220,9 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
 
       const subscription = await tx.studentSubscription.create({
         data: {
-          trainerId: trainer.id,
+          trainerId: plan.trainerId,
+          nutritionistId: plan.nutritionistId,
+          serviceType: plan.serviceType,
           studentId,
           planId: plan.id,
           recurrence: plan.recurrence,
@@ -236,8 +252,8 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
       return { subscription, payment };
     });
   } catch (error) {
-    // Safety net: the per-pair partial unique index (one active subscription
-    // per trainer/student) rejected a concurrent insert.
+    // Safety net: the per-pair partial unique indexes (one active subscription
+    // per trainer/student and per nutritionist/student) rejected a concurrent insert.
     if (error?.code === UNIQUE_VIOLATION_CODE) throw buildAlreadyActiveError();
     throw error;
   }
@@ -248,39 +264,34 @@ export async function assignPlanToStudent(prisma, userId, studentId, data, now =
   };
 }
 
-// Scoped by trainerId only (no live link required) so the billing history stays
+// Scoped by owner only (no live link required) so the billing history stays
 // reachable after the student is unlinked.
-export async function listSubscriptionsByStudent(prisma, userId, studentId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
+export async function listSubscriptionsByStudent(prisma, owner, studentId) {
   const subscriptions = await prisma.studentSubscription.findMany({
-    where: { trainerId: trainer.id, studentId },
+    where: { ...ownerScopeWhere(owner), studentId },
     orderBy: [{ createdAt: 'desc' }],
   });
 
   return subscriptions.map(formatSubscription);
 }
 
-export async function getActiveSubscriptionByStudent(prisma, userId, studentId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  await verifyTrainerStudentLink(prisma, trainer.id, studentId);
+export async function getActiveSubscriptionByStudent(prisma, owner, studentId) {
+  await assertLinkedOrThrow(prisma, owner, studentId, ServiceType.BOTH);
 
   const subscription = await prisma.studentSubscription.findFirst({
     where: {
-      trainerId: trainer.id,
+      ...ownerScopeWhere(owner),
       studentId,
       status: SubscriptionStatus.ACTIVE,
     },
+    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
   });
 
   return subscription ? formatSubscription(subscription) : null;
 }
 
-export async function listSubscriptions(prisma, userId, { status, planId } = {}) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  const where = { trainerId: trainer.id };
+export async function listSubscriptions(prisma, owner, { status, planId } = {}) {
+  const where = { ...ownerScopeWhere(owner) };
   if (status) where.status = status;
   if (planId) where.planId = planId;
 
@@ -292,40 +303,22 @@ export async function listSubscriptions(prisma, userId, { status, planId } = {})
   return subscriptions.map(formatSubscription);
 }
 
-export async function getSubscriptionById(prisma, userId, subscriptionId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
+export async function getSubscriptionById(prisma, owner, subscriptionId) {
   const subscription = await prisma.studentSubscription.findFirst({
-    where: { id: subscriptionId, trainerId: trainer.id },
+    where: { id: subscriptionId, ...ownerScopeWhere(owner) },
   });
 
-  if (!subscription) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.SUBSCRIPTION_NOT_FOUND,
-      message: 'Subscription not found',
-    });
-  }
+  if (!subscription) throw subscriptionNotFoundError();
 
   return formatSubscription(subscription);
 }
 
-export async function cancelSubscription(prisma, userId, subscriptionId, { reason } = {}, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
+export async function cancelSubscription(prisma, owner, subscriptionId, { reason } = {}, now = new Date()) {
   const subscription = await prisma.studentSubscription.findFirst({
-    where: { id: subscriptionId, trainerId: trainer.id },
+    where: { id: subscriptionId, ...ownerScopeWhere(owner) },
   });
 
-  if (!subscription) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.SUBSCRIPTION_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.SUBSCRIPTION_NOT_FOUND,
-      message: 'Subscription not found',
-    });
-  }
+  if (!subscription) throw subscriptionNotFoundError();
 
   if (subscription.status === SubscriptionStatus.CANCELLED) {
     throw new AppError({

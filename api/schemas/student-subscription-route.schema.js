@@ -44,6 +44,7 @@ const subscriptionSchema = {
   properties: {
     id: { type: 'string', format: 'uuid' },
     trainerId: { type: 'string', format: 'uuid' },
+    ...i18nField('serviceType', 'subscriptionServiceType'),
     studentId: { type: 'string', format: 'uuid' },
     planId: { type: 'string', format: 'uuid' },
     ...i18nField('recurrence', 'subscriptionRecurrence'),

@@ -146,6 +146,11 @@ export default {
       semiannual: 'Semiannual',
       annual: 'Annual',
     },
+    subscriptionServiceType: {
+      training: 'Training',
+      nutrition: 'Nutrition',
+      both: 'Both',
+    },
     feedbackCategory: {
       BUG: 'Problem',
       SUGGESTION: 'Suggestion',
@@ -361,6 +366,8 @@ export default {
     'subscription.cycleAlreadyExists': 'This billing cycle already exists.',
     'subscription.invalidAmount': 'Invalid amount. Use at most two decimal places and no more than 99,999,999.99.',
     'subscription.invalidPaidAt': 'Invalid payment date: it cannot be in the future or more than a year before the subscription start.',
+    'subscription.serviceTypeNotAllowed': 'Your professional profile does not allow this service type on a plan.',
+    'professional.notFound': 'Professional profile not found.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'You have reached the student limit for your plan. Upgrade to unlock more slots.',
