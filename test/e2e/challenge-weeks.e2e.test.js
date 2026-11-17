@@ -6,6 +6,8 @@ import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 import { signupVerified } from '../helpers/signup-user.js';
 import { closeDueChallenges } from '../../src/services/challenge-close-service.js';
+import { computeChallengeStandings } from '../../src/services/challenge-consistency-service.js';
+import { updateConfig } from '../../src/services/consistency-config-service.js';
 import { weekStartFor } from '../../src/helpers/consistency-week.js';
 import {
   ChallengeFormat,
@@ -397,6 +399,26 @@ e2eDescribe('challenge weeks', () => {
       expect(before[0]).toBe(before[1]);
       expect(after[0]).toBe(after[1]);
       expect(after[0]).toBeGreaterThan(before[0]);
+    });
+
+    it('CAMP-68 applies a new time zone from the next week', async () => {
+      const trainer = await createTrainer();
+      const challenge = await seedWeeklyChallenge(trainer.trainerId, {
+        start: new Date('2026-11-09T00:00:00.000Z'),
+        weeks: 4,
+        studentIds: [],
+      });
+      const wednesdayOfWeek2 = new Date('2026-11-18T15:00:00.000Z');
+      const wednesdayOfWeek3 = new Date('2026-11-25T15:00:00.000Z');
+
+      await updateConfig(prisma, trainer.trainerId, { timeZone: 'Asia/Tokyo' }, wednesdayOfWeek2);
+      const thisWeek = await computeChallengeStandings(prisma, challenge, wednesdayOfWeek2);
+      const nextWeek = await computeChallengeStandings(prisma, challenge, wednesdayOfWeek3);
+
+      expect(thisWeek.currentWeek).toBe(2);
+      expect(thisWeek.closesAt).toEqual(new Date('2026-11-23T00:00:00.000Z'));
+      expect(nextWeek.currentWeek).toBe(3);
+      expect(nextWeek.closesAt).toEqual(new Date('2026-11-29T12:00:00.000Z'));
     });
 
     it('CAMP-29 returns the row fields', async () => {
