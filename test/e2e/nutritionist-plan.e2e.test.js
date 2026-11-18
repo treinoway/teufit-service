@@ -541,7 +541,7 @@ e2eDescribe('e2e: nutritionist plan', () => {
       const updated = await write('POST', `/nutritionist/items/${itemId}/substitutes`, { foodId: foods.patinho.id });
 
       const [substitute] = updated.meals[0].options[0].items[0].substitutes;
-      expect(substitute).toMatchObject({ foodId: foods.patinho.id, name: 'Patinho, grelhado', source: 'tbca' });
+      expect(substitute).toMatchObject({ foodId: foods.patinho.id, name: 'Patinho, grelhado', source: 'taco' });
       expect(substitute.quantity).toBeCloseTo(PATINHO_BY_PROTEIN_G, 2);
       expect(substitute.nutrients.protein).toBeCloseTo(38.4, 1);
     });

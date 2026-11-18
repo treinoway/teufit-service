@@ -34,6 +34,8 @@ export const PatientInviteStatus = Object.freeze({
 export const patientInviteStatusValues = Object.freeze(Object.values(PatientInviteStatus));
 export const FoodSource = Object.freeze({ TACO: 'taco', TBCA: 'tbca', CUSTOM: 'custom' });
 export const foodSourceValues = Object.freeze(Object.values(FoodSource));
+// Public sources hidden from search and lookup: TBCA is not licensed for commercial use.
+export const HIDDEN_FOOD_SOURCES = Object.freeze([FoodSource.TBCA]);
 export const SwapBasis = Object.freeze({ PROTEIN: 'protein', KCAL: 'kcal' });
 export const MealLogStatus = Object.freeze({ DONE: 'done', DIFFERENT: 'different' });
 export const MealStatus = Object.freeze({ PENDING: 'pending', DONE: 'done', DIFFERENT: 'different' });

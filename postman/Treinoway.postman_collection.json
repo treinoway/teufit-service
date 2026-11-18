@@ -13371,7 +13371,7 @@
                 }
               ]
             },
-            "description": "Search foods (TACO, TBCA and the caller's own custom foods), accent/case-insensitive. `sources` is a comma separated list of taco, tbca, custom (default: all); custom returns only the caller's own foods (nutritionist). Any authenticated user."
+            "description": "Search foods (TACO and the caller's own custom foods; TBCA is currently hidden), accent/case-insensitive. `sources` is a comma separated list of taco, tbca, custom (default: all); custom returns only the caller's own foods (nutritionist); tbca is accepted but currently returns no foods. Any authenticated user."
           },
           "response": [
             {
@@ -13454,7 +13454,7 @@
                 }
               ]
             },
-            "description": "Get a single food (TACO, TBCA or an owned custom food)."
+            "description": "Get a single food (TACO or an owned custom food; TBCA foods are currently hidden and return 404)."
           },
           "response": [
             {

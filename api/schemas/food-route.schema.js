@@ -14,7 +14,7 @@ const security = [{ bearerAuth: [] }];
 
 export const searchFoodsSchema = {
   tags: ['Foods'],
-  summary: 'Search foods (TACO, TBCA and the caller own custom foods), accent/case-insensitive',
+  summary: 'Search foods (TACO and the caller own custom foods; TBCA is currently hidden), accent/case-insensitive',
   security,
   querystring: {
     type: 'object',
@@ -24,7 +24,7 @@ export const searchFoodsSchema = {
       groupId: { type: 'string', format: 'uuid' },
       sources: {
         type: 'string',
-        description: `Comma separated: ${foodSourceValues.join(',')}. Defaults to all; custom returns only the caller's own foods.`,
+        description: `Comma separated: ${foodSourceValues.join(',')}. Defaults to all; custom returns only the caller's own foods; tbca is accepted but currently hidden (returns no foods).`,
       },
       limit: { type: 'integer', minimum: 1, maximum: FOOD_SEARCH_LIMIT_MAX, default: FOOD_SEARCH_LIMIT_DEFAULT },
     },
