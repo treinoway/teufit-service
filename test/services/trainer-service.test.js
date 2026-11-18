@@ -69,7 +69,8 @@ import emailHandler from '../../src/config/email-handler.js';
 import { updateMyTrainerProfile, linkStudentByEmail, listStudents, listTrainers, searchStudents, getLinkedStudent, unlinkStudent, getOneByUserId, computeStudentBlockers } from '../../src/services/trainer-service.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
-import { buildAssignmentLockKey } from '../../src/helpers/subscription-helpers.js';
+import { createUnlinkWorld } from '../helpers/unlink-world.js';
+import { ServiceType, expectedAssignmentLockKey } from '../helpers/subscription-owner-fixtures.js';
 import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import {
   SubscriptionStatus,
@@ -1351,7 +1352,7 @@ describe('unlinkStudent', () => {
     prisma.trainerStudent.findUnique.mockResolvedValue(null);
 
     await expect(
-      unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' }),
+      unlinkStudent({ trainerId: 'trainer1', studentId: 'student1', userId: 'trainer-user1' }),
     ).rejects.toMatchObject({
       error: 'NOT_FOUND',
       messageCode: 'student.notLinked',
@@ -1363,14 +1364,37 @@ describe('unlinkStudent', () => {
 
   describe('when the link exists', () => {
     const NOW = new Date('2026-06-11T02:00:00Z'); // 23:00 on Jun 10 in Sao Paulo
+    const USER_ID = 'trainer-user1';
+    const NUTRITIONIST_ID = 'nutritionist1';
 
-    function buildTx() {
+    function makeSubscription(id, serviceType, overrides = {}) {
+      const onNutritionistRow = serviceType === ServiceType.NUTRITION;
       return {
-        $executeRaw: vi.fn().mockResolvedValue(1),
-        trainerStudent: { delete: vi.fn().mockResolvedValue({}) },
-        studentSubscription: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-        subscriptionPayment: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+        id,
+        studentId: 'student1',
+        serviceType,
+        trainerId: onNutritionistRow ? null : 'trainer1',
+        nutritionistId: onNutritionistRow ? NUTRITIONIST_ID : null,
+        status: SubscriptionStatus.ACTIVE,
+        ...overrides,
       };
+    }
+
+    function setUpWorld({ subscriptions, patientLinked = false }) {
+      const world = createUnlinkWorld({
+        userId: USER_ID,
+        trainerId: 'trainer1',
+        nutritionistId: NUTRITIONIST_ID,
+        subscriptions,
+        trainerLinked: true,
+        patientLinked,
+      });
+      prisma.$transaction.mockImplementation(world.runTransaction);
+      return world;
+    }
+
+    function unlink() {
+      return unlinkStudent({ trainerId: 'trainer1', studentId: 'student1', userId: USER_ID });
     }
 
     beforeEach(() => {
@@ -1387,69 +1411,102 @@ describe('unlinkStudent', () => {
       vi.useRealTimers();
     });
 
-    it('deletes the link, cancels the active subscription and voids upcoming payments in ONE transaction', async () => {
-      const tx = buildTx();
-      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+    it('deletes the link, cancels the active training subscription and voids upcoming payments in ONE transaction', async () => {
+      const world = setUpWorld({ subscriptions: [makeSubscription('sub-training', ServiceType.TRAINING)] });
 
-      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+      await unlink();
 
       expect(prisma.$transaction).toHaveBeenCalledOnce();
       expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
-      expect(tx.trainerStudent.delete).toHaveBeenCalledWith({
+      expect(world.tx.trainerStudent.delete).toHaveBeenCalledWith({
         where: { trainerId_studentId: { trainerId: 'trainer1', studentId: 'student1' } },
       });
-      expect(tx.studentSubscription.updateMany).toHaveBeenCalledWith({
-        where: { trainerId: 'trainer1', studentId: 'student1', status: SubscriptionStatus.ACTIVE },
-        data: {
-          status: SubscriptionStatus.CANCELLED,
-          cancelledAt: NOW,
-          cancellationReason: CANCELLATION_REASON_UNLINKED,
-        },
+      expect(world.subscription('sub-training')).toMatchObject({
+        status: SubscriptionStatus.CANCELLED,
+        cancelledAt: NOW,
+        cancellationReason: CANCELLATION_REASON_UNLINKED,
       });
+      expect(world.voidedIds()).toEqual(['sub-training']);
     });
 
     it('voids only payments whose cycle has not started (today in Sao Paulo), keeping due ones as debt', async () => {
-      const tx = buildTx();
-      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+      const world = setUpWorld({ subscriptions: [makeSubscription('sub-training', ServiceType.TRAINING)] });
 
-      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+      await unlink();
 
-      expect(tx.subscriptionPayment.updateMany).toHaveBeenCalledWith({
-        where: {
-        status: PaymentStatus.PENDING,
-        subscription: { trainerId: 'trainer1', studentId: 'student1' },
-        OR: [
-          { cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') } },
-          { subscription: { startDate: { gt: new Date('2026-06-10T00:00:00Z') } } },
-        ],
-      },
-        data: { status: PaymentStatus.CANCELLED, voidedAt: NOW },
-      });
+      const { where, data } = world.tx.subscriptionPayment.updateMany.mock.calls[0][0];
+      expect(where.status).toBe(PaymentStatus.PENDING);
+      expect(where.OR).toEqual([
+        { cycleStartDate: { gt: new Date('2026-06-10T00:00:00Z') } },
+        { subscription: { startDate: { gt: new Date('2026-06-10T00:00:00Z') } } },
+      ]);
+      expect(data).toEqual({ status: PaymentStatus.CANCELLED, voidedAt: NOW });
     });
 
-    it('takes the blocking per-pair advisory lock (same key as assign) before deleting the link or writing anything', async () => {
-      const tx = buildTx();
-      prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+    it('keeps a both subscription (and its charges) alive while the nutritionist patient link remains (AC 10)', async () => {
+      const world = setUpWorld({
+        subscriptions: [makeSubscription('sub-both', ServiceType.BOTH)],
+        patientLinked: true,
+      });
 
-      await unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' });
+      await unlink();
 
-      expect(tx.$executeRaw).toHaveBeenCalledOnce();
-      const [strings, lockKey] = tx.$executeRaw.mock.calls[0];
+      expect(world.cancelledIds()).toEqual([]);
+      expect(world.voidedIds()).toEqual([]);
+    });
+
+    it('cancels a both subscription and voids its charges when no patient link remains', async () => {
+      const world = setUpWorld({ subscriptions: [makeSubscription('sub-both', ServiceType.BOTH)] });
+
+      await unlink();
+
+      expect(world.cancelledIds()).toEqual(['sub-both']);
+      expect(world.voidedIds()).toEqual(['sub-both']);
+    });
+
+    it('leaves a nutrition subscription of the same user untouched', async () => {
+      const world = setUpWorld({ subscriptions: [makeSubscription('sub-nutrition', ServiceType.NUTRITION)] });
+
+      await unlink();
+
+      expect(world.cancelledIds()).toEqual([]);
+      expect(world.voidedIds()).toEqual([]);
+    });
+
+    it('does not touch other students or other trainers subscriptions', async () => {
+      const world = setUpWorld({
+        subscriptions: [
+          makeSubscription('sub-mine', ServiceType.TRAINING),
+          makeSubscription('sub-other-student', ServiceType.TRAINING, { studentId: 'student2' }),
+          makeSubscription('sub-other-trainer', ServiceType.TRAINING, { trainerId: 'trainer2' }),
+        ],
+      });
+
+      await unlink();
+
+      expect(world.cancelledIds()).toEqual(['sub-mine']);
+    });
+
+    it('takes the blocking per-user advisory lock (same key as assign) before deleting the link or writing anything', async () => {
+      const world = setUpWorld({ subscriptions: [makeSubscription('sub-training', ServiceType.TRAINING)] });
+
+      await unlink();
+
+      expect(world.tx.$executeRaw).toHaveBeenCalledOnce();
+      const [strings, lockKey] = world.tx.$executeRaw.mock.calls[0];
       expect(strings.join('?')).toContain('pg_advisory_xact_lock');
       expect(strings.join('?')).not.toContain('try');
-      expect(lockKey).toBe(buildAssignmentLockKey('trainer1', 'student1'));
-      const lockOrder = tx.$executeRaw.mock.invocationCallOrder[0];
-      expect(lockOrder).toBeLessThan(tx.trainerStudent.delete.mock.invocationCallOrder[0]);
-      expect(lockOrder).toBeLessThan(tx.studentSubscription.updateMany.mock.invocationCallOrder[0]);
-      expect(lockOrder).toBeLessThan(tx.subscriptionPayment.updateMany.mock.invocationCallOrder[0]);
+      expect(lockKey).toBe(expectedAssignmentLockKey(USER_ID, 'student1'));
+      const lockOrder = world.tx.$executeRaw.mock.invocationCallOrder[0];
+      expect(lockOrder).toBeLessThan(world.tx.trainerStudent.delete.mock.invocationCallOrder[0]);
+      expect(lockOrder).toBeLessThan(world.tx.studentSubscription.updateMany.mock.invocationCallOrder[0]);
+      expect(lockOrder).toBeLessThan(world.tx.subscriptionPayment.updateMany.mock.invocationCallOrder[0]);
     });
 
     it('propagates a transaction failure (link deletion is not applied alone)', async () => {
       prisma.$transaction.mockRejectedValue(new Error('tx failed'));
 
-      await expect(
-        unlinkStudent({ trainerId: 'trainer1', studentId: 'student1' }),
-      ).rejects.toThrow('tx failed');
+      await expect(unlink()).rejects.toThrow('tx failed');
       expect(prisma.trainerStudent.delete).not.toHaveBeenCalled();
     });
   });

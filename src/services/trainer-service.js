@@ -16,7 +16,6 @@ import { joinAllModeChallenges } from './challenge-participant-sync.js';
 import { TrainingStatus } from '../constants/training.js';
 import {
   SubscriptionStatus,
-  CANCELLATION_REASON_UNLINKED,
 } from '../constants/subscription.js';
 import {
   buildDueSoonPaymentWhere,
@@ -24,8 +23,9 @@ import {
   deriveBillingStatus,
 } from '../helpers/payment-status-helpers.js';
 import { todayInBusinessTz } from '../helpers/date-helpers.js';
-import { cancelUpcomingPayments } from './subscription-cycle-service.js';
-import { buildAssignmentLockKey } from '../helpers/subscription-helpers.js';
+import { buildProfessionalAssignmentLockKey } from '../helpers/subscription-owner-helpers.js';
+import { resolveOwnerRows } from './professional-owner-service.js';
+import { cancelSubscriptionsAfterUnlink, UnlinkedProfessional } from './unlink-billing-service.js';
 import { UserStatus } from '../constants/user-status.js';
 import { StudentBlocker } from '../constants/student-blocker.js';
 
@@ -728,15 +728,22 @@ export async function getLinkedStudent({ trainerUserId, studentId }, prismaClien
   };
 }
 
+// Resolves the User.id of a trainer row, for internal callers that only know the Trainer.id.
+async function resolveTrainerUserId(trainerId) {
+  const trainer = await prisma.trainer.findUnique({ where: { id: trainerId }, select: { userId: true } });
+  return trainer.userId;
+}
+
 /**
  * Unlink a student from the authenticated trainer.
  *
  * Contract:
- * - Input: trainerId (Trainer.id), studentId (User.id of the student)
+ * - Input: trainerId (Trainer.id), studentId (User.id of the student), userId (User.id of the trainer, optional:
+ *   resolved from the trainer row when absent)
  * - Throws NotFoundAppError if no link exists between trainer and student
  * - Returns nothing (caller should respond with 204)
  */
-export async function unlinkStudent({ trainerId, studentId }) {
+export async function unlinkStudent({ trainerId, studentId, userId }) {
   const existing = await prisma.trainerStudent.findUnique({
     where: { trainerId_studentId: { trainerId, studentId } },
   });
@@ -748,26 +755,25 @@ export async function unlinkStudent({ trainerId, studentId }) {
     });
   }
 
-  // The link and the active subscription end together: not-yet-due pending
-  // charges are voided, already-due ones stay pending as debt (visible in the
-  // finance overview even after the unlink).
+  // The link and the subscriptions that depended on it end together: not-yet-due
+  // pending charges are voided, already-due ones stay pending as debt (visible in
+  // the finance overview even after the unlink).
   const now = new Date();
+  const trainerUserId = userId ?? (await resolveTrainerUserId(trainerId));
   await prisma.$transaction(async (tx) => {
-    // Same key as assignPlanToStudent: waits for an in-flight assignment, and an
+    // Same user-level key as assignPlanToStudent: waits for an in-flight assignment, and an
     // assignment starting afterwards re-checks the link and finds it gone.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildAssignmentLockKey(trainerId, studentId)}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildProfessionalAssignmentLockKey(trainerUserId, studentId)}))`;
     await tx.trainerStudent.delete({
       where: { trainerId_studentId: { trainerId, studentId } },
     });
-    await tx.studentSubscription.updateMany({
-      where: { trainerId, studentId, status: SubscriptionStatus.ACTIVE },
-      data: {
-        status: SubscriptionStatus.CANCELLED,
-        cancelledAt: now,
-        cancellationReason: CANCELLATION_REASON_UNLINKED,
-      },
+    const owner = { ...(await resolveOwnerRows(tx, trainerUserId)), trainerId };
+    await cancelSubscriptionsAfterUnlink(tx, {
+      owner,
+      studentId,
+      unlinked: UnlinkedProfessional.TRAINER,
+      now,
     });
-    await cancelUpcomingPayments(tx, { trainerId, studentId }, todayInBusinessTz(now), { now });
   });
 
   // Roster change affects activeStudents and inactiveStudents KPIs.

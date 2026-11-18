@@ -142,21 +142,6 @@
       "count": 3
     }
   },
-  "api/routes/student-subscription-route.js": {
-    "local/function-header-comment": {
-      "count": 1
-    }
-  },
-  "api/routes/subscription-payment-route.js": {
-    "local/function-header-comment": {
-      "count": 1
-    }
-  },
-  "api/routes/subscription-plan-route.js": {
-    "local/function-header-comment": {
-      "count": 1
-    }
-  },
   "api/routes/trainer-branding-route.js": {
     "local/function-header-comment": {
       "count": 2
@@ -168,11 +153,6 @@
     }
   },
   "api/routes/trainer-dashboard-route.js": {
-    "local/function-header-comment": {
-      "count": 1
-    }
-  },
-  "api/routes/trainer-finance-route.js": {
     "local/function-header-comment": {
       "count": 1
     }
@@ -477,7 +457,7 @@
   },
   "src/helpers/subscription-helpers.js": {
     "local/function-header-comment": {
-      "count": 6
+      "count": 5
     }
   },
   "src/helpers/timezone.js": {
@@ -825,10 +805,10 @@
   },
   "src/services/student-subscription-service.js": {
     "local/function-header-comment": {
-      "count": 11
+      "count": 9
     },
     "local/no-comments-in-function": {
-      "count": 19
+      "count": 18
     }
   },
   "src/services/subscription-cycle-service.js": {
@@ -841,7 +821,7 @@
   },
   "src/services/subscription-payment-service.js": {
     "local/function-header-comment": {
-      "count": 21
+      "count": 18
     },
     "local/no-comments-in-function": {
       "count": 7
@@ -849,7 +829,7 @@
   },
   "src/services/subscription-plan-service.js": {
     "local/function-header-comment": {
-      "count": 9
+      "count": 8
     },
     "local/no-comments-in-function": {
       "count": 2

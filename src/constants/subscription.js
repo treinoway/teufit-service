@@ -16,6 +16,15 @@ export const SubscriptionStatus = Object.freeze({
   CANCELLED: 'cancelled',
 });
 
+/** Tag of what a plan bills: training, nutrition or both (owned by the trainer row). */
+export const ServiceType = Object.freeze({
+  TRAINING: 'training',
+  NUTRITION: 'nutrition',
+  BOTH: 'both',
+});
+
+export const serviceTypeValues = Object.freeze(Object.values(ServiceType));
+
 export const subscriptionStatusValues = Object.freeze(Object.values(SubscriptionStatus));
 
 export const PaymentStatus = Object.freeze({
@@ -77,11 +86,11 @@ export const MONEY_DECIMAL_PLACES = 2;
 /** paidAt may be at most this many months before the subscription start (advance payments). */
 export const PAID_AT_MAX_ADVANCE_MONTHS = 12;
 
-/** Key namespace of the per trainer/student advisory lock serializing assign/unlink. */
+/** Key namespace of the per professional-user/student advisory lock serializing assign/unlink. */
 export const SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX = 'subscription-assign';
 
 export const CANCELLATION_REASON_REPLACED = 'Replaced by new plan assignment';
-export const CANCELLATION_REASON_UNLINKED = 'Student unlinked from trainer';
+export const CANCELLATION_REASON_UNLINKED = 'Student unlinked from professional';
 
 /**
  * Number of calendar months each recurrence covers.
@@ -113,6 +122,8 @@ export const SubscriptionErrorCode = Object.freeze({
   PAYMENT_CONFLICT: 'SUBSCRIPTION_PAYMENT_CONFLICT',
   INVALID_AMOUNT: 'SUBSCRIPTION_INVALID_AMOUNT',
   INVALID_PAID_AT: 'SUBSCRIPTION_INVALID_PAID_AT',
+  SERVICE_TYPE_NOT_ALLOWED: 'SUBSCRIPTION_SERVICE_TYPE_NOT_ALLOWED',
+  PROFESSIONAL_NOT_FOUND: 'PROFESSIONAL_NOT_FOUND',
 });
 
 export const SubscriptionMessageCode = Object.freeze({
@@ -134,4 +145,6 @@ export const SubscriptionMessageCode = Object.freeze({
   PAYMENT_CONFLICT: 'subscription.paymentConflict',
   INVALID_AMOUNT: 'subscription.invalidAmount',
   INVALID_PAID_AT: 'subscription.invalidPaidAt',
+  SERVICE_TYPE_NOT_ALLOWED: 'subscription.serviceTypeNotAllowed',
+  PROFESSIONAL_NOT_FOUND: 'professional.notFound',
 });

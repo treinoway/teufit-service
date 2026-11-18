@@ -86,7 +86,11 @@ export async function nutritionistPatientRoutes(fastify) {
     '/nutritionist/patients/:patientId',
     { preHandler: nutritionistOnly, schema: schema.unlinkPatientSchema },
     async (request, reply) => {
-      await unlinkPatient(prisma, { nutritionistId: request.nutritionistId, patientId: request.params.patientId });
+      await unlinkPatient(prisma, {
+        nutritionistId: request.nutritionistId,
+        patientId: request.params.patientId,
+        userId: request.user.id,
+      });
       return reply.status(204).send();
     },
   );

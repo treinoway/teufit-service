@@ -358,11 +358,13 @@ model Nutritionist {
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  patients          NutritionistPatient[]
-  metabolicProfiles PatientMetabolicProfile[]
-  dietProtocols     DietProtocol[]
-  patientInvites    PatientInvite[]
-  customFoods       Food[]
+  patients             NutritionistPatient[]
+  subscriptionPlans    SubscriptionPlan[]
+  studentSubscriptions StudentSubscription[]
+  metabolicProfiles    PatientMetabolicProfile[]
+  dietProtocols        DietProtocol[]
+  patientInvites       PatientInvite[]
+  customFoods          Food[]
 
   @@map("nutritionists")
 }
@@ -1311,7 +1313,13 @@ model WaterLog {
 
 model SubscriptionPlan {
   id              String   @id @default(uuid()) @db.Uuid
-  trainerId       String   @map("trainer_id") @db.Uuid
+  // Exactly one of trainerId / nutritionistId is set (CHECK
+  // subscription_plans_exactly_one_owner, raw SQL in migration
+  // nutritionist_finance_owner — Prisma cannot express it).
+  trainerId       String?  @map("trainer_id") @db.Uuid
+  nutritionistId  String?  @map("nutritionist_id") @db.Uuid
+  // training | nutrition | both (see ServiceType in constants/subscription.js).
+  serviceType     String   @default("training") @map("service_type") @db.Text
   name            String   @db.Text
   description     String?  @db.Text
   recurrence      String   @db.Text
@@ -1324,16 +1332,24 @@ model SubscriptionPlan {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer       Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainer       Trainer?              @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  // Restrict: billing history is accounting data and is never dropped with the professional row.
+  nutritionist  Nutritionist?         @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
   subscriptions StudentSubscription[]
 
   @@index([trainerId, deletedAt])
+  @@index([nutritionistId, deletedAt])
   @@map("subscription_plans")
 }
 
 model StudentSubscription {
   id                 String    @id @default(uuid()) @db.Uuid
-  trainerId          String    @map("trainer_id") @db.Uuid
+  // Exactly one of trainerId / nutritionistId is set (CHECK
+  // student_subscriptions_exactly_one_owner, raw SQL in migration
+  // nutritionist_finance_owner). Snapshot of the plan owner at assign time.
+  trainerId          String?   @map("trainer_id") @db.Uuid
+  nutritionistId     String?   @map("nutritionist_id") @db.Uuid
+  serviceType        String    @default("training") @map("service_type") @db.Text
   studentId          String    @map("student_id") @db.Uuid
   planId             String    @map("plan_id") @db.Uuid
   recurrence         String    @db.Text
@@ -1349,18 +1365,23 @@ model StudentSubscription {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trainer  Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  student  User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  plan     SubscriptionPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
-  payments SubscriptionPayment[]
+  trainer      Trainer?              @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  nutritionist Nutritionist?         @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
+  student      User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments     SubscriptionPayment[]
 
   @@index([trainerId, status])
+  @@index([nutritionistId, status])
   @@index([studentId, status])
   @@index([planId])
   // NOTE: a partial unique index (trainer_id, student_id) WHERE status = 'active'
   // (student_subscriptions_one_active_per_pair, raw SQL in migration
   // per_trainer_active_subscription_unique) exists in the database — Prisma
   // cannot express it. A student may have one active subscription per trainer.
+  // Its nutritionist twin (nutritionist_id, student_id) WHERE status = 'active'
+  // is student_subscriptions_one_active_per_nutritionist_pair (same migration
+  // family: nutritionist_finance_owner).
   @@map("student_subscriptions")
 }
 
