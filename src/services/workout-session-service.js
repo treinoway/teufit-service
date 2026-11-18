@@ -14,6 +14,7 @@ import { AppError } from '../errors/app-error.js';
 import { awardWorkoutCompletionPoints } from './gamification-service.js';
 import { markBriefingDirty } from './briefing-service.js';
 import { withDeadlockRetry } from '../helpers/db-retry.js';
+import { computeBestSet, resolveEffectiveExerciseId } from '../helpers/best-set.js';
 import { lockWorkoutSessionForUpdate } from '../helpers/row-locks.js';
 import {
   advancedTechniqueLinksInclude,
@@ -395,18 +396,6 @@ export async function listSessions(userId, filters = {}) {
 }
 
 /**
- * Resolve the effective exerciseId for a given exerciseLog.
- * When the log was substituted, the student is performing the substitute exercise,
- * so previous performance should reflect that substitute's history.
- *
- * @param {{ exerciseId: string, substitutedByExerciseId: string | null }} exerciseLog
- * @returns {string}
- */
-function resolveEffectiveExerciseId(exerciseLog) {
-  return exerciseLog.substitutedByExerciseId ?? exerciseLog.exerciseId;
-}
-
-/**
  * Batch-load the most recent prior completed ExerciseLog per effective exerciseId,
  * then batch-load their completed setLogs. Returns a Map keyed by effectiveExerciseId.
  *
@@ -485,46 +474,6 @@ async function loadPreviousLogsByExercise(effectiveExerciseIds, userId, currentS
   }
 
   return resultByExerciseId;
-}
-
-/**
- * Compute the "best set" (highest tonnage = load * repetitions) from a list of
- * set logs. Considers ONLY completed sets that have non-null load AND repetitions.
- * Tie-break: higher load wins; on equal load, the lower setNumber wins (earliest).
- * Returns null when no set qualifies. Pure in-memory reduction — no DB access.
- *
- * @param {Array<{setNumber:number, repetitions:number|null, load:number|null, duration?:number|null, rpe?:number|null, restSeconds?:number|null, completed?:boolean}>} sets
- * @returns {{setNumber:number, load:number, repetitions:number, duration:number|null, rpe:number|null, restSeconds:number|null, completed:boolean, tonnage:number}|null}
- */
-function computeBestSet(sets) {
-  if (!Array.isArray(sets)) return null;
-
-  let best = null;
-  for (const set of sets) {
-    if (set.completed !== true) continue;
-    if (set.load == null || set.repetitions == null) continue;
-
-    const tonnage = set.load * set.repetitions;
-    if (
-      best === null ||
-      tonnage > best.tonnage ||
-      (tonnage === best.tonnage && set.load > best.load) ||
-      (tonnage === best.tonnage && set.load === best.load && set.setNumber < best.setNumber)
-    ) {
-      best = {
-        setNumber: set.setNumber,
-        load: set.load,
-        repetitions: set.repetitions,
-        duration: set.duration ?? null,
-        rpe: set.rpe ?? null,
-        restSeconds: set.restSeconds ?? null,
-        completed: true,
-        tonnage,
-      };
-    }
-  }
-
-  return best;
 }
 
 /**
