@@ -50,8 +50,8 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
   }
 
   it('should rank the simple cooked egg above composite dishes containing it', async () => {
-    await createFood('Arroz, c/ ovo frito, c/ sal (arroz polido cozido, ovo frito, c/ sal)', Source.TBCA);
-    await createFood('Carne, moída, cozida, c/ azeitona, ovo cozido, c/ óleo, c/ sal', Source.TBCA);
+    await createFood('Arroz, c/ ovo frito, c/ sal (arroz polido cozido, ovo frito, c/ sal)', Source.TACO);
+    await createFood('Carne, moída, cozida, c/ azeitona, ovo cozido, c/ óleo, c/ sal', Source.TACO);
     await createFood('Ovo, de galinha, inteiro, cozido/10minutos', Source.TACO);
 
     const names = await searchNames('ovo cozido');
@@ -61,7 +61,7 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
   });
 
   it('should rank the plain grilled chicken above a chicken burrito', async () => {
-    await createFood('Burrito de frango, c/ tortilha (tortilha, c/ peito de frango grelhado, c/ sal)', Source.TBCA);
+    await createFood('Burrito de frango, c/ tortilha (tortilha, c/ peito de frango grelhado, c/ sal)', Source.TACO);
     await createFood('Frango, peito, sem pele, grelhado', Source.TACO);
 
     const names = await searchNames('frango grelhado');
@@ -71,7 +71,7 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
   });
 
   it('should rank names starting with the query above names merely containing it', async () => {
-    await createFood('Abobrinha, à milanesa (farinha de trigo, ovo)', Source.TBCA);
+    await createFood('Abobrinha, à milanesa (farinha de trigo, ovo)', Source.TACO);
     await createFood('Bolo de ovo', Source.TACO);
     await createFood('Ovo, de galinha, inteiro, frito', Source.TACO);
 
@@ -82,7 +82,7 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
 
   it('should rank whole-word matches above substring matches', async () => {
     await createFood('Ovomaltine, achocolatado', Source.TACO);
-    await createFood('Ovo, cru', Source.TBCA);
+    await createFood('Ovo, cru', Source.TACO);
 
     const names = await searchNames('ovo');
 
@@ -91,15 +91,15 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
 
   it('should prefer fewer words and then non-composite names for same-prefix matches', async () => {
     await createFood('Ovo, c/ sal, frito', Source.TACO);
-    await createFood('Ovo, inteiro, frito', Source.TBCA);
-    await createFood('Ovo, frito', Source.TBCA);
+    await createFood('Ovo, inteiro, frito', Source.TACO);
+    await createFood('Ovo, frito', Source.TACO);
 
     const names = await searchNames('ovo');
 
     expect(names).toEqual(['Ovo, frito', 'Ovo, inteiro, frito', 'Ovo, c/ sal, frito']);
   });
 
-  it('should use source preference custom > taco > tbca as a tiebreaker', async () => {
+  it('should use source preference custom > taco as a tiebreaker and never return tbca', async () => {
     const nutritionist = await prisma.nutritionist.findUnique({ where: { userId: nutri.userId } });
     await createFood('Tapioca, goma', Source.TBCA);
     await createFood('Tapioca, goma', Source.TACO);
@@ -107,12 +107,12 @@ e2eDescribe('e2e: GET /foods relevance ranking', () => {
 
     const items = await searchItems('tapioca');
 
-    expect(items.map((item) => item.source)).toEqual([Source.CUSTOM, Source.TACO, Source.TBCA]);
+    expect(items.map((item) => item.source)).toEqual([Source.CUSTOM, Source.TACO]);
   });
 
   it('should keep accent-insensitive matching and respect the limit', async () => {
-    await createFood('Açaí, polpa', Source.TBCA);
-    await createFood('Açaí, c/ granola', Source.TBCA);
+    await createFood('Açaí, polpa', Source.TACO);
+    await createFood('Açaí, c/ granola', Source.TACO);
 
     const names = await searchNames('acai', '&limit=1');
 

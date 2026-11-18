@@ -92795,7 +92795,7 @@
     },
     "/foods": {
       "get": {
-        "summary": "Search foods (TACO, TBCA and the caller own custom foods), accent/case-insensitive",
+        "summary": "Search foods (TACO and the caller own custom foods; TBCA is currently hidden), accent/case-insensitive",
         "tags": [
           "Foods"
         ],
@@ -92825,7 +92825,7 @@
             "in": "query",
             "name": "sources",
             "required": false,
-            "description": "Comma separated: taco,tbca,custom. Defaults to all; custom returns only the caller's own foods."
+            "description": "Comma separated: taco,tbca,custom. Defaults to all; custom returns only the caller's own foods; tbca is accepted but currently hidden (returns no foods)."
           },
           {
             "schema": {
