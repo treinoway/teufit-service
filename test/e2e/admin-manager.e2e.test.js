@@ -139,7 +139,7 @@ async function createSessionWorld(app) {
   const studentId = await linkNamedStudent(app, trainer.trainerId, { firstName: 'Bia', lastName: 'Souza' });
   const { trainingA } = await createProtocolWithContent({ trainerId: trainer.trainerId, assigneeId: studentId, name: 'Hipertrofia' });
   const exercise = await prisma.exercise.findFirst({ where: { trainingId: trainingA.id, name: 'Supino reto' } });
-  return { studentId, trainingId: trainingA.id, exerciseId: exercise.id };
+  return { userId: studentId, studentId, trainingId: trainingA.id, exerciseId: exercise.id };
 }
 
 // Creates `count` training templates and one exercise template for the trainer.
