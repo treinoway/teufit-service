@@ -56,6 +56,7 @@ export async function deleteOwnAccount(userId, logger = console) {
 
     await tx.anamnesisResponse.deleteMany({ where: { studentId: userId } });
     await tx.studentAnamnesis.deleteMany({ where: { studentId: userId } });
+    await tx.studentFeedbackRequest.deleteMany({ where: { studentId: userId } });
 
     await tx.aiConversation.deleteMany({ where: { userId } });
 

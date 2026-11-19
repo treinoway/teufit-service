@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { lockTrainingTemplateForUpdate, lockDietProtocolForUpdate } from '../../src/helpers/row-locks.js';
+import {
+  lockTrainingTemplateForUpdate,
+  lockDietProtocolForUpdate,
+  lockStudentFeedbackRequestForUpdate,
+} from '../../src/helpers/row-locks.js';
 
 describe('lockTrainingTemplateForUpdate', () => {
   it('locks the training_templates row FOR UPDATE with the given id', async () => {
@@ -53,5 +57,51 @@ describe('lockDietProtocolForUpdate', () => {
     const tx = { $queryRaw: vi.fn().mockRejectedValue(failure) };
 
     await expect(lockDietProtocolForUpdate(tx, planId)).rejects.toBe(failure);
+  });
+});
+
+describe('lockStudentFeedbackRequestForUpdate', () => {
+  const requestId = 'feedback-request-1';
+
+  it('issues exactly one $queryRaw on the given tx', async () => {
+    const tx = { $queryRaw: vi.fn().mockResolvedValue([]) };
+
+    await lockStudentFeedbackRequestForUpdate(tx, requestId);
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('targets the student_feedback_requests table with FOR NO KEY UPDATE', async () => {
+    const tx = { $queryRaw: vi.fn().mockResolvedValue([]) };
+
+    await lockStudentFeedbackRequestForUpdate(tx, requestId);
+
+    const [strings] = tx.$queryRaw.mock.calls[0];
+    const sql = strings.join('?');
+    expect(sql).toContain('FROM student_feedback_requests');
+    expect(sql).toContain('FOR NO KEY UPDATE');
+  });
+
+  it('binds the id as a parameter instead of interpolating it into the SQL', async () => {
+    const tx = { $queryRaw: vi.fn().mockResolvedValue([]) };
+
+    await lockStudentFeedbackRequestForUpdate(tx, requestId);
+
+    const [strings, id] = tx.$queryRaw.mock.calls[0];
+    expect(id).toBe(requestId);
+    expect(strings.join('?')).not.toContain(requestId);
+  });
+
+  it('resolves to undefined when the row does not exist', async () => {
+    const tx = { $queryRaw: vi.fn().mockResolvedValue([]) };
+
+    await expect(lockStudentFeedbackRequestForUpdate(tx, requestId)).resolves.toBeUndefined();
+  });
+
+  it('propagates errors raised by the query', async () => {
+    const failure = new Error('lock timeout');
+    const tx = { $queryRaw: vi.fn().mockRejectedValue(failure) };
+
+    await expect(lockStudentFeedbackRequestForUpdate(tx, requestId)).rejects.toBe(failure);
   });
 });
