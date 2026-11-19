@@ -75,6 +75,24 @@
       "value": "",
       "type": "string",
       "description": "Tutorial UUID — used in /admin/tutorials/:tutorialId"
+    },
+    {
+      "key": "studentFeedbackId",
+      "value": "",
+      "type": "string",
+      "description": "Student feedback UUID - used in /my/feedbacks/:id and /trainer/student-feedbacks/:id/read"
+    },
+    {
+      "key": "studentId",
+      "value": "",
+      "type": "string",
+      "description": "Student UUID - used in /trainer/students/:studentId/feedbacks"
+    },
+    {
+      "key": "studentFeedbackTemplateId",
+      "value": "",
+      "type": "string",
+      "description": "Student feedback template UUID - used in /trainer/student-feedbacks/templates/:id"
     }
   ],
   "auth": {
@@ -23887,6 +23905,1505 @@
                 }
               ],
               "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Resource not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Student Feedback - My",
+      "item": [
+        {
+          "name": "Get Pending Feedback",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                "pending"
+              ]
+            },
+            "description": "Most recent feedback the student can still answer (pending and not past expiresAt), for the home card; feedback is null when there is none. Labels follow the app-language header. Requires authentication (any role). Errors: 401, 500."
+          },
+          "response": [
+            {
+              "name": "Get Pending Feedback - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    "pending"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"feedback\": {\n    \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n    \"milestone\": \"D7\",\n    \"milestoneLabel\": \"7 dias\",\n    \"title\": \"Padrão TeuFit\",\n    \"trainer\": {\n      \"name\": \"Rafael Menezes\",\n      \"avatarUrl\": null\n    },\n    \"questionCount\": 8,\n    \"estimatedMinutes\": 3,\n    \"expiresAt\": \"2026-11-20T12:00:00.000Z\",\n    \"daysLeft\": 3\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Feedback",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "description": "One feedback with its questions and the saved draft answers. A pending feedback past expiresAt reads status expired with daysLeft 0. The has_meal_plan question appears only when the student had a meal plan when it was sent. Requires authentication. Errors: 400 validation, 401, 404 STUDENT_FEEDBACK_NOT_FOUND (studentFeedback.notFound), 500."
+          },
+          "response": [
+            {
+              "name": "Get Feedback - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"milestone\": \"D7\",\n  \"milestoneLabel\": \"7 dias\",\n  \"title\": \"Padrão TeuFit\",\n  \"trainer\": {\n    \"name\": \"Rafael Menezes\",\n    \"avatarUrl\": null\n  },\n  \"questionCount\": 8,\n  \"estimatedMinutes\": 3,\n  \"expiresAt\": \"2026-11-20T12:00:00.000Z\",\n  \"daysLeft\": 3,\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"questions\": [\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"order\": 1,\n      \"text\": \"Como foi sua semana de treino?\",\n      \"helpText\": null,\n      \"type\": \"score\",\n      \"typeLabel\": \"Nota\",\n      \"required\": true,\n      \"minLabel\": \"Muito ruim\",\n      \"maxLabel\": \"Excelente\"\n    },\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a12\",\n      \"order\": 2,\n      \"text\": \"Como você avalia seu sono?\",\n      \"helpText\": null,\n      \"type\": \"stars\",\n      \"typeLabel\": \"Estrelas\",\n      \"required\": true,\n      \"minLabel\": null,\n      \"maxLabel\": null\n    },\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"order\": 3,\n      \"text\": \"Quer contar algo para o seu treinador?\",\n      \"helpText\": \"Opcional\",\n      \"type\": \"open\",\n      \"typeLabel\": \"Aberta\",\n      \"required\": false,\n      \"minLabel\": null,\n      \"maxLabel\": null\n    }\n  ],\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Feedback Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Replaces the answer of each question sent and keeps the others; returns everything saved so far in question order. score: integer 0-10 (score) or 1-5 (stars); null score or null/blank text removes the answer. text max 2000 chars; max 100 items. Requires authentication. Errors: 400 STUDENT_FEEDBACK_INVALID_ANSWER (studentFeedback.invalidAnswer, details.questionId) or validation, 401, 404 STUDENT_FEEDBACK_NOT_FOUND, 409 STUDENT_FEEDBACK_EXPIRED (studentFeedback.expired), 409 STUDENT_FEEDBACK_ALREADY_SUBMITTED (studentFeedback.alreadySubmitted), 500."
+          },
+          "response": [
+            {
+              "name": "Save Feedback Draft - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id",
+                "submit"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Submits the feedback; the answers sent are merged over the saved draft. Returns nextFeedbackAt (null when no automatic feedback is scheduled). Requires authentication. Errors: 400 STUDENT_FEEDBACK_REQUIRED_ANSWER_MISSING (studentFeedback.requiredAnswerMissing, details.questionIds) or STUDENT_FEEDBACK_INVALID_ANSWER, 401, 404 STUDENT_FEEDBACK_NOT_FOUND, 409 STUDENT_FEEDBACK_EXPIRED, 409 STUDENT_FEEDBACK_ALREADY_SUBMITTED, 500."
+          },
+          "response": [
+            {
+              "name": "Submit Feedback - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id/submit",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id",
+                    "submit"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"nextFeedbackAt\": \"2026-11-25T12:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Student Feedback - Trainer",
+      "item": [
+        {
+          "name": "List Inbox",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks?status=all&milestone=D7&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all",
+                  "description": "all | unread (answered, not read) | unanswered (expired)"
+                },
+                {
+                  "key": "milestone",
+                  "value": "D7",
+                  "description": "D7 | D15 | D21 | D30 | RECURRING | ADHOC"
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Optional. Maximum number of items, 1-200 (default 100, the most recently sent ones)"
+                }
+              ]
+            },
+            "description": "Student feedbacks of the trainer, most recently sent first, capped by limit (default 100, max 200). summary ignores the filters and the limit. Query params are optional (remove them for no filter). Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "List Inbox - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks?status=all&milestone=D7&limit=100",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "all",
+                      "description": "all | unread (answered, not read) | unanswered (expired)"
+                    },
+                    {
+                      "key": "milestone",
+                      "value": "D7",
+                      "description": "D7 | D15 | D21 | D30 | RECURRING | ADHOC"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "100"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"summary\": {\n    \"responseRate30d\": 75,\n    \"averageIndex\": 72,\n    \"unansweredCount\": 1,\n    \"unreadCount\": 2\n  },\n  \"items\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"student\": {\n        \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n        \"name\": \"Camila Duarte\",\n        \"avatarUrl\": null\n      },\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "unread-count"
+              ]
+            },
+            "description": "Number of answered student feedbacks the trainer has not read (sidebar badge). Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Unread Count - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/unread-count",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "unread-count"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "Mark Feedback As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                ":id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "description": "No body. Keeps the first read date; a feedback that was not answered yet is not stamped (readAt null). Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Mark Feedback As Read - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/:id/read",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    ":id",
+                    "read"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"readAt\": \"2026-11-12T09:15:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "feedbacks"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "description": "Student UUID"
+                }
+              ]
+            },
+            "description": "Feedbacks this trainer sent to the student, oldest first. pillars and openAnswers are empty unless the feedback was answered; variation between milestones is computed by the client. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 NOT_FOUND (student not linked), 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback History - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "feedbacks"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "{{studentId}}",
+                      "description": "Student UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"student\": {\n    \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n    \"name\": \"Camila Duarte\",\n    \"avatarUrl\": null\n  },\n  \"hasPending\": false,\n  \"feedbacks\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\",\n      \"pillars\": [\n        {\n          \"pillar\": \"training_adherence\",\n          \"pillarLabel\": \"Adesão (treino)\",\n          \"score\": 80\n        },\n        {\n          \"pillar\": \"sleep\",\n          \"pillarLabel\": \"Sono\",\n          \"score\": 75\n        }\n      ],\n      \"openAnswers\": [\n        {\n          \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n          \"question\": \"Quer contar algo para o seu treinador?\",\n          \"pillar\": \"report\",\n          \"pillarLabel\": \"Relato\",\n          \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Send Ad-hoc Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "feedbacks"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "description": "Student UUID"
+                }
+              ]
+            },
+            "description": "Optional body {templateId}: without it (no body or {}) the general template is sent; otherwise the general one or one of the trainer. Creates an ADHOC feedback request and e-mails the student; works with auto-send off. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 403 STUDENT_BLOCKED_ON_PLAN, 404 NOT_FOUND (student not linked), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (templateId neither general nor the trainer's), 409 STUDENT_FEEDBACK_ALREADY_PENDING (studentFeedback.alreadyPending), 500.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Send Ad-hoc Feedback - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "feedbacks"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "{{studentId}}",
+                      "description": "Student UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"templateId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"milestone\": \"ADHOC\",\n  \"milestoneLabel\": \"Envio manual\",\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"sentAt\": \"2026-11-17T12:00:00.000Z\",\n  \"expiresAt\": \"2026-11-20T12:00:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "config"
+              ]
+            },
+            "description": "Settings of the trainer. Defaults when never saved: autoSendEnabled false, every milestone true. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Config - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "config"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Student Feedback Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Partial update: any subset of the booleans, no extra properties. Turning auto-send on never sends milestones that fell due before. Returns the full config. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Update Student Feedback Config - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Student Feedback Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates"
+              ]
+            },
+            "description": "General template first, then the latest version of each template of the trainer, by name. milestones = milestones pointing at the template (all five for the general one with no config). Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "List Student Feedback Templates - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"templates\": [\n    {\n      \"id\": \"3a6f0f64-1c2b-4d8e-9b1a-0a1b2c3d4e01\",\n      \"name\": \"Feedback padrão\",\n      \"isGeneral\": true,\n      \"version\": 1,\n      \"questionCount\": 8,\n      \"milestones\": [\n        \"D7\",\n        \"D15\",\n        \"D21\",\n        \"D30\",\n        \"RECURRING\"\n      ],\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n      \"name\": \"Check-in semanal\",\n      \"isGeneral\": false,\n      \"version\": 2,\n      \"questionCount\": 3,\n      \"milestones\": [\n        \"D7\",\n        \"D30\"\n      ],\n      \"updatedAt\": \"2026-11-18T12:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Template",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "The general template or one of the trainer, with its questions. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (studentFeedbackTemplate.notFound), 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Template - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"name\": \"Check-in semanal\",\n    \"isGeneral\": false,\n    \"version\": 2,\n    \"hasRequests\": true,\n    \"milestones\": [\n      \"D7\",\n      \"D30\"\n    ],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Student Feedback Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Check-in mensal\",\n  \"sourceTemplateId\": \"{{studentFeedbackTemplateId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates"
+              ]
+            },
+            "description": "Creates a template of the trainer (version 1, hasRequests false, no milestones) with the given name. Body: name (string, 1-80, trimmed; required), sourceTemplateId (uuid, optional): the general template or one of the trainer, whose questions are copied in order. Without sourceTemplateId the template starts with one starter question (score, pillar other, required, no condition) whose text follows the app-language header (pt-BR default). Unknown body properties are ignored. Response 201 { template } in the shape of GET /trainer/student-feedbacks/templates/:id. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed; missing or empty name, name over 80, sourceTemplateId not a uuid), 400 STUDENT_FEEDBACK_TEMPLATE_INVALID (name of spaces only), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (source unknown, deleted, replaced by a newer version or of another trainer), 500."
+          },
+          "response": [
+            {
+              "name": "Create Student Feedback Template - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Check-in mensal\",\n  \"sourceTemplateId\": \"{{studentFeedbackTemplateId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"8d0f7780-8536-41ef-a55c-f18fd2a01bf8\",\n    \"name\": \"Check-in mensal\",\n    \"isGeneral\": false,\n    \"version\": 1,\n    \"hasRequests\": false,\n    \"milestones\": [],\n    \"questions\": [\n      {\n        \"id\": \"6f2c8d51-ae4b-4b7f-9032-4c5d6e7f8a12\",\n        \"order\": 1,\n        \"text\": \"Como foi a sua semana?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outro\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Student Feedback Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id/duplicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id",
+                "duplicate"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "No body. Copies the general template or one of the trainer into a new template of the trainer (version 1, hasRequests false, no milestones, name = source + ' (cópia)' cut to 80). Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Duplicate Student Feedback Template - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id/duplicate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id",
+                    "duplicate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"b1d5a3e2-52f4-4f0a-8a55-2e6c1d9f7a10\",\n    \"name\": \"Check-in semanal (cópia)\",\n    \"isGeneral\": false,\n    \"version\": 1,\n    \"hasRequests\": false,\n    \"milestones\": [],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Student Feedback Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Check-in semanal\",\n  \"questions\": [\n    {\n      \"text\": \"Como foi sua semana de treinos?\",\n      \"type\": \"stars\",\n      \"pillar\": \"training_adherence\",\n      \"required\": true\n    },\n    {\n      \"text\": \"Qual o seu nível de cansaço?\",\n      \"helpText\": \"0 = sem cansaço, 10 = exausto\",\n      \"type\": \"score\",\n      \"pillar\": \"sleep\",\n      \"required\": true,\n      \"invertScore\": true,\n      \"minLabel\": \"Nenhum\",\n      \"maxLabel\": \"Muito alto\"\n    },\n    {\n      \"text\": \"Você seguiu o plano alimentar?\",\n      \"type\": \"score\",\n      \"pillar\": \"diet_adherence\",\n      \"condition\": \"has_meal_plan\",\n      \"minLabel\": \"Nada\",\n      \"maxLabel\": \"Totalmente\"\n    },\n    {\n      \"text\": \"Quer contar mais alguma coisa?\",\n      \"type\": \"open\",\n      \"pillar\": \"other\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Replaces name and the whole question list (1-15), in the order sent. No request sent yet: edited in place (same id and version). Any request sent: new id, version + 1, hasRequests false; the old id answers 404 and milestones follow the new id. Texts are trimmed; blank help text/labels become null; end labels are dropped on non-score questions. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 400 STUDENT_FEEDBACK_TEMPLATE_INVALID (studentFeedbackTemplate.invalid: blank name/text, invertScore on an open question, no question without a condition), 403 STUDENT_FEEDBACK_TEMPLATE_READ_ONLY (general template), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Save Student Feedback Template - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Check-in semanal\",\n  \"questions\": [\n    {\n      \"text\": \"Como foi sua semana de treinos?\",\n      \"type\": \"stars\",\n      \"pillar\": \"training_adherence\",\n      \"required\": true\n    },\n    {\n      \"text\": \"Qual o seu nível de cansaço?\",\n      \"helpText\": \"0 = sem cansaço, 10 = exausto\",\n      \"type\": \"score\",\n      \"pillar\": \"sleep\",\n      \"required\": true,\n      \"invertScore\": true,\n      \"minLabel\": \"Nenhum\",\n      \"maxLabel\": \"Muito alto\"\n    },\n    {\n      \"text\": \"Você seguiu o plano alimentar?\",\n      \"type\": \"score\",\n      \"pillar\": \"diet_adherence\",\n      \"condition\": \"has_meal_plan\",\n      \"minLabel\": \"Nada\",\n      \"maxLabel\": \"Totalmente\"\n    },\n    {\n      \"text\": \"Quer contar mais alguma coisa?\",\n      \"type\": \"open\",\n      \"pillar\": \"other\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"name\": \"Check-in semanal\",\n    \"isGeneral\": false,\n    \"version\": 2,\n    \"hasRequests\": false,\n    \"milestones\": [\n      \"D7\",\n      \"D30\"\n    ],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Student Feedback Template",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "Soft delete; milestones using it go back to the general template; feedbacks already sent keep it. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 403 STUDENT_FEEDBACK_TEMPLATE_READ_ONLY (general template), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Delete Student Feedback Template - 204 No Content",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Milestone Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "milestone-templates"
+              ]
+            },
+            "description": "Template chosen for each milestone; null = the general template. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Milestone Templates - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "milestone-templates"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"milestoneTemplates\": {\n    \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"d15\": null,\n    \"d21\": null,\n    \"d30\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"recurring\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Student Feedback Milestone Templates",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "milestone-templates"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"d15\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Partial update: any subset of d7, d15, d21, d30, recurring, each a template uuid or null. null or the general template's id is stored as null. Response always has all five keys. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND for an unknown, foreign or deleted id (nothing is stored), 500."
+          },
+          "response": [
+            {
+              "name": "Update Student Feedback Milestone Templates - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "milestone-templates"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"d15\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"milestoneTemplates\": {\n    \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"d15\": null,\n    \"d21\": null,\n    \"d30\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"recurring\": null\n  }\n}"
             }
           ]
         }

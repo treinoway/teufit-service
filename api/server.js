@@ -64,6 +64,7 @@ import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminManagerRoutes } from './routes/admin-manager-route.js';
 import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
 import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
+import { studentFeedbackRoutes } from './routes/student-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
 import { getLlmProvider } from '../src/llm/index.js';
 import { createAiTracer } from '../src/observability/ai-tracer.js';
@@ -73,10 +74,12 @@ import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
 import { startConsistencyCloseCron } from '../src/jobs/consistency-close-cron.js';
+import { startStudentFeedbackCron } from '../src/jobs/student-feedback-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { createSignedFileHook } from './hooks/signed-file-hook.js';
 import s3BucketHandler from '../src/config/s3-bucket-handler.js';
+import emailHandler from '../src/config/email-handler.js';
 import { resolveExerciseVideoUrl } from '../src/helpers/exercise-video-key.js';
 import { healthRoutes } from './routes/health-route.js';
 import { checkLlmConfiguration } from '../src/llm/config.js';
@@ -458,6 +461,7 @@ export async function buildServer(options = {}) {
     await fastify.register(adminManagerRoutes);
     await fastify.register(trainerFeedbackRoutes);
     await fastify.register(adminFeedbackRoutes);
+    await fastify.register(studentFeedbackRoutes);
     await fastify.register(adminAiUsageRoutes);
     await fastify.register(adminDebugRoutes);
   });
@@ -489,6 +493,14 @@ export async function buildServer(options = {}) {
   if (consistencyCloseCronEnabled) {
     startConsistencyCloseCron(prisma, fastify.log);
     fastify.log.info('[cron:consistency-close] every-15-minutes UTC close scheduled');
+  }
+
+  const studentFeedbackCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_STUDENT_FEEDBACK_CRON, false);
+  if (studentFeedbackCronEnabled) {
+    startStudentFeedbackCron(prisma, fastify.log, emailHandler);
+    fastify.log.info('[cron:student-feedback] every-15-minutes UTC tick scheduled');
   }
 
   return fastify;

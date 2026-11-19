@@ -177,6 +177,39 @@ export default {
       expired: 'Expirado',
       declined: 'Recusado',
     },
+    studentFeedbackMilestone: {
+      D7: '7 dias',
+      D15: '15 dias',
+      D21: '21 dias',
+      D30: '30 dias',
+      RECURRING: 'A cada 30 dias',
+      ADHOC: 'Envio manual',
+    },
+    studentFeedbackStatus: {
+      pending: 'Pendente',
+      answered: 'Respondido',
+      expired: 'Expirado',
+    },
+    studentFeedbackQuestionType: {
+      score: 'Nota',
+      stars: 'Estrelas',
+      open: 'Aberta',
+    },
+    studentFeedbackBand: {
+      attention: 'Atenção',
+      stable: 'Estável',
+      good: 'Bom',
+    },
+    studentFeedbackPillar: {
+      training_adherence: 'Adesão (treino)',
+      diet_adherence: 'Adesão (plano alimentar)',
+      evolution: 'Evolução',
+      routine: 'Rotina',
+      sleep: 'Sono',
+      hydration: 'Hidratação',
+      report: 'Relato',
+      other: 'Outro',
+    },
   },
 
   errors: {
@@ -263,6 +296,17 @@ export default {
     'consistencyRanking.pause.weekNotEditable': 'Esta semana já foi encerrada ou está a mais de 12 semanas à frente, e não pode ser pausada nem reativada.',
     'consistencyRanking.season.notFound': 'Temporada não encontrada.',
     'consistencyRanking.target.notEditable': 'A meta só pode ser reduzida na semana em andamento, de zero até a meta original.',
+
+    // Student feedback
+    'studentFeedback.notFound': 'Feedback não encontrado.',
+    'studentFeedback.expired': 'O prazo para responder este feedback terminou.',
+    'studentFeedback.alreadySubmitted': 'Este feedback já foi enviado.',
+    'studentFeedback.alreadyPending': 'Este aluno já tem um feedback pendente.',
+    'studentFeedback.requiredAnswerMissing': 'Responda todas as perguntas obrigatórias antes de enviar.',
+    'studentFeedback.invalidAnswer': 'Uma das respostas é inválida.',
+    'studentFeedbackTemplate.notFound': 'Modelo de feedback não encontrado.',
+    'studentFeedbackTemplate.readOnly': 'O modelo padrão do TeuFit não pode ser alterado. Crie o seu a partir dele.',
+    'studentFeedbackTemplate.invalid': 'O modelo de feedback tem dados inválidos.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercício não encontrado neste modelo de treino.',
@@ -487,6 +531,11 @@ export default {
 
   notes: {
     autoCompleted24h: '[Treino concluído automaticamente após 24h sem atividade]',
+  },
+
+  // Texts stored in a student feedback template when the service creates it
+  studentFeedback: {
+    starterQuestionText: 'Como foi a sua semana?',
   },
 
   validation: {
