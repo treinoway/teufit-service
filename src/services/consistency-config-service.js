@@ -139,6 +139,19 @@ function isValidPillarList(value) {
   );
 }
 
+/**
+ * Reason each part of a scoring rule is invalid, with the rules of the ranking config, or null when it is valid.
+ *
+ * @param {{ weights: unknown, activePillars: unknown }} rule
+ * @returns {{ weights: string|null, activePillars: string|null }}
+ */
+export function scoringRuleProblems({ weights, activePillars }) {
+  return {
+    weights: weightsProblem(weights),
+    activePillars: isValidPillarList(activePillars) ? null : 'invalid',
+  };
+}
+
 // Reason per panel rule, or null when the rule is an integer inside its range
 function panelRuleProblems(input) {
   return Object.fromEntries(
