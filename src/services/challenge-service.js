@@ -8,11 +8,12 @@ import {
   ChallengeParticipantMode,
   ChallengeStatus,
   ChallengeVisibility,
+  SCORING_RULE_FIELDS,
 } from '../constants/challenge.js';
 import { currentWeekOf, validateWeeksInput, weeklyStatus, weeksSpan } from '../helpers/challenge-weeks.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
-import { getConfig } from './consistency-config-service.js';
+import { getConfig, scoringRuleProblems } from './consistency-config-service.js';
 import { assertCanCreateChallenge } from './platform-plan-service.js';
 
 const POINT_RULE_FIELDS = Object.freeze([
@@ -291,7 +292,7 @@ function validateDateRange(startDateStr, endDateStr, checkStartInFuture = false)
  * @param {string} trainerId - Trainer record ID
  * @param {{ startWeek: string, weeks: number, minPodiumWeeks?: number, description?: string, visibility?: string }} data
  * @param {Date} now
- * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string } }>}
+ * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string }, config: object }>}
  */
 async function resolveWeeklyFields(prisma, trainerId, data, now) {
   const config = await getConfig(prisma, trainerId, now);
@@ -308,7 +309,31 @@ async function resolveWeeklyFields(prisma, trainerId, data, now) {
       ...weeksSpan({ startWeek: data.startWeek, weeks: data.weeks }),
     },
     weeklyContext: { now, timeZone: config.timeZone },
+    config,
   };
+}
+
+// 400 naming the first field of a scoring rule that breaks the ranking config rules (CPD-08)
+function assertValidScoringRule(rule) {
+  const problems = scoringRuleProblems(rule);
+  const field = SCORING_RULE_FIELDS.find((name) => problems[name]);
+  if (!field) return;
+  throw new AppError({
+    httpStatus: 400,
+    error: ChallengeErrorCode.CHALLENGE_INVALID_SCORING_RULE,
+    messageCode: ChallengeMessageCode.CHALLENGE_INVALID_SCORING_RULE,
+    message: 'Invalid championship scoring rule',
+    details: { field, reason: problems[field] },
+  });
+}
+
+// Scoring rule of a new weekly championship: the one in the body, else a copy of the trainer's saved rule (CPD-06, CPD-07)
+function creationScoringRule(data, config) {
+  if (SCORING_RULE_FIELDS.every((field) => data[field] === undefined)) {
+    return { weights: { ...config.weights }, activePillars: [...config.activePillars] };
+  }
+  assertValidScoringRule(data);
+  return { weights: data.weights, activePillars: data.activePillars };
 }
 
 // The fields of `data` that are present, restricted to the given names
@@ -542,6 +567,7 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
 
   const weekly = isWeekly(data) ? await resolveWeeklyFields(prisma, trainer.id, data, now) : null;
   if (!weekly) validateDateRange(data.startDate, data.endDate, true);
+  const scoringRule = weekly ? creationScoringRule(data, weekly.config) : {};
 
   // Resolve participants
   let resolvedStudentIds;
@@ -616,6 +642,7 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
           : null,
         ...ptsSnapshot,
         ...weekly?.fields,
+        ...scoringRule,
       },
     });
 
