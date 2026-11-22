@@ -82763,6 +82763,34 @@
                     "type": "integer",
                     "description": "Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config"
                   },
+                  "weights": {
+                    "type": "object",
+                    "properties": {
+                      "workouts": {
+                        "type": "number"
+                      },
+                      "diet": {
+                        "type": "number"
+                      },
+                      "cardio": {
+                        "type": "number"
+                      },
+                      "feedback": {
+                        "type": "number"
+                      },
+                      "hydration": {
+                        "type": "number"
+                      }
+                    },
+                    "description": "Weekly format: weight of each of the five pillars, integers 0 to 100 summing 100; sent with activePillars, or both omitted to copy the trainer ranking config on creation"
+                  },
+                  "activePillars": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Weekly format: non-empty list of distinct pillars (workouts, diet, cardio, feedback, hydration)"
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 280,
@@ -83013,6 +83041,77 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "weights": {
+                      "type": "object",
+                      "properties": {
+                        "workouts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "diet": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "cardio": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "feedback": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "hydration": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "nullable": true,
+                      "description": "Pillar weights of a weekly championship (sum 100); null in the dates format"
+                    },
+                    "activePillars": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "workouts",
+                          "diet",
+                          "cardio",
+                          "feedback",
+                          "hydration"
+                        ]
+                      },
+                      "description": "Active pillars of a weekly championship; empty in the dates format"
+                    },
+                    "participantsPreview": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "firstName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      },
+                      "description": "List only: up to 4 participants by join order"
                     }
                   }
                 }
@@ -83461,6 +83560,77 @@
                         "type": "string",
                         "format": "date-time",
                         "nullable": true
+                      },
+                      "weights": {
+                        "type": "object",
+                        "properties": {
+                          "workouts": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "diet": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "cardio": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "feedback": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "hydration": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "nullable": true,
+                        "description": "Pillar weights of a weekly championship (sum 100); null in the dates format"
+                      },
+                      "activePillars": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "workouts",
+                            "diet",
+                            "cardio",
+                            "feedback",
+                            "hydration"
+                          ]
+                        },
+                        "description": "Active pillars of a weekly championship; empty in the dates format"
+                      },
+                      "participantsPreview": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "studentId": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "firstName": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "lastName": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "avatarUrl": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "description": "List only: up to 4 participants by join order"
                       }
                     }
                   }
@@ -83766,6 +83936,77 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "weights": {
+                      "type": "object",
+                      "properties": {
+                        "workouts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "diet": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "cardio": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "feedback": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "hydration": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "nullable": true,
+                      "description": "Pillar weights of a weekly championship (sum 100); null in the dates format"
+                    },
+                    "activePillars": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "workouts",
+                          "diet",
+                          "cardio",
+                          "feedback",
+                          "hydration"
+                        ]
+                      },
+                      "description": "Active pillars of a weekly championship; empty in the dates format"
+                    },
+                    "participantsPreview": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "firstName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      },
+                      "description": "List only: up to 4 participants by join order"
                     }
                   }
                 }
@@ -83979,6 +84220,34 @@
                   "minPodiumWeeks": {
                     "type": "integer",
                     "description": "Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config"
+                  },
+                  "weights": {
+                    "type": "object",
+                    "properties": {
+                      "workouts": {
+                        "type": "number"
+                      },
+                      "diet": {
+                        "type": "number"
+                      },
+                      "cardio": {
+                        "type": "number"
+                      },
+                      "feedback": {
+                        "type": "number"
+                      },
+                      "hydration": {
+                        "type": "number"
+                      }
+                    },
+                    "description": "Weekly format: weight of each of the five pillars, integers 0 to 100 summing 100; sent with activePillars, or both omitted to copy the trainer ranking config on creation"
+                  },
+                  "activePillars": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Weekly format: non-empty list of distinct pillars (workouts, diet, cardio, feedback, hydration)"
                   },
                   "description": {
                     "type": "string",
@@ -84199,6 +84468,77 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "weights": {
+                      "type": "object",
+                      "properties": {
+                        "workouts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "diet": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "cardio": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "feedback": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "hydration": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "nullable": true,
+                      "description": "Pillar weights of a weekly championship (sum 100); null in the dates format"
+                    },
+                    "activePillars": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "workouts",
+                          "diet",
+                          "cardio",
+                          "feedback",
+                          "hydration"
+                        ]
+                      },
+                      "description": "Active pillars of a weekly championship; empty in the dates format"
+                    },
+                    "participantsPreview": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "firstName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      },
+                      "description": "List only: up to 4 participants by join order"
                     }
                   }
                 }
@@ -84921,6 +85261,77 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "weights": {
+                      "type": "object",
+                      "properties": {
+                        "workouts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "diet": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "cardio": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "feedback": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "hydration": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "nullable": true,
+                      "description": "Pillar weights of a weekly championship (sum 100); null in the dates format"
+                    },
+                    "activePillars": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "workouts",
+                          "diet",
+                          "cardio",
+                          "feedback",
+                          "hydration"
+                        ]
+                      },
+                      "description": "Active pillars of a weekly championship; empty in the dates format"
+                    },
+                    "participantsPreview": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "studentId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "firstName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      },
+                      "description": "List only: up to 4 participants by join order"
                     }
                   }
                 }
@@ -85812,6 +86223,35 @@
                           }
                         }
                       }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "description": "Numbers of the consistency cards",
+                      "properties": {
+                        "classified": {
+                          "type": "integer",
+                          "description": "Participants with a podium position"
+                        },
+                        "entering": {
+                          "type": "integer",
+                          "description": "Participants still entering"
+                        },
+                        "leaderAverage": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Average of the 1st place"
+                        },
+                        "leaderLead": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Average of the 1st minus the 2nd; null with fewer than 2 classified"
+                        },
+                        "championshipAverage": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Mean of the classified averages"
+                        }
+                      }
                     }
                   }
                 }
@@ -86084,6 +86524,22 @@
                       },
                       "points": {
                         "type": "integer"
+                      },
+                      "workouts": {
+                        "type": "integer",
+                        "description": "Completed workouts in the challenge window"
+                      },
+                      "bonusPoints": {
+                        "type": "integer",
+                        "description": "Points from trainer bonuses"
+                      },
+                      "pointsThisWeek": {
+                        "type": "integer",
+                        "description": "Points since Monday 00:00 in the trainer time zone"
+                      },
+                      "streakDays": {
+                        "type": "integer",
+                        "description": "Consecutive days with a completed workout, ending today or yesterday"
                       }
                     }
                   }
