@@ -28,6 +28,7 @@ const POINT_RULE_FIELDS = Object.freeze([
 const WEEKLY_OPEN_FIELDS = Object.freeze(['name', 'description', 'anonymousRanking', 'visibility']);
 const WEEKLY_SCHEDULE_FIELDS = Object.freeze(['startWeek', 'weeks', 'minPodiumWeeks']);
 const FREE_DATE_FIELDS = Object.freeze(['startDate', 'endDate']);
+const PARTICIPANTS_PREVIEW_SIZE = 4;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -701,20 +702,48 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
   return formatChallenge(challenge, resolvedStudentIds.length, weekly?.weeklyContext);
 }
 
+// First participants of each championship of a trainer, by join order, keyed by championship id (CPD-65)
+async function participantsPreviewByChallenge(prisma, trainerId) {
+  const rows = await prisma.$queryRaw`
+    SELECT ranked.challenge_id AS "challengeId", ranked.student_id AS "studentId",
+           u.first_name AS "firstName", u.last_name AS "lastName", u.avatar_url AS "avatarUrl"
+    FROM (
+      SELECT cp.challenge_id, cp.student_id,
+             ROW_NUMBER() OVER (PARTITION BY cp.challenge_id ORDER BY cp.created_at, cp.student_id) AS position
+      FROM challenge_participants cp
+      JOIN challenges c ON c.id = cp.challenge_id
+      WHERE c.trainer_id = ${trainerId}::uuid
+    ) ranked
+    JOIN users u ON u.id = ranked.student_id
+    WHERE ranked.position <= ${PARTICIPANTS_PREVIEW_SIZE}
+    ORDER BY ranked.challenge_id, ranked.position`;
+  const previews = new Map();
+  for (const { challengeId, ...participant } of rows) {
+    previews.set(challengeId, [...(previews.get(challengeId) ?? []), participant]);
+  }
+  return previews;
+}
+
 /**
- * List challenges for a trainer with optional status filter.
+ * List challenges for a trainer with optional status filter, each with a preview of its first participants.
  */
 export async function listChallenges({ prisma, trainerUserId, status, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
 
-  const challenges = await prisma.challenge.findMany({
-    where: { trainerId: trainer.id },
-    include: { _count: { select: { participants: true } } },
-    orderBy: { startDate: 'desc' },
-  });
+  const [challenges, previews] = await Promise.all([
+    prisma.challenge.findMany({
+      where: { trainerId: trainer.id },
+      include: { _count: { select: { participants: true } } },
+      orderBy: { startDate: 'desc' },
+    }),
+    participantsPreviewByChallenge(prisma, trainer.id),
+  ]);
 
   const weeklyContexts = await weeklyContextsFor(prisma, challenges, now);
-  const formatted = challenges.map((c) => formatChallenge(c, c._count.participants, weeklyContexts.get(c.trainerId)));
+  const formatted = challenges.map((c) => ({
+    ...formatChallenge(c, c._count.participants, weeklyContexts.get(c.trainerId)),
+    participantsPreview: previews.get(c.id) ?? [],
+  }));
 
   if (!status) return formatted;
 

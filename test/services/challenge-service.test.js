@@ -42,6 +42,7 @@ const mockPrisma = {
   consistencyRankingConfig: { findUnique: vi.fn() },
   consistencyScoringRule: { findFirst: vi.fn() },
   $transaction: vi.fn(async (fn) => fn(mockTx)),
+  $queryRaw: vi.fn(),
 };
 
 import {
@@ -181,6 +182,7 @@ describe('challenge-service', () => {
     mockPrisma.gamificationConfig.findUnique.mockResolvedValue(null);
     // Silent template upsert is fire-and-forget — resolve by default to avoid unhandled rejection noise
     mockPrisma.gamificationConfig.upsert.mockResolvedValue({});
+    mockPrisma.$queryRaw.mockResolvedValue([]);
   });
 
   // ─── createChallenge ───────────────────────────────────────────────────────
