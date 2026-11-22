@@ -19,6 +19,7 @@ vi.mock('../../src/db.js', () => ({
     workoutSession: { deleteMany: vi.fn() },
     anamnesisResponse: { deleteMany: vi.fn() },
     studentAnamnesis: { deleteMany: vi.fn() },
+    studentFeedbackRequest: { deleteMany: vi.fn() },
     aiConversation: { deleteMany: vi.fn() },
     pointTransaction: { deleteMany: vi.fn() },
     pointBalance: { deleteMany: vi.fn() },
@@ -171,6 +172,33 @@ describe('account-deletion-service', () => {
           expect.any(Function),
           DELETION_TRANSACTION_OPTIONS,
         );
+      });
+
+      it('deletes the student feedback requests of the user through the transaction client, not the root client', async () => {
+        const tx = { ...prisma, studentFeedbackRequest: { deleteMany: vi.fn() } };
+        prisma.$transaction.mockImplementation(async (fn) => fn(tx));
+
+        await deleteOwnAccount(USER_ID);
+
+        expect(tx.studentFeedbackRequest.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { studentId: USER_ID } });
+        expect(prisma.studentFeedbackRequest.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('deletes the student feedback requests before anonymizing the user', async () => {
+        await deleteOwnAccount(USER_ID);
+
+        const [deletedAt] = prisma.studentFeedbackRequest.deleteMany.mock.invocationCallOrder;
+        const [anonymizedAt] = prisma.user.update.mock.invocationCallOrder;
+        expect(deletedAt).toBeLessThan(anonymizedAt);
+      });
+
+      it('rejects and does not anonymize the user when deleting the student feedback requests fails', async () => {
+        const failure = new Error('feedback delete failed');
+        prisma.studentFeedbackRequest.deleteMany.mockRejectedValue(failure);
+
+        await expect(deleteOwnAccount(USER_ID)).rejects.toBe(failure);
+
+        expect(prisma.user.update).not.toHaveBeenCalled();
       });
 
       it('deletes every related record with the correct where clause', async () => {

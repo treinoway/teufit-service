@@ -74,6 +74,7 @@ model User {
   challengeConsistencyStandings ChallengeConsistencyStanding[]
   consistencyWeekPauses         ConsistencyWeekPause[]
   consistencyContactLogs        ConsistencyContactLog[]
+  studentFeedbackRequests       StudentFeedbackRequest[]
 
   // Added for the manager backoffice user list (ORDER BY created_at DESC).
   @@index([createdAt])
@@ -164,6 +165,9 @@ model Trainer {
   consistencySeasonStandings ConsistencySeasonStanding[]
   consistencyWeekPauses      ConsistencyWeekPause[]
   consistencyContactLogs     ConsistencyContactLog[]
+  studentFeedbackConfig      StudentFeedbackConfig?
+  studentFeedbackRequests    StudentFeedbackRequest[]
+  studentFeedbackTemplates   StudentFeedbackTemplate[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -1977,4 +1981,150 @@ model ConsistencyContactLog {
 
   @@index([trainerId, studentId, createdAt(sort: Desc)])
   @@map("consistency_contact_logs")
+}
+
+// Student feedback to the trainer: questionnaire template (general when trainerId is null)
+model StudentFeedbackTemplate {
+  id        String  @id @default(uuid()) @db.Uuid
+  trainerId String? @map("trainer_id") @db.Uuid
+  name      String  @db.Text
+  isGeneral Boolean @default(false) @map("is_general")
+  version   Int     @default(1)
+  parentId  String? @map("parent_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer?                  @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  parent    StudentFeedbackTemplate?  @relation("StudentFeedbackTemplateVersions", fields: [parentId], references: [id], onDelete: Restrict)
+  forks     StudentFeedbackTemplate[] @relation("StudentFeedbackTemplateVersions")
+  questions StudentFeedbackQuestion[]
+  requests  StudentFeedbackRequest[]
+
+  // Configs whose milestone uses this template
+  d7Configs        StudentFeedbackConfig[] @relation("StudentFeedbackConfigD7Template")
+  d15Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD15Template")
+  d21Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD21Template")
+  d30Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD30Template")
+  recurringConfigs StudentFeedbackConfig[] @relation("StudentFeedbackConfigRecurringTemplate")
+
+  // A partial unique index (raw SQL in the migration) allows a single non-deleted general template
+  @@index([trainerId])
+  @@map("student_feedback_templates")
+}
+
+// One question of a student feedback template; `condition` hides it unless the request meets it (has_meal_plan)
+model StudentFeedbackQuestion {
+  id          String  @id @default(uuid()) @db.Uuid
+  templateId  String  @map("template_id") @db.Uuid
+  order       Int     @default(0)
+  text        String  @db.Text
+  helpText    String? @map("help_text") @db.Text
+  // score (0-10) | stars (1-5) | open
+  type        String  @db.Text
+  pillar      String  @db.Text
+  required    Boolean @default(false)
+  minLabel    String? @map("min_label") @db.Text
+  maxLabel    String? @map("max_label") @db.Text
+  invertScore Boolean @default(false) @map("invert_score")
+  condition   String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  template StudentFeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  answers  StudentFeedbackAnswer[]
+
+  @@index([templateId, order])
+  @@map("student_feedback_questions")
+}
+
+// Per-trainer automatic sending settings; enabledAt is stamped on each off -> on switch (no retroactive milestones)
+model StudentFeedbackConfig {
+  id              String    @id @default(uuid()) @db.Uuid
+  trainerId       String    @unique @map("trainer_id") @db.Uuid
+  autoSendEnabled Boolean   @default(false) @map("auto_send_enabled")
+  enabledAt       DateTime? @map("enabled_at") @db.Timestamptz(6)
+  d7              Boolean   @default(true)
+  d15             Boolean   @default(true)
+  d21             Boolean   @default(true)
+  d30             Boolean   @default(true)
+  recurring       Boolean   @default(true)
+
+  // Template of each milestone; null = the general template
+  d7TemplateId        String? @map("d7_template_id") @db.Uuid
+  d15TemplateId       String? @map("d15_template_id") @db.Uuid
+  d21TemplateId       String? @map("d21_template_id") @db.Uuid
+  d30TemplateId       String? @map("d30_template_id") @db.Uuid
+  recurringTemplateId String? @map("recurring_template_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer           Trainer                  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  d7Template        StudentFeedbackTemplate? @relation("StudentFeedbackConfigD7Template", fields: [d7TemplateId], references: [id], onDelete: SetNull)
+  d15Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD15Template", fields: [d15TemplateId], references: [id], onDelete: SetNull)
+  d21Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD21Template", fields: [d21TemplateId], references: [id], onDelete: SetNull)
+  d30Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD30Template", fields: [d30TemplateId], references: [id], onDelete: SetNull)
+  recurringTemplate StudentFeedbackTemplate? @relation("StudentFeedbackConfigRecurringTemplate", fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+
+  @@map("student_feedback_configs")
+}
+
+// One feedback sent to a student; dueAt identifies the milestone occurrence (null for ad-hoc sends)
+model StudentFeedbackRequest {
+  id             String    @id @default(uuid()) @db.Uuid
+  trainerId      String    @map("trainer_id") @db.Uuid
+  studentId      String    @map("student_id") @db.Uuid
+  templateId     String    @map("template_id") @db.Uuid
+  // D7 | D15 | D21 | D30 | RECURRING | ADHOC
+  milestone      String    @db.Text
+  // pending | answered | expired
+  status         String    @default("pending") @db.Text
+  hasMealPlan    Boolean   @default(false) @map("has_meal_plan")
+  dueAt          DateTime? @map("due_at") @db.Timestamptz(6)
+  sentAt         DateTime  @map("sent_at") @db.Timestamptz(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  reminderSentAt DateTime? @map("reminder_sent_at") @db.Timestamptz(6)
+  submittedAt    DateTime? @map("submitted_at") @db.Timestamptz(6)
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  overallIndex   Int?      @map("overall_index")
+  // attention | stable | good
+  band           String?   @db.Text
+  // { [pillar]: 0-100 } computed on submit
+  pillarScores   Json?     @map("pillar_scores")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer  Trainer                 @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student  User                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template StudentFeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  answers  StudentFeedbackAnswer[]
+
+  @@unique([trainerId, studentId, dueAt])
+  @@index([trainerId, sentAt(sort: Desc)])
+  @@index([studentId, status])
+  @@index([status, expiresAt])
+  @@map("student_feedback_requests")
+}
+
+// Answer to one question of a request (draft until the request is submitted)
+model StudentFeedbackAnswer {
+  id         String  @id @default(uuid()) @db.Uuid
+  requestId  String  @map("request_id") @db.Uuid
+  questionId String  @map("question_id") @db.Uuid
+  score      Int?
+  text       String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  request  StudentFeedbackRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  question StudentFeedbackQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, questionId])
+  @@index([questionId])
+  @@map("student_feedback_answers")
 }

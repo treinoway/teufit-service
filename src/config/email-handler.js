@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { parseBool } from '../helpers/env.js';
 import config from '../../config/index.js';
 import { INVITE_TTL_MS } from '../constants/trainer-invite.js';
+import { RESPONSE_WINDOW_DAYS } from '../constants/student-feedback.js';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const disableEmail = parseBool(process.env.DISABLE_EMAIL, false);
@@ -1251,6 +1252,52 @@ ${renderStoreButtonsBlock()}
             html: htmlContent,
             subject: subject,
         });
+    }
+
+    // Layout shared by the student feedback e-mails: students answer only in the mobile app, so the e-mail points there.
+    renderStudentFeedbackEmail({title, heading, paragraphs}) {
+        return renderTransactionalEmail({
+            title,
+            heading,
+            bodyHtml: [...paragraphs.map(renderParagraph), renderStoreButtonsBlock()].join('\n'),
+        });
+    }
+
+    /**
+     * Tells a student that their trainer asked for a feedback, answered in the mobile app within the window.
+     */
+    sendStudentFeedbackRequestEmail({to, studentName: rawStudentName, trainerName: rawTrainerName}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const studentName = sanitizeSubjectText(rawStudentName);
+        const trainerLabel = trainerName ? escapeHtml(trainerName) : 'Seu treinador';
+        const html = this.renderStudentFeedbackEmail({
+            title: 'Feedback do seu treino',
+            heading: studentName ? `${escapeHtml(studentName)}, conte como está seu processo` : 'Conte como está seu processo',
+            paragraphs: [
+                `${trainerLabel} quer saber como foram seus últimos dias. São poucas perguntas e leva só alguns minutos.`,
+                `Responda pelo app Teufit em até <strong>${RESPONSE_WINDOW_DAYS} dias</strong>.`,
+            ],
+        });
+        const subject = trainerName ? `[Teufit] ${trainerName} pediu seu feedback` : '[Teufit] Seu treinador pediu seu feedback';
+        return sendTransactional(this, { to, subject, html });
+    }
+
+    /**
+     * Reminds a student, once, that a feedback is still waiting for an answer.
+     */
+    sendStudentFeedbackReminderEmail({to, studentName: rawStudentName, trainerName: rawTrainerName}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const studentName = sanitizeSubjectText(rawStudentName);
+        const trainerLabel = trainerName ? escapeHtml(trainerName) : 'seu treinador';
+        const html = this.renderStudentFeedbackEmail({
+            title: 'Lembrete de feedback',
+            heading: studentName ? `${escapeHtml(studentName)}, seu feedback ainda está pendente` : 'Seu feedback ainda está pendente',
+            paragraphs: [
+                `O feedback que ${trainerLabel} pediu ainda não foi respondido. Suas respostas ajudam a ajustar seu plano.`,
+                'Responda pelo app Teufit antes que o prazo termine.',
+            ],
+        });
+        return sendTransactional(this, { to, subject: '[Teufit] Lembrete: seu feedback está pendente', html });
     }
 }
 

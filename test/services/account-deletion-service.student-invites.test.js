@@ -16,6 +16,7 @@ vi.mock('../../src/db.js', () => ({
     workoutSession: { deleteMany: vi.fn() },
     anamnesisResponse: { deleteMany: vi.fn() },
     studentAnamnesis: { deleteMany: vi.fn() },
+    studentFeedbackRequest: { deleteMany: vi.fn() },
     aiConversation: { deleteMany: vi.fn() },
     pointTransaction: { deleteMany: vi.fn() },
     pointBalance: { deleteMany: vi.fn() },
