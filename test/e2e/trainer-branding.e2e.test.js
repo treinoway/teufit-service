@@ -5,6 +5,7 @@ import { setupApp } from "../helpers/setup-app.js";
 import { cleanDatabase } from "../helpers/db-cleanup.js";
 import { provisionTrainerPlan } from "../helpers/platform-plan.js";
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -466,12 +467,7 @@ e2eDescribe("e2e: trainer branding", () => {
       });
 
       // Trainer links student
-      await app.inject({
-        method: "POST",
-        url: "/trainer/students",
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
       const res = await app.inject({
         method: "GET",
@@ -494,12 +490,7 @@ e2eDescribe("e2e: trainer branding", () => {
         await createStudentWithToken();
 
       // Link student without setting up branding
-      await app.inject({
-        method: "POST",
-        url: "/trainer/students",
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
       const res = await app.inject({
         method: "GET",

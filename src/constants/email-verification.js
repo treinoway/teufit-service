@@ -7,6 +7,7 @@ export const EmailVerificationErrorCode = Object.freeze({
   USER_NOT_FOUND: 'EMAIL_VERIFICATION_USER_NOT_FOUND',
   DAILY_LIMIT: 'EMAIL_VERIFICATION_DAILY_LIMIT',
   SEND_FAILED: 'EMAIL_VERIFICATION_SEND_FAILED',
+  REQUIRED: 'EMAIL_VERIFICATION_REQUIRED',
 });
 
 export const EmailVerificationMessageCode = Object.freeze({
@@ -18,6 +19,7 @@ export const EmailVerificationMessageCode = Object.freeze({
   USER_NOT_FOUND: 'emailVerification.userNotFound',
   DAILY_LIMIT: 'emailVerification.dailyLimit',
   SEND_FAILED: 'emailVerification.sendFailed',
+  REQUIRED: 'emailVerification.required',
 });
 
 export const EMAIL_PROVIDER = 'email';

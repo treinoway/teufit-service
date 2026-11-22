@@ -10,11 +10,17 @@ import {
   EMAIL_VERIFICATION_DAILY_MAX_CODES,
   EMAIL_VERIFICATION_DAILY_WINDOW_MS,
 } from '../constants/email-verification.js';
-import { PENDING_SIGNUP_STALE_MS, EXISTING_ACCOUNT_NOTICE_THROTTLE_MS } from '../constants/signup-verification.js';
+import {
+  PENDING_SIGNUP_STALE_MS,
+  EXISTING_ACCOUNT_NOTICE_THROTTLE_MS,
+  SignupErrorCode,
+  SignupMessageCode,
+} from '../constants/signup-verification.js';
+import { SignupSource } from '../constants/signup-source.js';
 import { findUserIdByEmailCaseInsensitive } from '../helpers/email-lookup.js';
 import { UserStatus } from '../constants/user-status.js';
 import { hashPassword } from '../helpers/password.js';
-import { generateCode, hashCode, hashesMatch } from './email-verification-service.js';
+import { generateCode, hashCode, hashesMatch, sendVerificationCodeSafely } from './email-verification-service.js';
 import { acceptPendingInvitesForUser } from './student-invite-service.js';
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
@@ -360,4 +366,60 @@ export async function verifySignupCode(prisma, { email, code, password }) {
 
   const linkedTrainers = await acceptPendingInvitesForUser(prisma, user);
   return { user, linkedTrainers };
+}
+
+// Builds the 409 answered when a direct signup targets an email that already has an account.
+function createEmailInUseError() {
+  return new AppError({
+    httpStatus: 409,
+    error: SignupErrorCode.EMAIL_IN_USE,
+    messageCode: SignupMessageCode.EMAIL_IN_USE,
+    message: 'This email already has an account.',
+  });
+}
+
+// Trims a name; blank or missing becomes null.
+function normalizeName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  return trimmed || null;
+}
+
+// Creates the role-less User and its UNVERIFIED email Account atomically; a unique violation means the email was taken meanwhile.
+async function createUnverifiedUser(prisma, { normalizedEmail, passwordHash, firstName, lastName }) {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          firstName: normalizeName(firstName),
+          lastName: normalizeName(lastName),
+          roles: [],
+          status: UserStatus.PENDING,
+          signupSource: SignupSource.WEB_DIRECT,
+        },
+      });
+      await tx.account.create({ data: { userId: user.id, provider: EMAIL_PROVIDER, providerId: normalizedEmail } });
+      return user;
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) throw createEmailInUseError();
+    throw error;
+  }
+}
+
+/**
+ * POST /auth/signup/direct: creates the account with an UNVERIFIED email, emails the code and accepts no student invite.
+ *
+ * @returns {Promise<{ user: object, linkedTrainers: number }>}
+ */
+export async function signupDirect(prisma, { email, password, firstName, lastName }, { emailSender = emailHandler } = {}) {
+  const normalizedEmail = normalizeEmail(email);
+  if (await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail)) throw createEmailInUseError();
+
+  const passwordHash = hashPassword(password);
+  const user = await createUnverifiedUser(prisma, { normalizedEmail, passwordHash, firstName, lastName });
+
+  await sendVerificationCodeSafely(prisma, { userId: user.id, email: normalizedEmail }, { emailSender });
+  return { user, linkedTrainers: 0 };
 }

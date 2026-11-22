@@ -12,6 +12,7 @@ import { buildPlatformPlanForMe } from './platform-plan-service.js';
 import { hasBetaAccess } from '../helpers/beta-access.js';
 import { parseBool } from '../helpers/env.js';
 import { isUserEmailVerified } from './email-verification-service.js';
+import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../constants/platform-plan.js';
 
 async function computeHasActiveTrainer(userId) {
 	const link = await prisma.trainerStudent.findFirst({
@@ -169,8 +170,6 @@ export async function getUserProfileById(userId, includeRelations = []) {
 		user.trainer = undefined;
 	}
 
-	// Roles/bootstrap-admin/trainer are exempt (no DB hit); only a plain
-	// roles:[] user triggers the accepted-invite lookup inside hasBetaAccess.
 	const betaAccess = await hasBetaAccess(user);
 
 	return toUserProfile(user, { hasActiveTrainer, platformPlan, betaAccess, emailVerified });
@@ -205,8 +204,27 @@ function sendTrainerWelcomeEmailSafely({ to, firstName }) {
 	}
 }
 
+// Ensures the Trainer row on the given client; a row created now also gets its BETA subscription (every new trainer is BETA).
+async function ensureTrainerProfileOn(db, userId) {
+	const profile = await ensureProfileForUser({ userId, role: Roles.TRAINER, tx: db });
+	if (profile?.created) {
+		await db.platformSubscription.create({
+			data: { trainerId: profile.trainerId, tier: PLATFORM_PLAN_TIERS.BETA, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
+		});
+	}
+	return profile;
+}
+
+// Ensures the Trainer row and, only when it is created, its BETA subscription, atomically (own transaction unless the caller passed one).
+async function ensureTrainerProfileWithBeta(userId, tx) {
+	if (tx) return ensureTrainerProfileOn(tx, userId);
+	return prisma.$transaction((transaction) => ensureTrainerProfileOn(transaction, userId));
+}
+
 /**
  * Grants the trainer role + Trainer row and makes trainer the active profile.
+ * A Trainer row created here gets an ACTIVE BETA PlatformSubscription; an
+ * existing Trainer (and whatever subscription it has) is never touched.
  * Idempotent. Pass `tx` to run inside a caller's interactive transaction (e.g.
  * signup via trainer invite, where the user row is not committed yet).
  * Pass `onCommit(task)` to defer the example-routine seeding and the welcome
@@ -246,8 +264,7 @@ export async function setActiveProfileToTrainer(userId, { tx, onCommit } = {}) {
 		});
 	}
 
-	// Ensure the Trainer record exists in the database
-	const profile = await ensureProfileForUser({ userId, role: Roles.TRAINER, tx });
+	const profile = await ensureTrainerProfileWithBeta(userId, tx);
 	if (profile?.created) {
 		const seedRoutine = () => seedExampleRoutineSafely({ trainerId: profile.trainerId });
 		const sendWelcomeEmail = () => sendTrainerWelcomeEmailSafely({ to: user.email, firstName: user.firstName });

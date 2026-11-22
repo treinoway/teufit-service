@@ -17,7 +17,7 @@
   },
   "api/middleware/auth.js": {
     "local/function-header-comment": {
-      "count": 2
+      "count": 1
     },
     "local/no-comments-in-function": {
       "count": 7
@@ -139,7 +139,7 @@
   },
   "api/routes/student-invite-route.js": {
     "local/function-header-comment": {
-      "count": 3
+      "count": 2
     }
   },
   "api/routes/trainer-branding-route.js": {
@@ -380,7 +380,7 @@
   },
   "src/helpers/beta-access.js": {
     "local/function-header-comment": {
-      "count": 2
+      "count": 1
     }
   },
   "src/helpers/date-helpers.js": {
@@ -765,7 +765,7 @@
   },
   "src/services/platform-plan-service.js": {
     "local/function-header-comment": {
-      "count": 10
+      "count": 9
     },
     "local/no-comments-in-function": {
       "count": 2
@@ -797,10 +797,10 @@
   },
   "src/services/student-invite-service.js": {
     "local/function-header-comment": {
-      "count": 29
+      "count": 23
     },
     "local/no-comments-in-function": {
-      "count": 11
+      "count": 9
     }
   },
   "src/services/student-subscription-service.js": {
@@ -952,7 +952,7 @@
       "count": 5
     },
     "local/no-comments-in-function": {
-      "count": 25
+      "count": 22
     },
     "no-restricted-imports": {
       "count": 1
@@ -1188,7 +1188,7 @@
       "count": 1
     },
     "local/no-comments-in-function": {
-      "count": 54
+      "count": 49
     }
   },
   "test/e2e/trainer-onboarding.e2e.test.js": {
@@ -1238,7 +1238,7 @@
   },
   "test/e2e/workout-session.e2e.test.js": {
     "local/no-comments-in-function": {
-      "count": 75
+      "count": 74
     }
   },
   "test/e2e/workouts-today.e2e.test.js": {
@@ -1574,9 +1574,6 @@
   "test/services/student-invite-service.test.js": {
     "local/function-header-comment": {
       "count": 3
-    },
-    "local/no-comments-in-function": {
-      "count": 1
     }
   },
   "test/services/student-subscription-service.test.js": {
@@ -1691,7 +1688,7 @@
   },
   "test/services/user-service.test.js": {
     "local/no-comments-in-function": {
-      "count": 23
+      "count": 15
     }
   },
   "test/services/workout-session-service.test.js": {

@@ -8,6 +8,7 @@ import { ChallengeParticipantMode } from '../../src/constants/challenge.js';
 import { InviteStatus } from '../../src/constants/trainer-invite.js';
 import crypto from 'node:crypto';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -583,13 +584,7 @@ e2eDescribe('e2e: user profile flows', () => {
       const { token: { accessToken: trainerToken } } = becomeRes.json();
 
       // Link the student to the trainer
-      const linkRes = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
-      expect(linkRes.statusCode).toBe(201);
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
     }
 
     it('GET /me returns hasActiveTrainer: false when the user has no trainer link', async () => {
@@ -685,7 +680,9 @@ e2eDescribe('e2e: user profile flows', () => {
     }
 
     it('GET /me returns platformPlan for trainer users on FREE tier', async () => {
-      const { accessToken } = await createAndAuthTrainer('free-plan');
+      const { accessToken, email } = await createAndAuthTrainer('free-plan');
+      // why: become-trainer grants BETA now, so this trainer is moved to FREE explicitly.
+      await prisma.platformSubscription.updateMany({ where: { trainer: { user: { email } } }, data: { tier: 'FREE' } });
 
       const response = await app.inject({
         method: 'GET',
@@ -812,13 +809,7 @@ e2eDescribe('e2e: user profile flows', () => {
     }
 
     async function linkTrainerStudent(trainerToken, studentEmail) {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
-      expect([201, 409]).toContain(response.statusCode);
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail, allowAlreadyLinked: true });
     }
 
     async function createProtocolAndTraining(trainerToken, studentId) {

@@ -130,15 +130,10 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
     expect(asStudent.statusCode).toBe(403);
   });
 
-  it('a freshly signed-up, non-exempt, un-invited user gets 403 invite.required on PATCH /become-trainer', async () => {
-    // The beta invite gate defaults OFF in the test environment (see
-    // config/environments/test.js) so the ~29 pre-existing e2e fixtures that
-    // self-promote via PATCH /become-trainer keep working. This is the one
-    // assertion that actually exercises the gate, so flip it on just for this
-    // test and restore it afterwards — mirrors the same mutation pattern used
-    // in test/middleware/auth-middleware.test.js's requireBetaAccess suite.
-    // Capture/restore the prior value rather than hardcoding `false`, so this
-    // doesn't silently corrupt state if the test-env default ever changes.
+  it('a freshly signed-up, un-invited user becomes a trainer on PATCH /become-trainer even with the gate flag on (open signup)', async () => {
+    // The invite gate was removed from /become-trainer; the flag is flipped on
+    // to prove it no longer matters. Capture/restore the prior value so state
+    // doesn't leak into other tests.
     const originalGateEnabled = config.betaInviteGate.enabled;
     config.betaInviteGate.enabled = true;
     try {
@@ -150,8 +145,8 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
         headers: { authorization: `Bearer ${accessToken}` },
       });
 
-      expect(response.statusCode).toBe(403);
-      expect(response.json().messageCode).toBe('invite.required');
+      expect(response.statusCode).toBe(200);
+      expect(response.json().messageCode).toBeUndefined();
     } finally {
       config.betaInviteGate.enabled = originalGateEnabled;
     }
@@ -183,7 +178,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
 
       const { accessToken: preRedeemToken } = await signup('new-trainer@example.com');
       const preMe = await getMe(preRedeemToken);
-      expect(preMe.json().betaAccess).toBe(false);
+      expect(preMe.json().betaAccess).toBe(true);
       expect(preMe.json().roles).not.toContain('trainer');
 
       const redeemRes = await redeemInvite(preRedeemToken, code);
@@ -247,7 +242,7 @@ e2eDescribe('e2e: trainer invite system (closed beta)', () => {
       const { accessToken } = await signup('beta-check@example.com');
 
       const preMe = await getMe(accessToken);
-      expect(preMe.json().betaAccess).toBe(false);
+      expect(preMe.json().betaAccess).toBe(true);
 
       const redeemRes = await redeemInvite(accessToken, code);
       const newAccessToken = redeemRes.json().token.accessToken;

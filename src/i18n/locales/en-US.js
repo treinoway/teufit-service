@@ -430,6 +430,7 @@ export default {
     'studentInvite.alreadyPending': 'There is already a pending invite for this email.',
     'studentInvite.dailyLimit': 'You have reached the daily invite limit. Please try again later.',
     'studentInvite.emailSendFailed': 'We could not send the invite email. Please try again.',
+    'studentInvite.expired': 'This invite has expired. Ask your trainer for a new one.',
     'student.accountDeactivated': 'This student account is deactivated.',
 
     // Email verification
@@ -441,6 +442,8 @@ export default {
     'emailVerification.userNotFound': 'User not found.',
     'emailVerification.dailyLimit': 'You have requested too many codes today. Please try again later.',
     'emailVerification.sendFailed': 'We could not send the verification email. Please try again.',
+    'emailVerification.required': 'Confirm your email to continue.',
+    'signup.emailInUse': 'This email already has an account. Sign in to continue.',
 
     // Password reset
     'auth.email.required': 'Email is required.',

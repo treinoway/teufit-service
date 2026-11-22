@@ -1,5 +1,7 @@
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 import { i18nField, i18nArrayField } from '../../src/i18n/schema-helpers.js';
+import { StudentInviteOutcome } from '../../src/constants/student-invite.js';
+import { studentInviteSchema } from './student-invite-route.schema.js';
 
 const trainerProfileResponseSchema = {
   type: 'object',
@@ -428,7 +430,10 @@ export const unlinkStudentSchema = {
 
 export const linkStudentSchema = {
   tags: ['trainer'],
-  summary: 'Link a student to the trainer by email',
+  summary: 'Invite a student by email (legacy direct link; same flow as POST /trainer/student-invites)',
+  description:
+    'Never links directly any more: runs the invite flow of POST /trainer/student-invites (same caps and errors) and answers 202 { outcome, invite }. '
+    + 'An existing account answers the invite in the app (GET /my/trainer/invites). The 201 student profile is kept in the contract but is no longer produced.',
   security: [{ bearerAuth: [] }],
   headers: {
     type: 'object',
@@ -455,14 +460,37 @@ export const linkStudentSchema = {
   response: {
     201: {
       ...studentItemSchema,
+      description: 'No longer produced: the student is never linked directly (see 202).',
+    },
+    202: {
+      description: 'Invite created and emailed; the link exists only after the student accepts (existing account) or verifies the signup email (new account).',
+      type: 'object',
+      required: ['outcome', 'invite'],
+      properties: {
+        outcome: { type: 'string', enum: Object.values(StudentInviteOutcome) },
+        invite: studentInviteSchema,
+      },
+      additionalProperties: false,
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
-    403: errorResponseSchema,
+    403: {
+      description: 'Not a trainer, plan student cap reached (platformPlan.studentCapExceeded) or sender email not confirmed after 3 invites in 24h (emailVerification.required)',
+      ...errorResponseSchema,
+    },
     404: errorResponseSchema,
-    409: errorResponseSchema,
-    422: errorResponseSchema,
-    429: errorResponseSchema,
+    409: {
+      description: 'Already linked (student.alreadyLinked), already pending (studentInvite.alreadyPending) or trainer profile missing (trainer.profileMissing)',
+      ...errorResponseSchema,
+    },
+    422: {
+      description: 'Cannot link self (student.cannotLinkSelf) or student account deactivated (student.accountDeactivated)',
+      ...errorResponseSchema,
+    },
+    429: {
+      description: 'Daily invite limit (studentInvite.dailyLimit; details.retryAfterSeconds) or rate limit',
+      ...errorResponseSchema,
+    },
     500: errorResponseSchema,
   },
 };

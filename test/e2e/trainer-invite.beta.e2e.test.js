@@ -15,7 +15,7 @@ const INVITEE_EMAIL = 'beta-trainer@example.com';
 const PASSWORD = 'StrongPassw0rd!';
 const BETA_TIER = 'BETA';
 const ASAAS_SUBSCRIPTION_ID = 'mock-asaas-sub-001';
-const { FREE, PRO } = PLATFORM_PLAN_TIERS;
+const { PRO } = PLATFORM_PLAN_TIERS;
 
 e2eDescribe('e2e: closed-beta invite grants the BETA plan', () => {
   let app;
@@ -128,12 +128,12 @@ e2eDescribe('e2e: closed-beta invite grants the BETA plan', () => {
   });
 
   describe('PATCH /become-trainer without an invite', () => {
-    it('should not create a BETA subscription', async () => {
-      const { userId } = await createTrainerWithToken(app);
+    it('should create an ACTIVE BETA subscription (open signup: every new trainer is BETA)', async () => {
+      const { userId } = await createTrainerWithToken(app, { keepSignupPlan: true });
 
       const subscription = await subscriptionForUser(userId);
 
-      expect(subscription?.tier ?? FREE).toBe(FREE);
+      expect(subscription).toMatchObject({ tier: BETA_TIER, status: 'ACTIVE' });
     });
   });
 });

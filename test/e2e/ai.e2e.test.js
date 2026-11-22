@@ -20,6 +20,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 import Anthropic from '@anthropic-ai/sdk'
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 /**
  * Build a mock Anthropic stream object that yields text_delta events
@@ -713,12 +714,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       expect(signupRes.statusCode).toBe(201)
       const { user: { id: studentId } } = signupRes.json()
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email },
-      })
+      await linkStudentByInvite(app, { trainerToken, email })
 
       return { studentId }
     }
@@ -836,12 +832,7 @@ e2eDescribe('e2e: AI Assistant routes', () => {
       expect(signupRes.statusCode).toBe(201)
       const { user: { id: studentId } } = signupRes.json()
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email },
-      })
+      await linkStudentByInvite(app, { trainerToken, email })
 
       return { studentId }
     }

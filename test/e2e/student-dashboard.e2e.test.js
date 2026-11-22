@@ -5,6 +5,7 @@ import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { WorkoutSessionStatus, DashboardMessageCode, WeekDays } from '../../src/constants/training.js';
 import { countWeekdayOccurrences, WEEKDAY_TO_INT } from '../../src/helpers/adherence-helpers.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -67,13 +68,7 @@ e2eDescribe('e2e: student dashboard (trainer view)', () => {
   }
 
   async function linkTrainerStudent(trainerToken, studentEmail) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    expect([201, 409]).toContain(res.statusCode);
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail, allowAlreadyLinked: true });
   }
 
   async function createProtocol(trainerToken, studentId, { name = 'Test Protocol', startDate = '2026-01-01' } = {}) {

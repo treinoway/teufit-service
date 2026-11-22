@@ -3,6 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 import { prisma } from '../../src/db.js';
 import {
   AnamnesisQuestionType,
@@ -74,13 +75,7 @@ e2eDescribe('e2e: anamnesis — trainer fills on behalf of the student', () => {
   const createStudent = (prefix = 'student') => signup(prefix);
 
   async function linkStudent(trainer, student) {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: bearer(trainer.accessToken),
-      payload: { email: student.email },
-    });
-    expect([201, 409]).toContain(response.statusCode);
+    await linkStudentByInvite(app, { trainerToken: trainer.accessToken, email: student.email, allowAlreadyLinked: true });
   }
 
   async function createAnamnesis(trainer) {

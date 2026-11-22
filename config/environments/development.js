@@ -43,6 +43,7 @@ export default {
           verifyEmail: { max: 1000, timeWindow: '1 minute' },
           resendEmailVerification: { max: 1000, timeWindow: '1 minute' },
           signup: { max: 1000, timeWindow: '1 minute' },
+          signupDirect: { max: 1000, timeWindow: '1 minute' },
           signupVerify: { max: 1000, timeWindow: '1 minute' },
           signupVerifyPerEmail: { max: 1000, timeWindow: '1 minute' },
           signupResend: { max: 1000, timeWindow: '1 minute' },

@@ -98,6 +98,39 @@ export const signupVerifySchema = {
   },
 };
 
+const signupFirstNameProperty = { type: 'string', minLength: 1, maxLength: 100, pattern: '\\S' };
+const signupLastNameProperty = { type: 'string', maxLength: 100 };
+
+export const signupDirectSchema = {
+  tags: authTags,
+  summary: 'Create an account in one step, without the email code (web professional signup)',
+  description:
+    'Creates the user (no role yet, email NOT verified) and returns tokens, same body as /auth/signup/verify. '
+    + 'A 6-digit verification code is emailed; confirm it later with POST /auth/verify-email (GET /me reports '
+    + 'emailVerified). Until then AI actions and the 4th student/patient invite in 24h answer 403 '
+    + 'emailVerification.required. Pending student invites for the email are only accepted once it is verified. '
+    + '409 signup.emailInUse when the email already has an account (this endpoint reveals it, unlike /auth/signup). '
+    + 'Rate limited per IP (429 request.rateLimitExceeded).',
+  body: {
+    type: 'object',
+    required: ['email', 'password', 'firstName'],
+    additionalProperties: false,
+    properties: {
+      email: signupEmailProperty,
+      password: signupPasswordProperty,
+      firstName: signupFirstNameProperty,
+      lastName: signupLastNameProperty,
+    },
+  },
+  response: {
+    201: signupVerifySchema.response[201],
+    400: signupVerifySchema.response[400],
+    409: errorResponseSchema,
+    429: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 export const signupResendSchema = {
   tags: authTags,
   summary: 'Re-send the signup code (always 202)',

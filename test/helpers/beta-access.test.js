@@ -13,7 +13,6 @@ vi.mock('../../src/db.js', () => {
 
 import { prisma } from '../../src/db.js';
 import { hasBetaAccess } from '../../src/helpers/beta-access.js';
-import { InviteStatus } from '../../src/constants/trainer-invite.js';
 import config from '../../config/index.js';
 
 const USER_ID = 'user-1';
@@ -59,39 +58,37 @@ describe('hasBetaAccess', () => {
     expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
   });
 
-  it('queries for an accepted invite for a plain user with no exempt role', async () => {
+  it('returns true for a plain user with an accepted invite without hitting the DB', async () => {
     prisma.trainerInvite.findFirst.mockResolvedValue({ id: 'invite-1' });
 
     const result = await hasBetaAccess({ id: USER_ID, email: 'plain@example.com', roles: [] });
 
     expect(result).toBe(true);
-    expect(prisma.trainerInvite.findFirst).toHaveBeenCalledWith({
-      where: { userId: USER_ID, status: InviteStatus.ACCEPTED },
-      select: { id: true },
-    });
+    expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
   });
 
-  it('returns false when no accepted invite exists for the user', async () => {
+  it('returns true when no accepted invite exists for the user', async () => {
     prisma.trainerInvite.findFirst.mockResolvedValue(null);
 
     const result = await hasBetaAccess({ id: USER_ID, email: 'plain@example.com', roles: [] });
 
-    expect(result).toBe(false);
-  });
-
-  it('returns false without hitting the DB when the user has no id', async () => {
-    const result = await hasBetaAccess({ email: 'plain@example.com', roles: [] });
-    expect(result).toBe(false);
+    expect(result).toBe(true);
     expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
   });
 
-  it('treats a missing roles array as empty (falls through to invite lookup)', async () => {
+  it('returns true without hitting the DB when the user has no id', async () => {
+    const result = await hasBetaAccess({ email: 'plain@example.com', roles: [] });
+    expect(result).toBe(true);
+    expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns true when the roles array is missing, without an invite lookup', async () => {
     prisma.trainerInvite.findFirst.mockResolvedValue(null);
 
     const result = await hasBetaAccess({ id: USER_ID, email: 'plain@example.com' });
 
-    expect(result).toBe(false);
-    expect(prisma.trainerInvite.findFirst).toHaveBeenCalled();
+    expect(result).toBe(true);
+    expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
   });
 
   describe('tester email allowlist (BETA_TESTER_EMAILS)', () => {
@@ -118,27 +115,24 @@ describe('hasBetaAccess', () => {
       expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
     });
 
-    it('does not exempt an email that is absent from the allowlist (falls through to invite lookup)', async () => {
+    it('returns true for an email that is absent from the allowlist (the allowlist no longer matters)', async () => {
       config.betaInviteGate.testerEmails = ['qa@example.com'];
       prisma.trainerInvite.findFirst.mockResolvedValue(null);
 
       const result = await hasBetaAccess({ id: USER_ID, email: 'not-a-tester@example.com', roles: [] });
 
-      expect(result).toBe(false);
-      expect(prisma.trainerInvite.findFirst).toHaveBeenCalledWith({
-        where: { userId: USER_ID, status: InviteStatus.ACCEPTED },
-        select: { id: true },
-      });
+      expect(result).toBe(true);
+      expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
     });
 
-    it('exempts no one when the allowlist is empty (default/unset BETA_TESTER_EMAILS)', async () => {
+    it('returns true when the allowlist is empty (default/unset BETA_TESTER_EMAILS)', async () => {
       config.betaInviteGate.testerEmails = [];
       prisma.trainerInvite.findFirst.mockResolvedValue(null);
 
       const result = await hasBetaAccess({ id: USER_ID, email: 'plain@example.com', roles: [] });
 
-      expect(result).toBe(false);
-      expect(prisma.trainerInvite.findFirst).toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(prisma.trainerInvite.findFirst).not.toHaveBeenCalled();
     });
   });
 

@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../src/db.js', () => ({
-  prisma: {
+vi.mock('../../src/db.js', () => {
+  const prisma = {
     user: { findUnique: vi.fn(), update: vi.fn() },
     userPreferences: { upsert: vi.fn() },
     trainer: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
-  },
-}));
+    platformSubscription: { create: vi.fn() },
+  };
+  prisma.$transaction = vi.fn(async (work) => work(prisma));
+  return { prisma };
+});
 
 vi.mock('../../src/services/trainer-example-routine-service.js', () => ({
   seedExampleRoutine: vi.fn(),

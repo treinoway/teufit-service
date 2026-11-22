@@ -47,7 +47,10 @@ export const aiChatSchema = {
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
-    403: errorResponseSchema,
+    403: {
+      description: 'Plan does not allow the AI assistant, or email not confirmed (emailVerification.required; checked after the plan, before any model call)',
+      ...errorResponseSchema,
+    },
     404: errorResponseSchema,
     422: errorResponseSchema,
     429: errorResponseSchema,
@@ -91,7 +94,10 @@ export const aiChatStreamSchema = {
   response: {
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
-    403: errorResponseSchema,
+    403: {
+      description: 'Plan does not allow the AI assistant, or email not confirmed (emailVerification.required); answered as JSON before any SSE event',
+      ...errorResponseSchema,
+    },
     404: errorResponseSchema,
     429: errorResponseSchema,
     500: errorResponseSchema,

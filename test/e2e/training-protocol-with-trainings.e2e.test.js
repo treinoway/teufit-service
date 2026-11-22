@@ -3,6 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -75,13 +76,7 @@ e2eDescribe('e2e: POST /trainer/protocols/with-trainings', () => {
    * Links the student to the trainer so assertStudentActiveOnPlan passes.
    */
   async function linkStudentToTrainer(trainerToken, studentEmail) {
-    const linkResponse = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    expect(linkResponse.statusCode).toBe(201);
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail });
   }
 
   function makeMinimalPayload(assigneeId) {
