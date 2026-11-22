@@ -325,6 +325,7 @@ export default {
     'challenge.minPodium.invalid': 'Invalid podium minimum. Use 1 up to the championship weeks, at most 4.',
     'challenge.notClosable': 'Only a running weekly championship can be closed early.',
     'challenge.notWeekly': 'This championship has no consistency standings.',
+    'challenge.scoringRule.invalid': 'Invalid scoring. The weights of the five pillars must be integers from 0 to 100 adding up to 100, and at least one pillar must be active.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',

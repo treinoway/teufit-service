@@ -979,6 +979,9 @@ model Challenge {
   closedAt         DateTime? @map("closed_at") @db.Timestamptz(6)
   // Instant an edit last moved the start Monday; weeks started before it are neutral (CAMP-11)
   startScheduledAt DateTime? @map("start_scheduled_at") @db.Timestamptz(6)
+  // Scoring rule copied into a weekly championship (null and empty for the dates format)
+  weights          Json?
+  activePillars    String[]  @default([]) @map("active_pillars")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)

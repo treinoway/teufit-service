@@ -42,6 +42,7 @@ const mockPrisma = {
   consistencyRankingConfig: { findUnique: vi.fn() },
   consistencyScoringRule: { findFirst: vi.fn() },
   $transaction: vi.fn(async (fn) => fn(mockTx)),
+  $queryRaw: vi.fn(),
 };
 
 import {
@@ -124,6 +125,18 @@ const weeklyBody = (overrides = {}) => ({
   ...overrides,
 });
 
+// Scoring rule saved in the trainer's ranking config
+const SAVED_RULE = {
+  weights: { workouts: 60, diet: 0, cardio: 40, feedback: 0, hydration: 0 },
+  activePillars: ['workouts', 'cardio'],
+};
+
+// Scoring rule a trainer sets on one championship
+const CHAMPIONSHIP_RULE = {
+  weights: { workouts: 100, diet: 0, cardio: 0, feedback: 0, hydration: 0 },
+  activePillars: ['workouts'],
+};
+
 // Fake findMany over stored championships: those whose fields equal every value of the where clause
 const storedMatching = (records) => async ({ where }) => records.filter((record) => (
   Object.entries(where).every(([field, value]) => (record[field] ?? null) === value)
@@ -169,6 +182,7 @@ describe('challenge-service', () => {
     mockPrisma.gamificationConfig.findUnique.mockResolvedValue(null);
     // Silent template upsert is fire-and-forget — resolve by default to avoid unhandled rejection noise
     mockPrisma.gamificationConfig.upsert.mockResolvedValue({});
+    mockPrisma.$queryRaw.mockResolvedValue([]);
   });
 
   // ─── createChallenge ───────────────────────────────────────────────────────
@@ -656,6 +670,90 @@ describe('challenge-service', () => {
 
       expect(result.name).toBe('New Name');
     });
+
+    it('CPD-14 changes the weights of a scheduled championship', async () => {
+      currentRecord = weeklyRecord({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20'), ...SAVED_RULE });
+      mockPrisma.challenge.findUnique.mockResolvedValue(currentRecord);
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => ({ ...currentRecord, ...data }));
+      mockPrisma.challengeParticipant.count.mockResolvedValue(3);
+      const update = (data) => updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
+      });
+
+      const result = await update({ ...CHAMPIONSHIP_RULE });
+
+      expect(mockPrisma.challenge.update).toHaveBeenCalledWith({
+        where: { id: CHALLENGE_ID },
+        data: { weights: CHAMPIONSHIP_RULE.weights, activePillars: CHAMPIONSHIP_RULE.activePillars },
+      });
+      expect(result).toMatchObject({ status: ChallengeStatus.SCHEDULED, ...CHAMPIONSHIP_RULE });
+
+      const onlyWeights = { workouts: 50, diet: 0, cardio: 50, feedback: 0, hydration: 0 };
+      await update({ weights: onlyWeights });
+      expect(mockPrisma.challenge.update).toHaveBeenLastCalledWith({ where: { id: CHALLENGE_ID }, data: { weights: onlyWeights } });
+
+      mockPrisma.challenge.update.mockClear();
+      const invalid = [
+        [{ weights: { ...CHAMPIONSHIP_RULE.weights, workouts: 90 } }, 'weights'],
+        [{ weights: { workouts: 100 } }, 'weights'],
+        [{ activePillars: [] }, 'activePillars'],
+        [{ ...CHAMPIONSHIP_RULE, activePillars: ['workouts', 'steps'] }, 'activePillars'],
+      ];
+      for (const [data, field] of invalid) {
+        await expect(update(data)).rejects.toMatchObject({
+          httpStatus: 400,
+          error: ChallengeErrorCode.CHALLENGE_INVALID_SCORING_RULE,
+          messageCode: ChallengeMessageCode.CHALLENGE_INVALID_SCORING_RULE,
+          details: { field },
+        });
+      }
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+
+    it('CPD-15 answers 409 for weights of a running championship', async () => {
+      const update = (data) => updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
+      });
+
+      mockPrisma.challenge.findUnique.mockResolvedValue(weeklyRecord(SAVED_RULE));
+      for (const data of [{ ...CHAMPIONSHIP_RULE }, { weights: CHAMPIONSHIP_RULE.weights }, { name: 'Junto', activePillars: ['workouts'] }]) {
+        await expect(update(data)).rejects.toMatchObject({
+          httpStatus: 409,
+          error: ChallengeErrorCode.CHALLENGE_ALREADY_STARTED,
+          messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_STARTED,
+        });
+      }
+
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ ...SAVED_RULE, closedAt: new Date('2026-11-16T00:10:00.000Z') }));
+      await expect(update({ ...CHAMPIONSHIP_RULE })).rejects.toMatchObject({
+        httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED,
+      });
+
+      mockPrisma.challenge.findUnique.mockResolvedValueOnce(weeklyRecord({ ...SAVED_RULE, cancelledAt: new Date('2026-11-17T10:00:00.000Z') }));
+      await expect(update({ ...CHAMPIONSHIP_RULE })).rejects.toMatchObject({
+        httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_CANCELLED,
+      });
+
+      expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getChallenge', () => {
+    it('CPD-16 returns the weights and active pillars of a weekly championship', async () => {
+      mockPrisma.challenge.findUnique.mockResolvedValue(weeklyRecord(SAVED_RULE));
+      mockPrisma.challengeParticipant.count.mockResolvedValue(2);
+
+      const weekly = await getChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP,
+      });
+
+      expect(weekly).toMatchObject({ format: 'weeks', weights: SAVED_RULE.weights, activePillars: SAVED_RULE.activePillars });
+
+      mockPrisma.challenge.findUnique.mockResolvedValue(makeChallengeRecord({ weights: null, activePillars: [] }));
+      const dates = await getChallenge({ prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID });
+
+      expect(dates).toMatchObject({ format: 'dates', weights: null, activePillars: [] });
+    });
   });
 
   // ─── addParticipants ───────────────────────────────────────────────────────
@@ -916,6 +1014,74 @@ describe('challenge-service', () => {
         data: [{ challengeId: 'all-mode-uuid', studentId: STUDENT_ID_2, createdAt: WEDNESDAY_SP }],
         skipDuplicates: true,
       });
+    });
+
+    it('CPD-07 copies the saved ranking config when the body has no weights', async () => {
+      mockPrisma.consistencyScoringRule.findFirst.mockResolvedValue({
+        ...SAVED_RULE,
+        closeWeekday: 0,
+        closeHour: 21,
+        timeZone: 'America/Sao_Paulo',
+      });
+
+      await createChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        now: WEDNESDAY_SP,
+        data: weeklyBody(),
+      });
+
+      const stored = mockTx.challenge.create.mock.calls[0][0].data;
+      expect(stored.weights).toEqual(SAVED_RULE.weights);
+      expect(stored.activePillars).toEqual(SAVED_RULE.activePillars);
+    });
+
+    it('CPD-06 stores the weights and active pillars sent in the body', async () => {
+      mockPrisma.consistencyScoringRule.findFirst.mockResolvedValue({
+        ...SAVED_RULE,
+        closeWeekday: 0,
+        closeHour: 21,
+        timeZone: 'America/Sao_Paulo',
+      });
+
+      await createChallenge({
+        prisma: mockPrisma,
+        trainerUserId: TRAINER_USER_ID,
+        now: WEDNESDAY_SP,
+        data: weeklyBody(CHAMPIONSHIP_RULE),
+      });
+
+      const stored = mockTx.challenge.create.mock.calls[0][0].data;
+      expect(stored.weights).toEqual(CHAMPIONSHIP_RULE.weights);
+      expect(stored.activePillars).toEqual(CHAMPIONSHIP_RULE.activePillars);
+    });
+
+    it('CPD-08 rejects an invalid or partial scoring rule with 400 and the field', async () => {
+      const invalid = [
+        [{ weights: CHAMPIONSHIP_RULE.weights }, 'activePillars'],
+        [{ activePillars: CHAMPIONSHIP_RULE.activePillars }, 'weights'],
+        [{ ...CHAMPIONSHIP_RULE, weights: { ...CHAMPIONSHIP_RULE.weights, workouts: 90 } }, 'weights'],
+        [{ ...CHAMPIONSHIP_RULE, weights: { workouts: 100 } }, 'weights'],
+        [{ ...CHAMPIONSHIP_RULE, activePillars: [] }, 'activePillars'],
+        [{ ...CHAMPIONSHIP_RULE, activePillars: ['workouts', 'workouts'] }, 'activePillars'],
+        [{ ...CHAMPIONSHIP_RULE, activePillars: ['steps'] }, 'activePillars'],
+      ];
+
+      for (const [rule, field] of invalid) {
+        await expect(createChallenge({
+          prisma: mockPrisma,
+          trainerUserId: TRAINER_USER_ID,
+          now: WEDNESDAY_SP,
+          data: weeklyBody(rule),
+        })).rejects.toMatchObject({
+          httpStatus: 400,
+          error: ChallengeErrorCode.CHALLENGE_INVALID_SCORING_RULE,
+          messageCode: ChallengeMessageCode.CHALLENGE_INVALID_SCORING_RULE,
+          details: { field },
+        });
+      }
+      expect(mockTx.challenge.create).not.toHaveBeenCalled();
+      expect(mockTx.challengeParticipant.createMany).not.toHaveBeenCalled();
     });
 
     it('CAMP-12 creates a dates championship as today when no weekly format is sent', async () => {

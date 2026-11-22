@@ -8,11 +8,12 @@ import {
   ChallengeParticipantMode,
   ChallengeStatus,
   ChallengeVisibility,
+  SCORING_RULE_FIELDS,
 } from '../constants/challenge.js';
 import { currentWeekOf, validateWeeksInput, weeklyStatus, weeksSpan } from '../helpers/challenge-weeks.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
-import { getConfig } from './consistency-config-service.js';
+import { getConfig, scoringRuleProblems } from './consistency-config-service.js';
 import { assertCanCreateChallenge } from './platform-plan-service.js';
 
 const POINT_RULE_FIELDS = Object.freeze([
@@ -27,6 +28,7 @@ const POINT_RULE_FIELDS = Object.freeze([
 const WEEKLY_OPEN_FIELDS = Object.freeze(['name', 'description', 'anonymousRanking', 'visibility']);
 const WEEKLY_SCHEDULE_FIELDS = Object.freeze(['startWeek', 'weeks', 'minPodiumWeeks']);
 const FREE_DATE_FIELDS = Object.freeze(['startDate', 'endDate']);
+const PARTICIPANTS_PREVIEW_SIZE = 4;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -150,6 +152,8 @@ function formatChallenge(challenge, participantCount = undefined, weeklyContext 
     weeks: challenge.weeks ?? null,
     currentWeek: currentWeekFor(challenge, status, weeklyContext),
     minPodiumWeeks: challenge.minPodiumWeeks ?? null,
+    weights: challenge.weights ?? null,
+    activePillars: challenge.activePillars ?? [],
     description: challenge.description ?? null,
     visibility: challenge.visibility ?? ChallengeVisibility.FULL,
     ownerType: challenge.ownerType ?? ChallengeOwnerType.TRAINER,
@@ -291,7 +295,7 @@ function validateDateRange(startDateStr, endDateStr, checkStartInFuture = false)
  * @param {string} trainerId - Trainer record ID
  * @param {{ startWeek: string, weeks: number, minPodiumWeeks?: number, description?: string, visibility?: string }} data
  * @param {Date} now
- * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string } }>}
+ * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string }, config: object }>}
  */
 async function resolveWeeklyFields(prisma, trainerId, data, now) {
   const config = await getConfig(prisma, trainerId, now);
@@ -308,7 +312,31 @@ async function resolveWeeklyFields(prisma, trainerId, data, now) {
       ...weeksSpan({ startWeek: data.startWeek, weeks: data.weeks }),
     },
     weeklyContext: { now, timeZone: config.timeZone },
+    config,
   };
+}
+
+// 400 naming the first field of a scoring rule that breaks the ranking config rules (CPD-08)
+function assertValidScoringRule(rule) {
+  const problems = scoringRuleProblems(rule);
+  const field = SCORING_RULE_FIELDS.find((name) => problems[name]);
+  if (!field) return;
+  throw new AppError({
+    httpStatus: 400,
+    error: ChallengeErrorCode.CHALLENGE_INVALID_SCORING_RULE,
+    messageCode: ChallengeMessageCode.CHALLENGE_INVALID_SCORING_RULE,
+    message: 'Invalid championship scoring rule',
+    details: { field, reason: problems[field] },
+  });
+}
+
+// Scoring rule of a new weekly championship: the one in the body, else a copy of the trainer's saved rule (CPD-06, CPD-07)
+function creationScoringRule(data, config) {
+  if (SCORING_RULE_FIELDS.every((field) => data[field] === undefined)) {
+    return { weights: { ...config.weights }, activePillars: [...config.activePillars] };
+  }
+  assertValidScoringRule(data);
+  return { weights: data.weights, activePillars: data.activePillars };
 }
 
 // The fields of `data` that are present, restricted to the given names
@@ -344,20 +372,29 @@ async function assertOpenIfWeekly(prisma, challenge, now) {
   return weeklyContext;
 }
 
-// 409 when a running weekly championship would change its schedule, podium minimum or point rules
+// 409 when a running weekly championship would change its schedule, podium minimum, point rules or scoring rule
 function assertWeeklyScheduleLocked(data) {
-  const touched = [...WEEKLY_SCHEDULE_FIELDS, ...FREE_DATE_FIELDS, ...POINT_RULE_FIELDS].some((field) => data[field] !== undefined);
+  const touched = [...WEEKLY_SCHEDULE_FIELDS, ...FREE_DATE_FIELDS, ...POINT_RULE_FIELDS, ...SCORING_RULE_FIELDS]
+    .some((field) => data[field] !== undefined);
   if (touched) {
     throw new AppError({
       httpStatus: 409,
       error: ChallengeErrorCode.CHALLENGE_ALREADY_STARTED,
       messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_STARTED,
-      message: 'Start, weeks, end, podium minimum and point rules cannot change after the championship starts',
+      message: 'Start, weeks, end, podium minimum, point rules and scoring rule cannot change after the championship starts',
     });
   }
 }
 
-// Schedule and point-rule columns of a scheduled weekly championship, validated like the creation; a start moved into the running week records when it moved (CAMP-11)
+// Scoring-rule columns sent for a scheduled championship, validated merged with the stored rule (CPD-14)
+function scoringRuleChanges(challenge, data) {
+  const changes = pickDefined(data, SCORING_RULE_FIELDS);
+  if (Object.keys(changes).length === 0) return changes;
+  assertValidScoringRule({ weights: challenge.weights, activePillars: challenge.activePillars, ...changes });
+  return changes;
+}
+
+// Schedule, point-rule and scoring-rule columns of a scheduled weekly championship, validated like the creation; a start moved into the running week records when it moved (CAMP-11)
 async function weeklyScheduleChanges(prisma, challenge, data, now) {
   if (FREE_DATE_FIELDS.some((field) => data[field] !== undefined)) {
     throw new AppError({
@@ -367,7 +404,7 @@ async function weeklyScheduleChanges(prisma, challenge, data, now) {
       message: 'Weekly championships are scheduled with startWeek and weeks, not free dates',
     });
   }
-  const pointRules = pickDefined(data, POINT_RULE_FIELDS);
+  const pointRules = { ...pickDefined(data, POINT_RULE_FIELDS), ...scoringRuleChanges(challenge, data) };
   if (!WEEKLY_SCHEDULE_FIELDS.some((field) => data[field] !== undefined)) return pointRules;
   const { fields, weeklyContext } = await resolveWeeklyFields(prisma, challenge.trainerId, {
     startWeek: data.startWeek ?? formatDateOnly(challenge.startDate),
@@ -542,6 +579,7 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
 
   const weekly = isWeekly(data) ? await resolveWeeklyFields(prisma, trainer.id, data, now) : null;
   if (!weekly) validateDateRange(data.startDate, data.endDate, true);
+  const scoringRule = weekly ? creationScoringRule(data, weekly.config) : {};
 
   // Resolve participants
   let resolvedStudentIds;
@@ -616,6 +654,7 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
           : null,
         ...ptsSnapshot,
         ...weekly?.fields,
+        ...scoringRule,
       },
     });
 
@@ -663,20 +702,48 @@ export async function createChallenge({ prisma, trainerUserId, data, now = new D
   return formatChallenge(challenge, resolvedStudentIds.length, weekly?.weeklyContext);
 }
 
+// First participants of each championship of a trainer, by join order, keyed by championship id (CPD-65)
+async function participantsPreviewByChallenge(prisma, trainerId) {
+  const rows = await prisma.$queryRaw`
+    SELECT ranked.challenge_id AS "challengeId", ranked.student_id AS "studentId",
+           u.first_name AS "firstName", u.last_name AS "lastName", u.avatar_url AS "avatarUrl"
+    FROM (
+      SELECT cp.challenge_id, cp.student_id,
+             ROW_NUMBER() OVER (PARTITION BY cp.challenge_id ORDER BY cp.created_at, cp.student_id) AS position
+      FROM challenge_participants cp
+      JOIN challenges c ON c.id = cp.challenge_id
+      WHERE c.trainer_id = ${trainerId}::uuid
+    ) ranked
+    JOIN users u ON u.id = ranked.student_id
+    WHERE ranked.position <= ${PARTICIPANTS_PREVIEW_SIZE}
+    ORDER BY ranked.challenge_id, ranked.position`;
+  const previews = new Map();
+  for (const { challengeId, ...participant } of rows) {
+    previews.set(challengeId, [...(previews.get(challengeId) ?? []), participant]);
+  }
+  return previews;
+}
+
 /**
- * List challenges for a trainer with optional status filter.
+ * List challenges for a trainer with optional status filter, each with a preview of its first participants.
  */
 export async function listChallenges({ prisma, trainerUserId, status, now = new Date() }) {
   const trainer = await resolveTrainer(prisma, trainerUserId);
 
-  const challenges = await prisma.challenge.findMany({
-    where: { trainerId: trainer.id },
-    include: { _count: { select: { participants: true } } },
-    orderBy: { startDate: 'desc' },
-  });
+  const [challenges, previews] = await Promise.all([
+    prisma.challenge.findMany({
+      where: { trainerId: trainer.id },
+      include: { _count: { select: { participants: true } } },
+      orderBy: { startDate: 'desc' },
+    }),
+    participantsPreviewByChallenge(prisma, trainer.id),
+  ]);
 
   const weeklyContexts = await weeklyContextsFor(prisma, challenges, now);
-  const formatted = challenges.map((c) => formatChallenge(c, c._count.participants, weeklyContexts.get(c.trainerId)));
+  const formatted = challenges.map((c) => ({
+    ...formatChallenge(c, c._count.participants, weeklyContexts.get(c.trainerId)),
+    participantsPreview: previews.get(c.id) ?? [],
+  }));
 
   if (!status) return formatted;
 

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { AppError } from '../errors/app-error.js';
 import {
   ChallengeErrorCode,
@@ -7,6 +8,7 @@ import {
 } from '../constants/challenge.js';
 import { WeekStatus } from '../constants/consistency-ranking.js';
 import { currentWeekOf, weeklyStatus } from '../helpers/challenge-weeks.js';
+import { rescoreClosedWeek } from '../helpers/championship-score.js';
 import { currentStreak, isEligible, liveAverage, rankStandings } from '../helpers/consistency-math.js';
 import { shortNameOf } from '../helpers/consistency-names.js';
 import { weekBounds, weekStartFor } from '../helpers/consistency-week.js';
@@ -15,8 +17,10 @@ import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { faixaFor } from './consistency-insights-service.js';
 import { evaluateRunningWeek } from './consistency-standings-service.js';
 
+const { Decimal } = Prisma;
 const MS_PER_WEEK = 7 * 86400000;
 const FULL_SCORE = 100;
+const SCORE_DECIMAL_PLACES = 4;
 const STUDENT_SELECT = { select: { firstName: true, lastName: true, username: true } };
 const NOT_RUNNING = Object.freeze({ status: WeekStatus.NEUTRAL, partial: null });
 
@@ -98,18 +102,35 @@ async function resultsByStudent(prisma, trainerId, studentIds, currentMonday) {
   return byStudent;
 }
 
+// Start instant (Monday 00:00 in the week's time zone) of each championship week, keyed by "YYYY-MM-DD" of its Monday
+function weekStartsOf(mondays, rules) {
+  return new Map(mondays.map((monday) => {
+    const key = formatDateOnly(monday);
+    return [key, weekBounds(civilOf(monday), rules.get(key)).startInstant];
+  }));
+}
+
 // Championship weeks that count for a participant: those starting (Monday 00:00) at or after the entry (CAMP-17) and after an edit moved the start (CAMP-11)
-function countedWeeks(participant, mondays, rules, startScheduledAt) {
+function countedWeeks(participant, weekStarts, startScheduledAt) {
   const entry = startScheduledAt ? laterOf(participant.createdAt, startScheduledAt).getTime() : participant.createdAt.getTime();
-  return new Set(
-    mondays
-      .filter((monday) => weekBounds(civilOf(monday), rules.get(formatDateOnly(monday))).startInstant.getTime() >= entry)
-      .map(formatDateOnly),
-  );
+  return new Set([...weekStarts].filter(([, startInstant]) => startInstant.getTime() >= entry).map(([key]) => key));
+}
+
+// Scoring rule stored on the championship, or null for one created without it
+function scoringOf(challenge) {
+  if (!challenge.weights || !Array.isArray(challenge.activePillars) || challenge.activePillars.length === 0) return null;
+  return { weights: challenge.weights, activePillars: challenge.activePillars };
+}
+
+// Status and score of a stored week in the championship: rescored with its rule (late entry decided by the link), or as stored when it has none
+function championshipWeek(row, scoring, entry) {
+  // why: a weekly championship without a stored rule (none after the F2.6 backfill) keeps the general ranking score it had before
+  if (!scoring) return { status: row.status, score: row.score };
+  return rescoreClosedWeek(row, scoring, entry);
 }
 
 // Running-week outcome of each participant whose current week counts and has no stored result yet
-async function runningOutcomes(prisma, trainerId, runningMonday, participants) {
+async function runningOutcomes(prisma, trainerId, runningMonday, participants, scoring) {
   if (!runningMonday) return new Map();
   const key = formatDateOnly(runningMonday);
   const pending = participants.filter(
@@ -117,14 +138,17 @@ async function runningOutcomes(prisma, trainerId, runningMonday, participants) {
   );
   if (pending.length === 0) return new Map();
   const links = pending.map((row) => ({ studentId: row.studentId, createdAt: laterOf(row.createdAt, row.linkedAt) }));
-  return evaluateRunningWeek(prisma, trainerId, runningMonday, links);
+  if (!scoring) return evaluateRunningWeek(prisma, trainerId, runningMonday, links);
+  return evaluateRunningWeek(prisma, trainerId, runningMonday, links, { scoring });
 }
 
-// Championship figures of one participant from its counted closed weeks plus the running week
-function figuresOf(participant, week, { elapsed, minPodiumWeeks }) {
-  const closedValid = participant.results.filter(
-    (row) => participant.counted.has(formatDateOnly(row.weekStart)) && row.status === WeekStatus.VALID,
-  );
+// Championship figures of one participant from its counted closed weeks plus the running week; the streak stays the student's (AD-021)
+function figuresOf(participant, week, { elapsed, minPodiumWeeks, scoring, weekStarts }) {
+  const entryOf = (row) => ({ linkedAt: participant.linkedAt, weekStartInstant: weekStarts.get(formatDateOnly(row.weekStart)) });
+  const closedValid = participant.results
+    .filter((row) => participant.counted.has(formatDateOnly(row.weekStart)))
+    .map((row) => championshipWeek(row, scoring, entryOf(row)))
+    .filter((row) => row.status === WeekStatus.VALID);
   const validWeeks = closedValid.length + (week.status === WeekStatus.VALID ? 1 : 0);
   return {
     studentId: participant.studentId,
@@ -161,6 +185,24 @@ function liveRow(student, required) {
   };
 }
 
+// Value quantized to the 4 places of the averages, as a number
+function quantized(value) {
+  return new Decimal(value).toDecimalPlaces(SCORE_DECIMAL_PLACES, Decimal.ROUND_HALF_UP).toNumber();
+}
+
+// Numbers of the consistency cards: classified and entering counts, leader average and lead over the 2nd, mean of the classified averages
+function summaryOf(rows, entering) {
+  const averages = rows.map((row) => row.average).filter((average) => average !== null);
+  const total = averages.reduce((sum, average) => sum.plus(average), new Decimal(0));
+  return {
+    classified: rows.length,
+    entering: entering.length,
+    leaderAverage: averages.length > 0 ? averages[0] : null,
+    leaderLead: averages.length > 1 ? quantized(new Decimal(averages[0]).minus(averages[1])) : null,
+    championshipAverage: averages.length > 0 ? quantized(total.dividedBy(averages.length)) : null,
+  };
+}
+
 // Close instant of the running week, or of the last championship week once it has passed
 async function closesAtOf(prisma, trainerId, currentMonday, lastMonday) {
   const monday = currentMonday.getTime() > lastMonday.getTime() ? lastMonday : currentMonday;
@@ -174,7 +216,7 @@ async function closesAtOf(prisma, trainerId, currentMonday, lastMonday) {
  * @param {object} prisma
  * @param {object} challenge - stored weekly championship
  * @param {Date} now
- * @returns {Promise<{ rows: object[], entering: object[], currentWeek: number, closesAt: Date }>}
+ * @returns {Promise<{ rows: object[], entering: object[], currentWeek: number, closesAt: Date, summary: object }>}
  */
 export async function computeChallengeStandings(prisma, challenge, now) {
   const config = await getConfig(prisma, challenge.trainerId, now);
@@ -184,6 +226,7 @@ export async function computeChallengeStandings(prisma, challenge, now) {
   const runningMonday = mondays.find((monday) => monday.getTime() === currentMonday.getTime()) ?? null;
   const elapsed = currentWeekOf({ startDate: challenge.startDate, weeks: mondays.length }, currentMonday);
   const minPodiumWeeks = challenge.minPodiumWeeks ?? config.minPodiumWeeks;
+  const scoring = scoringOf(challenge);
 
   const [rules, participants, closesAt] = await Promise.all([
     rulesByWeek(prisma, challenge.trainerId, mondays),
@@ -193,23 +236,21 @@ export async function computeChallengeStandings(prisma, challenge, now) {
   const results = participants.length > 0
     ? await resultsByStudent(prisma, challenge.trainerId, participants.map((row) => row.studentId), currentMonday)
     : new Map();
+  const weekStarts = weekStartsOf(mondays, rules);
   const enriched = participants.map((row) => ({
     ...row,
-    counted: countedWeeks(row, mondays, rules, challenge.startScheduledAt),
+    counted: countedWeeks(row, weekStarts, challenge.startScheduledAt),
     results: results.get(row.studentId) ?? [],
   }));
-  const outcomes = await runningOutcomes(prisma, challenge.trainerId, runningMonday, enriched);
+  const outcomes = await runningOutcomes(prisma, challenge.trainerId, runningMonday, enriched, scoring);
 
   const listed = enriched
-    .map((row) => figuresOf(row, outcomes.get(row.studentId) ?? NOT_RUNNING, { elapsed, minPodiumWeeks }))
+    .map((row) => figuresOf(row, outcomes.get(row.studentId) ?? NOT_RUNNING, { elapsed, minPodiumWeeks, scoring, weekStarts }))
     .filter((student) => student.validWeeks > 0);
   const required = Math.min(minPodiumWeeks, elapsed);
-  return {
-    rows: rankStandings(listed.filter((student) => student.eligible)).map((student) => liveRow(student, required)),
-    entering: listed.filter((student) => !student.eligible).sort(byName).map((student) => liveRow(student, required)),
-    currentWeek: elapsed,
-    closesAt,
-  };
+  const rows = rankStandings(listed.filter((student) => student.eligible)).map((student) => liveRow(student, required));
+  const entering = listed.filter((student) => !student.eligible).sort(byName).map((student) => liveRow(student, required));
+  return { rows, entering, currentWeek: elapsed, closesAt, summary: summaryOf(rows, entering) };
 }
 
 // 404 for a missing trainer profile or championship
@@ -323,7 +364,7 @@ async function frozenStandings(prisma, challenge) {
  * @param {string} trainerUserId - authenticated trainer's user id
  * @param {string} challengeId
  * @param {Date} [now]
- * @returns {Promise<{ challenge: object, status: string, currentWeek: number|null, closesAt: Date|null, rows: object[], entering: object[] }>}
+ * @returns {Promise<{ challenge: object, status: string, currentWeek: number|null, closesAt: Date|null, rows: object[], entering: object[], summary: object }>}
  */
 export async function getChallengeConsistency(prisma, trainerUserId, challengeId, now = new Date()) {
   const challenge = await ownedChallenge(prisma, trainerUserId, challengeId);
@@ -334,9 +375,12 @@ export async function getChallengeConsistency(prisma, trainerUserId, challengeId
   const base = { challenge: summarize(challenge, participantCount), status };
 
   if (status === ChallengeStatus.COMPLETED) {
-    return { ...base, currentWeek: challenge.weeks, closesAt: null, ...(await frozenStandings(prisma, challenge)) };
+    const { rows, entering } = await frozenStandings(prisma, challenge);
+    return { ...base, currentWeek: challenge.weeks, closesAt: null, rows, entering, summary: summaryOf(rows, entering) };
   }
-  if (status !== ChallengeStatus.ACTIVE) return { ...base, currentWeek: null, closesAt: null, rows: [], entering: [] };
-  const { rows, entering, currentWeek, closesAt } = await computeChallengeStandings(prisma, challenge, now);
-  return { ...base, currentWeek, closesAt, rows, entering };
+  if (status !== ChallengeStatus.ACTIVE) {
+    return { ...base, currentWeek: null, closesAt: null, rows: [], entering: [], summary: summaryOf([], []) };
+  }
+  const { rows, entering, currentWeek, closesAt, summary } = await computeChallengeStandings(prisma, challenge, now);
+  return { ...base, currentWeek, closesAt, rows, entering, summary };
 }

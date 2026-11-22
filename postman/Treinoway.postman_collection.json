@@ -13122,7 +13122,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"ptsWorkoutCompleted\": 10\n}",
+              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"weights\": { \"workouts\": 70, \"diet\": 0, \"cardio\": 30, \"feedback\": 0, \"hydration\": 0 },\n  \"activePillars\": [\"workouts\", \"cardio\"]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -13139,7 +13139,7 @@
                 "challenges"
               ]
             },
-            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored."
+            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored.\n\nScoring rule (weekly format): `weights` (the five pillars, integers 0 to 100 summing 100) and `activePillars` (non-empty, distinct pillars), sent together; omit both to copy the trainer ranking config. An invalid or partial rule answers 400 challenge.scoringRule.invalid with `details.field` (`weights` or `activePillars`). XP rules left out are copied from the trainer gamification config."
           },
           "response": []
         },
@@ -13171,7 +13171,7 @@
                 }
               ]
             },
-            "description": "List trainer challenges with optional ?status filter"
+            "description": "List trainer challenges with optional ?status filter. Each item carries `weights` and `activePillars` (weekly format) and `participantsPreview`: up to 4 participants by join order (studentId, firstName, lastName, avatarUrl)."
           },
           "response": []
         },
@@ -13203,7 +13203,7 @@
                 }
               ]
             },
-            "description": "Get challenge detail"
+            "description": "Get challenge detail. Weekly championships return their scoring rule: `weights` and `activePillars` (null and [] in the free-dates format)."
           },
           "response": []
         },
@@ -13249,7 +13249,7 @@
                 }
               ]
             },
-            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge.\n\nWeekly format: while scheduled every field (name, description, startWeek, weeks, minPodiumWeeks, anonymousRanking, visibility, point rules); while running only name, description, anonymousRanking and visibility (others answer 409)."
+            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge.\n\nWeekly format: while scheduled every field (name, description, startWeek, weeks, minPodiumWeeks, anonymousRanking, visibility, point rules); while running only name, description, anonymousRanking and visibility (others answer 409). `weights` and `activePillars` change only while scheduled, validated like the creation (400 challenge.scoringRule.invalid); running, closed or cancelled answers 409."
           },
           "response": []
         },
@@ -13380,7 +13380,7 @@
                 }
               ]
             },
-            "description": "Get challenge leaderboard"
+            "description": "Get challenge leaderboard (XP). Each entry also carries `workouts` (completed workouts in the window), `bonusPoints` (trainer bonuses), `pointsThisWeek` (since Monday 00:00 in the trainer time zone) and `streakDays` (consecutive days with a completed workout, ending today or yesterday)."
           },
           "response": []
         },
@@ -13413,7 +13413,7 @@
                 }
               ]
             },
-            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship."
+            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Weeks are scored with the championship weights and active pillars. `summary` carries the card numbers: classified, entering, leaderAverage, leaderLead (1st minus 2nd) and championshipAverage. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship."
           },
           "response": []
         },

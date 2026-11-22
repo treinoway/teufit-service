@@ -7,7 +7,7 @@ import {
   challengeStatusValues,
   challengeVisibilityValues,
 } from '../../src/constants/challenge.js';
-import { Faixa, WeekStatus } from '../../src/constants/consistency-ranking.js';
+import { Faixa, WeekStatus, pillarValues } from '../../src/constants/consistency-ranking.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const authHeaders = {
@@ -56,6 +56,44 @@ const challengeSchema = {
   },
 };
 
+const pillarWeightsSchema = {
+  type: 'object',
+  properties: Object.fromEntries(pillarValues.map((pillar) => [pillar, { type: 'integer', minimum: 0, maximum: 100 }])),
+};
+
+const participantPreviewSchema = {
+  type: 'object',
+  properties: {
+    studentId: { type: 'string', format: 'uuid' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    avatarUrl: { type: 'string', nullable: true },
+  },
+};
+
+// Trainer view of a championship: the shared shape plus its scoring rule and, in the list, the participants preview
+const trainerChallengeSchema = {
+  type: 'object',
+  properties: {
+    ...challengeSchema.properties,
+    weights: {
+      ...pillarWeightsSchema,
+      nullable: true,
+      description: 'Pillar weights of a weekly championship (sum 100); null in the dates format',
+    },
+    activePillars: {
+      type: 'array',
+      items: { type: 'string', enum: pillarValues },
+      description: 'Active pillars of a weekly championship; empty in the dates format',
+    },
+    participantsPreview: {
+      type: 'array',
+      items: participantPreviewSchema,
+      description: 'List only: up to 4 participants by join order',
+    },
+  },
+};
+
 const challengeDescriptionBodyField = {
   type: 'string',
   maxLength: CHALLENGE_DESCRIPTION_MAX_LENGTH,
@@ -72,6 +110,20 @@ const weeklyScheduleBodyFields = {
   minPodiumWeeks: {
     type: 'integer',
     description: 'Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config',
+  },
+};
+
+// Loose on purpose: the service validates the rule and answers 400 challenge.scoringRule.invalid with details.field (CPD-08)
+const scoringRuleBodyFields = {
+  weights: {
+    type: 'object',
+    properties: Object.fromEntries(pillarValues.map((pillar) => [pillar, { type: 'number' }])),
+    description: 'Weekly format: weight of each of the five pillars, integers 0 to 100 summing 100; sent with activePillars, or both omitted to copy the trainer ranking config on creation',
+  },
+  activePillars: {
+    type: 'array',
+    items: { type: 'string' },
+    description: `Weekly format: non-empty list of distinct pillars (${pillarValues.join(', ')})`,
   },
 };
 
@@ -110,6 +162,17 @@ const rankingEntrySchema = {
   },
 };
 
+const trainerRankingEntrySchema = {
+  type: 'object',
+  properties: {
+    ...rankingEntrySchema.properties,
+    workouts: { type: 'integer', description: 'Completed workouts in the challenge window' },
+    bonusPoints: { type: 'integer', description: 'Points from trainer bonuses' },
+    pointsThisWeek: { type: 'integer', description: 'Points since Monday 00:00 in the trainer time zone' },
+    streakDays: { type: 'integer', description: 'Consecutive days with a completed workout, ending today or yesterday' },
+  },
+};
+
 const participantEntrySchema = {
   type: 'object',
   properties: {
@@ -140,6 +203,7 @@ export const createChallengeSchema = {
       endDate: { type: 'string', format: 'date', description: 'Dates format only (required there)' },
       format: { type: 'string', enum: challengeFormatValues },
       ...weeklyScheduleBodyFields,
+      ...scoringRuleBodyFields,
       description: challengeDescriptionBodyField,
       visibility: { type: 'string', enum: challengeVisibilityValues },
       participantMode: { type: 'string', enum: challengeParticipantModeValues },
@@ -153,7 +217,7 @@ export const createChallengeSchema = {
     },
   },
   response: {
-    201: challengeSchema,
+    201: trainerChallengeSchema,
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
@@ -174,7 +238,7 @@ export const listChallengesSchema = {
     },
   },
   response: {
-    200: { type: 'array', items: challengeSchema },
+    200: { type: 'array', items: trainerChallengeSchema },
     401: errorResponseSchema,
     403: errorResponseSchema,
     500: errorResponseSchema,
@@ -192,7 +256,7 @@ export const getChallengeSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -218,13 +282,14 @@ export const updateChallengeSchema = {
       startDate: { type: 'string', format: 'date' },
       endDate: { type: 'string', format: 'date' },
       ...weeklyScheduleBodyFields,
+      ...scoringRuleBodyFields,
       description: challengeDescriptionBodyField,
       visibility: { type: 'string', enum: challengeVisibilityValues },
       ...challengePtsOverrideBodyFields,
     },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
@@ -245,7 +310,7 @@ export const cancelChallengeSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -285,7 +350,7 @@ export const getChallengeRankingSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: { type: 'array', items: rankingEntrySchema },
+    200: { type: 'array', items: trainerRankingEntrySchema },
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -469,6 +534,18 @@ const challengeConsistencyRowSchema = {
   },
 };
 
+const consistencySummarySchema = {
+  type: 'object',
+  description: 'Numbers of the consistency cards',
+  properties: {
+    classified: { type: 'integer', description: 'Participants with a podium position' },
+    entering: { type: 'integer', description: 'Participants still entering' },
+    leaderAverage: { type: 'number', nullable: true, description: 'Average of the 1st place' },
+    leaderLead: { type: 'number', nullable: true, description: 'Average of the 1st minus the 2nd; null with fewer than 2 classified' },
+    championshipAverage: { type: 'number', nullable: true, description: 'Mean of the classified averages' },
+  },
+};
+
 export const getChallengeConsistencySchema = {
   tags: ['challenges'],
   summary: 'Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed',
@@ -501,6 +578,7 @@ export const getChallengeConsistencySchema = {
         closesAt: { type: 'string', format: 'date-time', nullable: true, description: 'Close instant of the running week' },
         rows: { type: 'array', items: challengeConsistencyRowSchema },
         entering: { type: 'array', items: challengeConsistencyRowSchema },
+        summary: consistencySummarySchema,
       },
     },
     401: errorResponseSchema,

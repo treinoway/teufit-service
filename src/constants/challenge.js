@@ -50,6 +50,9 @@ export const CHALLENGE_MAX_WEEKS = 12;
 export const CHALLENGE_MIN_PODIUM_WEEKS = 1;
 export const CHALLENGE_MAX_PODIUM_WEEKS = 4;
 
+// Body fields of a weekly championship's own scoring rule (AD-051)
+export const SCORING_RULE_FIELDS = Object.freeze(['weights', 'activePillars']);
+
 // Error codes
 export const ChallengeErrorCode = Object.freeze({
   CHALLENGE_NOT_FOUND: 'CHALLENGE_NOT_FOUND',
@@ -70,6 +73,7 @@ export const ChallengeErrorCode = Object.freeze({
   CHALLENGE_INVALID_MIN_PODIUM: 'CHALLENGE_INVALID_MIN_PODIUM',
   CHALLENGE_NOT_CLOSABLE: 'CHALLENGE_NOT_CLOSABLE',
   CHALLENGE_NOT_WEEKLY: 'CHALLENGE_NOT_WEEKLY',
+  CHALLENGE_INVALID_SCORING_RULE: 'CHALLENGE_INVALID_SCORING_RULE',
 });
 
 export const ChallengeMessageCode = Object.freeze({
@@ -91,4 +95,5 @@ export const ChallengeMessageCode = Object.freeze({
   CHALLENGE_INVALID_MIN_PODIUM: 'challenge.minPodium.invalid',
   CHALLENGE_NOT_CLOSABLE: 'challenge.notClosable',
   CHALLENGE_NOT_WEEKLY: 'challenge.notWeekly',
+  CHALLENGE_INVALID_SCORING_RULE: 'challenge.scoringRule.invalid',
 });
