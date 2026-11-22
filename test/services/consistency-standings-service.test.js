@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { getPanelStandings, getStandings } from '../../src/services/consistency-standings-service.js';
+import { evaluateRunningWeek, getPanelStandings, getStandings } from '../../src/services/consistency-standings-service.js';
 import { getConfig, ruleForWeek } from '../../src/services/consistency-config-service.js';
 import { ensureCurrentSeason } from '../../src/services/consistency-season-service.js';
 import { materializeTargets } from '../../src/services/consistency-target-service.js';
@@ -729,5 +729,53 @@ describe('getPanelStandings', () => {
       { pillar: 'cardio', done: 1, expected: 2, adherence: 50 },
     ]);
     expect(result.entering[0].seasonPillars).toEqual([]);
+  });
+});
+
+const RUNNING_MONDAY = new Date(Date.UTC(2026, 10, 9));
+const CHAMPIONSHIP_SCORING = {
+  weights: { workouts: 100, diet: 0, cardio: 0, feedback: 0, hydration: 0 },
+  activePillars: ['workouts'],
+};
+
+describe('evaluateRunningWeek', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('CPD-09 scores the running week with the given scoring rule', async () => {
+    const joiner = link('joiner', 'Joiner', { createdAt: new Date('2026-11-10T12:00:00Z') });
+    const { prisma } = setup({
+      links: [link('ana', 'Ana'), link('bia', 'Bia'), joiner],
+      targets: { ana: { workouts: 3, cardio: 2 }, bia: { workouts: 3, cardio: 2 }, joiner: { workouts: 3, cardio: 2 } },
+      done: { ana: { workouts: 3, cardio: 0 }, bia: { workouts: 3, cardio: 0 }, joiner: { workouts: 3, cardio: 0 } },
+      studentPauses: { bia: true },
+    });
+    const links = [link('ana', 'Ana'), link('bia', 'Bia'), joiner];
+
+    const championship = await evaluateRunningWeek(prisma, TRAINER_ID, RUNNING_MONDAY, links, { scoring: CHAMPIONSHIP_SCORING });
+    const general = await evaluateRunningWeek(prisma, TRAINER_ID, RUNNING_MONDAY, links);
+
+    expect(championship.get('ana').status).toBe(WeekStatus.VALID);
+    expect(championship.get('ana').partial.toString()).toBe('100');
+    expect(championship.get('ana').pillars).toEqual({ workouts: { expected: 3, done: 3 }, cardio: { expected: 2, done: 0 } });
+    expect(championship.get('bia')).toMatchObject({ status: WeekStatus.PAUSED, partial: null });
+    expect(championship.get('joiner')).toMatchObject({ status: WeekStatus.NEUTRAL, partial: null });
+    expect(general.get('ana').status).toBe(WeekStatus.VALID);
+    expect(general.get('ana').partial.toString()).toBe('66.6667');
+  });
+
+  it('CPD-11 makes the running week neutral when no active championship pillar has a target', async () => {
+    const { prisma } = setup({
+      links: [link('ana', 'Ana')],
+      targets: { ana: { workouts: 0, cardio: 2 } },
+      done: { ana: { workouts: 0, cardio: 2 } },
+    });
+
+    const outcomes = await evaluateRunningWeek(prisma, TRAINER_ID, RUNNING_MONDAY, [link('ana', 'Ana')], {
+      scoring: CHAMPIONSHIP_SCORING,
+    });
+
+    expect(outcomes.get('ana')).toMatchObject({ status: WeekStatus.NEUTRAL, partial: null });
   });
 });

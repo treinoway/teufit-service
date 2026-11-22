@@ -95,7 +95,7 @@ function weekOutcome(link, ctx) {
   if (link.createdAt.getTime() > ctx.startInstant.getTime()) return neutral;
   const pause = ctx.pauses.students.has(link.studentId) ? ctx.pauses.students.get(link.studentId) : ctx.pauses.team;
   if (pause) return { status: WeekStatus.PAUSED, partial: null, pillars };
-  const partial = scoreWeek({ expected, done, weights: ctx.rule.weights, activePillars: ctx.rule.activePillars });
+  const partial = scoreWeek({ expected, done, weights: ctx.scoring.weights, activePillars: ctx.scoring.activePillars });
   return partial === null ? neutral : { status: WeekStatus.VALID, partial, pillars };
 }
 
@@ -106,9 +106,10 @@ function weekOutcome(link, ctx) {
  * @param {string} trainerId - Trainer.id
  * @param {Date} mondayDate - midnight-UTC Date of the running week's Monday
  * @param {Array<{ studentId: string, createdAt: Date }>} links - createdAt is when the student started counting
+ * @param {{ scoring?: { weights: object, activePillars: string[] } }} [options] - scoring replaces the trainer's weights and pillars in the score (a championship's rule); close, window, entry and pauses stay the trainer's
  * @returns {Promise<Map<string, { status: string, partial: object|null, pillars: object }>>} outcome per student id
  */
-export async function evaluateRunningWeek(prisma, trainerId, mondayDate, links) {
+export async function evaluateRunningWeek(prisma, trainerId, mondayDate, links, { scoring } = {}) {
   const weekStart = civilOf(mondayDate);
   const rule = await ruleForWeek(prisma, trainerId, weekStart);
   const previousRule = await ruleForWeek(prisma, trainerId, civilOf(new Date(mondayDate.getTime() - MS_PER_WEEK)));
@@ -120,7 +121,7 @@ export async function evaluateRunningWeek(prisma, trainerId, mondayDate, links) 
     pausesFor(prisma, trainerId, [weekStart]),
   ]);
   const startInstant = weekBounds(weekStart, rule).startInstant;
-  const ctx = { rule, targets, done, pauses: pauses.get(dateKey(mondayDate)), startInstant };
+  const ctx = { scoring: scoring ?? rule, targets, done, pauses: pauses.get(dateKey(mondayDate)), startInstant };
   return new Map(links.map((link) => [link.studentId, weekOutcome(link, ctx)]));
 }
 
