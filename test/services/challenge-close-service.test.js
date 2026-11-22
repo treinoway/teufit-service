@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { closeDueChallenges, requestEarlyClose } from '../../src/services/challenge-close-service.js';
 import { computeChallengeStandings } from '../../src/services/challenge-consistency-service.js';
 import { getConfig, ruleForWeek } from '../../src/services/consistency-config-service.js';
 import { ChallengeErrorCode, ChallengeMessageCode, ChallengeStatus } from '../../src/constants/challenge.js';
+import { WeekStatus } from '../../src/constants/consistency-ranking.js';
 
 vi.mock('../../src/services/consistency-config-service.js', () => ({ getConfig: vi.fn(), ruleForWeek: vi.fn() }));
 vi.mock('../../src/services/challenge-consistency-service.js', async (importOriginal) => ({
@@ -32,6 +34,9 @@ const prisma = {
   consistencyWeekClose: { findUnique: vi.fn() },
   consistencySeason: { findFirst: vi.fn() },
   challengeConsistencyStanding: { createMany: vi.fn() },
+  challengeParticipant: { findMany: vi.fn() },
+  trainerStudent: { findMany: vi.fn() },
+  consistencyWeeklyResult: { findMany: vi.fn() },
   $queryRaw: vi.fn(),
   $transaction: vi.fn(async (fn) => fn(prisma)),
 };
@@ -204,6 +209,55 @@ function eightWeeks(overrides = {}) {
 
 // Wednesday 2026-11-18 12:00 in São Paulo
 const WEDNESDAY_WEEK3 = new Date('2026-11-18T15:00:00.000Z');
+
+const { Decimal } = Prisma;
+const GENERAL_STORED_RULE = {
+  weights: { workouts: 60, cardio: 40, diet: 0, feedback: 0, hydration: 0 },
+  activePillars: ['workouts', 'cardio'],
+};
+const WORKOUTS_ONLY = { weights: { workouts: 100, cardio: 0, diet: 0, feedback: 0, hydration: 0 }, activePillars: ['workouts'] };
+
+// Stored weekly result closed with the general ranking rule (score as that rule gave it)
+function closedWeek(studentId, week, [workoutsExpected, workoutsDone], [cardioExpected, cardioDone], generalScore) {
+  return {
+    studentId,
+    seasonId: null,
+    weekStart: dateOnly(week),
+    status: WeekStatus.VALID,
+    score: new Decimal(generalScore),
+    pillars: { workouts: { expected: workoutsExpected, done: workoutsDone }, cardio: { expected: cardioExpected, done: cardioDone } },
+    weights: GENERAL_STORED_RULE,
+  };
+}
+
+describe('challenge close', () => {
+  it('CPD-13 freezes the final standings with the championship score', async () => {
+    const { computeChallengeStandings: realStandings } = await vi.importActual('../../src/services/challenge-consistency-service.js');
+    computeChallengeStandings.mockImplementation(realStandings);
+    arrange([championship(WORKOUTS_ONLY)]);
+    prisma.challengeParticipant.findMany.mockResolvedValue([
+      { studentId: 'ana', createdAt: new Date('2026-10-30T12:00:00.000Z'), student: { firstName: 'Ana', lastName: 'Souza' } },
+      { studentId: 'bia', createdAt: new Date('2026-10-30T12:00:00.000Z'), student: { firstName: 'Bia', lastName: 'Lima' } },
+    ]);
+    prisma.trainerStudent.findMany.mockResolvedValue([
+      { studentId: 'ana', createdAt: new Date('2026-01-01T00:00:00.000Z') },
+      { studentId: 'bia', createdAt: new Date('2026-01-01T00:00:00.000Z') },
+    ]);
+    prisma.consistencyWeeklyResult.findMany.mockResolvedValue([
+      closedWeek('ana', '2026-11-09', [3, 3], [2, 0], 60), closedWeek('ana', '2026-11-02', [3, 3], [2, 0], 60),
+      closedWeek('bia', '2026-11-09', [3, 2], [2, 2], 80), closedWeek('bia', '2026-11-02', [3, 2], [2, 2], 80),
+    ]);
+
+    await closeDueChallenges(prisma, logger, AFTER_CLOSE);
+
+    const frozen = prisma.challengeConsistencyStanding.createMany.mock.calls[0][0].data;
+    expect(frozen.map((row) => [row.studentId, row.position, row.eligible, Number(row.average), row.validWeeks, row.weeks100, row.streak])).toEqual([
+      ['ana', 1, true, 100, 2, 2, 0],
+      ['bia', 2, true, 66.6667, 2, 0, 0],
+    ]);
+    expect(prisma.challenge.update).toHaveBeenCalledWith({ where: { id: 'champ-a' }, data: { closedAt: AFTER_CLOSE } });
+  });
+});
 
 describe('requestEarlyClose', () => {
   it('CAMP-42 schedules the close for this week and moves the end to its Sunday', async () => {
