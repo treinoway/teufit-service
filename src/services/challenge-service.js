@@ -151,6 +151,8 @@ function formatChallenge(challenge, participantCount = undefined, weeklyContext 
     weeks: challenge.weeks ?? null,
     currentWeek: currentWeekFor(challenge, status, weeklyContext),
     minPodiumWeeks: challenge.minPodiumWeeks ?? null,
+    weights: challenge.weights ?? null,
+    activePillars: challenge.activePillars ?? [],
     description: challenge.description ?? null,
     visibility: challenge.visibility ?? ChallengeVisibility.FULL,
     ownerType: challenge.ownerType ?? ChallengeOwnerType.TRAINER,
@@ -369,20 +371,29 @@ async function assertOpenIfWeekly(prisma, challenge, now) {
   return weeklyContext;
 }
 
-// 409 when a running weekly championship would change its schedule, podium minimum or point rules
+// 409 when a running weekly championship would change its schedule, podium minimum, point rules or scoring rule
 function assertWeeklyScheduleLocked(data) {
-  const touched = [...WEEKLY_SCHEDULE_FIELDS, ...FREE_DATE_FIELDS, ...POINT_RULE_FIELDS].some((field) => data[field] !== undefined);
+  const touched = [...WEEKLY_SCHEDULE_FIELDS, ...FREE_DATE_FIELDS, ...POINT_RULE_FIELDS, ...SCORING_RULE_FIELDS]
+    .some((field) => data[field] !== undefined);
   if (touched) {
     throw new AppError({
       httpStatus: 409,
       error: ChallengeErrorCode.CHALLENGE_ALREADY_STARTED,
       messageCode: ChallengeMessageCode.CHALLENGE_ALREADY_STARTED,
-      message: 'Start, weeks, end, podium minimum and point rules cannot change after the championship starts',
+      message: 'Start, weeks, end, podium minimum, point rules and scoring rule cannot change after the championship starts',
     });
   }
 }
 
-// Schedule and point-rule columns of a scheduled weekly championship, validated like the creation; a start moved into the running week records when it moved (CAMP-11)
+// Scoring-rule columns sent for a scheduled championship, validated merged with the stored rule (CPD-14)
+function scoringRuleChanges(challenge, data) {
+  const changes = pickDefined(data, SCORING_RULE_FIELDS);
+  if (Object.keys(changes).length === 0) return changes;
+  assertValidScoringRule({ weights: challenge.weights, activePillars: challenge.activePillars, ...changes });
+  return changes;
+}
+
+// Schedule, point-rule and scoring-rule columns of a scheduled weekly championship, validated like the creation; a start moved into the running week records when it moved (CAMP-11)
 async function weeklyScheduleChanges(prisma, challenge, data, now) {
   if (FREE_DATE_FIELDS.some((field) => data[field] !== undefined)) {
     throw new AppError({
@@ -392,7 +403,7 @@ async function weeklyScheduleChanges(prisma, challenge, data, now) {
       message: 'Weekly championships are scheduled with startWeek and weeks, not free dates',
     });
   }
-  const pointRules = pickDefined(data, POINT_RULE_FIELDS);
+  const pointRules = { ...pickDefined(data, POINT_RULE_FIELDS), ...scoringRuleChanges(challenge, data) };
   if (!WEEKLY_SCHEDULE_FIELDS.some((field) => data[field] !== undefined)) return pointRules;
   const { fields, weeklyContext } = await resolveWeeklyFields(prisma, challenge.trainerId, {
     startWeek: data.startWeek ?? formatDateOnly(challenge.startDate),
