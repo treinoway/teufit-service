@@ -6,7 +6,7 @@ import {
 } from '../../src/services/challenge-consistency-service.js';
 import { getConfig, ruleForWeek } from '../../src/services/consistency-config-service.js';
 import { evaluateRunningWeek } from '../../src/services/consistency-standings-service.js';
-import { liveAverage, seasonFigures } from '../../src/helpers/consistency-math.js';
+import { liveAverage, scoreWeek, seasonFigures } from '../../src/helpers/consistency-math.js';
 import { ChallengeErrorCode, ChallengeMessageCode, ChallengeStatus } from '../../src/constants/challenge.js';
 import { Faixa, WeekStatus } from '../../src/constants/consistency-ranking.js';
 
@@ -428,6 +428,122 @@ describe('computeChallengeStandings', () => {
   });
 });
 
+const GENERAL_STORED_RULE = {
+  weights: { workouts: 60, cardio: 40, diet: 0, feedback: 0, hydration: 0 },
+  activePillars: ['workouts', 'cardio'],
+};
+const WORKOUTS_ONLY = { weights: { workouts: 100, cardio: 0, diet: 0, feedback: 0, hydration: 0 }, activePillars: ['workouts'] };
+
+// Per-pillar counts as the weekly close stores them
+function counts([workoutsExpected, workoutsDone], [cardioExpected, cardioDone]) {
+  return {
+    workouts: { expected: workoutsExpected, done: workoutsDone },
+    cardio: { expected: cardioExpected, done: cardioDone },
+  };
+}
+
+// Expected and done maps of stored per-pillar counts
+function flatten(pillars) {
+  return {
+    expected: { workouts: pillars.workouts.expected, cardio: pillars.cardio.expected },
+    done: { workouts: pillars.workouts.done, cardio: pillars.cardio.done },
+  };
+}
+
+// Stored weekly result closed with the general ranking rule, from its per-pillar counts
+function closedWeek(studentId, week, pillars) {
+  const score = scoreWeek({ ...flatten(pillars), ...GENERAL_STORED_RULE });
+  return {
+    studentId,
+    seasonId: null,
+    weekStart: dateOnly(week),
+    status: score === null ? WeekStatus.NEUTRAL : WeekStatus.VALID,
+    score,
+    pillars,
+    weights: GENERAL_STORED_RULE,
+  };
+}
+
+// Running weeks scored like evaluateRunningWeek does: the given scoring rule, else the general one
+function runningWeeksFrom(pillarsByStudent) {
+  evaluateRunningWeek.mockImplementation(async (_prisma, _trainerId, _monday, evaluated, options = {}) => new Map(
+    evaluated.map((link) => {
+      const pillars = pillarsByStudent[link.studentId];
+      const partial = scoreWeek({ ...flatten(pillars), ...(options.scoring ?? GENERAL_STORED_RULE) });
+      return [link.studentId, { status: partial === null ? WeekStatus.NEUTRAL : WeekStatus.VALID, partial, pillars }];
+    }),
+  ));
+}
+
+// Ana does every workout and no cardio, Bia two of three workouts and every cardio, Caio has a cardio-only week
+function arrangeScoringScenario() {
+  const anaWeek = counts([3, 3], [2, 0]);
+  const biaWeek = counts([3, 2], [2, 2]);
+  const cardioOnly = counts([0, 0], [2, 2]);
+  arrange({
+    participants: [participant('ana', 'Ana', 'Souza'), participant('bia', 'Bia', 'Lima'), participant('caio', 'Caio', 'Reis')],
+    results: [
+      closedWeek('ana', '2026-11-09', anaWeek), closedWeek('ana', '2026-11-02', anaWeek),
+      closedWeek('bia', '2026-11-09', biaWeek), closedWeek('bia', '2026-11-02', biaWeek),
+      closedWeek('caio', '2026-11-09', counts([3, 3], [0, 0])), closedWeek('caio', '2026-11-02', cardioOnly),
+    ],
+  });
+  runningWeeksFrom({ ana: anaWeek, bia: biaWeek, caio: cardioOnly });
+}
+
+describe('computeChallengeStandings', () => {
+  it('CPD-12 uses the championship score for average, band, weeks at 100, eligibility and podium', async () => {
+    arrangeScoringScenario();
+
+    const general = await computeChallengeStandings(prisma, championship(), NOW);
+    const standings = await computeChallengeStandings(prisma, championship(WORKOUTS_ONLY), NOW);
+
+    expect(general.rows.map((row) => [row.studentId, row.position, row.average])).toEqual([
+      ['caio', 1, 100],
+      ['bia', 2, 80],
+      ['ana', 3, 60],
+    ]);
+    expect(standings.rows.map((row) => [row.studentId, row.position, row.average, row.faixa, row.weeksAt100, row.currentWeekScore])).toEqual([
+      ['ana', 1, 100, Faixa.FULL, 2, 100],
+      ['bia', 2, 66.6667, Faixa.RESTARTING, 0, 66.6667],
+    ]);
+    expect(standings.entering.map((row) => [row.studentId, row.eligible, row.validWeeks, row.weeksMissing, row.weekStatus])).toEqual([
+      ['caio', false, 1, 1, WeekStatus.NEUTRAL],
+    ]);
+    expect(rowOf(standings, 'ana').streak).toBe(0);
+    expect(rowOf(standings, 'caio').streak).toBe(2);
+  });
+
+  it('CPD-32 returns the summary with classified, entering, leader average and lead and the championship average', async () => {
+    arrangeScoringScenario();
+
+    const standings = await computeChallengeStandings(prisma, championship(WORKOUTS_ONLY), NOW);
+
+    expect(standings.summary).toEqual({
+      classified: 2,
+      entering: 1,
+      leaderAverage: 100,
+      leaderLead: 33.3333,
+      championshipAverage: 83.3334,
+    });
+  });
+
+  it('CPD-32 leaves the lead null with one classified and every average null with none', async () => {
+    arrange({
+      participants: [participant('ana', 'Ana', 'Souza'), participant('bia', 'Bia', 'Lima')],
+      results: [closedWeek('ana', '2026-11-09', counts([3, 3], [0, 0])), closedWeek('ana', '2026-11-02', counts([3, 3], [0, 0]))],
+    });
+    runningWeeksFrom({ ana: counts([3, 3], [0, 0]), bia: counts([3, 3], [0, 0]) });
+
+    const one = await computeChallengeStandings(prisma, championship(WORKOUTS_ONLY), NOW);
+    expect(one.summary).toEqual({ classified: 1, entering: 1, leaderAverage: 100, leaderLead: null, championshipAverage: 100 });
+
+    arrange({ participants: [] });
+    const none = await computeChallengeStandings(prisma, championship(WORKOUTS_ONLY), NOW);
+    expect(none.summary).toEqual({ classified: 0, entering: 0, leaderAverage: null, leaderLead: null, championshipAverage: null });
+  });
+});
+
 describe('getChallengeConsistency', () => {
   it('CAMP-30 returns empty standings and the start for a scheduled championship', async () => {
     prisma.challenge.findUnique.mockResolvedValue(
@@ -481,6 +597,22 @@ describe('getChallengeConsistency', () => {
     expect(response.entering).toMatchObject([{ studentId: 'c', position: null, weeksMissing: 1 }]);
     expect(prisma.consistencyWeeklyResult.findMany).not.toHaveBeenCalled();
     expect(evaluateRunningWeek).not.toHaveBeenCalled();
+  });
+
+  it('CPD-32 returns the summary of the frozen standings and an empty one before the start', async () => {
+    prisma.challenge.findUnique.mockResolvedValue(championship({ closedAt: new Date('2026-11-30T00:10:00.000Z') }));
+    prisma.challengeConsistencyStanding.findMany.mockResolvedValue([
+      { studentId: 'b', position: 2, eligible: true, average: new Decimal(80), validWeeks: 3, weeks100: 0, streak: 0, student: { firstName: 'Bia', lastName: 'B' } },
+      { studentId: 'c', position: null, eligible: false, average: new Decimal(60), validWeeks: 1, weeks100: 0, streak: 0, student: { firstName: 'Caio', lastName: 'C' } },
+      { studentId: 'a', position: 1, eligible: true, average: new Decimal(95.5), validWeeks: 4, weeks100: 2, streak: 2, student: { firstName: 'Ana', lastName: 'A' } },
+    ]);
+
+    const closed = await getChallengeConsistency(prisma, TRAINER_USER_ID, CHALLENGE_ID, new Date('2026-12-10T15:00:00.000Z'));
+    expect(closed.summary).toEqual({ classified: 2, entering: 1, leaderAverage: 95.5, leaderLead: 15.5, championshipAverage: 87.75 });
+
+    prisma.challenge.findUnique.mockResolvedValue(championship({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') }));
+    const scheduled = await getChallengeConsistency(prisma, TRAINER_USER_ID, CHALLENGE_ID, NOW);
+    expect(scheduled.summary).toEqual({ classified: 0, entering: 0, leaderAverage: null, leaderLead: null, championshipAverage: null });
   });
 
   it('CAMP-43 returns no standings for a cancelled championship', async () => {
