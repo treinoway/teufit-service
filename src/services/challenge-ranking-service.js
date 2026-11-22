@@ -1,6 +1,11 @@
 import { AppError } from '../errors/app-error.js';
 import { ChallengeErrorCode, ChallengeMessageCode } from '../constants/challenge.js';
-import { getDateOnlyAsMidnightUtc } from '../helpers/date-helpers.js';
+import { PointAction } from '../constants/gamification.js';
+import { weekStartFor } from '../helpers/consistency-week.js';
+import { civilDateInTimeZone, getDateOnlyAsMidnightUtc, zonedWallClockToInstant } from '../helpers/date-helpers.js';
+import { getConfig } from './consistency-config-service.js';
+
+const MS_PER_DAY = 86400000;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -66,6 +71,66 @@ async function resolveChallengeForStudent(prisma, challengeId, studentId) {
   return challenge;
 }
 
+// Transaction window of a challenge: startDate 00:00 UTC inclusive to (endDate + 1 day) 00:00 UTC exclusive
+function challengeWindow(challenge) {
+  const endDatePlusOne = new Date(challenge.endDate);
+  endDatePlusOne.setUTCDate(endDatePlusOne.getUTCDate() + 1);
+  return { windowStart: getDateOnlyAsMidnightUtc(challenge.startDate), windowEnd: getDateOnlyAsMidnightUtc(endDatePlusOne) };
+}
+
+// Midnight-UTC day number of a civil date, so consecutive days differ by one
+function dayNumber({ year, month, day }) {
+  return Date.UTC(year, month - 1, day) / MS_PER_DAY;
+}
+
+// Consecutive civil days with a completed workout, ending today or yesterday
+function streakDaysOf(workoutInstants, timeZone, now) {
+  const days = new Set(workoutInstants.map((instant) => dayNumber(civilDateInTimeZone(instant, timeZone))));
+  const today = dayNumber(civilDateInTimeZone(now, timeZone));
+  let day = days.has(today) ? today : today - 1;
+  let streak = 0;
+  while (days.has(day)) {
+    streak += 1;
+    day -= 1;
+  }
+  return streak;
+}
+
+// Workouts, bonus points, points since Monday 00:00 (trainer timezone) and workout streak days per student, inside the challenge window
+async function trainerFigures(prisma, challenge, studentIds, { timeZone, now }) {
+  const { windowStart, windowEnd } = challengeWindow(challenge);
+  const monday = zonedWallClockToInstant(weekStartFor(now, timeZone), timeZone);
+  const weekStart = monday.getTime() > windowStart.getTime() ? monday : windowStart;
+  const scope = { challengeId: challenge.id, studentId: { in: studentIds } };
+  const [byAction, thisWeek, workoutRows] = await Promise.all([
+    prisma.pointTransaction.groupBy({
+      by: ['studentId', 'action'],
+      where: { ...scope, action: { in: [PointAction.WORKOUT_COMPLETED, PointAction.TRAINER_BONUS] }, createdAt: { gte: windowStart, lt: windowEnd } },
+      _sum: { points: true },
+      _count: { _all: true },
+    }),
+    prisma.pointTransaction.groupBy({
+      by: ['studentId'],
+      where: { ...scope, createdAt: { gte: weekStart, lt: windowEnd } },
+      _sum: { points: true },
+    }),
+    prisma.pointTransaction.findMany({
+      where: { ...scope, action: PointAction.WORKOUT_COMPLETED, createdAt: { gte: windowStart, lt: windowEnd } },
+      select: { studentId: true, createdAt: true },
+    }),
+  ]);
+  return new Map(studentIds.map((studentId) => {
+    const ofAction = (action) => byAction.find((row) => row.studentId === studentId && row.action === action);
+    const workoutInstants = workoutRows.filter((row) => row.studentId === studentId).map((row) => row.createdAt);
+    return [studentId, {
+      workouts: ofAction(PointAction.WORKOUT_COMPLETED)?._count._all ?? 0,
+      bonusPoints: ofAction(PointAction.TRAINER_BONUS)?._sum.points ?? 0,
+      pointsThisWeek: thisWeek.find((row) => row.studentId === studentId)?._sum.points ?? 0,
+      streakDays: streakDaysOf(workoutInstants, timeZone, now),
+    }];
+  }));
+}
+
 /**
  * Compute challenge ranking entries.
  *
@@ -81,12 +146,7 @@ async function resolveChallengeForStudent(prisma, challengeId, studentId) {
  * in @db.Date fields; we need the actual midnight boundary here.
  */
 async function computeChallengeRankingEntries(prisma, challenge, requestingStudentId, anonymousRanking) {
-  const windowStart = getDateOnlyAsMidnightUtc(challenge.startDate);
-
-  // endDate boundary is exclusive: we want all transactions BEFORE (endDate+1)@midnight
-  const endDatePlusOne = new Date(challenge.endDate);
-  endDatePlusOne.setUTCDate(endDatePlusOne.getUTCDate() + 1);
-  const windowEnd = getDateOnlyAsMidnightUtc(endDatePlusOne);
+  const { windowStart, windowEnd } = challengeWindow(challenge);
 
   // Fetch all participant IDs
   const participantRows = await prisma.challengeParticipant.findMany({
@@ -179,9 +239,10 @@ async function computeChallengeRankingEntries(prisma, challenge, requestingStude
  * @param {import('@prisma/client').PrismaClient} deps.prisma
  * @param {string} deps.trainerUserId
  * @param {string} deps.challengeId
- * @returns {Promise<object[]>}
+ * @param {Date} [deps.now]
+ * @returns {Promise<object[]>} entries with workouts, bonusPoints, pointsThisWeek and streakDays
  */
-export async function getChallengeRankingForTrainer({ prisma, trainerUserId, challengeId }) {
+export async function getChallengeRankingForTrainer({ prisma, trainerUserId, challengeId, now = new Date() }) {
   const trainer = await prisma.trainer.findUnique({
     where: { userId: trainerUserId },
     select: { id: true },
@@ -201,7 +262,11 @@ export async function getChallengeRankingForTrainer({ prisma, trainerUserId, cha
   // anonymousRanking is snapshotted on the challenge at creation time
   const anonymousRanking = challenge.anonymousRanking ?? false;
 
-  return computeChallengeRankingEntries(prisma, challenge, null, anonymousRanking);
+  const entries = await computeChallengeRankingEntries(prisma, challenge, null, anonymousRanking);
+  if (entries.length === 0) return entries;
+  const { timeZone } = await getConfig(prisma, trainer.id, now);
+  const figures = await trainerFigures(prisma, challenge, entries.map((entry) => entry.studentId), { timeZone, now });
+  return entries.map((entry) => ({ ...entry, ...figures.get(entry.studentId) }));
 }
 
 /**
