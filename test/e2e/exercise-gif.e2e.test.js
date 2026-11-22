@@ -4,6 +4,7 @@ import { prisma } from '../../src/db.js';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -312,13 +313,7 @@ e2eDescribe('e2e: exercise gifUrl schema additions', () => {
     async function postProtocol(exercises) {
       const { accessToken } = await createTrainerWithToken();
       const { userId: studentId, email } = await createStudentWithToken();
-      const linkResponse = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: authHeader(accessToken),
-        payload: { email },
-      });
-      expect(linkResponse.statusCode).toBe(201);
+      await linkStudentByInvite(app, { trainerToken: accessToken, email });
 
       return app.inject({
         method: 'POST',

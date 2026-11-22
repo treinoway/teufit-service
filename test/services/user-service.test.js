@@ -24,6 +24,10 @@ vi.mock('../../src/db.js', () => {
       account: {
         findFirst: vi.fn(),
       },
+      platformSubscription: {
+        create: vi.fn(),
+      },
+      $transaction: vi.fn(),
     },
   };
 });
@@ -60,13 +64,14 @@ describe('userService', () => {
     vi.clearAllMocks();
     // Default: no active trainer link — individual tests override when needed
     prisma.trainerStudent.findFirst.mockResolvedValue(null);
-    // Default: no accepted invite — betaAccess falls through to false for
-    // plain student users (hasBetaAccess invite lookup)
+    // Default: no accepted invite (betaAccess is true regardless)
     prisma.trainerInvite.findFirst.mockResolvedValue(null);
     // Default: no trainer profile (student-only user)
     prisma.trainer.findUnique.mockResolvedValue(null);
     // Default: no verified account — emailVerified is false
     prisma.account.findFirst.mockResolvedValue(null);
+    // Interactive transactions run on the same mocked client
+    prisma.$transaction.mockImplementation(async (work) => work(prisma));
   });
 
   it('throws USER_ID_REQUIRED when userId is missing', async () => {
@@ -90,14 +95,10 @@ describe('userService', () => {
   });
 
   it('returns user profile without passwordHash when found with all relations', async () => {
-    // This test asserts betaAccess: false via the accepted-invite DB lookup
-    // path (prisma.trainerInvite.findFirst mocked to null in beforeEach) for
-    // a plain 'student'-role user. Force the kill-switch on — it defaults
-    // OFF in the test environment (config/environments/test.js), which would
-    // otherwise short-circuit hasBetaAccess to true before ever touching the
-    // DB. Capture/restore the prior value (rather than hardcoding `false`)
-    // so state doesn't leak into other tests, and set the flag immediately
-    // before the try so a throw in between can't leave it stuck on.
+    // Signup is open: betaAccess is true for a plain user with no accepted
+    // invite even with the gate flag on (it defaults OFF in the test
+    // environment). Capture/restore the prior value so state doesn't leak
+    // into other tests.
     const originalGateEnabled = config.betaInviteGate.enabled;
     config.betaInviteGate.enabled = true;
     try {
@@ -154,7 +155,7 @@ describe('userService', () => {
     birthDate: null,
     avatarUrl: null,
     hasActiveTrainer: false,
-    betaAccess: false,
+    betaAccess: true,
     emailVerified: false,
     address: {
       id: 'a1',
@@ -281,6 +282,7 @@ describe('userService', () => {
     const tx = {
       user: { findUnique: vi.fn().mockResolvedValue({ roles: [] }), update: vi.fn().mockResolvedValue({}) },
       trainer: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 't-tx' }) },
+      platformSubscription: { create: vi.fn().mockResolvedValue({}) },
       userPreferences: { upsert: vi.fn().mockResolvedValue({ userId: 'u-tx', activeProfile: 'trainer' }) },
     };
 
@@ -288,6 +290,11 @@ describe('userService', () => {
 
     expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u-tx' }, data: { roles: { set: ['trainer'] } } });
     expect(tx.trainer.create).toHaveBeenCalledWith({ data: { userId: 'u-tx' } });
+    expect(tx.platformSubscription.create).toHaveBeenCalledWith({
+      data: { trainerId: 't-tx', tier: 'BETA', status: 'ACTIVE' },
+    });
+    expect(prisma.platformSubscription.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(maybeMarkProfileComplete).toHaveBeenCalledWith({ userId: 'u-tx', tx });
     expect(tx.userPreferences.upsert).toHaveBeenCalledWith({
       where: { userId: 'u-tx' },
@@ -707,12 +714,8 @@ describe('userService', () => {
 
   describe('getUserProfileById with lazy loading', () => {
     it('returns minimal payload when no relations are requested', async () => {
-      // Same rationale as the 'all relations' test above: this asserts
-      // betaAccess: false via the accepted-invite DB lookup path for a plain
-      // 'student'-role user, so the kill-switch (OFF by default in the test
-      // environment) must be forced on to reach that code path at all.
-      // Capture/restore the prior value and set the flag immediately before
-      // the try so a throw in between can't leave it stuck on.
+      // Same rationale as the 'all relations' test above: betaAccess is true
+      // for a plain user with no accepted invite even with the gate flag on.
       const originalGateEnabled = config.betaInviteGate.enabled;
       config.betaInviteGate.enabled = true;
 
@@ -746,7 +749,7 @@ describe('userService', () => {
         birthDate: '1990-01-01',
         avatarUrl: 'https://example.com/avatar.jpg',
         hasActiveTrainer: false,
-        betaAccess: false,
+        betaAccess: true,
         emailVerified: false,
       });
       expect(result).not.toHaveProperty('address');

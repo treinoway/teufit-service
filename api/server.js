@@ -23,6 +23,7 @@ import { nutritionistRoutes } from './routes/nutritionist-route.js';
 import { userRoutes } from './routes/user-route.js';
 import { trainerInviteRoutes, trainerInvitePreviewRoutes } from './routes/trainer-invite-route.js';
 import { studentInviteRoutes } from './routes/student-invite-route.js';
+import { myTrainerInviteRoutes } from './routes/my-trainer-invite-route.js';
 import { addressRoutes } from './routes/address-route.js';
 import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
 import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
@@ -420,6 +421,7 @@ export async function buildServer(options = {}) {
     await fastify.register(userRoutes);
     await fastify.register(trainerInviteRoutes);
     await fastify.register(studentInviteRoutes);
+    await fastify.register(myTrainerInviteRoutes);
     await fastify.register(addressRoutes);
     await fastify.register(trainingProtocolTemplateRoutes);
     await fastify.register(trainingProtocolRoutes);

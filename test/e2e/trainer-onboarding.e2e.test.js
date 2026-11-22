@@ -3,6 +3,7 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -222,13 +223,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     const { accessToken: trainerToken } = await createTrainerWithToken();
     const { email: studentEmail } = await createUserWithToken();
 
-    const linkRes = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    expect(linkRes.statusCode).toBe(201);
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
     const onboarding = await getOnboardingStatus(trainerToken);
     expect(onboarding.firstStudentLinked).toBe(true);
@@ -240,22 +235,12 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     const { email: studentEmail1 } = await createUserWithToken();
     const { email: studentEmail2 } = await createUserWithToken();
 
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail1 },
-    });
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail1 });
 
     const firstCheck = await getOnboardingStatus(trainerToken);
     const firstTimestamp = firstCheck.firstStudentLinkedAt;
 
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail2 },
-    });
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail2 });
 
     const secondCheck = await getOnboardingStatus(trainerToken);
     expect(secondCheck.firstStudentLinkedAt).toBe(firstTimestamp);
@@ -266,12 +251,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     const { email: assigneeEmail } = await createUserWithToken();
 
     // Link assignee first so they're accessible as a student
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: assigneeEmail },
-    });
+    await linkStudentByInvite(app, { trainerToken, email: assigneeEmail });
 
     // Get assignee ID from student list
     const studentsRes = await app.inject({
@@ -303,12 +283,7 @@ e2eDescribe('e2e: trainer onboarding milestones (GET /me?include=trainerOnboardi
     const { accessToken: trainerToken } = await createTrainerWithToken();
     const { email: assigneeEmail } = await createUserWithToken();
 
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: assigneeEmail },
-    });
+    await linkStudentByInvite(app, { trainerToken, email: assigneeEmail });
 
     const studentsRes = await app.inject({
       method: 'GET',

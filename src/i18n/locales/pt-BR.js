@@ -478,6 +478,7 @@ export default {
     'studentInvite.alreadyPending': 'Já existe um convite pendente para este e-mail.',
     'studentInvite.dailyLimit': 'Você atingiu o limite diário de convites. Tente novamente mais tarde.',
     'studentInvite.emailSendFailed': 'Não foi possível enviar o e-mail do convite. Tente novamente.',
+    'studentInvite.expired': 'Este convite expirou. Peça um novo convite ao seu treinador.',
     'student.accountDeactivated': 'A conta deste aluno está desativada.',
 
     // Email verification
@@ -489,6 +490,8 @@ export default {
     'emailVerification.userNotFound': 'Usuário não encontrado.',
     'emailVerification.dailyLimit': 'Você solicitou códigos demais hoje. Tente novamente mais tarde.',
     'emailVerification.sendFailed': 'Não foi possível enviar o e-mail de verificação. Tente novamente.',
+    'emailVerification.required': 'Confirme seu e-mail para continuar.',
+    'signup.emailInUse': 'Este e-mail já tem uma conta. Entre para continuar.',
 
     // Password reset
     'auth.email.required': 'O e-mail é obrigatório.',

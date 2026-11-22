@@ -29,6 +29,7 @@ vi.mock('../../src/db.js', () => ({
     waterLog: { deleteMany: vi.fn() },
     dietProtocol: { deleteMany: vi.fn() },
     patientInvite: { deleteMany: vi.fn() },
+    studentInvite: { deleteMany: vi.fn() },
     aiInteractionLog: { updateMany: vi.fn() },
     trainerInvite: { deleteMany: vi.fn() },
     $transaction: vi.fn(),

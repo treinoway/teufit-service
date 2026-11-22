@@ -45,7 +45,7 @@ export const invitePatientSchema = {
   tags,
   summary: 'Invite a patient by email (the link only exists after the patient accepts in the app)',
   description:
-    'Always creates a pending invite and emails it (outcome "invited", `invite`), whether or not the email already has an account. The patient accepts or declines in the app; nothing about the patient is visible to the nutritionist before acceptance. Outcome "linked" is kept in the enum for compatibility but is no longer produced.',
+    'Always creates a pending invite and emails it (outcome "invited", `invite`), whether or not the email already has an account. The patient accepts or declines in the app; nothing about the patient is visible to the nutritionist before acceptance. Outcome "linked" is kept in the enum for compatibility but is no longer produced. A sender whose email is not confirmed can create 3 invites per rolling 24h; the next one answers 403 emailVerification.required (accounts created before the open-signup cut-off are exempt).',
   security,
   body: {
     type: 'object',
@@ -62,6 +62,10 @@ export const invitePatientSchema = {
       },
     },
     ...standardErrors,
+    403: {
+      description: 'Not a nutritionist, or sender email not confirmed after 3 invites in 24h (emailVerification.required)',
+      ...errorResponseSchema,
+    },
     422: errorResponseSchema,
     429: errorResponseSchema,
   },

@@ -43,8 +43,15 @@ export async function createAdminWithToken(app) {
   return { userId, accessToken };
 }
 
-/** Creates a trainer and returns { userId, trainerId, accessToken, email }. */
-export async function createTrainerWithToken(app, { firstName, lastName } = {}) {
+/**
+ * Creates a legacy-style trainer (no PlatformSubscription row = FREE) and returns { userId, trainerId, accessToken, email }.
+ *
+ * @param {object} app - Fastify instance.
+ * @param {object} [options] - `keepSignupPlan: true` keeps the ACTIVE BETA row that PATCH /become-trainer
+ *   now grants; by default it is removed because the suites built on this helper assume no row and
+ *   provision a tier explicitly when they need one.
+ */
+export async function createTrainerWithToken(app, { firstName, lastName, keepSignupPlan = false } = {}) {
   const { userId, accessToken, email } = await signupUser(app, 'trainer');
   const becomeTrainerResponse = await app.inject({
     method: 'PATCH',
@@ -59,6 +66,7 @@ export async function createTrainerWithToken(app, { firstName, lastName } = {}) 
     await prisma.user.update({ where: { id: userId }, data: { firstName, lastName } });
   }
   const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
+  if (!keepSignupPlan) await prisma.platformSubscription.deleteMany({ where: { trainerId: trainer.id } });
   return { userId, trainerId: trainer.id, accessToken: trainerToken, email };
 }
 

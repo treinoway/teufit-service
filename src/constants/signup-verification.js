@@ -12,3 +12,12 @@ export const PENDING_SIGNUP_STALE_MS = 24 * 60 * 60 * 1000;
 
 // "You already have an account" emails: at most one per address per window.
 export const EXISTING_ACCOUNT_NOTICE_THROTTLE_MS = 15 * 60 * 1000;
+
+// Errors of POST /auth/signup/direct (the only signup path that reveals an existing account).
+export const SignupErrorCode = Object.freeze({
+  EMAIL_IN_USE: 'EMAIL_IN_USE',
+});
+
+export const SignupMessageCode = Object.freeze({
+  EMAIL_IN_USE: 'signup.emailInUse',
+});

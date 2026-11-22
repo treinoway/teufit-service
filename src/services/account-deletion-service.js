@@ -72,6 +72,10 @@ export async function deleteOwnAccount(userId, logger = console) {
       where: user.email ? { OR: [{ patientId: userId }, { email: user.email.trim().toLowerCase() }] } : { patientId: userId },
     });
 
+    await tx.studentInvite.deleteMany({
+      where: user.email ? { OR: [{ studentId: userId }, { email: user.email.trim().toLowerCase() }] } : { studentId: userId },
+    });
+
     await tx.aiInteractionLog.updateMany({
       where: { studentId: userId },
       data: { studentId: null, userMessage: null, responseText: null },

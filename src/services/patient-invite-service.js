@@ -8,6 +8,7 @@ import {
   STUDENT_INVITE_MAX_SENDS as MAX_SENDS,
   STUDENT_INVITE_DAILY_MAX as DAILY_MAX,
   STUDENT_INVITE_DAILY_WINDOW_MS as DAILY_WINDOW_MS,
+  UNVERIFIED_SENDER_INVITE_MAX,
 } from '../constants/student-invite.js';
 import {
   NutritionErrorCode,
@@ -21,6 +22,7 @@ import {
   confirmVerificationCodeDelivered,
   isUserEmailVerified,
 } from './email-verification-service.js';
+import { assertEmailVerified } from './email-verified-guard.js';
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
 const MS_PER_SECOND = 1000;
@@ -226,14 +228,21 @@ function secondsUntil(timestampMs) {
   return Math.max(1, Math.ceil((timestampMs - Date.now()) / MS_PER_SECOND));
 }
 
-// Per-nutritionist rolling-window cap on newly created invites.
-async function assertDailyInviteLimitNotReached(prisma, nutritionistId) {
+// Throws 403 emailVerification.required when a sender with an unverified email already used the unverified allowance.
+async function assertUnverifiedSenderWithinCap(prisma, { nutritionistUserId, recentInviteCount }) {
+  if (recentInviteCount < UNVERIFIED_SENDER_INVITE_MAX) return;
+  await assertEmailVerified(prisma, nutritionistUserId);
+}
+
+// Per-nutritionist rolling-window caps on newly created invites: the unverified-sender allowance first, then the daily cap.
+async function assertInviteLimitsNotReached(prisma, { nutritionistId, nutritionistUserId }) {
   const recentInvites = await prisma.patientInvite.findMany({
     where: { nutritionistId, createdAt: { gte: new Date(Date.now() - DAILY_WINDOW_MS) } },
     orderBy: { createdAt: 'desc' },
     take: DAILY_MAX,
     select: { createdAt: true },
   });
+  await assertUnverifiedSenderWithinCap(prisma, { nutritionistUserId, recentInviteCount: recentInvites.length });
   if (recentInvites.length < DAILY_MAX) return;
   const oldestCountedAt = recentInvites[recentInvites.length - 1].createdAt.getTime();
   throw new AppError({
@@ -269,7 +278,7 @@ export async function invitePatient(prisma, { nutritionistId, nutritionistUserId
   const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
   if (existingUserId) await assertInvitableAccount(prisma, { nutritionistId, nutritionistUserId, userId: existingUserId });
 
-  await assertDailyInviteLimitNotReached(prisma, nutritionistId);
+  await assertInviteLimitsNotReached(prisma, { nutritionistId, nutritionistUserId });
   const invite = await createPendingInvite(prisma, { nutritionistId, email: normalizedEmail });
   await deliverInviteEmail(prisma, { userId: existingUserId, nutritionistUserId, email: normalizedEmail, emailSender });
   return { outcome: InviteOutcome.INVITED, invite: withEffectiveStatus(invite) };

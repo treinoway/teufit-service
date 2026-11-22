@@ -5,6 +5,7 @@ import { setupApp } from '../helpers/setup-app.js'
 import { cleanDatabase } from '../helpers/db-cleanup.js'
 import { provisionTrainerPlan } from '../helpers/platform-plan.js'
 import { signupVerified } from '../helpers/signup-user.js'
+import { linkStudentByInvite } from '../helpers/link-student.js'
 import { AI_ERRORS, AI_MESSAGE_CODES } from '../../src/constants/ai.js'
 import ptBR from '../../src/i18n/locales/pt-BR.js'
 import enUS from '../../src/i18n/locales/en-US.js'
@@ -105,12 +106,7 @@ describe('e2e: iArnold review fixes', () => {
   }
 
   async function linkStudent(trainer, email) {
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainer.accessToken}` },
-      payload: { email },
-    })
+    await linkStudentByInvite(app, { trainerToken: trainer.accessToken, email })
   }
 
   async function createSharedStudent(...trainers) {

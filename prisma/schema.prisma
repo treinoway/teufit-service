@@ -15,6 +15,8 @@ model User {
   email        String? @unique @db.Text
   passwordHash String? @map("password_hash") @db.Text
   status       String  @default("pending") @db.Text
+  // Acquisition path of the account; null for every path except the ones in src/constants/signup-source.js.
+  signupSource String? @map("signup_source") @db.Text
 
   // Personal data (single source of truth)
   firstName String?   @map("first_name") @db.Text
@@ -1687,6 +1689,8 @@ model StudentInvite {
   sendCount  Int       @default(1) @map("send_count")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // true when the email already had an account at invite time: the student answers in the app, never auto-accepted
+  requiresConsent Boolean @default(false) @map("requires_consent")
 
   trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   student User?   @relation(fields: [studentId], references: [id], onDelete: SetNull)

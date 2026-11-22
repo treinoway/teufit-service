@@ -14,6 +14,9 @@ import {
   EMAIL_VERIFICATION_DAILY_WINDOW_MS,
 } from '../constants/email-verification.js';
 import { acceptPendingInvitesForUser } from './student-invite-service.js';
+import { isUserEmailVerified } from './email-verified-guard.js';
+
+export { isUserEmailVerified };
 
 const MS_PER_SECOND = 1000;
 const CODE_UPPER_BOUND = 10 ** EMAIL_VERIFICATION_CODE_LENGTH;
@@ -34,15 +37,6 @@ export function hashesMatch(candidateHash, storedHash) {
 
 function buildVerificationError({ httpStatus, error, messageCode, message, details }) {
   return new AppError({ httpStatus, error, messageCode, message, details });
-}
-
-/** True when ANY of the user's accounts has a verifiedAt. */
-export async function isUserEmailVerified(prisma, userId) {
-  const account = await prisma.account.findFirst({
-    where: { userId, verifiedAt: { not: null } },
-    select: { id: true },
-  });
-  return Boolean(account);
 }
 
 async function requireActiveUser(prisma, userId) {

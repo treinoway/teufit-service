@@ -199,9 +199,15 @@ e2eDescribe('e2e: migration — update default anamnesis structure', () => {
     beforeAll(async () => {
       ({ connectionString, prisma } = await createDatabaseBeforeMigration());
 
-      const trainerUser = await prisma.user.create({ data: { email: 'trainer-migration@example.com', roles: ['TRAINER'] } });
+      const trainerUser = await prisma.user.create({
+        data: { email: 'trainer-migration@example.com', roles: ['TRAINER'] },
+        select: { id: true },
+      });
       const trainer = await prisma.trainer.create({ data: { userId: trainerUser.id }, select: { id: true } });
-      const studentUser = await prisma.user.create({ data: { email: 'student-migration@example.com', roles: ['STUDENT'] } });
+      const studentUser = await prisma.user.create({
+        data: { email: 'student-migration@example.com', roles: ['STUDENT'] },
+        select: { id: true },
+      });
 
       const defaultAnamnesis = await createLegacyDefaultAnamnesis(prisma);
       defaultAnamnesisId = defaultAnamnesis.id;

@@ -14,6 +14,7 @@ import {
 } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -76,13 +77,7 @@ e2eDescribe('e2e: anamnesis', () => {
   }
 
   async function linkTrainerStudent(trainerToken, studentEmail) {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    expect([201, 409]).toContain(response.statusCode);
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail, allowAlreadyLinked: true });
   }
 
   async function createAnamnesis(trainerToken, payload = {}) {

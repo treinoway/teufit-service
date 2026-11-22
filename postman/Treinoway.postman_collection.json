@@ -1174,6 +1174,171 @@
           ]
         },
         {
+          "name": "Sign Up - Direct (web, no code step)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup/direct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup",
+                "direct"
+              ]
+            },
+            "description": "One-step signup used by the web app (trainers / nutritionists). Creates the account right away with NO role and an UNVERIFIED email, returns tokens and emails a 6-digit verification code (confirm later with POST /auth/verify-email; GET /me reports emailVerified). Body: email, password (min 8), firstName (required), lastName (optional). 201 { user: { id }, token: { accessToken }, refreshToken, linkedTrainers: 0 } (same shape as /auth/signup/verify; pending student invites are only accepted once the email is verified). Errors: 409 EMAIL_IN_USE / signup.emailInUse when the email already has an account (including a deactivated one); 400 VALIDATION_ERROR / validation.failed; 429 TOO_MANY_REQUESTS / request.rateLimitExceeded (per IP, config.rateLimit.auth.signupDirect). While the email is unverified, AI actions and the 4th student/patient invite within 24h answer 403 EMAIL_VERIFICATION_REQUIRED / emailVerification.required."
+          },
+          "response": [
+            {
+              "name": "Sign Up - Direct - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": { \"id\": \"6f1c2d3e-0000-4000-8000-000000000001\" },\n  \"token\": { \"accessToken\": \"eyJhbGciOi...\" },\n  \"refreshToken\": \"9b0f...\",\n  \"linkedTrainers\": 0\n}"
+            },
+            {
+              "name": "Sign Up - Direct - 400 Validation error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Dados inválidos. Verifique os campos e tente novamente.\",\n  \"details\": [\n    { \"field\": \"firstName\", \"validations\": [\"required\"], \"messageCode\": \"validation.firstName.required\", \"message\": \"O campo firstName é obrigatório.\" }\n  ]\n}"
+            },
+            {
+              "name": "Sign Up - Direct - 409 Email in use",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_IN_USE\",\n  \"messageCode\": \"signup.emailInUse\",\n  \"message\": \"Este e-mail já tem uma conta. Entre para continuar.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
           "name": "Sign Up - Resend Code",
           "request": {
             "auth": {
@@ -2132,7 +2297,7 @@
               "body": "{\n  \"activeProfile\": \"nutritionist\",\n  \"token\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIs...\"\n  },\n  \"refreshToken\": \"8f3c1d...\"\n}"
             },
             {
-              "name": "Become Nutritionist - 403 Invite Required",
+              "name": "Become Nutritionist - 403 Invite Required (no longer produced: signup is open)",
               "originalRequest": {
                 "method": "PATCH",
                 "header": [
@@ -2632,9 +2797,45 @@
                 "students"
               ]
             },
-            "description": "Link a student to the authenticated trainer by searching for the student by email. Requires TRAINER role. A student can be linked to multiple trainers."
+            "description": "Legacy direct link. It never links directly any more: it runs the same invite flow as POST /trainer/student-invites (same caps and errors) and answers 202 { outcome, invite }. An existing account must accept the invite in the app (GET /my/trainer/invites); an address without an account is linked automatically after signup + e-mail verification. The old 201 student profile is no longer produced. Requires TRAINER role. Rate limited (config.rateLimit.trainer.inviteStudent). Errors: 403 platformPlan.studentCapExceeded / emailVerification.required, 409 student.alreadyLinked / studentInvite.alreadyPending / trainer.profileMissing, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Link Student by Email - 202 Invited",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"student@example.com\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students"
+                  ]
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"outcome\": \"invited\",\n  \"invite\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"email\": \"student@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"studentId\": null,\n    \"expiresAt\": \"2026-12-19T15:00:00.000Z\",\n    \"acceptedAt\": null,\n    \"revokedAt\": null,\n    \"lastSentAt\": \"2026-11-19T15:00:00.000Z\",\n    \"sendCount\": 1,\n    \"createdAt\": \"2026-11-19T15:00:00.000Z\",\n    \"canResend\": false,\n    \"resendAvailableAt\": \"2026-11-19T16:00:00.000Z\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get Linked Student",
@@ -2827,7 +3028,7 @@
                 "student-invites"
               ]
             },
-            "description": "Add a student by email. If the email belongs to a registered user with a VERIFIED email, the student is linked immediately (outcome \"linked\", `student` present); otherwise (no user, or a user whose email is not verified yet) a pending invite is emailed (outcome \"invited\", `invite` present) and accepted automatically once the student signs up and verifies that email. Plan student cap applies to invites. At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds); direct links do not count. Requires TRAINER role. Rate limited (see config.rateLimit.trainer.inviteStudent). Errors: 409 student.alreadyLinked / studentInvite.alreadyPending, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit.",
+            "description": "Invite a student by email; nobody is linked without the student's own action. Always creates a pending invite and emails it (outcome \"invited\", `invite` present). If the email already has an account (verified or not) the student accepts or declines in the app (GET /my/trainer/invites) and receives an \"open the app\" email; otherwise the invite is accepted automatically once the student signs up and verifies that email. Outcome \"linked\" and `student` stay in the contract but are no longer produced. Plan student cap applies. At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds). A sender whose email is not confirmed can create 3 invites per rolling 24h, then 403 emailVerification.required (accounts created before the open-signup cut-off are exempt). Requires TRAINER role. Rate limited (see config.rateLimit.trainer.inviteStudent). Errors: 403 platformPlan.studentCapExceeded / emailVerification.required, 409 student.alreadyLinked / studentInvite.alreadyPending, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"novo.aluno@example.com\"\n}",
@@ -2880,7 +3081,7 @@
               "body": "{\n  \"outcome\": \"invited\",\n  \"invite\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"email\": \"novo.aluno@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"studentId\": null,\n    \"expiresAt\": \"2026-10-29T15:00:00.000Z\",\n    \"acceptedAt\": null,\n    \"revokedAt\": null,\n    \"lastSentAt\": \"2026-09-29T15:00:00.000Z\",\n    \"sendCount\": 1,\n    \"createdAt\": \"2026-09-29T15:00:00.000Z\",\n    \"canResend\": false,\n    \"resendAvailableAt\": \"2026-09-29T16:00:00.000Z\"\n  }\n}"
             },
             {
-              "name": "Invite Student - 201 Linked",
+              "name": "Invite Student - 201 Linked (no longer produced)",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -2958,6 +3159,46 @@
                 }
               ],
               "body": "{\n  \"error\": \"STUDENT_INVITE_DAILY_LIMIT\",\n  \"messageCode\": \"studentInvite.dailyLimit\",\n  \"message\": \"Você atingiu o limite diário de convites. Tente novamente mais tarde.\",\n  \"details\": {\n    \"retryAfterSeconds\": 43200\n  }\n}"
+            },
+            {
+              "name": "Invite Student - 403 Email Verification Required",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"novo.aluno@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -3071,7 +3312,7 @@
                 }
               ]
             },
-            "description": "Resend a pending student invite email. 1 hour cooldown between sends, max 5 sends per invite; resending an expired pending invite revives it (new 30 day expiry). Requires TRAINER role. Errors: 404, 409 studentInvite.notPending / studentInvite.resendLimit, 429 studentInvite.resendCooldown (details.retryAfterSeconds). 502 studentInvite.emailSendFailed when the email provider rejects the send (the resend is not counted)."
+            "description": "Resend a pending student invite email. 1 hour cooldown between sends, max 5 sends per invite; resending an expired pending invite revives it (new 30 day expiry). Requires TRAINER role. Errors: 404, 409 studentInvite.notPending / studentInvite.resendLimit, 429 studentInvite.resendCooldown (details.retryAfterSeconds). 502 studentInvite.emailSendFailed when the email provider rejects the send (the resend is not counted). An invite that waits for the consent of an existing account resends the \"open the app\" email; no verification code is sent."
           },
           "response": [
             {
@@ -11908,6 +12149,51 @@
                 }
               ],
               "body": "{\n  \"error\": \"AI_OVERLOADED\",\n  \"messageCode\": \"ai.overloaded\",\n  \"message\": \"O assistente está sobrecarregado no momento. Tente novamente em instantes.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 Email not confirmed",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"studentId\": \"7c1d9e52-3a64-4b8f-a0d2-5e9b1c4f6a38\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/ai/chat",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "ai",
+                    "chat"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -12100,6 +12386,57 @@
                 }
               ],
               "body": "{\n  \"error\": \"AI_UNAVAILABLE\",\n  \"messageCode\": \"ai.unavailable\",\n  \"message\": \"O assistente não está disponível no momento. Tente novamente mais tarde.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 Email not confirmed (pre-stream)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "app-language",
+                    "value": "pt-BR",
+                    "description": "Locale for translated error messages (pt-BR default)"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"conversationId\": \"b2f4a7d1-8c3e-4f60-9a15-d7e2c6b94013\",\n  \"studentId\": \"7c1d9e52-3a64-4b8f-a0d2-5e9b1c4f6a38\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/ai/chat/stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "ai",
+                    "chat",
+                    "stream"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         }
@@ -14101,6 +14438,52 @@
                 }
               ],
               "body": "{\n  \"error\": \"NUTRITION_INVITE_ALREADY_LINKED\",\n  \"messageCode\": \"nutrition.invite.alreadyLinked\",\n  \"message\": \"Este paciente já está vinculado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Invite Patient by Email - 403 Email Verification Required",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/nutritionist/patient-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "nutritionist",
+                    "patient-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"novo.paciente@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -18580,6 +18963,609 @@
                 }
               ],
               "body": "{\n  \"error\": \"NUTRITION_DAY_OUT_OF_RANGE\",\n  \"messageCode\": \"nutrition.day.outOfRange\",\n  \"message\": \"Este dia está fora do período em que o plano pode ser registrado.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Student app - Trainer invites",
+      "item": [
+        {
+          "name": "List My Trainer Invites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites"
+              ]
+            },
+            "description": "Pending, unexpired trainer invites that wait for the caller's consent (the e-mail already had an account when the trainer invited it), newest first. A caller without a verified e-mail gets { items: [] }. Nothing is shared with the trainer until the invite is accepted. Any authenticated user (Bearer token)."
+          },
+          "response": [
+            {
+              "name": "List My Trainer Invites - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n      \"trainer\": {\n        \"firstName\": \"Ana\",\n        \"lastName\": \"Coach\",\n        \"avatarUrl\": null\n      },\n      \"createdAt\": \"2026-11-19T15:00:00.000Z\",\n      \"expiresAt\": \"2026-12-19T15:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Accept Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites",
+                ":id",
+                "accept"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "description": "Invite id (UUID)"
+                }
+              ]
+            },
+            "description": "Accept a pending trainer invite addressed to the caller e-mail: creates the trainer-student link (inactive on the plan when the trainer is over the student cap). Body: {} (optional). Errors: 404 studentInvite.notFound (unknown id, another e-mail, caller e-mail not verified), 409 studentInvite.notPending (already accepted, declined or revoked), 422 studentInvite.expired. Any authenticated user (Bearer token).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Accept Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"accepted\"\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_FOUND\",\n  \"messageCode\": \"studentInvite.notFound\",\n  \"message\": \"Convite não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 409 Not Pending",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_PENDING\",\n  \"messageCode\": \"studentInvite.notPending\",\n  \"message\": \"Este convite não está mais pendente.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 422 Expired",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_EXPIRED\",\n  \"messageCode\": \"studentInvite.expired\",\n  \"message\": \"Este convite expirou. Peça um novo convite ao seu treinador.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Decline Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites",
+                ":id",
+                "decline"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "description": "Invite id (UUID)"
+                }
+              ]
+            },
+            "description": "Decline a pending trainer invite addressed to the caller e-mail: nothing is linked and the trainer's invite list reports `declined`. Body: {} (optional). Same errors as accept. Any authenticated user (Bearer token).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Decline Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"declined\"\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_FOUND\",\n  \"messageCode\": \"studentInvite.notFound\",\n  \"message\": \"Convite não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 409 Not Pending",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_PENDING\",\n  \"messageCode\": \"studentInvite.notPending\",\n  \"message\": \"Este convite não está mais pendente.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 422 Expired",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_EXPIRED\",\n  \"messageCode\": \"studentInvite.expired\",\n  \"message\": \"Este convite expirou. Peça um novo convite ao seu treinador.\",\n  \"details\": {}\n}"
             }
           ]
         }

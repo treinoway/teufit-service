@@ -1,5 +1,5 @@
 import { Roles } from '../../src/constants/roles.js';
-import { StudentInviteOutcome, StudentInviteErrorCode, StudentInviteMessageCode } from '../../src/constants/student-invite.js';
+import { StudentInviteErrorCode, StudentInviteMessageCode } from '../../src/constants/student-invite.js';
 import { ConflictAppError } from '../../src/errors/app-error.js';
 import { prisma } from '../../src/db.js';
 import config from '../../config/index.js';
@@ -11,6 +11,10 @@ import {
   revokeStudentInvite,
 } from '../../src/services/student-invite-service.js';
 import * as schema from '../schemas/student-invite-route.schema.js';
+import { linkStudentSchema } from '../schemas/trainer-route.schema.js';
+
+const LEGACY_LINK_PROFILE_MISSING_MESSAGE_CODE = 'trainer.profileMissing';
+const ACCEPTED_FOR_PROCESSING = 202;
 
 function serializeInvite(invite) {
   return {
@@ -29,12 +33,13 @@ function serializeInvite(invite) {
   };
 }
 
-async function requireTrainerId(userId) {
+// Resolves the trainer id of the user or throws 409 (the legacy link route keeps its own messageCode).
+async function requireTrainerId(userId, messageCode = StudentInviteMessageCode.TRAINER_PROFILE_MISSING) {
   const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
   if (!trainer) {
     throw new ConflictAppError({
       error: StudentInviteErrorCode.TRAINER_PROFILE_MISSING,
-      messageCode: StudentInviteMessageCode.TRAINER_PROFILE_MISSING,
+      messageCode,
       message: 'Trainer profile not found',
     });
   }
@@ -57,10 +62,24 @@ export async function studentInviteRoutes(fastify) {
 
       const result = await inviteStudent(prisma, { trainerId, trainerUserId, email: request.body.email });
 
-      if (result.outcome === StudentInviteOutcome.LINKED) {
-        return reply.status(201).send({ outcome: result.outcome, student: result.student });
-      }
       return reply.status(201).send({ outcome: result.outcome, invite: serializeInvite(result.invite) });
+    },
+  );
+
+  fastify.post(
+    '/trainer/students',
+    {
+      config: { rateLimit: config.rateLimit.trainer.inviteStudent },
+      preHandler: trainerOnly,
+      schema: linkStudentSchema,
+    },
+    async (request, reply) => {
+      const trainerUserId = request.user.id;
+      const trainerId = await requireTrainerId(trainerUserId, LEGACY_LINK_PROFILE_MISSING_MESSAGE_CODE);
+
+      const result = await inviteStudent(prisma, { trainerId, trainerUserId, email: request.body.email });
+
+      return reply.status(ACCEPTED_FOR_PROCESSING).send({ outcome: result.outcome, invite: serializeInvite(result.invite) });
     },
   );
 

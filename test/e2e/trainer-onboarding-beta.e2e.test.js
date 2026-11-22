@@ -5,6 +5,7 @@ import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { provisionTrainerPlan } from '../helpers/platform-plan.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -204,13 +205,7 @@ e2eDescribe('e2e: trainer onboarding beta milestones', () => {
   describe('first anamnesis sent milestone', () => {
     async function linkStudent(trainer) {
       const student = await createUser('student');
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: auth(trainer.accessToken),
-        payload: { email: student.email },
-      });
-      expect(res.statusCode).toBe(201);
+      await linkStudentByInvite(app, { trainerToken: trainer.accessToken, email: student.email });
       return student;
     }
 

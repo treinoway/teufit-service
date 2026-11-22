@@ -85,8 +85,10 @@ e2eDescribe('e2e: platform plan routes', () => {
   // ─── GET /trainer/platform-plan ────────────────────────────────────────────
 
   describe('GET /trainer/platform-plan', () => {
-    it('returns 200 with FREE plan defaults for a new trainer', async () => {
-      const { accessToken } = await createTrainerWithToken();
+    it('returns 200 with FREE plan defaults for a trainer without a subscription row', async () => {
+      const { trainerId, accessToken } = await createTrainerWithToken();
+      // why: become-trainer grants BETA now; a legacy trainer has no row and reads as FREE.
+      await prisma.platformSubscription.deleteMany({ where: { trainerId } });
 
       const res = await app.inject({
         method: 'GET',

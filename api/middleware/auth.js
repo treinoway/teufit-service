@@ -117,11 +117,7 @@ export function requireTrainer() {
   };
 }
 
-// Middleware to close the /become-trainer self-promotion bypass during the
-// closed beta. Exempts admins, existing trainers, and tester-allowlisted
-// emails (via hasBetaAccess) — only a plain roles:[] user without an accepted
-// TrainerInvite is blocked. Gated behind BETA_INVITE_GATE_ENABLED so the
-// gate can be killed in an emergency without a deploy.
+// Closed-beta gate, no longer mounted on any route (signup is open and hasBetaAccess is true for every user); kept exported for compatibility.
 export function requireBetaAccess() {
   return async function (request) {
     if (config.betaInviteGate?.enabled === false) return;

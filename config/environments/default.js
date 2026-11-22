@@ -1,6 +1,8 @@
 import { parseBool } from '../../src/helpers/env.js';
 import { LANGFUSE_CONTENT_MODES, LANGFUSE_DEFAULTS } from '../../src/constants/ai-tracing.js';
 
+const DEFAULT_EMAIL_VERIFICATION_ENFORCED_FROM = '2026-11-18T00:00:00.000Z';
+
 // Comma-separated list → normalized (trimmed, lowercased), non-empty emails.
 // Used to parse BETA_TESTER_EMAILS below.
 function parseEmailAllowlist(raw) {
@@ -26,6 +28,12 @@ function parseLangfuseContentMode(raw) {
 // Tells whether both Langfuse keys are present and not blank.
 function hasLangfuseKeys() {
   return Boolean(process.env.LANGFUSE_PUBLIC_KEY?.trim() && process.env.LANGFUSE_SECRET_KEY?.trim());
+}
+
+// Resolves EMAIL_VERIFICATION_ENFORCED_FROM, falling back to the default cut-off for unset or unparseable values.
+function parseEnforcedFrom(raw) {
+  const candidate = typeof raw === 'string' ? raw.trim() : '';
+  return candidate && !Number.isNaN(new Date(candidate).getTime()) ? candidate : DEFAULT_EMAIL_VERIFICATION_ENFORCED_FROM;
 }
 
 export default {
@@ -111,6 +119,11 @@ export default {
     appStoreUrl: process.env.APP_STORE_URL || 'https://apps.apple.com/br/app/id6809516404',
     playStoreUrl: process.env.PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=br.com.teufit.app',
   },
+  emailVerification: {
+    // Open-signup cut-off (ISO instant): unverified accounts created BEFORE it are not refused by
+    // emailVerification.required (legacy e-mail/password accounts were never asked to verify).
+    enforcedFrom: parseEnforcedFrom(process.env.EMAIL_VERIFICATION_ENFORCED_FROM),
+  },
   betaInviteGate: {
     // Emergency kill-switch for the /become-trainer beta gate — set
     // BETA_INVITE_GATE_ENABLED=false to disable without a deploy. Parsed
@@ -175,6 +188,12 @@ export default {
       // NAT (many mobile users behind one IP); the real per-email bounds are the
       // DB-backed code cooldown / daily cap / attempts (src/constants/email-verification.js).
       signup: {
+        max: 20,
+        timeWindow: '1 hour',
+      },
+      // POST /auth/signup/direct: creates an account and emails a code per call. It has its
+      // own counter, separate from /auth/signup (also bounds the 409 account-existence probe).
+      signupDirect: {
         max: 20,
         timeWindow: '1 hour',
       },
