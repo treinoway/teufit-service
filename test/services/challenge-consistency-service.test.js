@@ -514,6 +514,24 @@ describe('computeChallengeStandings', () => {
     expect(rowOf(standings, 'caio').streak).toBe(2);
   });
 
+  it('CPD-10 keeps a closed week neutral when the trainer link began after it started, whatever the stored rule', async () => {
+    const halfAndHalf = { weights: { workouts: 50, cardio: 50, diet: 0, feedback: 0, hydration: 0 }, activePillars: ['workouts', 'cardio'] };
+    const cardioOnly = counts([0, 0], [2, 2]);
+    arrange({
+      participants: [participant('dani', 'Dani', 'Rocha')],
+      links: [{ studentId: 'dani', createdAt: new Date('2026-11-11T15:00:00.000Z') }],
+      results: [{
+        studentId: 'dani', seasonId: null, weekStart: dateOnly('2026-11-09'), status: WeekStatus.NEUTRAL, score: null,
+        pillars: cardioOnly, weights: WORKOUTS_ONLY,
+      }],
+    });
+    runningWeeksFrom({ dani: cardioOnly });
+
+    const standings = await computeChallengeStandings(prisma, championship(halfAndHalf), NOW);
+
+    expect(rowOf(standings, 'dani')).toMatchObject({ validWeeks: 1, average: 100, weeksAt100: 0, currentWeekScore: 100 });
+  });
+
   it('CPD-32 returns the summary with classified, entering, leader average and lead and the championship average', async () => {
     arrangeScoringScenario();
 

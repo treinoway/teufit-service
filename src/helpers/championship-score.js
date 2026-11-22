@@ -12,11 +12,10 @@ function countsOf(pillars) {
   return { expected, done };
 }
 
-// Whether a neutral stored week would have scored under the rule stored with it, which means it went neutral by late entry
-function isNeutralByEntry(row, counts) {
-  const stored = row.weights;
-  if (!stored?.weights || !Array.isArray(stored.activePillars)) return false;
-  return scoreWeek({ ...counts, weights: stored.weights, activePillars: stored.activePillars }) !== null;
+// Whether the student's trainer link began after the week started (Monday 00:00), which makes the week neutral by late entry
+function joinedAfterStart(entry) {
+  if (!entry?.linkedAt || !entry?.weekStartInstant) return false;
+  return entry.linkedAt.getTime() > entry.weekStartInstant.getTime();
 }
 
 /**
@@ -24,12 +23,13 @@ function isNeutralByEntry(row, counts) {
  *
  * @param {{ status: string, pillars: object, weights: object|null }} row - stored ConsistencyWeeklyResult
  * @param {{ weights: object, activePillars: string[] }} scoring - the championship's rule
+ * @param {{ linkedAt: Date, weekStartInstant: Date }} [entry] - when the student's trainer link began and when the week started
  * @returns {{ status: string, score: object|null }} score is a Decimal for a valid week
  */
-export function rescoreClosedWeek(row, scoring) {
+export function rescoreClosedWeek(row, scoring, entry) {
   if (row.status === WeekStatus.PAUSED) return { status: WeekStatus.PAUSED, score: null };
   const counts = countsOf(row.pillars);
-  if (row.status === WeekStatus.NEUTRAL && isNeutralByEntry(row, counts)) return { status: WeekStatus.NEUTRAL, score: null };
+  if (row.status === WeekStatus.NEUTRAL && joinedAfterStart(entry)) return { status: WeekStatus.NEUTRAL, score: null };
   const score = scoreWeek({ ...counts, weights: scoring.weights, activePillars: scoring.activePillars });
   return score === null ? { status: WeekStatus.NEUTRAL, score: null } : { status: WeekStatus.VALID, score };
 }

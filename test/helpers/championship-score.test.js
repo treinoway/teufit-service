@@ -15,6 +15,11 @@ const HALF_AND_HALF = {
   activePillars: [Pillar.WORKOUTS, Pillar.CARDIO],
 };
 
+// Monday 2026-11-09 00:00 in São Paulo, and links made on the Wednesday of that week and long before it
+const WEEK_START = new Date('2026-11-09T03:00:00.000Z');
+const LINKED_MID_WEEK = { linkedAt: new Date('2026-11-11T15:00:00.000Z'), weekStartInstant: WEEK_START };
+const LINKED_BEFORE = { linkedAt: new Date('2026-01-01T00:00:00.000Z'), weekStartInstant: WEEK_START };
+
 // Stored weekly result with per-pillar counts and the rule recorded at close
 function storedWeek({ status, workouts, cardio, weights = GENERAL_RULE }) {
   return {
@@ -43,10 +48,21 @@ describe('rescoreClosedWeek', () => {
 
   it('CPD-10 keeps a week neutral by late entry and a paused week paused', () => {
     const lateEntry = storedWeek({ status: WeekStatus.NEUTRAL, workouts: [3, 3], cardio: [2, 2] });
-    expect(rescoreClosedWeek(lateEntry, WORKOUTS_ONLY)).toEqual({ status: WeekStatus.NEUTRAL, score: null });
+    expect(rescoreClosedWeek(lateEntry, WORKOUTS_ONLY, LINKED_MID_WEEK)).toEqual({ status: WeekStatus.NEUTRAL, score: null });
+
+    const noTargetUnderStoredRule = storedWeek({ status: WeekStatus.NEUTRAL, workouts: [0, 0], cardio: [2, 2], weights: WORKOUTS_ONLY });
+    expect(rescoreClosedWeek(noTargetUnderStoredRule, HALF_AND_HALF, LINKED_MID_WEEK)).toEqual({ status: WeekStatus.NEUTRAL, score: null });
 
     const paused = storedWeek({ status: WeekStatus.PAUSED, workouts: [3, 3], cardio: [2, 2] });
-    expect(rescoreClosedWeek(paused, WORKOUTS_ONLY)).toEqual({ status: WeekStatus.PAUSED, score: null });
+    expect(rescoreClosedWeek(paused, WORKOUTS_ONLY, LINKED_BEFORE)).toEqual({ status: WeekStatus.PAUSED, score: null });
+  });
+
+  it('CPD-10 rescores a neutral week of a student linked before the week started', () => {
+    const neutralByTarget = storedWeek({ status: WeekStatus.NEUTRAL, workouts: [0, 0], cardio: [2, 2], weights: WORKOUTS_ONLY });
+    const rescored = rescoreClosedWeek(neutralByTarget, HALF_AND_HALF, LINKED_BEFORE);
+
+    expect(rescored.status).toBe(WeekStatus.VALID);
+    expect(num(rescored.score)).toBe(100);
   });
 
   it('CPD-11 makes a week neutral when no active championship pillar had a target', () => {

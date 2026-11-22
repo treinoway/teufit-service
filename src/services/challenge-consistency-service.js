@@ -102,14 +102,18 @@ async function resultsByStudent(prisma, trainerId, studentIds, currentMonday) {
   return byStudent;
 }
 
+// Start instant (Monday 00:00 in the week's time zone) of each championship week, keyed by "YYYY-MM-DD" of its Monday
+function weekStartsOf(mondays, rules) {
+  return new Map(mondays.map((monday) => {
+    const key = formatDateOnly(monday);
+    return [key, weekBounds(civilOf(monday), rules.get(key)).startInstant];
+  }));
+}
+
 // Championship weeks that count for a participant: those starting (Monday 00:00) at or after the entry (CAMP-17) and after an edit moved the start (CAMP-11)
-function countedWeeks(participant, mondays, rules, startScheduledAt) {
+function countedWeeks(participant, weekStarts, startScheduledAt) {
   const entry = startScheduledAt ? laterOf(participant.createdAt, startScheduledAt).getTime() : participant.createdAt.getTime();
-  return new Set(
-    mondays
-      .filter((monday) => weekBounds(civilOf(monday), rules.get(formatDateOnly(monday))).startInstant.getTime() >= entry)
-      .map(formatDateOnly),
-  );
+  return new Set([...weekStarts].filter(([, startInstant]) => startInstant.getTime() >= entry).map(([key]) => key));
 }
 
 // Scoring rule stored on the championship, or null for one created without it
@@ -118,11 +122,11 @@ function scoringOf(challenge) {
   return { weights: challenge.weights, activePillars: challenge.activePillars };
 }
 
-// Status and score of a stored week in the championship: rescored with its rule, or as stored when it has none
-function championshipWeek(row, scoring) {
+// Status and score of a stored week in the championship: rescored with its rule (late entry decided by the link), or as stored when it has none
+function championshipWeek(row, scoring, entry) {
   // why: a weekly championship without a stored rule (none after the F2.6 backfill) keeps the general ranking score it had before
   if (!scoring) return { status: row.status, score: row.score };
-  return rescoreClosedWeek(row, scoring);
+  return rescoreClosedWeek(row, scoring, entry);
 }
 
 // Running-week outcome of each participant whose current week counts and has no stored result yet
@@ -139,10 +143,11 @@ async function runningOutcomes(prisma, trainerId, runningMonday, participants, s
 }
 
 // Championship figures of one participant from its counted closed weeks plus the running week; the streak stays the student's (AD-021)
-function figuresOf(participant, week, { elapsed, minPodiumWeeks, scoring }) {
+function figuresOf(participant, week, { elapsed, minPodiumWeeks, scoring, weekStarts }) {
+  const entryOf = (row) => ({ linkedAt: participant.linkedAt, weekStartInstant: weekStarts.get(formatDateOnly(row.weekStart)) });
   const closedValid = participant.results
     .filter((row) => participant.counted.has(formatDateOnly(row.weekStart)))
-    .map((row) => championshipWeek(row, scoring))
+    .map((row) => championshipWeek(row, scoring, entryOf(row)))
     .filter((row) => row.status === WeekStatus.VALID);
   const validWeeks = closedValid.length + (week.status === WeekStatus.VALID ? 1 : 0);
   return {
@@ -231,15 +236,16 @@ export async function computeChallengeStandings(prisma, challenge, now) {
   const results = participants.length > 0
     ? await resultsByStudent(prisma, challenge.trainerId, participants.map((row) => row.studentId), currentMonday)
     : new Map();
+  const weekStarts = weekStartsOf(mondays, rules);
   const enriched = participants.map((row) => ({
     ...row,
-    counted: countedWeeks(row, mondays, rules, challenge.startScheduledAt),
+    counted: countedWeeks(row, weekStarts, challenge.startScheduledAt),
     results: results.get(row.studentId) ?? [],
   }));
   const outcomes = await runningOutcomes(prisma, challenge.trainerId, runningMonday, enriched, scoring);
 
   const listed = enriched
-    .map((row) => figuresOf(row, outcomes.get(row.studentId) ?? NOT_RUNNING, { elapsed, minPodiumWeeks, scoring }))
+    .map((row) => figuresOf(row, outcomes.get(row.studentId) ?? NOT_RUNNING, { elapsed, minPodiumWeeks, scoring, weekStarts }))
     .filter((student) => student.validWeeks > 0);
   const required = Math.min(minPodiumWeeks, elapsed);
   const rows = rankStandings(listed.filter((student) => student.eligible)).map((student) => liveRow(student, required));
