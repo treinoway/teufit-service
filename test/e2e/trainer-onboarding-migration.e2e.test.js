@@ -60,6 +60,22 @@ function listMigrationsBefore(migrationName) {
     .sort();
 }
 
+// Inserts a pending student invite listing only the columns that exist before the migration under test.
+async function insertStudentInvite(connectionString, { trainerId, email, expiresAt, createdAt }) {
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    // why: the current Prisma client writes columns added by later migrations (requires_consent), absent in this database.
+    await client.query(
+      `INSERT INTO "student_invites" ("id", "trainer_id", "email", "expires_at", "created_at")
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), trainerId, email, expiresAt, createdAt],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 // Reads the four onboarding milestone columns of one trainer row.
 async function readTrainerMilestones(connectionString, trainerId) {
   const client = new pg.Client({ connectionString });
@@ -120,9 +136,11 @@ e2eDescribe('e2e: migration — add trainer onboarding milestones', () => {
 
     const activeTrainerId = await createTrainer(fullProfile);
     for (const createdAt of [LATER_INVITE_AT, FIRST_INVITE_AT]) {
-      await prisma.studentInvite.create({
-        data: { trainerId: activeTrainerId, email: `invite-${createdAt.getTime()}@example.com`, expiresAt: INVITE_EXPIRES_AT, createdAt },
-        select: { id: true },
+      await insertStudentInvite(connectionString, {
+        trainerId: activeTrainerId,
+        email: `invite-${createdAt.getTime()}@example.com`,
+        expiresAt: INVITE_EXPIRES_AT,
+        createdAt,
       });
     }
     for (const createdAt of [LATER_ANAMNESIS_AT, FIRST_ANAMNESIS_AT]) {
