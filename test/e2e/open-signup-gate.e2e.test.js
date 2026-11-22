@@ -10,6 +10,7 @@ import emailHandler from '../../src/config/email-handler.js';
 import { Roles } from '../../src/constants/roles.js';
 import { InviteErrorCode } from '../../src/constants/trainer-invite.js';
 import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../../src/constants/platform-plan.js';
+import { ExerciseType } from '../../src/constants/training.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -20,6 +21,16 @@ const TRAINER_PROFILE = 'trainer';
 const NUTRITIONIST_PROFILE = 'nutritionist';
 const ASAAS_SUBSCRIPTION_ID = 'sub_e2e_paid_0001';
 const ASAAS_CUSTOMER_ID = 'cus_e2e_paid_0001';
+const PUBLIC_EXERCISE_NAMES = ['Agachamento livre', 'Supino reto'];
+
+// Creates the public exercise templates the example routine is seeded from, owned by a trainer row inserted directly (no /become-trainer, so no welcome email).
+async function seedPublicExerciseTemplates(app) {
+  const owner = await createUser(app, 'library-owner');
+  const ownerTrainer = await prisma.trainer.create({ data: { userId: owner.userId }, select: { id: true } });
+  await prisma.exerciseTemplate.createMany({
+    data: PUBLIC_EXERCISE_NAMES.map((name) => ({ trainerId: ownerTrainer.id, name, type: ExerciseType.STRENGTH, isPublic: true })),
+  });
+}
 
 e2eDescribe('e2e: professions without an invite (beta gate removed) and BETA for every new trainer', () => {
   let app;
@@ -55,6 +66,7 @@ e2eDescribe('e2e: professions without an invite (beta gate removed) and BETA for
     let res;
 
     beforeEach(async () => {
+      await seedPublicExerciseTemplates(app);
       user = await createUser(app);
       res = await patch(BECOME_TRAINER_URL, user.accessToken);
     });
