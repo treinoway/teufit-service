@@ -329,6 +329,7 @@ export default {
     'challenge.minPodium.invalid': 'Mínimo de semanas para o pódio inválido. Use de 1 até o número de semanas do campeonato, no máximo 4.',
     'challenge.notClosable': 'Só um campeonato em semanas em andamento pode ser encerrado antes.',
     'challenge.notWeekly': 'Este campeonato não tem classificação de constância.',
+    'challenge.scoringRule.invalid': 'Pontuação inválida. Os pesos dos cinco pilares devem ser inteiros de 0 a 100 com soma 100, e ao menos um pilar deve estar ativo.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',
