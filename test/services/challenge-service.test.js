@@ -719,6 +719,39 @@ describe('challenge-service', () => {
       expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
     });
 
+    it('APP-37 validates and stores the visibility of a weekly championship', async () => {
+      let record = weeklyRecord();
+      mockPrisma.challenge.findUnique.mockImplementation(async () => record);
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => {
+        record = { ...record, ...data };
+        return record;
+      });
+      mockPrisma.challengeParticipant.count.mockResolvedValue(3);
+      const setVisibility = (visibility) => updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data: { visibility },
+      });
+
+      const positionOnly = await setVisibility('position');
+      expect(positionOnly).toMatchObject({ status: ChallengeStatus.ACTIVE, visibility: 'position' });
+      expect(record.visibility).toBe('position');
+
+      await expect(setVisibility('public')).rejects.toMatchObject({
+        httpStatus: 400,
+        error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+        messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+        details: { field: 'visibility' },
+      });
+      expect(record.visibility).toBe('position');
+
+      const off = await setVisibility('off');
+      expect(off.visibility).toBe('off');
+      expect(record.visibility).toBe('off');
+
+      record = { ...record, closedAt: new Date('2026-11-16T00:10:00.000Z') };
+      await expect(setVisibility('full')).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED });
+      expect(record.visibility).toBe('off');
+    });
+
     it('CPD-15 answers 409 for weights of a running championship', async () => {
       const update = (data) => updateChallenge({
         prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
@@ -899,6 +932,22 @@ describe('challenge-service', () => {
         ownerType: 'trainer',
         participantCount: 1,
       });
+    });
+
+    it('APP-37 validates the visibility on creation and stores the chosen one', async () => {
+      const positionOnly = await createChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, now: WEDNESDAY_SP, data: weeklyBody({ visibility: 'position' }),
+      });
+      expect(positionOnly.visibility).toBe('position');
+
+      await expect(createChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, now: WEDNESDAY_SP, data: weeklyBody({ visibility: 'public' }),
+      })).rejects.toMatchObject({
+        httpStatus: 400,
+        error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+        messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+      });
+      expect(mockTx.challenge.create).toHaveBeenCalledTimes(1);
     });
 
     it('CAMP-61 ignores an owner type sent in the body', async () => {

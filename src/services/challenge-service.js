@@ -9,6 +9,7 @@ import {
   ChallengeStatus,
   ChallengeVisibility,
   SCORING_RULE_FIELDS,
+  challengeVisibilityValues,
 } from '../constants/challenge.js';
 import { currentWeekOf, validateWeeksInput, weeklyStatus, weeksSpan } from '../helpers/challenge-weeks.js';
 import { effectiveVisibility, isMinor, visibleFigures } from '../helpers/consistency-anonymize.js';
@@ -306,6 +307,7 @@ function validateDateRange(startDateStr, endDateStr, checkStartInFuture = false)
  * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string }, config: object }>}
  */
 async function resolveWeeklyFields(prisma, trainerId, data, now) {
+  assertValidVisibility(data.visibility);
   const config = await getConfig(prisma, trainerId, now);
   const minPodiumWeeks = data.minPodiumWeeks ?? Math.min(config.minPodiumWeeks, data.weeks);
   validateWeeksInput({ startWeek: data.startWeek, weeks: data.weeks, minPodiumWeeks }, { timeZone: config.timeZone, now });
@@ -322,6 +324,18 @@ async function resolveWeeklyFields(prisma, trainerId, data, now) {
     weeklyContext: { now, timeZone: config.timeZone },
     config,
   };
+}
+
+// 400 for a visibility other than off, position or full (APP-35, APP-37); absent keeps the stored one
+function assertValidVisibility(visibility) {
+  if (visibility === undefined || challengeVisibilityValues.includes(visibility)) return;
+  throw new AppError({
+    httpStatus: 400,
+    error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+    messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+    message: `visibility must be one of ${challengeVisibilityValues.join(', ')}`,
+    details: { field: 'visibility' },
+  });
 }
 
 // 400 naming the first field of a scoring rule that breaks the ranking config rules (CPD-08)
@@ -439,6 +453,7 @@ async function updateWeeklyChallenge(prisma, challenge, data, now) {
   const status = weeklyStatus(challenge, weeklyContext);
   assertWeeklyOpen(status);
   if (status !== ChallengeStatus.SCHEDULED) assertWeeklyScheduleLocked(data);
+  assertValidVisibility(data.visibility);
 
   const openFields = pickDefined(data, WEEKLY_OPEN_FIELDS);
   if (openFields.name !== undefined) openFields.name = openFields.name.trim();

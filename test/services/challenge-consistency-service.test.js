@@ -8,7 +8,7 @@ import { getConfig, ruleForWeek } from '../../src/services/consistency-config-se
 import { evaluateRunningWeek } from '../../src/services/consistency-standings-service.js';
 import { liveAverage, scoreWeek, seasonFigures } from '../../src/helpers/consistency-math.js';
 import { ChallengeErrorCode, ChallengeMessageCode, ChallengeStatus } from '../../src/constants/challenge.js';
-import { Faixa, WeekStatus } from '../../src/constants/consistency-ranking.js';
+import { CONSISTENCY_PRIVACY_TERM_VERSION, Faixa, WeekStatus } from '../../src/constants/consistency-ranking.js';
 
 vi.mock('../../src/services/consistency-config-service.js', () => ({ getConfig: vi.fn(), ruleForWeek: vi.fn() }));
 vi.mock('../../src/services/consistency-standings-service.js', () => ({ evaluateRunningWeek: vi.fn() }));
@@ -38,6 +38,7 @@ const prisma = {
   trainerStudent: { findMany: vi.fn() },
   consistencyWeeklyResult: { findMany: vi.fn() },
   challengeConsistencyStanding: { findMany: vi.fn() },
+  consistencyPrivacyPref: { findMany: vi.fn() },
 };
 
 // Date-only column value (midnight UTC), as Prisma returns @db.Date
@@ -102,6 +103,7 @@ beforeEach(() => {
   ruleForWeek.mockResolvedValue(RULE);
   prisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   prisma.challengeParticipant.count.mockResolvedValue(0);
+  prisma.consistencyPrivacyPref.findMany.mockResolvedValue([]);
 });
 
 describe('computeChallengeStandings', () => {
@@ -631,6 +633,21 @@ describe('getChallengeConsistency', () => {
     prisma.challenge.findUnique.mockResolvedValue(championship({ startDate: dateOnly('2026-11-23'), endDate: dateOnly('2026-12-20') }));
     const scheduled = await getChallengeConsistency(prisma, TRAINER_USER_ID, CHALLENGE_ID, NOW);
     expect(scheduled.summary).toEqual({ classified: 0, entering: 0, leaderAverage: null, leaderLead: null, championshipAverage: null });
+  });
+
+  it('APP-36 returns the privacy counts of the participants to the trainer', async () => {
+    prisma.challenge.findUnique.mockResolvedValue(championship());
+    prisma.challengeParticipant.count.mockResolvedValue(5);
+    arrange({ participants: [] });
+    prisma.consistencyPrivacyPref.findMany.mockResolvedValue([
+      { appearAs: 'name', termVersion: CONSISTENCY_PRIVACY_TERM_VERSION },
+      { appearAs: 'anonymous', termVersion: CONSISTENCY_PRIVACY_TERM_VERSION },
+      { appearAs: 'name', termVersion: '2020-01-v0' },
+    ]);
+
+    const result = await getChallengeConsistency(prisma, TRAINER_USER_ID, CHALLENGE_ID, NOW);
+
+    expect(result.privacyCounts).toEqual({ name: 1, anonymous: 1, pending: 3 });
   });
 
   it('CAMP-43 returns no standings for a cancelled championship', async () => {

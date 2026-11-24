@@ -90,3 +90,22 @@ export async function privacyCountsFor(prisma, studentIds) {
   for (const appearAs of choices.values()) counts[appearAs] += 1;
   return counts;
 }
+
+/**
+ * How the participants of a championship appear: by name, as "Aluno do time" by choice, or still pending (APP-36).
+ *
+ * @param {object} prisma
+ * @param {string} challengeId
+ * @param {number} participantCount - participants of the championship
+ * @returns {Promise<{ name: number, anonymous: number, pending: number }>}
+ */
+export async function championshipPrivacyCounts(prisma, challengeId, participantCount) {
+  const rows = await prisma.consistencyPrivacyPref.findMany({
+    where: { student: { challengeParticipants: { some: { challengeId } } } },
+    select: { appearAs: true, termVersion: true },
+  });
+  const choices = rows.map(appearAsOf);
+  const name = choices.filter((appearAs) => appearAs === AppearAs.NAME).length;
+  const anonymous = choices.filter((appearAs) => appearAs === AppearAs.ANONYMOUS).length;
+  return { name, anonymous, pending: Math.max(participantCount - name - anonymous, 0) };
+}
