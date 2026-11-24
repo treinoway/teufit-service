@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  championshipPrivacyCounts,
   getPrivacy,
-  privacyCountsFor,
   setPrivacy,
 } from '../../src/services/consistency-privacy-service.js';
 import {
@@ -14,14 +14,21 @@ import {
 const MONDAY = new Date('2026-11-23T13:00:00.000Z');
 const TUESDAY = new Date('2026-11-24T13:00:00.000Z');
 
-// In-memory consistency_privacy_prefs table answering the Prisma calls with stored rows
-function privacyTable(initial = []) {
+// Whether a stored choice matches a Prisma where: studentId in, or the student taking part in a championship
+function prefMatches(row, where, participants) {
+  if (where.studentId?.in) return where.studentId.in.includes(row.studentId);
+  const challengeId = where.student?.challengeParticipants?.some?.challengeId;
+  return participants.some((participant) => participant.challengeId === challengeId && participant.studentId === row.studentId);
+}
+
+// In-memory consistency_privacy_prefs table (and championship participants) answering the Prisma calls with stored rows
+function privacyTable(initial = [], participants = []) {
   const rows = new Map(initial.map((row) => [row.studentId, { id: `pref-${row.studentId}`, updatedAt: null, ...row }]));
   return {
     rows,
     consistencyPrivacyPref: {
       findUnique: async ({ where }) => rows.get(where.studentId) ?? null,
-      findMany: async ({ where }) => [...rows.values()].filter((row) => where.studentId.in.includes(row.studentId)),
+      findMany: async ({ where }) => [...rows.values()].filter((row) => prefMatches(row, where, participants)),
       upsert: async ({ where, create, update }) => {
         const current = rows.get(where.studentId);
         const next = current ? { ...current, ...update, updatedAt: new Date() } : { id: `pref-${where.studentId}`, updatedAt: null, ...create };
@@ -60,30 +67,31 @@ describe('consistency-privacy-service', () => {
   });
 
   it('APP-23 replaces the choice and counts it on the next read', async () => {
-    const prisma = privacyTable();
+    const prisma = privacyTable([], [{ challengeId: 'verao', studentId: 'camila' }]);
     await setPrivacy(prisma, 'camila', AppearAs.NAME, CONSISTENCY_PRIVACY_TERM_VERSION, MONDAY);
-    const countsBefore = await privacyCountsFor(prisma, ['camila']);
+    const countsBefore = await championshipPrivacyCounts(prisma, 'verao', 1);
 
     await setPrivacy(prisma, 'camila', AppearAs.ANONYMOUS, CONSISTENCY_PRIVACY_TERM_VERSION, TUESDAY);
 
     expect(countsBefore).toEqual({ name: 1, anonymous: 0, pending: 0 });
     expect(await getPrivacy(prisma, 'camila')).toEqual({ appearAs: AppearAs.ANONYMOUS, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: TUESDAY });
-    expect(await privacyCountsFor(prisma, ['camila'])).toEqual({ name: 0, anonymous: 1, pending: 0 });
+    expect(await championshipPrivacyCounts(prisma, 'verao', 1)).toEqual({ name: 0, anonymous: 1, pending: 0 });
     expect(prisma.rows.size).toBe(1);
   });
 
   it('APP-36 counts name, anonymous and pending participants', async () => {
+    const verao = ['ana', 'bruno', 'marcos', 'lucas', 'camila'].map((studentId) => ({ challengeId: 'verao', studentId }));
     const prisma = privacyTable([
       { studentId: 'ana', appearAs: AppearAs.NAME, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: MONDAY },
       { studentId: 'bruno', appearAs: AppearAs.NAME, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: MONDAY },
       { studentId: 'marcos', appearAs: AppearAs.ANONYMOUS, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: MONDAY },
       { studentId: 'lucas', appearAs: AppearAs.NAME, termVersion: '2020-01-v0', acceptedAt: MONDAY },
       { studentId: 'outro-time', appearAs: AppearAs.ANONYMOUS, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: MONDAY },
-    ]);
+    ], [...verao, { challengeId: 'outono', studentId: 'outro-time' }]);
 
-    const counts = await privacyCountsFor(prisma, ['ana', 'bruno', 'marcos', 'lucas', 'camila']);
+    const counts = await championshipPrivacyCounts(prisma, 'verao', verao.length);
 
     expect(counts).toEqual({ name: 2, anonymous: 1, pending: 2 });
-    expect(await privacyCountsFor(prisma, [])).toEqual({ name: 0, anonymous: 0, pending: 0 });
+    expect(await championshipPrivacyCounts(prisma, 'vazio', 0)).toEqual({ name: 0, anonymous: 0, pending: 0 });
   });
 });

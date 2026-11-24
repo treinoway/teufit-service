@@ -78,20 +78,6 @@ export async function privacyByStudent(prisma, studentIds) {
 }
 
 /**
- * How many of the students appear by name, as "Aluno do time" by choice, and still have to answer (APP-36).
- *
- * @param {object} prisma
- * @param {string[]} studentIds
- * @returns {Promise<{ name: number, anonymous: number, pending: number }>}
- */
-export async function privacyCountsFor(prisma, studentIds) {
-  const choices = await privacyByStudent(prisma, studentIds);
-  const counts = { [AppearAs.NAME]: 0, [AppearAs.ANONYMOUS]: 0, [AppearAs.PENDING]: 0 };
-  for (const appearAs of choices.values()) counts[appearAs] += 1;
-  return counts;
-}
-
-/**
  * How the participants of a championship appear: by name, as "Aluno do time" by choice, or still pending (APP-36).
  *
  * @param {object} prisma
