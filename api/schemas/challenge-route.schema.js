@@ -579,6 +579,15 @@ export const getChallengeConsistencySchema = {
         rows: { type: 'array', items: challengeConsistencyRowSchema },
         entering: { type: 'array', items: challengeConsistencyRowSchema },
         summary: consistencySummarySchema,
+        privacyCounts: {
+          type: 'object',
+          description: 'How the participants appear in the app: by name, as "Aluno do time" by choice, or still to answer the privacy term',
+          properties: {
+            name: { type: 'integer' },
+            anonymous: { type: 'integer' },
+            pending: { type: 'integer' },
+          },
+        },
       },
     },
     401: errorResponseSchema,
@@ -591,6 +600,26 @@ export const getChallengeConsistencySchema = {
 
 // ─── Student challenge schemas ─────────────────────────────────────────────────
 
+// List item of the student: the shared shape plus the student's consistency in a running or closed weekly championship
+const myChallengeListItemSchema = {
+  type: 'object',
+  properties: {
+    ...challengeSchema.properties,
+    consistency: {
+      type: 'object',
+      nullable: true,
+      description: 'Weekly format, running or closed: figures of the student as the visibility allows; null otherwise',
+      properties: {
+        visibility: { type: 'string', enum: challengeVisibilityValues, description: 'Effective visibility: "off" for a minor' },
+        position: { type: 'integer', nullable: true },
+        total: { type: 'integer', nullable: true },
+        faixa: { type: 'string', enum: Object.values(Faixa), nullable: true },
+        average: { type: 'number', nullable: true },
+      },
+    },
+  },
+};
+
 export const listMyChallengesSchema = {
   tags: ['challenges'],
   summary: 'List challenges the student participates in',
@@ -601,10 +630,11 @@ export const listMyChallengesSchema = {
     properties: {
       trainerId: { type: 'string', format: 'uuid' },
       status: { type: 'string', enum: challengeStatusValues },
+      format: { type: 'string', enum: challengeFormatValues, description: 'Only championships of this format; the app asks for "weeks"' },
     },
   },
   response: {
-    200: { type: 'array', items: challengeSchema },
+    200: { type: 'array', items: myChallengeListItemSchema },
     401: errorResponseSchema,
     500: errorResponseSchema,
   },
