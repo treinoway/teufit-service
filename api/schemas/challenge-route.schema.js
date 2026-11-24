@@ -673,8 +673,18 @@ export const getMyChallengeRankingSchema = {
     200: {
       type: 'object',
       properties: {
-        entries: { type: 'array', items: rankingEntrySchema },
-        myPosition: { type: 'integer', nullable: true },
+        entries: {
+          type: 'array',
+          description: 'Weekly championship: the constancy privacy applies ("Aluno do time" without photo when pending, anonymous, minor or anonymous ranking), a colleague carries an opaque studentId, only the own row with visibility "position" and none with "off"',
+          items: {
+            type: 'object',
+            properties: {
+              ...rankingEntrySchema.properties,
+              isMe: { type: 'boolean', description: 'The requesting student; weekly championships only' },
+            },
+          },
+        },
+        myPosition: { type: 'integer', nullable: true, description: 'Null in a weekly championship with visibility "off" or for a minor' },
         myPoints: { type: 'integer' },
       },
     },

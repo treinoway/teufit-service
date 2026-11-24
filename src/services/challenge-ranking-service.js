@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../errors/app-error.js';
-import { ChallengeErrorCode, ChallengeMessageCode } from '../constants/challenge.js';
+import { ChallengeErrorCode, ChallengeFormat, ChallengeMessageCode, ChallengeVisibility } from '../constants/challenge.js';
+import { ANONYMOUS_DISPLAY_NAME } from '../constants/consistency-ranking.js';
 import { PointAction } from '../constants/gamification.js';
+import { effectiveVisibility, isHidden, isMinor } from '../helpers/consistency-anonymize.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
 import { civilDateInTimeZone, getDateOnlyAsMidnightUtc, zonedWallClockToInstant } from '../helpers/date-helpers.js';
 import { getConfig } from './consistency-config-service.js';
+import { privacyByStudent } from './consistency-privacy-service.js';
 
 const MS_PER_DAY = 86400000;
 
@@ -230,6 +234,41 @@ async function computeChallengeRankingEntries(prisma, challenge, requestingStude
   });
 }
 
+// Entry of the weekly points ranking as the viewer sees it: own row as is, a colleague with an opaque id and hidden by the constancy rules
+function weeklyEntryOf(entry, { viewerId, minorIds, privacies, anonymousRanking }) {
+  if (entry.studentId === viewerId) return { ...entry, isMe: true };
+  const hidden = isHidden({ privacy: privacies.get(entry.studentId), isMinor: minorIds.has(entry.studentId), anonymousRanking });
+  return {
+    ...entry,
+    studentId: randomUUID(),
+    firstName: hidden ? ANONYMOUS_DISPLAY_NAME : entry.firstName,
+    lastName: hidden ? null : entry.lastName,
+    avatarUrl: hidden ? null : entry.avatarUrl,
+    isMe: false,
+  };
+}
+
+// Ids of the listed students under 18 on the trainer's civil day
+async function minorIdsOf(prisma, challenge, studentIds, now) {
+  const { timeZone } = await getConfig(prisma, challenge.trainerId, now);
+  const today = civilDateInTimeZone(now, timeZone);
+  const users = await prisma.user.findMany({ where: { id: { in: studentIds } }, select: { id: true, birthDate: true } });
+  return new Set(users.filter((user) => isMinor(user.birthDate ?? null, today)).map((user) => user.id));
+}
+
+// Points ranking of a weekly championship with the constancy privacy and visibility: own row only with "Só a posição", nothing with "Desligado" (APP-74, AD-077)
+async function weeklyStudentRanking(prisma, challenge, studentId, entries, now) {
+  const myEntry = entries.find((entry) => entry.studentId === studentId);
+  const myPoints = myEntry?.points ?? 0;
+  const ids = entries.map((entry) => entry.studentId);
+  const [minorIds, privacies] = await Promise.all([minorIdsOf(prisma, challenge, ids, now), privacyByStudent(prisma, ids)]);
+  const visibility = effectiveVisibility(challenge.visibility, minorIds.has(studentId));
+  if (visibility === ChallengeVisibility.OFF) return { entries: [], myPosition: null, myPoints };
+  const visible = visibility === ChallengeVisibility.FULL ? entries : entries.filter((entry) => entry === myEntry);
+  const context = { viewerId: studentId, minorIds, privacies, anonymousRanking: challenge.anonymousRanking ?? false };
+  return { entries: visible.map((entry) => weeklyEntryOf(entry, context)), myPosition: myEntry?.position ?? null, myPoints };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -271,16 +310,22 @@ export async function getChallengeRankingForTrainer({ prisma, trainerUserId, cha
 
 /**
  * Get the ranking for a challenge (student-facing).
- * Includes the student's own position highlighted.
+ * Includes the student's own position highlighted; a weekly championship follows the constancy privacy and visibility (APP-74).
  *
  * @param {object} deps
  * @param {import('@prisma/client').PrismaClient} deps.prisma
  * @param {string} deps.studentId - userId of the student
  * @param {string} deps.challengeId
+ * @param {Date} [deps.now]
  * @returns {Promise<{ entries: object[], myPosition: number|null, myPoints: number }>}
  */
-export async function getChallengeRankingForStudent({ prisma, studentId, challengeId }) {
+export async function getChallengeRankingForStudent({ prisma, studentId, challengeId, now = new Date() }) {
   const challenge = await resolveChallengeForStudent(prisma, challengeId, studentId);
+
+  if (challenge.format === ChallengeFormat.WEEKS) {
+    const entries = await computeChallengeRankingEntries(prisma, challenge, studentId, false);
+    return weeklyStudentRanking(prisma, challenge, studentId, entries, now);
+  }
 
   // anonymousRanking is snapshotted on the challenge at creation time
   const anonymousRanking = challenge.anonymousRanking ?? false;

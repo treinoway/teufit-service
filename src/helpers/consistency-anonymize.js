@@ -11,8 +11,13 @@ const PODIUM_PLACES = 3;
 const CLUB_100_MIN = 3;
 const TIE_REASON = 'mesma média, mesmas semanas a 100% e mesma sequência';
 
-// Whether the participant shows as "Aluno do time": anonymous championship, minor, or no stored choice to appear by name (AD-045)
-function isHidden({ privacy, isMinor: minor, anonymousRanking }) {
+/**
+ * Whether the participant shows as "Aluno do time": anonymous championship, minor, or no stored choice to appear by name (AD-045).
+ *
+ * @param {{ privacy: string, isMinor: boolean, anonymousRanking: boolean }} rules - privacy is one of AppearAs
+ * @returns {boolean}
+ */
+export function isHidden({ privacy, isMinor: minor, anonymousRanking }) {
   return Boolean(anonymousRanking) || Boolean(minor) || privacy !== AppearAs.NAME;
 }
 
