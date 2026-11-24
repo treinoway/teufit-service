@@ -101,6 +101,7 @@ describe('getStudentOverview', () => {
   it('APP-02 highlights the running championship that ends first', async () => {
     exampleTeam();
     addChampionship(championship('outono', 'Outono', '2026-11-16', 5), ['camila']);
+    addChampionship(championship('longo', 'Longo', '2026-11-02', 8), ['camila']);
 
     const overview = await getStudentOverview(world.prisma, 'camila', NOW);
 
