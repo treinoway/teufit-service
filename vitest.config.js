@@ -22,6 +22,12 @@ export default defineConfig({
       ASAAS_WEBHOOK_SECRET: 'test-webhook-secret-123',
       // AI tests mock the Anthropic SDK; a placeholder key keeps the AI availability check satisfied.
       ANTHROPIC_API_KEY: 'test-anthropic-key',
+      // Unit tests that call buildServer() need these at plugin registration; CI has no .env.
+      SESSION_SECRET: 'unit-test-session-secret-at-least-32-characters',
+      JWT_SECRET: 'unit-test-jwt-secret',
+      GOOGLE_OAUTH_CLIENT_ID: 'unit-test-google-client-id',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'unit-test-google-client-secret',
+      GOOGLE_OAUTH_CALLBACK_URL: 'http://localhost:3000/auth/google/callback',
     },
   },
 });

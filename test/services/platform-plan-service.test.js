@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import config from '../../config/index.js';
 import { PLAN_LIMITS, PLATFORM_PLAN_ERRORS, getBillingMonth } from '../../src/constants/platform-plan.js';
 
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
@@ -12,6 +13,9 @@ const mockPrisma = {
     updateMany: vi.fn(),
   },
   aiUsageEvent: { count: vi.fn(), create: vi.fn(), groupBy: vi.fn() },
+  trainer: { findUnique: vi.fn() },
+  account: { findFirst: vi.fn() },
+  user: { findUnique: vi.fn() },
 };
 
 import {
@@ -297,7 +301,69 @@ describe('assertCanCreateChallenge', () => {
 // ─── assertCanUseAi ───────────────────────────────────────────────────────────
 
 describe('assertCanUseAi', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.trainer.findUnique.mockResolvedValue({ userId: 'trainer-user-1' });
+    mockPrisma.account.findFirst.mockResolvedValue({ id: 'account-1' });
+  });
+
+  describe('when the trainer email is unverified', () => {
+    beforeEach(() => {
+      mockPrisma.account.findFirst.mockResolvedValue(null);
+      mockPrisma.aiUsageEvent.count.mockResolvedValue(0);
+      mockPrisma.user.findUnique.mockResolvedValue({ createdAt: new Date(config.emailVerification.enforcedFrom) });
+    });
+
+    it('does not refuse an account created before the open-signup cut-off', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('BETA'));
+      mockPrisma.user.findUnique.mockResolvedValue({ createdAt: new Date(new Date(config.emailVerification.enforcedFrom).getTime() - 1) });
+
+      await expect(assertCanUseAi(mockPrisma, TRAINER_ID, STUDENT_ID)).resolves.toBeUndefined();
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'trainer-user-1' }, select: { createdAt: true } });
+    });
+
+    it('throws 403 EMAIL_VERIFICATION_REQUIRED on a plan that allows AI', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('BETA'));
+
+      await expect(assertCanUseAi(mockPrisma, TRAINER_ID, STUDENT_ID)).rejects.toMatchObject({
+        httpStatus: 403,
+        error: 'EMAIL_VERIFICATION_REQUIRED',
+        messageCode: 'emailVerification.required',
+      });
+      expect(mockPrisma.account.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'trainer-user-1', verifiedAt: { not: null } } }),
+      );
+    });
+
+    it('answers the plan error first when the plan has no AI', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('FREE'));
+
+      await expect(assertCanUseAi(mockPrisma, TRAINER_ID, STUDENT_ID)).rejects.toMatchObject(
+        expectPlanError(PLATFORM_PLAN_ERRORS.AI_NOT_AVAILABLE)
+      );
+      expect(mockPrisma.account.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('answers the usage cap error first when the cap is reached', async () => {
+      mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('PRO'));
+      mockPrisma.aiUsageEvent.count.mockResolvedValue(3);
+
+      await expect(assertCanUseAi(mockPrisma, TRAINER_ID, STUDENT_ID)).rejects.toMatchObject({
+        error: PLATFORM_PLAN_ERRORS.AI_ACTIONS_EXCEEDED.code,
+      });
+    });
+  });
+
+  it('throws EMAIL_VERIFICATION_REQUIRED without an account lookup when the trainer row is missing', async () => {
+    mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('BETA'));
+    mockPrisma.aiUsageEvent.count.mockResolvedValue(0);
+    mockPrisma.trainer.findUnique.mockResolvedValue(null);
+
+    await expect(assertCanUseAi(mockPrisma, TRAINER_ID, STUDENT_ID)).rejects.toMatchObject({
+      error: 'EMAIL_VERIFICATION_REQUIRED',
+    });
+    expect(mockPrisma.account.findFirst).not.toHaveBeenCalled();
+  });
 
   it('throws AI_NOT_AVAILABLE for FREE without any DB count call', async () => {
     mockPrisma.platformSubscription.findUnique.mockResolvedValue(makeSubscription('FREE'));

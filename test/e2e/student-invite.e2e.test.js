@@ -60,7 +60,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
   let inviteEmails;
   // Existing-user (unverified) variant invite emails: payloads and the codes they carried.
   let existingUserInviteEmails;
-  let existingUserInviteCodes;
+  let openAppEmails;
 
   beforeAll(async () => {
     app = await setupApp();
@@ -75,10 +75,12 @@ e2eDescribe('e2e: student invites + email verification', () => {
     verificationCodes = new Map();
     inviteEmails = [];
     existingUserInviteEmails = [];
-    existingUserInviteCodes = new Map();
+    openAppEmails = [];
     vi.spyOn(emailHandler, 'sendExistingUserStudentInviteEmail').mockImplementation(async (payload) => {
       existingUserInviteEmails.push(payload);
-      if (payload.code) existingUserInviteCodes.set(payload.to.toLowerCase(), payload.code);
+    });
+    vi.spyOn(emailHandler, 'sendStudentInviteOpenAppEmail').mockImplementation(async (payload) => {
+      openAppEmails.push(payload);
     });
     vi.spyOn(emailHandler, 'sendEmailVerificationEmail').mockImplementation(async ({ to, code }) => {
       verificationCodes.set(to.toLowerCase(), code);
@@ -122,6 +124,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
 
   async function createTrainer({ tier = 'DIAMOND' } = {}) {
     const { userId, accessToken, email } = await signup(uniqueEmail('trainer'));
+    await prisma.account.updateMany({ where: { userId }, data: { verifiedAt: new Date() } });
     const becomeRes = await app.inject({
       method: 'PATCH',
       url: '/become-trainer',
@@ -152,6 +155,14 @@ e2eDescribe('e2e: student invites + email verification', () => {
 
   function revokeInvite(token, id) {
     return app.inject({ method: 'DELETE', url: `/trainer/student-invites/${id}`, headers: auth(token) });
+  }
+
+  function listMyInvites(token) {
+    return app.inject({ method: 'GET', url: '/my/trainer/invites', headers: auth(token) });
+  }
+
+  function acceptInvite(token, id) {
+    return app.inject({ method: 'POST', url: `/my/trainer/invites/${id}/accept`, headers: auth(token), payload: {} });
   }
 
   function verifyEmail(token, code) {
@@ -222,7 +233,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
       expect(res.json().outcome).toBe(StudentInviteOutcome.INVITED);
     });
 
-    it('should link a registered user immediately and return outcome linked', async () => {
+    it('should invite a registered verified user instead of linking, and wait for their consent', async () => {
       const trainer = await createTrainer();
       const student = await signupVerified(uniqueEmail('registered'));
 
@@ -230,24 +241,33 @@ e2eDescribe('e2e: student invites + email verification', () => {
 
       expect(res.statusCode).toBe(201);
       expect(res.json()).toMatchObject({
-        outcome: StudentInviteOutcome.LINKED,
-        student: { id: student.userId, email: student.email },
+        outcome: StudentInviteOutcome.INVITED,
+        invite: { email: student.email, status: StudentInviteStatus.PENDING, studentId: null },
       });
+      expect(res.json()).not.toHaveProperty('student');
+      expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
+      const persisted = await prisma.studentInvite.findUnique({ where: { id: res.json().invite.id } });
+      expect(persisted).toMatchObject({ status: StudentInviteStatus.PENDING, requiresConsent: true });
+      expect(openAppEmails).toEqual([{ to: student.email, trainerName: expect.any(String) }]);
+      expect(inviteEmails).toHaveLength(0);
+      expect(existingUserInviteEmails).toHaveLength(0);
+    });
+
+    it('should link the registered user and mark a pending one active only when they accept in the app', async () => {
+      const trainer = await createTrainer();
+      const student = await signupVerified(uniqueEmail('linkpending'));
+      await prisma.user.update({ where: { id: student.userId }, data: { status: 'pending' } });
+      const invite = (await inviteStudent(trainer.token, student.email)).json().invite;
+      expect((await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } })).status).toBe('pending');
+
+      const res = await acceptInvite(student.accessToken, invite.id);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ status: StudentInviteStatus.ACCEPTED });
       const link = await prisma.trainerStudent.findUnique({
         where: { trainerId_studentId: { trainerId: trainer.trainerId, studentId: student.userId } },
       });
       expect(link).not.toBeNull();
-      expect(await prisma.studentInvite.count()).toBe(0);
-    });
-
-    it('should mark a pending verified student active when the trainer links them', async () => {
-      const trainer = await createTrainer();
-      const student = await signupVerified(uniqueEmail('linkpending'));
-      await prisma.user.update({ where: { id: student.userId }, data: { status: 'pending' } });
-
-      const res = await inviteStudent(trainer.token, student.email);
-
-      expect(res.json().outcome).toBe(StudentInviteOutcome.LINKED);
       const persisted = await prisma.user.findUnique({ where: { id: student.userId }, select: { status: true } });
       expect(persisted.status).toBe('active');
     });
@@ -260,7 +280,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
       expectInviteResendFields(res.json().invite, { canResend: false, resendAvailable: true });
     });
 
-    it('should mark this trainer\'s pending invite accepted when the email later belongs to a verified user linked directly', async () => {
+    it('should answer 409 studentInvite.alreadyPending, and link nothing, when the email of a pending invite later belongs to a verified user', async () => {
       const trainer = await createTrainer();
       const email = uniqueEmail('directaccept');
       const pending = (await inviteStudent(trainer.token, email)).json().invite;
@@ -269,13 +289,14 @@ e2eDescribe('e2e: student invites + email verification', () => {
 
       const res = await inviteStudent(trainer.token, email);
 
-      expect(res.json().outcome).toBe(StudentInviteOutcome.LINKED);
-      const persisted = await prisma.studentInvite.findUnique({ where: { id: pending.id } });
-      expect(persisted).toMatchObject({
-        status: StudentInviteStatus.ACCEPTED,
-        studentId: student.userId,
-        acceptedAt: expect.any(Date),
+      expect(res.statusCode).toBe(409);
+      expectErrorContract(res.json(), {
+        error: StudentInviteErrorCode.ALREADY_PENDING,
+        messageCode: StudentInviteMessageCode.ALREADY_PENDING,
       });
+      expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
+      const persisted = await prisma.studentInvite.findUnique({ where: { id: pending.id } });
+      expect(persisted).toMatchObject({ status: StudentInviteStatus.PENDING, studentId: null });
     });
 
     describe('existing user with an unverified email', () => {
@@ -289,18 +310,26 @@ e2eDescribe('e2e: student invites + email verification', () => {
         expect(res.json().outcome).toBe(StudentInviteOutcome.INVITED);
         expect(res.json().invite).toMatchObject({ email: student.email, status: StudentInviteStatus.PENDING });
         expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
-        expect(existingUserInviteEmails).toHaveLength(1);
+        expect(openAppEmails).toEqual([{ to: student.email, trainerName: expect.any(String) }]);
+        expect(existingUserInviteEmails).toHaveLength(0);
         expect(inviteEmails).toHaveLength(0);
       });
 
-      it('should link and accept the invite once the user verifies the code', async () => {
+      it('should keep the invite pending when the user verifies the code, then link once they accept it in the app', async () => {
         const trainer = await createTrainer();
         const student = await signup(uniqueEmail('verifylater'));
         const invite = (await inviteStudent(trainer.token, student.email)).json().invite;
 
         const verifyRes = await verifyEmail(student.accessToken, verificationCodes.get(student.email));
 
-        expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 1 });
+        expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 0 });
+        expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
+        expect((await prisma.studentInvite.findUnique({ where: { id: invite.id } })).status).toBe(StudentInviteStatus.PENDING);
+        expect((await listMyInvites(student.accessToken)).json().items.map((item) => item.id)).toEqual([invite.id]);
+
+        const acceptRes = await acceptInvite(student.accessToken, invite.id);
+
+        expect(acceptRes.statusCode).toBe(200);
         const link = await prisma.trainerStudent.findUnique({
           where: { trainerId_studentId: { trainerId: trainer.trainerId, studentId: student.userId } },
         });
@@ -309,7 +338,24 @@ e2eDescribe('e2e: student invites + email verification', () => {
         expect(persisted).toMatchObject({ status: StudentInviteStatus.ACCEPTED, studentId: student.userId });
       });
 
-      it('should mark the user active once the invite is accepted on email verification', async () => {
+      it('should not show or let the user answer the invite while the email is still unverified', async () => {
+        const trainer = await createTrainer();
+        const student = await signup(uniqueEmail('answerunverified'));
+        const invite = (await inviteStudent(trainer.token, student.email)).json().invite;
+
+        const listRes = await listMyInvites(student.accessToken);
+        const acceptRes = await acceptInvite(student.accessToken, invite.id);
+
+        expect(listRes.json()).toEqual({ items: [] });
+        expect(acceptRes.statusCode).toBe(404);
+        expectErrorContract(acceptRes.json(), {
+          error: StudentInviteErrorCode.NOT_FOUND,
+          messageCode: StudentInviteMessageCode.NOT_FOUND,
+        });
+        expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
+      });
+
+      it('should mark the user active on email verification even with a consent invite still pending', async () => {
         const trainer = await createTrainer();
         const student = await signup(uniqueEmail('activateonverify'));
         await inviteStudent(trainer.token, student.email);
@@ -376,7 +422,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
         });
       });
 
-      describe('verification code carried by the invite email', () => {
+      describe('no verification code is carried by the invite email any more', () => {
         async function backdateVerificationTokens(userId) {
           await prisma.emailVerificationToken.updateMany({
             where: { userId },
@@ -384,82 +430,38 @@ e2eDescribe('e2e: student invites + email verification', () => {
           });
         }
 
-        it('should email the variant with a fresh code that verifies the email and accepts the invite', async () => {
+        it('should issue no new code and keep the signup code valid, even when a code could be issued', async () => {
           const trainer = await createTrainer();
           const student = await signup(uniqueEmail('m1code'));
           const signupCode = verificationCodes.get(student.email);
           await backdateVerificationTokens(student.userId);
+          const tokensBefore = await prisma.emailVerificationToken.count({ where: { userId: student.userId } });
 
           const inviteRes = await inviteStudent(trainer.token, student.email);
 
           expect(inviteRes.statusCode).toBe(201);
-          expect(existingUserInviteEmails).toEqual([
-            { to: student.email, trainerName: expect.any(String), code: expect.stringMatching(/^\d{6}$/) },
-          ]);
-          const inviteCode = existingUserInviteCodes.get(student.email);
-          if (inviteCode !== signupCode) {
-            const staleRes = await verifyEmail(student.accessToken, signupCode);
-            expect(staleRes.statusCode).toBe(400);
-          }
-          const verifyRes = await verifyEmail(student.accessToken, inviteCode);
+          expect(existingUserInviteEmails).toEqual([]);
+          expect(openAppEmails).toEqual([{ to: student.email, trainerName: expect.any(String) }]);
+          expect(await prisma.emailVerificationToken.count({ where: { userId: student.userId } })).toBe(tokensBefore);
+          const verifyRes = await verifyEmail(student.accessToken, signupCode);
           expect(verifyRes.statusCode).toBe(200);
-          expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 1 });
-          const persisted = await prisma.studentInvite.findUnique({ where: { id: inviteRes.json().invite.id } });
-          expect(persisted).toMatchObject({ status: StudentInviteStatus.ACCEPTED, studentId: student.userId });
-        });
-
-        it('should still return 201 and send the variant with code null when the resend cooldown blocks issuing', async () => {
-          const trainer = await createTrainer();
-          const student = await signup(uniqueEmail('m1cooldown'));
-
-          const res = await inviteStudent(trainer.token, student.email);
-
-          expect(res.statusCode).toBe(201);
-          expect(existingUserInviteEmails).toEqual([
-            { to: student.email, trainerName: expect.any(String), code: null },
-          ]);
-          expect(await prisma.emailVerificationToken.count({ where: { userId: student.userId } })).toBe(1);
-        });
-
-        it('should still return 201 and send the variant with code null when the daily code cap blocks issuing', async () => {
-          const trainer = await createTrainer();
-          const student = await signup(uniqueEmail('m1cap'));
-          await prisma.emailVerificationToken.updateMany({
-            where: { userId: student.userId },
-            data: { createdAt: new Date(Date.now() - 2 * EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) },
-          });
-          await prisma.emailVerificationToken.createMany({
-            data: Array.from({ length: EMAIL_VERIFICATION_DAILY_MAX_CODES - 1 }, (_, i) => ({
-              userId: student.userId,
-              tokenHash: `seed-hash-${student.userId}-${i}`,
-              used: true,
-              expiresAt: new Date(Date.now() + MS_PER_HOUR),
-              createdAt: new Date(Date.now() - (i + 3) * MS_PER_HOUR),
-            })),
-          });
-
-          const res = await inviteStudent(trainer.token, student.email);
-
-          expect(res.statusCode).toBe(201);
-          expect(existingUserInviteEmails).toEqual([
-            { to: student.email, trainerName: expect.any(String), code: null },
-          ]);
+          expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 0 });
         });
 
         it.each([
           [
             'a thrown error',
-            () => emailHandler.sendExistingUserStudentInviteEmail.mockRejectedValue(new Error('resend down')),
+            () => emailHandler.sendStudentInviteOpenAppEmail.mockRejectedValue(new Error('resend down')),
           ],
           [
             'a returned Resend error',
             () =>
-              emailHandler.sendExistingUserStudentInviteEmail.mockResolvedValue({
+              emailHandler.sendStudentInviteOpenAppEmail.mockResolvedValue({
                 data: null,
                 error: { message: 'rejected' },
               }),
           ],
-        ])('should still return 201 and mark the issued token undelivered when the variant email fails with %s', async (_label, arrange) => {
+        ])('should still return 201 and touch no verification token when the "open the app" email fails with %s', async (_label, arrange) => {
           const trainer = await createTrainer();
           const student = await signup(uniqueEmail('m1fail'));
           await backdateVerificationTokens(student.userId);
@@ -472,8 +474,7 @@ e2eDescribe('e2e: student invites + email verification', () => {
           const failed = await prisma.emailVerificationToken.findMany({
             where: { userId: student.userId, sendFailedAt: { not: null } },
           });
-          expect(failed).toHaveLength(1);
-          expect(failed[0].used).toBe(true);
+          expect(failed).toHaveLength(0);
         });
       });
     });
@@ -541,15 +542,20 @@ e2eDescribe('e2e: student invites + email verification', () => {
         expect(res.statusCode).toBe(201);
       });
 
-      it('should not apply to direct links of verified users', async () => {
+      it('should apply to invites of existing verified users too (there is no direct link any more)', async () => {
         const trainer = await createTrainer();
         await seedInvites(trainer.trainerId, STUDENT_INVITE_DAILY_MAX, (i) => new Date(Date.now() - i * 1000));
         const student = await signupVerified(uniqueEmail('directatcap'));
 
         const res = await inviteStudent(trainer.token, student.email);
 
-        expect(res.statusCode).toBe(201);
-        expect(res.json().outcome).toBe(StudentInviteOutcome.LINKED);
+        expect(res.statusCode).toBe(429);
+        expectErrorContract(res.json(), {
+          error: StudentInviteErrorCode.DAILY_LIMIT,
+          messageCode: StudentInviteMessageCode.DAILY_LIMIT,
+        });
+        expect(await prisma.trainerStudent.count({ where: { studentId: student.userId } })).toBe(0);
+        expect(await prisma.studentInvite.count({ where: { email: student.email } })).toBe(0);
       });
 
       it('should not count resends toward the cap', async () => {
@@ -570,7 +576,8 @@ e2eDescribe('e2e: student invites + email verification', () => {
     it('should return 409 student.alreadyLinked when inviting an already linked student', async () => {
       const trainer = await createTrainer();
       const student = await signupVerified(uniqueEmail('linked'));
-      await inviteStudent(trainer.token, student.email);
+      const invite = (await inviteStudent(trainer.token, student.email)).json().invite;
+      expect((await acceptInvite(student.accessToken, invite.id)).statusCode).toBe(200);
 
       const res = await inviteStudent(trainer.token, student.email);
 
@@ -1594,10 +1601,10 @@ e2eDescribe('e2e: student invites + email verification', () => {
       expect(res.statusCode).toBe(403);
     });
 
-    describe('when the invite email belongs to an existing user with an unverified email', () => {
+    describe('when the invite waits for the consent of an existing account', () => {
       const TWO_MINUTES_MS = 2 * 60 * 1000;
 
-      async function pendingInviteForUnverifiedUser() {
+      async function pendingConsentInvite() {
         const trainer = await createTrainer();
         const student = await signup(uniqueEmail('resendunverified'));
         await prisma.emailVerificationToken.updateMany({
@@ -1607,87 +1614,54 @@ e2eDescribe('e2e: student invites + email verification', () => {
         const inviteRes = await inviteStudent(trainer.token, student.email);
         expect(inviteRes.statusCode).toBe(201);
         const invite = inviteRes.json().invite;
-        const firstInviteCode = existingUserInviteCodes.get(student.email);
-        existingUserInviteEmails.length = 0;
-        return { trainer, student, invite, firstInviteCode };
-      }
-
-      async function elapseResendWindows({ invite, student }) {
+        openAppEmails.length = 0;
         await prisma.studentInvite.update({
           where: { id: invite.id },
           data: { lastSentAt: new Date(Date.now() - 2 * MS_PER_HOUR) },
         });
-        await prisma.emailVerificationToken.updateMany({
-          where: { userId: student.userId },
-          data: { createdAt: new Date(Date.now() - TWO_MINUTES_MS) },
-        });
+        return { trainer, student, invite };
       }
 
-      it('should send the existing-user variant with a fresh code instead of the generic email', async () => {
-        const setup = await pendingInviteForUnverifiedUser();
-        await elapseResendWindows(setup);
-
-        const res = await resendInvite(setup.trainer.token, setup.invite.id);
-
-        expect(res.statusCode).toBe(200);
-        expect(existingUserInviteEmails).toEqual([
-          { to: setup.student.email, trainerName: expect.any(String), code: expect.stringMatching(/^\d{6}$/) },
-        ]);
-        expect(inviteEmails).toHaveLength(0);
-      });
-
-      it('should close the older code once the variant is delivered and accept the invite on verification', async () => {
-        const setup = await pendingInviteForUnverifiedUser();
-        await elapseResendWindows(setup);
-        await resendInvite(setup.trainer.token, setup.invite.id);
-        const newCode = existingUserInviteCodes.get(setup.student.email);
-
-        const staleRes = await verifyEmail(setup.student.accessToken, setup.firstInviteCode);
-        const verifyRes = await verifyEmail(setup.student.accessToken, newCode);
-
-        expect(newCode).not.toBe(setup.firstInviteCode);
-        expect(staleRes.statusCode).toBe(400);
-        expect(verifyRes.statusCode).toBe(200);
-        expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 1 });
-      });
-
-      it('should return 200 with the variant carrying code null when the code cooldown blocks issuing', async () => {
-        const setup = await pendingInviteForUnverifiedUser();
-        await prisma.studentInvite.update({
-          where: { id: setup.invite.id },
-          data: { lastSentAt: new Date(Date.now() - 2 * MS_PER_HOUR) },
-        });
-        await prisma.emailVerificationToken.updateMany({
-          where: { userId: setup.student.userId },
-          data: { createdAt: new Date() },
-        });
+      it('should resend the "open the app" email, with no verification code and no other invite email', async () => {
+        const setup = await pendingConsentInvite();
         const tokensBefore = await prisma.emailVerificationToken.count({ where: { userId: setup.student.userId } });
 
         const res = await resendInvite(setup.trainer.token, setup.invite.id);
 
         expect(res.statusCode).toBe(200);
-        expect(existingUserInviteEmails).toEqual([
-          { to: setup.student.email, trainerName: expect.any(String), code: null },
-        ]);
+        expect(openAppEmails).toEqual([{ to: setup.student.email, trainerName: expect.any(String) }]);
+        expect(existingUserInviteEmails).toHaveLength(0);
+        expect(inviteEmails).toHaveLength(0);
         expect(await prisma.emailVerificationToken.count({ where: { userId: setup.student.userId } })).toBe(tokensBefore);
+      });
+
+      it('should keep the invite a pending consent invite that is not accepted by verifying the email', async () => {
+        const setup = await pendingConsentInvite();
+        await resendInvite(setup.trainer.token, setup.invite.id);
+
+        const verifyRes = await verifyEmail(setup.student.accessToken, verificationCodes.get(setup.student.email));
+
+        expect(verifyRes.statusCode).toBe(200);
+        expect(verifyRes.json()).toEqual({ verified: true, linkedTrainers: 0 });
+        const persisted = await prisma.studentInvite.findUnique({ where: { id: setup.invite.id } });
+        expect(persisted).toMatchObject({ status: StudentInviteStatus.PENDING, requiresConsent: true, sendCount: 2 });
       });
 
       it.each([
         [
           'a thrown error',
-          () => emailHandler.sendExistingUserStudentInviteEmail.mockRejectedValue(new Error('resend down')),
+          () => emailHandler.sendStudentInviteOpenAppEmail.mockRejectedValue(new Error('resend down')),
         ],
         [
           'a returned Resend error',
           () =>
-            emailHandler.sendExistingUserStudentInviteEmail.mockResolvedValue({
+            emailHandler.sendStudentInviteOpenAppEmail.mockResolvedValue({
               data: null,
               error: { message: 'rejected' },
             }),
         ],
-      ])('should return 502, roll back bookkeeping, mark the new code undelivered and keep the old code valid on %s', async (_label, arrange) => {
-        const setup = await pendingInviteForUnverifiedUser();
-        await elapseResendWindows(setup);
+      ])('should return 502, roll back bookkeeping and leave the verification codes alone on %s', async (_label, arrange) => {
+        const setup = await pendingConsentInvite();
         arrange();
 
         const res = await resendInvite(setup.trainer.token, setup.invite.id);
@@ -1702,9 +1676,8 @@ e2eDescribe('e2e: student invites + email verification', () => {
         const failedRows = await prisma.emailVerificationToken.findMany({
           where: { userId: setup.student.userId, sendFailedAt: { not: null } },
         });
-        expect(failedRows).toHaveLength(1);
-        expect(failedRows[0].used).toBe(true);
-        const verifyRes = await verifyEmail(setup.student.accessToken, setup.firstInviteCode);
+        expect(failedRows).toHaveLength(0);
+        const verifyRes = await verifyEmail(setup.student.accessToken, verificationCodes.get(setup.student.email));
         expect(verifyRes.statusCode).toBe(200);
       });
     });

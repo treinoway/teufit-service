@@ -8,7 +8,7 @@ import { PLATFORM_PLAN_TIERS, PLATFORM_SUBSCRIPTION_STATUSES } from '../../src/c
 // same field with the same meaning.
 export const betaAccessFieldSchema = {
   type: 'boolean',
-  description: 'True if the user may use the web app during the closed beta (admin, trainer, tester allowlist, or accepted trainer invite). Always true for every authenticated user when the BETA_INVITE_GATE_ENABLED kill-switch is administratively disabled.',
+  description: 'Always true: signup is open and no invite is required. Kept for clients built during the closed beta.',
 };
 
 export const emailVerifiedFieldSchema = {
@@ -407,7 +407,7 @@ export const becomeTrainerSchema = {
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: {
-      description: 'Forbidden — an invite is required during the closed beta (invite.required)',
+      description: 'Forbidden. Signup is open: this route no longer answers invite.required (the messageCode stays reserved in the contract)',
       ...errorResponseSchema,
     },
     429: errorResponseSchema,
@@ -457,7 +457,7 @@ export const becomeNutritionistSchema = {
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: {
-      description: 'Forbidden — an invite is required during the closed beta (invite.required)',
+      description: 'Forbidden. Signup is open: this route no longer answers invite.required (the messageCode stays reserved in the contract)',
       ...errorResponseSchema,
     },
     429: errorResponseSchema,

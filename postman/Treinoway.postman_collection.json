@@ -75,6 +75,24 @@
       "value": "",
       "type": "string",
       "description": "Tutorial UUID — used in /admin/tutorials/:tutorialId"
+    },
+    {
+      "key": "studentFeedbackId",
+      "value": "",
+      "type": "string",
+      "description": "Student feedback UUID - used in /my/feedbacks/:id and /trainer/student-feedbacks/:id/read"
+    },
+    {
+      "key": "studentId",
+      "value": "",
+      "type": "string",
+      "description": "Student UUID - used in /trainer/students/:studentId/feedbacks"
+    },
+    {
+      "key": "studentFeedbackTemplateId",
+      "value": "",
+      "type": "string",
+      "description": "Student feedback template UUID - used in /trainer/student-feedbacks/templates/:id"
     }
   ],
   "auth": {
@@ -1156,6 +1174,171 @@
           ]
         },
         {
+          "name": "Sign Up - Direct (web, no code step)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', jsonData.token.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "app-language",
+                "value": "{{appLanguage}}",
+                "type": "text",
+                "description": "Optional: override response language (pt-BR, en-US). Defaults to pt-BR."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup/direct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup",
+                "direct"
+              ]
+            },
+            "description": "One-step signup used by the web app (trainers / nutritionists). Creates the account right away with NO role and an UNVERIFIED email, returns tokens and emails a 6-digit verification code (confirm later with POST /auth/verify-email; GET /me reports emailVerified). Body: email, password (min 8), firstName (required), lastName (optional). 201 { user: { id }, token: { accessToken }, refreshToken, linkedTrainers: 0 } (same shape as /auth/signup/verify; pending student invites are only accepted once the email is verified). Errors: 409 EMAIL_IN_USE / signup.emailInUse when the email already has an account (including a deactivated one); 400 VALIDATION_ERROR / validation.failed; 429 TOO_MANY_REQUESTS / request.rateLimitExceeded (per IP, config.rateLimit.auth.signupDirect). While the email is unverified, AI actions and the 4th student/patient invite within 24h answer 403 EMAIL_VERIFICATION_REQUIRED / emailVerification.required."
+          },
+          "response": [
+            {
+              "name": "Sign Up - Direct - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": { \"id\": \"6f1c2d3e-0000-4000-8000-000000000001\" },\n  \"token\": { \"accessToken\": \"eyJhbGciOi...\" },\n  \"refreshToken\": \"9b0f...\",\n  \"linkedTrainers\": 0\n}"
+            },
+            {
+              "name": "Sign Up - Direct - 400 Validation error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Dados inválidos. Verifique os campos e tente novamente.\",\n  \"details\": [\n    { \"field\": \"firstName\", \"validations\": [\"required\"], \"messageCode\": \"validation.firstName.required\", \"message\": \"O campo firstName é obrigatório.\" }\n  ]\n}"
+            },
+            {
+              "name": "Sign Up - Direct - 409 Email in use",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Bia\",\n  \"lastName\": \"Souza\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/signup/direct",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "signup",
+                    "direct"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_IN_USE\",\n  \"messageCode\": \"signup.emailInUse\",\n  \"message\": \"Este e-mail já tem uma conta. Entre para continuar.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
           "name": "Sign Up - Resend Code",
           "request": {
             "auth": {
@@ -2114,7 +2297,7 @@
               "body": "{\n  \"activeProfile\": \"nutritionist\",\n  \"token\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIs...\"\n  },\n  \"refreshToken\": \"8f3c1d...\"\n}"
             },
             {
-              "name": "Become Nutritionist - 403 Invite Required",
+              "name": "Become Nutritionist - 403 Invite Required (no longer produced: signup is open)",
               "originalRequest": {
                 "method": "PATCH",
                 "header": [
@@ -2614,9 +2797,45 @@
                 "students"
               ]
             },
-            "description": "Link a student to the authenticated trainer by searching for the student by email. Requires TRAINER role. A student can be linked to multiple trainers."
+            "description": "Legacy direct link. It never links directly any more: it runs the same invite flow as POST /trainer/student-invites (same caps and errors) and answers 202 { outcome, invite }. An existing account must accept the invite in the app (GET /my/trainer/invites); an address without an account is linked automatically after signup + e-mail verification. The old 201 student profile is no longer produced. Requires TRAINER role. Rate limited (config.rateLimit.trainer.inviteStudent). Errors: 403 platformPlan.studentCapExceeded / emailVerification.required, 409 student.alreadyLinked / studentInvite.alreadyPending / trainer.profileMissing, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Link Student by Email - 202 Invited",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"student@example.com\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students"
+                  ]
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"outcome\": \"invited\",\n  \"invite\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"email\": \"student@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"studentId\": null,\n    \"expiresAt\": \"2026-12-19T15:00:00.000Z\",\n    \"acceptedAt\": null,\n    \"revokedAt\": null,\n    \"lastSentAt\": \"2026-11-19T15:00:00.000Z\",\n    \"sendCount\": 1,\n    \"createdAt\": \"2026-11-19T15:00:00.000Z\",\n    \"canResend\": false,\n    \"resendAvailableAt\": \"2026-11-19T16:00:00.000Z\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get Linked Student",
@@ -2809,7 +3028,7 @@
                 "student-invites"
               ]
             },
-            "description": "Add a student by email. If the email belongs to a registered user with a VERIFIED email, the student is linked immediately (outcome \"linked\", `student` present); otherwise (no user, or a user whose email is not verified yet) a pending invite is emailed (outcome \"invited\", `invite` present) and accepted automatically once the student signs up and verifies that email. Plan student cap applies to invites. At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds); direct links do not count. Requires TRAINER role. Rate limited (see config.rateLimit.trainer.inviteStudent). Errors: 409 student.alreadyLinked / studentInvite.alreadyPending, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit.",
+            "description": "Invite a student by email; nobody is linked without the student's own action. Always creates a pending invite and emails it (outcome \"invited\", `invite` present). If the email already has an account (verified or not) the student accepts or declines in the app (GET /my/trainer/invites) and receives an \"open the app\" email; otherwise the invite is accepted automatically once the student signs up and verifies that email. Outcome \"linked\" and `student` stay in the contract but are no longer produced. Plan student cap applies. At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds). A sender whose email is not confirmed can create 3 invites per rolling 24h, then 403 emailVerification.required (accounts created before the open-signup cut-off are exempt). Requires TRAINER role. Rate limited (see config.rateLimit.trainer.inviteStudent). Errors: 403 platformPlan.studentCapExceeded / emailVerification.required, 409 student.alreadyLinked / studentInvite.alreadyPending, 422 student.cannotLinkSelf / student.accountDeactivated, 429 studentInvite.dailyLimit.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"novo.aluno@example.com\"\n}",
@@ -2862,7 +3081,7 @@
               "body": "{\n  \"outcome\": \"invited\",\n  \"invite\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"email\": \"novo.aluno@example.com\",\n    \"status\": \"pending\",\n    \"statusLabel\": \"Pendente\",\n    \"studentId\": null,\n    \"expiresAt\": \"2026-10-29T15:00:00.000Z\",\n    \"acceptedAt\": null,\n    \"revokedAt\": null,\n    \"lastSentAt\": \"2026-09-29T15:00:00.000Z\",\n    \"sendCount\": 1,\n    \"createdAt\": \"2026-09-29T15:00:00.000Z\",\n    \"canResend\": false,\n    \"resendAvailableAt\": \"2026-09-29T16:00:00.000Z\"\n  }\n}"
             },
             {
-              "name": "Invite Student - 201 Linked",
+              "name": "Invite Student - 201 Linked (no longer produced)",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -2940,6 +3159,46 @@
                 }
               ],
               "body": "{\n  \"error\": \"STUDENT_INVITE_DAILY_LIMIT\",\n  \"messageCode\": \"studentInvite.dailyLimit\",\n  \"message\": \"Você atingiu o limite diário de convites. Tente novamente mais tarde.\",\n  \"details\": {\n    \"retryAfterSeconds\": 43200\n  }\n}"
+            },
+            {
+              "name": "Invite Student - 403 Email Verification Required",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"novo.aluno@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -3053,7 +3312,7 @@
                 }
               ]
             },
-            "description": "Resend a pending student invite email. 1 hour cooldown between sends, max 5 sends per invite; resending an expired pending invite revives it (new 30 day expiry). Requires TRAINER role. Errors: 404, 409 studentInvite.notPending / studentInvite.resendLimit, 429 studentInvite.resendCooldown (details.retryAfterSeconds). 502 studentInvite.emailSendFailed when the email provider rejects the send (the resend is not counted)."
+            "description": "Resend a pending student invite email. 1 hour cooldown between sends, max 5 sends per invite; resending an expired pending invite revives it (new 30 day expiry). Requires TRAINER role. Errors: 404, 409 studentInvite.notPending / studentInvite.resendLimit, 429 studentInvite.resendCooldown (details.retryAfterSeconds). 502 studentInvite.emailSendFailed when the email provider rejects the send (the resend is not counted). An invite that waits for the consent of an existing account resends the \"open the app\" email; no verification code is sent."
           },
           "response": [
             {
@@ -11585,7 +11844,123 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"items\": [\n    {\n      \"id\": \"ws1\",\n      \"trainingName\": \"Treino A\",\n      \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n      \"durationSec\": 3300\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"ws1\",\n      \"trainingName\": \"Treino A\",\n      \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n      \"durationSec\": 3300,\n      \"deletedAt\": null\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Session Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "sessions",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                  "description": "Workout session UUID"
+                }
+              ]
+            },
+            "description": "Full detail of a workout session (any student, including soft-deleted sessions): exercise logs, set logs and the previous log of the same exercise. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 404 (admin.sessionNotFound), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get Session Detail - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "sessions",
+                    ":sessionId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "sessionId",
+                      "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                      "description": "Workout session UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f\",\n  \"status\": \"COMPLETED\",\n  \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n  \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n  \"durationSec\": 3300,\n  \"notes\": null,\n  \"deletedAt\": null,\n  \"training\": {\n    \"id\": \"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"name\": \"Treino A\"\n  },\n  \"student\": {\n    \"id\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n    \"firstName\": \"Maria\",\n    \"lastName\": \"Silva\",\n    \"email\": \"maria@example.com\"\n  },\n  \"exerciseLogs\": [\n    {\n      \"id\": \"c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f\",\n      \"order\": 1,\n      \"status\": \"COMPLETED\",\n      \"notes\": null,\n      \"exercise\": {\n        \"id\": \"e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b\",\n        \"name\": \"Supino reto\",\n        \"sets\": 3,\n        \"repetitions\": \"10\",\n        \"prescriptionMode\": \"REPS\",\n        \"duration\": null,\n        \"hasLoad\": true,\n        \"suggestedLoad\": 40,\n        \"restInterval\": 60\n      },\n      \"substitutedByExerciseId\": null,\n      \"substitutedByExerciseName\": null,\n      \"setLogs\": [\n        {\n          \"id\": \"f1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c\",\n          \"setNumber\": 1,\n          \"repetitions\": 10,\n          \"load\": 40,\n          \"duration\": null,\n          \"rpe\": 7,\n          \"restSeconds\": 60,\n          \"completed\": true,\n          \"notes\": null\n        }\n      ],\n      \"previousLog\": {\n        \"workoutSessionId\": \"7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f\",\n        \"finishedAt\": \"2026-10-27T10:00:00.000Z\",\n        \"setLogs\": [\n          {\n            \"setNumber\": 1,\n            \"repetitions\": 10,\n            \"load\": 37.5,\n            \"duration\": null\n          }\n        ],\n        \"bestSet\": {\n          \"setNumber\": 1,\n          \"load\": 37.5,\n          \"repetitions\": 10,\n          \"duration\": null,\n          \"rpe\": 7,\n          \"restSeconds\": 60,\n          \"completed\": true,\n          \"tonnage\": 375\n        }\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Session Detail - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "sessions",
+                    ":sessionId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "sessionId",
+                      "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                      "description": "Workout session UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"admin.sessionNotFound\",\n  \"message\": \"Workout session not found.\",\n  \"details\": {}\n}"
             }
           ]
         }
@@ -11890,6 +12265,51 @@
                 }
               ],
               "body": "{\n  \"error\": \"AI_OVERLOADED\",\n  \"messageCode\": \"ai.overloaded\",\n  \"message\": \"O assistente está sobrecarregado no momento. Tente novamente em instantes.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 Email not confirmed",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"studentId\": \"7c1d9e52-3a64-4b8f-a0d2-5e9b1c4f6a38\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/ai/chat",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "ai",
+                    "chat"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -12082,6 +12502,57 @@
                 }
               ],
               "body": "{\n  \"error\": \"AI_UNAVAILABLE\",\n  \"messageCode\": \"ai.unavailable\",\n  \"message\": \"O assistente não está disponível no momento. Tente novamente mais tarde.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "403 Email not confirmed (pre-stream)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "app-language",
+                    "value": "pt-BR",
+                    "description": "Locale for translated error messages (pt-BR default)"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"Cria um protocolo para o João usando o template Hipertrofia\",\n  \"conversationId\": \"b2f4a7d1-8c3e-4f60-9a15-d7e2c6b94013\",\n  \"studentId\": \"7c1d9e52-3a64-4b8f-a0d2-5e9b1c4f6a38\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/ai/chat/stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "ai",
+                    "chat",
+                    "stream"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         }
@@ -12750,6 +13221,45 @@
           "response": []
         },
         {
+          "name": "Create Weekly Championship",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"visibility\": \"full\",\n  \"weights\": { \"workouts\": 70, \"diet\": 0, \"cardio\": 30, \"feedback\": 0, \"hydration\": 0 },\n  \"activePillars\": [\"workouts\", \"cardio\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges"
+              ]
+            },
+            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored.\n\nScoring rule (weekly format): `weights` (the five pillars, integers 0 to 100 summing 100) and `activePillars` (non-empty, distinct pillars), sent together; omit both to copy the trainer ranking config. An invalid or partial rule answers 400 challenge.scoringRule.invalid with `details.field` (`weights` or `activePillars`). XP rules left out are copied from the trainer gamification config.\n\nVisibility in the app (`visibility`): `off` (Desligado: the student sees only the own week), `position` (Só a posição do aluno) or `full` (Ranking completo ao vivo, the default). It can change at any time before the end (PATCH) and applies on the next read of that championship; another value answers 400 challenge.visibility.invalid."
+          },
+          "response": []
+        },
+        {
           "name": "List Challenges",
           "request": {
             "method": "GET",
@@ -12777,7 +13287,7 @@
                 }
               ]
             },
-            "description": "List trainer challenges with optional ?status filter"
+            "description": "List trainer challenges with optional ?status filter. Each item carries `weights` and `activePillars` (weekly format) and `participantsPreview`: up to 4 participants by join order (studentId, firstName, lastName, avatarUrl)."
           },
           "response": []
         },
@@ -12809,7 +13319,7 @@
                 }
               ]
             },
-            "description": "Get challenge detail"
+            "description": "Get challenge detail. Weekly championships return their scoring rule: `weights` and `activePillars` (null and [] in the free-dates format)."
           },
           "response": []
         },
@@ -12855,7 +13365,7 @@
                 }
               ]
             },
-            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge."
+            "description": "Update challenge name, dates, and/or point rules. Pts fields (ptsWorkoutCompleted, ptsStreak7Days, ptsStreak30Days, ptsDailyCheckin, ptsEvolutionRecord, ptsWorkoutFeedback, dailyPointsCap) can only be updated when the challenge status is 'scheduled'. Returns 400 CHALLENGE_NOT_ACTIVE if you attempt to update pts fields on an active, completed, or cancelled challenge.\n\nWeekly format: while scheduled every field (name, description, startWeek, weeks, minPodiumWeeks, anonymousRanking, visibility, point rules); while running only name, description, anonymousRanking and visibility (others answer 409). `weights` and `activePillars` change only while scheduled, validated like the creation (400 challenge.scoringRule.invalid); running, closed or cancelled answers 409."
           },
           "response": []
         },
@@ -12889,6 +13399,39 @@
               ]
             },
             "description": "Cancel a challenge"
+          },
+          "response": []
+        },
+        {
+          "name": "Close Weekly Championship Early",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "close"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "End a running weekly championship early: the running week becomes the last one, the end moves to its Sunday and the championship closes at that week close (`closesAt`). 409 challenge.notClosable when it is not a running weekly championship."
           },
           "response": []
         },
@@ -12953,7 +13496,40 @@
                 }
               ]
             },
-            "description": "Get challenge leaderboard"
+            "description": "Get challenge leaderboard (XP). Each entry also carries `workouts` (completed workouts in the window), `bonusPoints` (trainer bonuses), `pointsThisWeek` (since Monday 00:00 in the trainer time zone) and `streakDays` (consecutive days with a completed workout, ending today or yesterday)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Challenge Consistency Standings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/challenges/:id/consistency",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "challenges",
+                ":id",
+                "consistency"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Weeks are scored with the championship weights and active pillars. `summary` carries the card numbers: classified, entering, leaderAverage, leaderLead (1st minus 2nd) and championshipAverage. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship. `privacyCounts` { name, anonymous, pending } tells how the participants appear in the app: by name, as \"Aluno do time\" by choice, or still to answer the privacy term."
           },
           "response": []
         },
@@ -13150,10 +13726,15 @@
                   "key": "status",
                   "value": "active",
                   "disabled": true
+                },
+                {
+                  "key": "format",
+                  "value": "weeks",
+                  "disabled": true
                 }
               ]
             },
-            "description": "List challenges the student participates in"
+            "description": "List challenges the student participates in, without cancelled ones, ordered running by nearest end, next by nearest start and closed by latest end. Optional `format` (`weeks` or `dates`) keeps only that format; the app asks for `weeks`. Each running or closed weekly championship carries `consistency` (`visibility`, `position`, `total`, `faixa`, `average`) as the championship visibility allows: `position` drops the average, `off` (and a student under 18) drops every figure; null for free-dates and scheduled ones."
           },
           "response": []
         },
@@ -13221,6 +13802,45 @@
             "description": "Get challenge leaderboard with own position highlighted"
           },
           "response": []
+        },
+        {
+          "name": "Get My Challenge Consistency",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/challenges/:id/consistency?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "challenges",
+                ":id",
+                "consistency"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Consistency classification of a weekly championship as a participant sees it, already anonymized on the server. `challenge` (name, description, status, weeks, currentWeek, participantCount, closedAt), `visibility`, `closesAt` of the running week, `privacy`, `me` (\"Minha constância\": appearsAs, position, total, faixa, average, weeks100 { done, of }, streak, entering, firstPlaceShared, the live week by pillar, weekStrip and effectiveWeights) and `board` (podium or club100 with tieSentence, neighbors, entering, total and one page of 20 items). Peer rows carry only key (opaque, per response), displayName (\"Aluno do time\" when pending, anonymous, under 18 or with the championship anonymous ranking), initials, avatarUrl, position, average, faixa, streak and isMe: never ids, e-mail, phone or pillars. Visibility `position`: board null and no average; `off` (also for a student under 18): board null and no position. Scheduled: me and board null. Closed: the frozen final standings. 404 challenge.notFound when the student is not a participant, or the championship is cancelled or in the free-dates format."
+          },
+          "response": []
         }
       ]
     },
@@ -13266,7 +13886,7 @@
                 }
               ]
             },
-            "description": "Search foods (TACO, TBCA and the caller's own custom foods), accent/case-insensitive. `sources` is a comma separated list of taco, tbca, custom (default: all); custom returns only the caller's own foods (nutritionist). Any authenticated user."
+            "description": "Search foods (TACO and the caller's own custom foods; TBCA is currently hidden), accent/case-insensitive. `sources` is a comma separated list of taco, tbca, custom (default: all); custom returns only the caller's own foods (nutritionist); tbca is accepted but currently returns no foods. Any authenticated user."
           },
           "response": [
             {
@@ -13349,7 +13969,7 @@
                 }
               ]
             },
-            "description": "Get a single food (TACO, TBCA or an owned custom food)."
+            "description": "Get a single food (TACO or an owned custom food; TBCA foods are currently hidden and return 404)."
           },
           "response": [
             {
@@ -13978,6 +14598,52 @@
                 }
               ],
               "body": "{\n  \"error\": \"NUTRITION_INVITE_ALREADY_LINKED\",\n  \"messageCode\": \"nutrition.invite.alreadyLinked\",\n  \"message\": \"Este paciente já está vinculado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Invite Patient by Email - 403 Email Verification Required",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/nutritionist/patient-invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "nutritionist",
+                    "patient-invites"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"novo.paciente@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"EMAIL_VERIFICATION_REQUIRED\",\n  \"messageCode\": \"emailVerification.required\",\n  \"message\": \"Confirme seu e-mail para continuar.\",\n  \"details\": {}\n}"
             }
           ]
         },
@@ -18463,6 +19129,609 @@
       ]
     },
     {
+      "name": "Student app - Trainer invites",
+      "item": [
+        {
+          "name": "List My Trainer Invites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites"
+              ]
+            },
+            "description": "Pending, unexpired trainer invites that wait for the caller's consent (the e-mail already had an account when the trainer invited it), newest first. A caller without a verified e-mail gets { items: [] }. Nothing is shared with the trainer until the invite is accepted. Any authenticated user (Bearer token)."
+          },
+          "response": [
+            {
+              "name": "List My Trainer Invites - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n      \"trainer\": {\n        \"firstName\": \"Ana\",\n        \"lastName\": \"Coach\",\n        \"avatarUrl\": null\n      },\n      \"createdAt\": \"2026-11-19T15:00:00.000Z\",\n      \"expiresAt\": \"2026-12-19T15:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Accept Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites",
+                ":id",
+                "accept"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "description": "Invite id (UUID)"
+                }
+              ]
+            },
+            "description": "Accept a pending trainer invite addressed to the caller e-mail: creates the trainer-student link (inactive on the plan when the trainer is over the student cap). Body: {} (optional). Errors: 404 studentInvite.notFound (unknown id, another e-mail, caller e-mail not verified), 409 studentInvite.notPending (already accepted, declined or revoked), 422 studentInvite.expired. Any authenticated user (Bearer token).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Accept Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"accepted\"\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_FOUND\",\n  \"messageCode\": \"studentInvite.notFound\",\n  \"message\": \"Convite não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 409 Not Pending",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_PENDING\",\n  \"messageCode\": \"studentInvite.notPending\",\n  \"message\": \"Este convite não está mais pendente.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Accept Trainer Invite - 422 Expired",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/accept",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "accept"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_EXPIRED\",\n  \"messageCode\": \"studentInvite.expired\",\n  \"message\": \"Este convite expirou. Peça um novo convite ao seu treinador.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Decline Trainer Invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "trainer",
+                "invites",
+                ":id",
+                "decline"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "description": "Invite id (UUID)"
+                }
+              ]
+            },
+            "description": "Decline a pending trainer invite addressed to the caller e-mail: nothing is linked and the trainer's invite list reports `declined`. Body: {} (optional). Same errors as accept. Any authenticated user (Bearer token).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Decline Trainer Invite - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"declined\"\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 404 Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_FOUND\",\n  \"messageCode\": \"studentInvite.notFound\",\n  \"message\": \"Convite não encontrado.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 409 Not Pending",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_NOT_PENDING\",\n  \"messageCode\": \"studentInvite.notPending\",\n  \"message\": \"Este convite não está mais pendente.\",\n  \"details\": {}\n}"
+            },
+            {
+              "name": "Decline Trainer Invite - 422 Expired",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/trainer/invites/:id/decline",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "trainer",
+                    "invites",
+                    ":id",
+                    "decline"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                      "description": "Invite id (UUID)"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"STUDENT_INVITE_EXPIRED\",\n  \"messageCode\": \"studentInvite.expired\",\n  \"message\": \"Este convite expirou. Peça um novo convite ao seu treinador.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Videos",
       "item": [
         {
@@ -20350,6 +21619,710 @@
               "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"month\",\n      \"message\": \"must match pattern\"\n    }\n  ]\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Professional Billing",
+      "item": [
+        {
+          "name": "Create Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). serviceType (training|nutrition|both) is optional: defaults to training for users with a trainer row, nutrition for nutritionist-only users. training/both plans belong to the trainer row, nutrition to the nutritionist row. 422 subscription.serviceTypeNotAllowed when the caller lacks the row the type needs (both needs both rows).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Plano Nutricional\",\n  \"recurrence\": \"monthly\",\n  \"price\": 200,\n  \"serviceType\": \"nutrition\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans?includeArchived=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans"
+              ],
+              "query": [
+                {
+                  "key": "includeArchived",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). ?includeArchived=true includes archived plans. Items carry serviceType/serviceTypeLabel, nullable trainerId/nutritionistId, activeSubscriptionCount and activeSubscriptionCountByKind { students, patients } (a subscriber linked to the caller as trainer student counts as student, otherwise patient)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.planNotFound outside the caller's scope."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). serviceType may only switch within the same owner row (training <-> both for a trainer row); moving to or from nutrition returns 422 subscription.serviceTypeNotAllowed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Novo nome\",\n  \"serviceType\": \"both\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Archive Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}",
+                "archive"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Idempotent soft delete."
+          },
+          "response": []
+        },
+        {
+          "name": "Unarchive Plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscription-plans/{{planId}}/unarchive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscription-plans",
+                "{{planId}}",
+                "unarchive"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Plan to Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Link rule by plan serviceType: training needs a trainer link, nutrition an active nutritionist-patient link, both either one (403 student.notLinked otherwise). Replaces the caller's active subscription with the same person through either owner row (reason replaced); other professionals' subscriptions are untouched. The trainer seat quota applies only to training plans and to both plans for people linked as trainer students.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{planId}}\",\n  \"startDate\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). History across both owner rows; no live link required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Student Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/subscriptions/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "subscriptions",
+                "active"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 403 student.notLinked when the person has neither link to the caller; null when none is active."
+          },
+          "response": []
+        },
+        {
+          "name": "List Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Filters: status, planId."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.notFound outside the caller's scope."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "cancel"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Voids not-yet-due pending payments.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Alta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Next Payment Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Same rules as the trainer route.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Subscription Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/subscriptions/{{subscriptionId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "subscriptions",
+                "{{subscriptionId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 404 subscription.paymentNotFound for another professional's payment.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Pix\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment Paid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/mark-paid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "mark-paid"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paidAt\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Payment Pending",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/mark-pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "mark-pending"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Void Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}/void",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}",
+                "void"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). "
+          },
+          "response": []
+        },
+        {
+          "name": "Void Payment (DELETE alias)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). 204; alias of void."
+          },
+          "response": []
+        },
+        {
+          "name": "List Student Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/students/{{studentId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "students",
+                "{{studentId}}",
+                "payments"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). History and summary across both owner rows; rows carry serviceType/serviceTypeLabel."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/finance/overview?month=2026-11",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "finance",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "2026-11",
+                  "description": "YYYY-MM (America/Sao_Paulo). Defaults to the current month."
+                }
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). KPIs and payment rows for a month across both owner rows; rows carry serviceType/serviceTypeLabel."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/professional/finance/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "professional",
+                "finance",
+                "summary"
+              ]
+            },
+            "description": "Requires the trainer or nutritionist role; scoped to every row the caller owns (trainer + nutritionist). Returns { overdueCount, overdueAmount } (2-decimal string) for the sidebar badge; does not generate cycles."
+          },
+          "response": []
         }
       ]
     },
@@ -23078,6 +25051,1575 @@
                 }
               ],
               "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Resource not found.\",\n  \"details\": {}\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consistency Ranking - My",
+      "item": [
+        {
+          "name": "Get My Consistency Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/consistency-ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "consistency-ranking"
+              ]
+            },
+            "description": "Home card and Ranking tab of the student app. `state` is `ok` or `no_trainer` (no active trainer link: week and highlight null). `week`: score, status, paused, closesAt and one row per active pillar with a target (done, expected, missing, complete), plus `missingPhrase` (\"Faltam ...\" over the active pillars). Scored with the weights of the highlighted championship, or with the trainer general ranking without one. `highlight`: the running weekly championship that ends first (then started first, then by name) with challengeId, name, visibility, position, total, faixa and average as its visibility allows; null without one. `othersCount`: other running weekly championships (\"+N campeonatos\"). `privacy`: appearAs (`name`, `anonymous` or `pending`), termVersion and acceptedAt."
+          },
+          "response": []
+        },
+        {
+          "name": "Set My Consistency Privacy",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appearAs\": \"name\",\n  \"termVersion\": \"2026-11-v1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/my/consistency-ranking/privacy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "consistency-ranking",
+                "privacy"
+              ]
+            },
+            "description": "Stores how the student appears to the other participants of every championship: `name` (first name and initial of the last name) or `anonymous` (\"Aluno do time\", no photo), with the date and the current term version. Storing it again only moves the date; the score never changes. Returns { appearAs, termVersion, acceptedAt }. 400 consistencyRanking.privacy.invalid for another choice or an outdated term version."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Student Feedback - My",
+      "item": [
+        {
+          "name": "Get Pending Feedback",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                "pending"
+              ]
+            },
+            "description": "Most recent feedback the student can still answer (pending and not past expiresAt), for the home card; feedback is null when there is none. Labels follow the app-language header. Requires authentication (any role). Errors: 401, 500."
+          },
+          "response": [
+            {
+              "name": "Get Pending Feedback - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    "pending"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"feedback\": {\n    \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n    \"milestone\": \"D7\",\n    \"milestoneLabel\": \"7 dias\",\n    \"title\": \"Padrão TeuFit\",\n    \"trainer\": {\n      \"name\": \"Rafael Menezes\",\n      \"avatarUrl\": null\n    },\n    \"questionCount\": 8,\n    \"estimatedMinutes\": 3,\n    \"expiresAt\": \"2026-11-20T12:00:00.000Z\",\n    \"daysLeft\": 3\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Feedback",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "description": "One feedback with its questions and the saved draft answers. A pending feedback past expiresAt reads status expired with daysLeft 0. The has_meal_plan question appears only when the student had a meal plan when it was sent. Requires authentication. Errors: 400 validation, 401, 404 STUDENT_FEEDBACK_NOT_FOUND (studentFeedback.notFound), 500."
+          },
+          "response": [
+            {
+              "name": "Get Feedback - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"milestone\": \"D7\",\n  \"milestoneLabel\": \"7 dias\",\n  \"title\": \"Padrão TeuFit\",\n  \"trainer\": {\n    \"name\": \"Rafael Menezes\",\n    \"avatarUrl\": null\n  },\n  \"questionCount\": 8,\n  \"estimatedMinutes\": 3,\n  \"expiresAt\": \"2026-11-20T12:00:00.000Z\",\n  \"daysLeft\": 3,\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"questions\": [\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"order\": 1,\n      \"text\": \"Como foi sua semana de treino?\",\n      \"helpText\": null,\n      \"type\": \"score\",\n      \"typeLabel\": \"Nota\",\n      \"required\": true,\n      \"minLabel\": \"Muito ruim\",\n      \"maxLabel\": \"Excelente\"\n    },\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a12\",\n      \"order\": 2,\n      \"text\": \"Como você avalia seu sono?\",\n      \"helpText\": null,\n      \"type\": \"stars\",\n      \"typeLabel\": \"Estrelas\",\n      \"required\": true,\n      \"minLabel\": null,\n      \"maxLabel\": null\n    },\n    {\n      \"id\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"order\": 3,\n      \"text\": \"Quer contar algo para o seu treinador?\",\n      \"helpText\": \"Opcional\",\n      \"type\": \"open\",\n      \"typeLabel\": \"Aberta\",\n      \"required\": false,\n      \"minLabel\": null,\n      \"maxLabel\": null\n    }\n  ],\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Feedback Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id",
+                "draft"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Replaces the answer of each question sent and keeps the others; returns everything saved so far in question order. score: integer 0-10 (score) or 1-5 (stars); null score or null/blank text removes the answer. text max 2000 chars; max 100 items. Requires authentication. Errors: 400 STUDENT_FEEDBACK_INVALID_ANSWER (studentFeedback.invalidAnswer, details.questionId) or validation, 401, 404 STUDENT_FEEDBACK_NOT_FOUND, 409 STUDENT_FEEDBACK_EXPIRED (studentFeedback.expired), 409 STUDENT_FEEDBACK_ALREADY_SUBMITTED (studentFeedback.alreadySubmitted), 500."
+          },
+          "response": [
+            {
+              "name": "Save Feedback Draft - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id/draft",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id",
+                    "draft"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Submit Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/feedbacks/:id/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "feedbacks",
+                ":id",
+                "submit"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Submits the feedback; the answers sent are merged over the saved draft. Returns nextFeedbackAt (null when no automatic feedback is scheduled). Requires authentication. Errors: 400 STUDENT_FEEDBACK_REQUIRED_ANSWER_MISSING (studentFeedback.requiredAnswerMissing, details.questionIds) or STUDENT_FEEDBACK_INVALID_ANSWER, 401, 404 STUDENT_FEEDBACK_NOT_FOUND, 409 STUDENT_FEEDBACK_EXPIRED, 409 STUDENT_FEEDBACK_ALREADY_SUBMITTED, 500."
+          },
+          "response": [
+            {
+              "name": "Submit Feedback - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/my/feedbacks/:id/submit",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "my",
+                    "feedbacks",
+                    ":id",
+                    "submit"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a11\",\n      \"score\": 8,\n      \"text\": null\n    },\n    {\n      \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n      \"score\": null,\n      \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"nextFeedbackAt\": \"2026-11-25T12:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Student Feedback - Trainer",
+      "item": [
+        {
+          "name": "List Inbox",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks?status=all&milestone=D7&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all",
+                  "description": "all | unread (answered, not read) | unanswered (expired)"
+                },
+                {
+                  "key": "milestone",
+                  "value": "D7",
+                  "description": "D7 | D15 | D21 | D30 | RECURRING | ADHOC"
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Optional. Maximum number of items, 1-200 (default 100, the most recently sent ones)"
+                }
+              ]
+            },
+            "description": "Student feedbacks of the trainer, most recently sent first, capped by limit (default 100, max 200). summary ignores the filters and the limit. Query params are optional (remove them for no filter). Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "List Inbox - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks?status=all&milestone=D7&limit=100",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "all",
+                      "description": "all | unread (answered, not read) | unanswered (expired)"
+                    },
+                    {
+                      "key": "milestone",
+                      "value": "D7",
+                      "description": "D7 | D15 | D21 | D30 | RECURRING | ADHOC"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "100"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"summary\": {\n    \"responseRate30d\": 75,\n    \"averageIndex\": 72,\n    \"unansweredCount\": 1,\n    \"unreadCount\": 2\n  },\n  \"items\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"student\": {\n        \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n        \"name\": \"Camila Duarte\",\n        \"avatarUrl\": null\n      },\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "unread-count"
+              ]
+            },
+            "description": "Number of answered student feedbacks the trainer has not read (sidebar badge). Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Unread Count - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/unread-count",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "unread-count"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "Mark Feedback As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                ":id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackId}}",
+                  "description": "Student feedback UUID"
+                }
+              ]
+            },
+            "description": "No body. Keeps the first read date; a feedback that was not answered yet is not stamped (readAt null). Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Mark Feedback As Read - 200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/:id/read",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    ":id",
+                    "read"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackId}}",
+                      "description": "Student feedback UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"readAt\": \"2026-11-12T09:15:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "feedbacks"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "description": "Student UUID"
+                }
+              ]
+            },
+            "description": "Feedbacks this trainer sent to the student, oldest first. pillars and openAnswers are empty unless the feedback was answered; variation between milestones is computed by the client. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 NOT_FOUND (student not linked), 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback History - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "feedbacks"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "{{studentId}}",
+                      "description": "Student UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"student\": {\n    \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n    \"name\": \"Camila Duarte\",\n    \"avatarUrl\": null\n  },\n  \"hasPending\": false,\n  \"feedbacks\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\",\n      \"pillars\": [\n        {\n          \"pillar\": \"training_adherence\",\n          \"pillarLabel\": \"Adesão (treino)\",\n          \"score\": 80\n        },\n        {\n          \"pillar\": \"sleep\",\n          \"pillarLabel\": \"Sono\",\n          \"score\": 75\n        }\n      ],\n      \"openAnswers\": [\n        {\n          \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n          \"question\": \"Quer contar algo para o seu treinador?\",\n          \"pillar\": \"report\",\n          \"pillarLabel\": \"Relato\",\n          \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Send Ad-hoc Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "students",
+                ":studentId",
+                "feedbacks"
+              ],
+              "variable": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}",
+                  "description": "Student UUID"
+                }
+              ]
+            },
+            "description": "Optional body {templateId}: without it (no body or {}) the general template is sent; otherwise the general one or one of the trainer. Creates an ADHOC feedback request and e-mails the student; works with auto-send off. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 403 STUDENT_BLOCKED_ON_PLAN, 404 NOT_FOUND (student not linked), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (templateId neither general nor the trainer's), 409 STUDENT_FEEDBACK_ALREADY_PENDING (studentFeedback.alreadyPending), 500.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Send Ad-hoc Feedback - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/students/:studentId/feedbacks",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "students",
+                    ":studentId",
+                    "feedbacks"
+                  ],
+                  "variable": [
+                    {
+                      "key": "studentId",
+                      "value": "{{studentId}}",
+                      "description": "Student UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"templateId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n  \"milestone\": \"ADHOC\",\n  \"milestoneLabel\": \"Envio manual\",\n  \"status\": \"pending\",\n  \"statusLabel\": \"Pendente\",\n  \"sentAt\": \"2026-11-17T12:00:00.000Z\",\n  \"expiresAt\": \"2026-11-20T12:00:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "config"
+              ]
+            },
+            "description": "Settings of the trainer. Defaults when never saved: autoSendEnabled false, every milestone true. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Config - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "config"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Student Feedback Config",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "config"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Partial update: any subset of the booleans, no extra properties. Turning auto-send on never sends milestones that fell due before. Returns the full config. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Update Student Feedback Config - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/config",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "config"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Student Feedback Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates"
+              ]
+            },
+            "description": "General template first, then the latest version of each template of the trainer, by name. milestones = milestones pointing at the template (all five for the general one with no config). Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "List Student Feedback Templates - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"templates\": [\n    {\n      \"id\": \"3a6f0f64-1c2b-4d8e-9b1a-0a1b2c3d4e01\",\n      \"name\": \"Feedback padrão\",\n      \"isGeneral\": true,\n      \"version\": 1,\n      \"questionCount\": 8,\n      \"milestones\": [\n        \"D7\",\n        \"D15\",\n        \"D21\",\n        \"D30\",\n        \"RECURRING\"\n      ],\n      \"updatedAt\": null\n    },\n    {\n      \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n      \"name\": \"Check-in semanal\",\n      \"isGeneral\": false,\n      \"version\": 2,\n      \"questionCount\": 3,\n      \"milestones\": [\n        \"D7\",\n        \"D30\"\n      ],\n      \"updatedAt\": \"2026-11-18T12:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Template",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "The general template or one of the trainer, with its questions. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (studentFeedbackTemplate.notFound), 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Template - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"name\": \"Check-in semanal\",\n    \"isGeneral\": false,\n    \"version\": 2,\n    \"hasRequests\": true,\n    \"milestones\": [\n      \"D7\",\n      \"D30\"\n    ],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Student Feedback Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Check-in mensal\",\n  \"sourceTemplateId\": \"{{studentFeedbackTemplateId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates"
+              ]
+            },
+            "description": "Creates a template of the trainer (version 1, hasRequests false, no milestones) with the given name. Body: name (string, 1-80, trimmed; required), sourceTemplateId (uuid, optional): the general template or one of the trainer, whose questions are copied in order. Without sourceTemplateId the template starts with one starter question (score, pillar other, required, no condition) whose text follows the app-language header (pt-BR default). Unknown body properties are ignored. Response 201 { template } in the shape of GET /trainer/student-feedbacks/templates/:id. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed; missing or empty name, name over 80, sourceTemplateId not a uuid), 400 STUDENT_FEEDBACK_TEMPLATE_INVALID (name of spaces only), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (source unknown, deleted, replaced by a newer version or of another trainer), 500."
+          },
+          "response": [
+            {
+              "name": "Create Student Feedback Template - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Check-in mensal\",\n  \"sourceTemplateId\": \"{{studentFeedbackTemplateId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"8d0f7780-8536-41ef-a55c-f18fd2a01bf8\",\n    \"name\": \"Check-in mensal\",\n    \"isGeneral\": false,\n    \"version\": 1,\n    \"hasRequests\": false,\n    \"milestones\": [],\n    \"questions\": [\n      {\n        \"id\": \"6f2c8d51-ae4b-4b7f-9032-4c5d6e7f8a12\",\n        \"order\": 1,\n        \"text\": \"Como foi a sua semana?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outro\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Student Feedback Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id/duplicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id",
+                "duplicate"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "No body. Copies the general template or one of the trainer into a new template of the trainer (version 1, hasRequests false, no milestones, name = source + ' (cópia)' cut to 80). Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Duplicate Student Feedback Template - 201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id/duplicate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id",
+                    "duplicate"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"b1d5a3e2-52f4-4f0a-8a55-2e6c1d9f7a10\",\n    \"name\": \"Check-in semanal (cópia)\",\n    \"isGeneral\": false,\n    \"version\": 1,\n    \"hasRequests\": false,\n    \"milestones\": [],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Save Student Feedback Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Check-in semanal\",\n  \"questions\": [\n    {\n      \"text\": \"Como foi sua semana de treinos?\",\n      \"type\": \"stars\",\n      \"pillar\": \"training_adherence\",\n      \"required\": true\n    },\n    {\n      \"text\": \"Qual o seu nível de cansaço?\",\n      \"helpText\": \"0 = sem cansaço, 10 = exausto\",\n      \"type\": \"score\",\n      \"pillar\": \"sleep\",\n      \"required\": true,\n      \"invertScore\": true,\n      \"minLabel\": \"Nenhum\",\n      \"maxLabel\": \"Muito alto\"\n    },\n    {\n      \"text\": \"Você seguiu o plano alimentar?\",\n      \"type\": \"score\",\n      \"pillar\": \"diet_adherence\",\n      \"condition\": \"has_meal_plan\",\n      \"minLabel\": \"Nada\",\n      \"maxLabel\": \"Totalmente\"\n    },\n    {\n      \"text\": \"Quer contar mais alguma coisa?\",\n      \"type\": \"open\",\n      \"pillar\": \"other\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Replaces name and the whole question list (1-15), in the order sent. No request sent yet: edited in place (same id and version). Any request sent: new id, version + 1, hasRequests false; the old id answers 404 and milestones follow the new id. Texts are trimmed; blank help text/labels become null; end labels are dropped on non-score questions. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 400 STUDENT_FEEDBACK_TEMPLATE_INVALID (studentFeedbackTemplate.invalid: blank name/text, invertScore on an open question, no question without a condition), 403 STUDENT_FEEDBACK_TEMPLATE_READ_ONLY (general template), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Save Student Feedback Template - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Check-in semanal\",\n  \"questions\": [\n    {\n      \"text\": \"Como foi sua semana de treinos?\",\n      \"type\": \"stars\",\n      \"pillar\": \"training_adherence\",\n      \"required\": true\n    },\n    {\n      \"text\": \"Qual o seu nível de cansaço?\",\n      \"helpText\": \"0 = sem cansaço, 10 = exausto\",\n      \"type\": \"score\",\n      \"pillar\": \"sleep\",\n      \"required\": true,\n      \"invertScore\": true,\n      \"minLabel\": \"Nenhum\",\n      \"maxLabel\": \"Muito alto\"\n    },\n    {\n      \"text\": \"Você seguiu o plano alimentar?\",\n      \"type\": \"score\",\n      \"pillar\": \"diet_adherence\",\n      \"condition\": \"has_meal_plan\",\n      \"minLabel\": \"Nada\",\n      \"maxLabel\": \"Totalmente\"\n    },\n    {\n      \"text\": \"Quer contar mais alguma coisa?\",\n      \"type\": \"open\",\n      \"pillar\": \"other\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"template\": {\n    \"id\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"name\": \"Check-in semanal\",\n    \"isGeneral\": false,\n    \"version\": 2,\n    \"hasRequests\": false,\n    \"milestones\": [\n      \"D7\",\n      \"D30\"\n    ],\n    \"questions\": [\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f01\",\n        \"order\": 1,\n        \"text\": \"Como foi sua semana de treinos?\",\n        \"helpText\": null,\n        \"type\": \"stars\",\n        \"typeLabel\": \"Estrelas\",\n        \"pillar\": \"training_adherence\",\n        \"pillarLabel\": \"Adesão ao treino\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f02\",\n        \"order\": 2,\n        \"text\": \"Qual o seu nível de cansaço?\",\n        \"helpText\": null,\n        \"type\": \"score\",\n        \"typeLabel\": \"Nota\",\n        \"pillar\": \"sleep\",\n        \"pillarLabel\": \"Sono\",\n        \"required\": true,\n        \"condition\": null,\n        \"invertScore\": true,\n        \"minLabel\": \"Nenhum\",\n        \"maxLabel\": \"Muito alto\"\n      },\n      {\n        \"id\": \"5e1b7c40-9d3a-4a6e-8f21-3b4c5d6e7f03\",\n        \"order\": 3,\n        \"text\": \"Quer contar mais alguma coisa?\",\n        \"helpText\": null,\n        \"type\": \"open\",\n        \"typeLabel\": \"Texto livre\",\n        \"pillar\": \"other\",\n        \"pillarLabel\": \"Outros\",\n        \"required\": false,\n        \"condition\": null,\n        \"invertScore\": false,\n        \"minLabel\": null,\n        \"maxLabel\": null\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Student Feedback Template",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "templates",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{studentFeedbackTemplateId}}",
+                  "description": "Feedback template UUID"
+                }
+              ]
+            },
+            "description": "Soft delete; milestones using it go back to the general template; feedbacks already sent keep it. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 403 STUDENT_FEEDBACK_TEMPLATE_READ_ONLY (general template), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND, 500."
+          },
+          "response": [
+            {
+              "name": "Delete Student Feedback Template - 204 No Content",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/templates/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "templates",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "{{studentFeedbackTemplateId}}",
+                      "description": "Feedback template UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Get Student Feedback Milestone Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "milestone-templates"
+              ]
+            },
+            "description": "Template chosen for each milestone; null = the general template. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 500."
+          },
+          "response": [
+            {
+              "name": "Get Student Feedback Milestone Templates - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "milestone-templates"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"milestoneTemplates\": {\n    \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"d15\": null,\n    \"d21\": null,\n    \"d30\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"recurring\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Student Feedback Milestone Templates",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trainer",
+                "student-feedbacks",
+                "milestone-templates"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"d15\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Partial update: any subset of d7, d15, d21, d30, recurring, each a template uuid or null. null or the general template's id is stored as null. Response always has all five keys. Requires TRAINER role. Errors: 400 VALIDATION_ERROR (validation.failed), 401, 403 trainer.notFound, 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND for an unknown, foreign or deleted id (nothing is stored), 500."
+          },
+          "response": [
+            {
+              "name": "Update Student Feedback Milestone Templates - 200 OK",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/trainer/student-feedbacks/milestone-templates",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "trainer",
+                    "student-feedbacks",
+                    "milestone-templates"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"d15\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"milestoneTemplates\": {\n    \"d7\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"d15\": null,\n    \"d21\": null,\n    \"d30\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"recurring\": null\n  }\n}"
             }
           ]
         }

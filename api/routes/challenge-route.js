@@ -19,6 +19,9 @@ import {
   getChallengeRankingForTrainer,
   getChallengeRankingForStudent,
 } from '../../src/services/challenge-ranking-service.js';
+import { getChallengeConsistency } from '../../src/services/challenge-consistency-service.js';
+import { getStudentBoard } from '../../src/services/consistency-student-board-service.js';
+import { requestEarlyClose } from '../../src/services/challenge-close-service.js';
 import {
   createChallengeSchema,
   listChallengesSchema,
@@ -34,7 +37,10 @@ import {
   listMyChallengesSchema,
   getMyChallengSchema,
   getMyChallengeRankingSchema,
+  closeChallengeSchema,
+  getChallengeConsistencySchema,
 } from '../schemas/challenge-route.schema.js';
+import { getMyChallengeConsistencySchema } from '../schemas/my-consistency-ranking-route.schema.js';
 
 export async function challengeRoutes(fastify) {
   // ─── Trainer: CRUD ────────────────────────────────────────────────────────
@@ -133,6 +139,35 @@ export async function challengeRoutes(fastify) {
         challengeId: request.params.id,
       });
       return reply.status(204).send();
+    },
+  );
+
+  fastify.post(
+    '/trainer/challenges/:id/close',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: closeChallengeSchema,
+    },
+    async (request, reply) => {
+      const { closesAt } = await requestEarlyClose(prisma, request.user.id, request.params.id);
+      const challenge = await getChallenge({
+        prisma,
+        trainerUserId: request.user.id,
+        challengeId: request.params.id,
+      });
+      return reply.send({ ...challenge, closesAt });
+    },
+  );
+
+  fastify.get(
+    '/trainer/challenges/:id/consistency',
+    {
+      preHandler: [authenticate, requireRole(Roles.TRAINER)],
+      schema: getChallengeConsistencySchema,
+    },
+    async (request, reply) => {
+      const standings = await getChallengeConsistency(prisma, request.user.id, request.params.id);
+      return reply.send(standings);
     },
   );
 
@@ -238,6 +273,7 @@ export async function challengeRoutes(fastify) {
         studentId: request.user.id,
         trainerId: request.query.trainerId ?? null,
         status: request.query.status ?? null,
+        format: request.query.format ?? null,
       });
       return reply.send(challenges);
     },
@@ -272,6 +308,18 @@ export async function challengeRoutes(fastify) {
         challengeId: request.params.id,
       });
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    '/my/challenges/:id/consistency',
+    {
+      preHandler: [authenticate],
+      schema: getMyChallengeConsistencySchema,
+    },
+    async (request, reply) => {
+      const board = await getStudentBoard(prisma, request.user.id, request.params.id, { page: request.query.page });
+      return reply.send(board);
     },
   );
 }

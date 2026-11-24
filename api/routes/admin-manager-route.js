@@ -2,6 +2,7 @@ import config from '../../config/index.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import {
   getProtocolDetail,
+  getSessionDetail,
   getUserOverview,
   listUserProtocols,
   listUserSessions,
@@ -61,5 +62,9 @@ export async function adminManagerRoutes(fastify) {
   fastify.get('/admin/manager/users/:userId/sessions', managerRouteOptions(schema.listUserSessionsSchema), async (request, reply) => {
     const { page, pageSize } = request.query;
     return reply.send(await listUserSessions(fastify.adminDb, { userId: request.params.userId, page, pageSize }));
+  });
+
+  fastify.get('/admin/manager/sessions/:sessionId', managerRouteOptions(schema.getSessionDetailSchema), async (request, reply) => {
+    return reply.send(await getSessionDetail(fastify.adminDb, { sessionId: request.params.sessionId }));
   });
 }

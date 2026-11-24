@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { parseBool } from '../helpers/env.js';
 import config from '../../config/index.js';
 import { INVITE_TTL_MS } from '../constants/trainer-invite.js';
+import { RESPONSE_WINDOW_DAYS } from '../constants/student-feedback.js';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const disableEmail = parseBool(process.env.DISABLE_EMAIL, false);
@@ -71,6 +72,7 @@ function renderVerificationCodeBlock(code) {
 }
 
 const PATIENT_INVITE_CONSENT_NOTICE = 'Nenhum dado seu é compartilhado com o nutricionista até você aceitar.';
+const STUDENT_INVITE_CONSENT_NOTICE = 'Nenhum dado seu é compartilhado com o treinador até você aceitar.';
 
 // Subject line for a nutritionist invite.
 function patientInviteSubject(nutritionistName) {
@@ -363,7 +365,7 @@ class EmailHandler {
 
     sendStudentLinkedEmail({to, trainerName}) {
         const teamLabel = trainerName ? `time de ${escapeHtml(trainerName)}` : 'time do seu treinador';
-        const subject = '[Teufit] Bem-vindo ao teste fechado!';
+        const subject = '[Teufit] Você entrou no time do seu treinador';
         const htmlContent = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -388,46 +390,14 @@ class EmailHandler {
                     <!-- Content -->
                     <tr>
                         <td style="padding: 44px 40px;">
-                            <!-- Beta badge -->
-                            <table role="presentation" style="width: 100%; margin: 0 0 20px; border-collapse: collapse;">
-                                <tr>
-                                    <td align="center">
-                                        <span style="display: inline-block; background-color: #D6E5F8; color: #1054B2; font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;">
-                                            Acesso antecipado · Teste fechado
-                                        </span>
-                                    </td>
-                                </tr>
-                            </table>
-
                             <h2 style="margin: 0 0 12px; color: #0F1B2D; font-size: 22px; font-weight: 800; text-align: center;">
-                                Você está no teste fechado do Teufit!
+                                Você entrou no ${teamLabel}
                             </h2>
 
                             <p style="margin: 0 0 16px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Você foi vinculado ao ${teamLabel} e é uma das primeiras pessoas a usar o Teufit. Estamos muito felizes em ter você nessa fase inicial com a gente.
+                                Você foi vinculado ao ${teamLabel} no Teufit. Abra o app para ver seus treinos e acompanhar sua evolução.
                             </p>
 
-                            <!-- What to expect -->
-                            <table role="presentation" style="width: 100%; margin: 24px 0; border-collapse: collapse;">
-                                <tr>
-                                    <td style="padding: 0;">
-                                        <table role="presentation" width="100%" align="center" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: separate; background-color: #D6E5F8; border-radius: 16px;">
-                                            <tr>
-                                                <td style="padding: 24px;">
-                                                    <p style="margin: 0 0 10px; color: #1054B2; font-size: 17px; font-weight: 800;">
-                                                        O que esperar desta fase
-                                                    </p>
-                                                    ${renderBulletList(['Alguns bugs podem aparecer — é esperado e faz parte do processo.', 'Seu feedback molda o produto: conte o que funciona e o que pode melhorar.', 'Sua participação é muito importante para deixar o Teufit cada vez melhor.'], '#1054B2')}
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <p style="margin: 0 0 4px; color: #4b5563; font-size: 16px; line-height: 1.7; text-align: center;">
-                                Estamos ansiosos pelos seus feedbacks. Conte com a gente!
-                            </p>
 ${renderStoreButtonsBlock()}
 
                             <p style="margin: 30px 0 0; color: #6b7280; font-size: 15px; line-height: 1.6; text-align: center;">
@@ -776,6 +746,27 @@ ${renderStoreButtonsBlock()}
             html: htmlContent,
             subject: subject,
         });
+    }
+
+    // Invite email for an address that already has an account: the student opens the app to accept or decline (no code, no link).
+    sendStudentInviteOpenAppEmail({to, trainerName: rawTrainerName}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const label = trainerName ? escapeHtml(trainerName) : 'Seu treinador';
+        const subject = trainerName
+            ? `[Teufit] ${trainerName} te convidou no Teufit`
+            : '[Teufit] Seu treinador te convidou no Teufit';
+        const html = renderTransactionalEmail({
+            title: 'Convite Teufit',
+            heading: `${label} te convidou no Teufit`,
+            bodyHtml: [
+                renderParagraph(`${label} quer montar seus treinos e acompanhar sua evolução pelo Teufit.`),
+                renderParagraph('Abra o app Teufit para <strong>aceitar ou recusar</strong> o convite. Se o convite não aparecer, atualize o app para a versão mais recente.'),
+                renderParagraph(STUDENT_INVITE_CONSENT_NOTICE),
+                renderStoreButtonsBlock(),
+                renderParagraph('Este convite expira em 30 dias.'),
+            ].join('\n'),
+        });
+        return sendTransactional(this, { to, subject, html });
     }
 
     /**
@@ -1261,6 +1252,52 @@ ${renderStoreButtonsBlock()}
             html: htmlContent,
             subject: subject,
         });
+    }
+
+    // Layout shared by the student feedback e-mails: students answer only in the mobile app, so the e-mail points there.
+    renderStudentFeedbackEmail({title, heading, paragraphs}) {
+        return renderTransactionalEmail({
+            title,
+            heading,
+            bodyHtml: [...paragraphs.map(renderParagraph), renderStoreButtonsBlock()].join('\n'),
+        });
+    }
+
+    /**
+     * Tells a student that their trainer asked for a feedback, answered in the mobile app within the window.
+     */
+    sendStudentFeedbackRequestEmail({to, studentName: rawStudentName, trainerName: rawTrainerName}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const studentName = sanitizeSubjectText(rawStudentName);
+        const trainerLabel = trainerName ? escapeHtml(trainerName) : 'Seu treinador';
+        const html = this.renderStudentFeedbackEmail({
+            title: 'Feedback do seu treino',
+            heading: studentName ? `${escapeHtml(studentName)}, conte como está seu processo` : 'Conte como está seu processo',
+            paragraphs: [
+                `${trainerLabel} quer saber como foram seus últimos dias. São poucas perguntas e leva só alguns minutos.`,
+                `Responda pelo app Teufit em até <strong>${RESPONSE_WINDOW_DAYS} dias</strong>.`,
+            ],
+        });
+        const subject = trainerName ? `[Teufit] ${trainerName} pediu seu feedback` : '[Teufit] Seu treinador pediu seu feedback';
+        return sendTransactional(this, { to, subject, html });
+    }
+
+    /**
+     * Reminds a student, once, that a feedback is still waiting for an answer.
+     */
+    sendStudentFeedbackReminderEmail({to, studentName: rawStudentName, trainerName: rawTrainerName}) {
+        const trainerName = sanitizeSubjectText(rawTrainerName);
+        const studentName = sanitizeSubjectText(rawStudentName);
+        const trainerLabel = trainerName ? escapeHtml(trainerName) : 'seu treinador';
+        const html = this.renderStudentFeedbackEmail({
+            title: 'Lembrete de feedback',
+            heading: studentName ? `${escapeHtml(studentName)}, seu feedback ainda está pendente` : 'Seu feedback ainda está pendente',
+            paragraphs: [
+                `O feedback que ${trainerLabel} pediu ainda não foi respondido. Suas respostas ajudam a ajustar seu plano.`,
+                'Responda pelo app Teufit antes que o prazo termine.',
+            ],
+        });
+        return sendTransactional(this, { to, subject: '[Teufit] Lembrete: seu feedback está pendente', html });
     }
 }
 

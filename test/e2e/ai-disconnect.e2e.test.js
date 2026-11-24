@@ -7,6 +7,7 @@ import { setupApp } from '../helpers/setup-app.js'
 import { cleanDatabase } from '../helpers/db-cleanup.js'
 import { provisionTrainerPlan } from '../helpers/platform-plan.js'
 import { signupVerified } from '../helpers/signup-user.js'
+import { linkStudentByInvite } from '../helpers/link-student.js'
 import { AI_TOOLS } from '../../src/constants/ai.js'
 
 const anthropicCreate = vi.fn()
@@ -194,7 +195,7 @@ describe('e2e: AI client disconnect', () => {
       const email = uniqueEmail('student')
       const signupRes = await signupVerified(app, { method: 'POST', url: '/auth/signup', payload: { email, password: PASSWORD } })
       const { user: { id: studentId } } = signupRes.json()
-      await app.inject({ method: 'POST', url: '/trainer/students', headers: { authorization: `Bearer ${trainer.accessToken}` }, payload: { email } })
+      await linkStudentByInvite(app, { trainerToken: trainer.accessToken, email })
       const protocol = await prisma.trainingProtocol.create({
         data: { assigneeId: studentId, trainerId: trainer.trainerId, name: 'Protocolo', startDate: new Date('2026-10-01') },
       })

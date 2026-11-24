@@ -13,21 +13,17 @@ import {
   STUDENT_INVITE_MAX_SENDS,
   STUDENT_INVITE_DAILY_MAX,
   STUDENT_INVITE_DAILY_WINDOW_MS,
+  UNVERIFIED_SENDER_INVITE_MAX,
   STUDENT_INVITE_LIST_PAGE_SIZE_DEFAULT,
   STUDENT_INVITE_LIST_PAGE_SIZE_MAX,
   studentInviteStatusValues,
 } from '../constants/student-invite.js';
 import { UserStatus } from '../constants/user-status.js';
 import { assertStudentCap } from './platform-plan-service.js';
-import { linkStudentByEmail } from './trainer-service.js';
 import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from './trainer-onboarding-service.js';
 import { markBriefingDirty } from './briefing-service.js';
-import {
-  issueCodeRespectingLimits,
-  markVerificationSendFailed,
-  confirmVerificationCodeDelivered,
-  isUserEmailVerified,
-} from './email-verification-service.js';
+import { joinAllModeChallenges } from './challenge-participant-sync.js';
+import { assertEmailVerified } from './email-verified-guard.js';
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
 const MS_PER_SECOND = 1000;
@@ -106,18 +102,17 @@ function buildStatusFilter(status, now) {
   return { status };
 }
 
-/**
- * Sends the invite email and reports whether it was delivered. Never throws.
- * The Resend SDK returns `{ data, error }` instead of throwing, so both a
- * thrown error and a returned `error` count as a failure (logged).
- */
-async function deliverInviteEmail(prisma, { trainerUserId, email, emailSender }) {
+// Sends the invite email of the right kind and reports whether it was delivered; never throws (Resend returns `{ error }` instead of throwing).
+async function deliverInviteEmail(prisma, { trainerUserId, email, emailSender, requiresConsent }) {
   try {
     const trainerUser = await prisma.user.findUnique({
       where: { id: trainerUserId },
       select: { firstName: true, lastName: true },
     });
-    const response = await emailSender.sendStudentInviteEmail({ to: email, trainerName: buildFullName(trainerUser) });
+    const message = { to: email, trainerName: buildFullName(trainerUser) };
+    const response = requiresConsent
+      ? await emailSender.sendStudentInviteOpenAppEmail(message)
+      : await emailSender.sendStudentInviteEmail(message);
     if (response?.error) {
       console.error('Failed to send student invite email', response.error);
       return false;
@@ -129,91 +124,12 @@ async function deliverInviteEmail(prisma, { trainerUserId, email, emailSender })
   }
 }
 
-/**
- * Invite email for an existing user whose email is unverified. One email
- * carries the invite AND the verification code (two emails would double the
- * sends, and the stock verification email says "ignore if you did not sign up",
- * which reads as contradictory next to an invite). The code goes through the
- * normal issuing path (cooldown + daily cap); when that blocks or fails the
- * email is still sent, without a code. The previously delivered code is only
- * closed once this email is confirmed sent. Never throws.
- *
- * @returns {Promise<boolean>} whether the invite email was delivered
- */
-async function deliverExistingUserInviteEmail(prisma, { userId, trainerUserId, email, emailSender }) {
-  let issued = null;
-  try {
-    issued = await issueCodeRespectingLimits(prisma, userId);
-  } catch (issueError) {
-    console.warn('Verification code not issued for student invite email', issueError?.messageCode ?? issueError);
-  }
-
-  try {
-    const trainerUser = await prisma.user.findUnique({
-      where: { id: trainerUserId },
-      select: { firstName: true, lastName: true },
-    });
-    const response = await emailSender.sendExistingUserStudentInviteEmail({
-      to: email,
-      trainerName: buildFullName(trainerUser),
-      code: issued?.code ?? null,
-    });
-    if (!response?.error) {
-      if (issued) await confirmVerificationCodeDelivered(prisma, issued);
-      return true;
-    }
-    console.error('Failed to send student invite email', response.error);
-  } catch (emailError) {
-    console.error('Failed to send student invite email', emailError);
-  }
-  if (issued) await markVerificationSendFailed(prisma, issued.tokenId);
-  return false;
-}
-
-/**
- * Id of the active user owning this email when that email is still unverified,
- * else null. Decides whether a resend must carry a verification code.
- */
-async function findUnverifiedExistingUserId(prisma, email) {
-  const userId = await findUserIdByEmailCaseInsensitive(prisma, email);
-  if (!userId) return null;
-
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { deletedAt: true } });
-  if (!user || user.deletedAt) return null;
-  return (await isUserEmailVerified(prisma, userId)) ? null : userId;
-}
-
-/**
- * Resend delivery: existing unverified users get the variant email with a
- * verification code, everyone else the generic download email. The result
- * reflects the INVITE email only; code issuing is best-effort inside
- * deliverExistingUserInviteEmail and never fails the resend.
- */
-async function deliverResendEmail(prisma, { trainerUserId, email, emailSender }) {
-  let unverifiedUserId = null;
-  try {
-    unverifiedUserId = await findUnverifiedExistingUserId(prisma, email);
-  } catch (lookupError) {
-    console.error('Failed to resolve student invite recipient; sending generic email', lookupError);
-  }
-  if (!unverifiedUserId) return deliverInviteEmail(prisma, { trainerUserId, email, emailSender });
-  return deliverExistingUserInviteEmail(prisma, { userId: unverifiedUserId, trainerUserId, email, emailSender });
-}
-
 function throwSelfLink() {
   throw new AppError({
     httpStatus: 422,
     error: StudentInviteErrorCode.CANNOT_LINK_SELF,
     messageCode: StudentInviteMessageCode.CANNOT_LINK_SELF,
     message: 'A trainer cannot link themselves as a student',
-  });
-}
-
-/** Direct link succeeded: close this trainer's pending invite for the email, if any. */
-async function acceptOwnPendingInvite(prisma, { trainerId, email, studentId }) {
-  await prisma.studentInvite.updateMany({
-    where: { trainerId, email, status: StudentInviteStatus.PENDING },
-    data: { status: StudentInviteStatus.ACCEPTED, studentId, acceptedAt: new Date() },
   });
 }
 
@@ -230,17 +146,11 @@ async function assertNotAlreadyLinked(prisma, { trainerId, studentId }) {
   }
 }
 
-/**
- * Existing user: link directly only when their email is verified. An
- * unverified account could be squatted by anyone who typed the address at
- * signup, so it gets a pending invite instead, accepted once the email is
- * verified (verify-email or a verifying OAuth login). Returns null when a
- * pending invite must be created.
- */
-async function linkExistingUser(prisma, { trainerId, trainerUserId, userId, email }) {
+// Throws unless the existing account can be invited: 422 when deactivated or the trainer's own, 409 when already linked to this trainer.
+async function assertExistingUserInvitable(prisma, { trainerId, trainerUserId, userId }) {
   const existingUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, deletedAt: true },
+    select: { id: true, deletedAt: true },
   });
 
   if (!existingUser || existingUser.deletedAt) {
@@ -253,30 +163,27 @@ async function linkExistingUser(prisma, { trainerId, trainerUserId, userId, emai
   }
 
   if (existingUser.id === trainerUserId) throwSelfLink();
-
-  if (!(await isUserEmailVerified(prisma, existingUser.id))) {
-    await assertNotAlreadyLinked(prisma, { trainerId, studentId: existingUser.id });
-    return null;
-  }
-
-  // linkStudentByEmail matches the stored email exactly, so pass the stored
-  // value rather than the normalized input (legacy users may be mixed-case).
-  const student = await linkStudentByEmail({ trainerId, trainerUserId, email: existingUser.email });
-  await acceptOwnPendingInvite(prisma, { trainerId, email, studentId: student.id });
-  return { outcome: StudentInviteOutcome.LINKED, student };
+  await assertNotAlreadyLinked(prisma, { trainerId, studentId: existingUser.id });
 }
 
 function secondsUntil(timestampMs) {
   return Math.max(1, Math.ceil((timestampMs - Date.now()) / MS_PER_SECOND));
 }
 
+// Throws 403 emailVerification.required when a sender with an unverified email already used the unverified allowance.
+async function assertUnverifiedSenderWithinCap(prisma, { trainerUserId, recentInviteCount }) {
+  if (recentInviteCount < UNVERIFIED_SENDER_INVITE_MAX) return;
+  await assertEmailVerified(prisma, trainerUserId);
+}
+
 /**
- * Per-trainer rolling-window cap on invite emails (1 indexed query).
+ * Per-trainer rolling-window caps on invite emails (1 indexed query): the
+ * unverified-sender allowance first, then the daily cap.
  * Counting rule: only invites CREATED in the window count. Resends are not
  * counted: there is no send log, and per-invite cooldown + max sends already
- * bound them. Direct links (no email) never reach this check.
+ * bound them.
  */
-async function assertDailyInviteLimitNotReached(prisma, trainerId) {
+async function assertInviteLimitsNotReached(prisma, { trainerId, trainerUserId }) {
   const now = Date.now();
   const recentInvites = await prisma.studentInvite.findMany({
     where: { trainerId, createdAt: { gte: new Date(now - STUDENT_INVITE_DAILY_WINDOW_MS) } },
@@ -284,6 +191,7 @@ async function assertDailyInviteLimitNotReached(prisma, trainerId) {
     take: STUDENT_INVITE_DAILY_MAX,
     select: { createdAt: true },
   });
+  await assertUnverifiedSenderWithinCap(prisma, { trainerUserId, recentInviteCount: recentInvites.length });
   if (recentInvites.length < STUDENT_INVITE_DAILY_MAX) return;
 
   // The cap-th newest invite leaves the window first, freeing one slot.
@@ -297,7 +205,7 @@ async function assertDailyInviteLimitNotReached(prisma, trainerId) {
   });
 }
 
-async function createPendingInvite(prisma, { trainerId, email }) {
+async function createPendingInvite(prisma, { trainerId, email, requiresConsent }) {
   // A time-expired invite is still `pending` in the DB (no write on read) and
   // would trip the partial unique index, although the list reports it as
   // expired. Flip it first so the trainer can invite the email again.
@@ -311,6 +219,7 @@ async function createPendingInvite(prisma, { trainerId, email }) {
       data: {
         trainerId,
         email,
+        requiresConsent,
         expiresAt: new Date(Date.now() + STUDENT_INVITE_TTL_MS),
       },
     });
@@ -332,15 +241,11 @@ async function createPendingInvite(prisma, { trainerId, email }) {
 }
 
 /**
- * Trainer adds a student by email.
- * - Existing user with a VERIFIED email -> link immediately (linkStudentByEmail).
- * - Existing user with an unverified email -> pending invite + one email that
- *   carries the invite and a verification code (accepted once verified).
- * - No user -> pending invite + download email; accepted once the signup email
- *   is verified.
+ * Trainer invites a student by email; nobody is ever linked without the student's own action.
+ * - Existing account (verified or not) -> pending invite with requiresConsent + "open the app" email; the student accepts or declines in the app.
+ * - No account -> pending invite + download email; accepted automatically once the signup email is verified.
  *
- * Deactivated users and the trainer's own account are rejected (422) before
- * the verified/unverified split.
+ * Deactivated accounts, the trainer's own account (422) and already-linked students (409) are rejected before the caps.
  */
 export async function inviteStudent(
   prisma,
@@ -351,29 +256,15 @@ export async function inviteStudent(
 
   const existingUserId = await findUserIdByEmailCaseInsensitive(prisma, normalizedEmail);
   if (existingUserId) {
-    const linked = await linkExistingUser(prisma, {
-      trainerId,
-      trainerUserId,
-      userId: existingUserId,
-      email: normalizedEmail,
-    });
-    if (linked) return linked;
+    await assertExistingUserInvitable(prisma, { trainerId, trainerUserId, userId: existingUserId });
   }
+  const requiresConsent = Boolean(existingUserId);
 
-  await assertDailyInviteLimitNotReached(prisma, trainerId);
+  await assertInviteLimitsNotReached(prisma, { trainerId, trainerUserId });
   await assertStudentCap(prisma, trainerId);
 
-  const invite = await createPendingInvite(prisma, { trainerId, email: normalizedEmail });
-  if (existingUserId) {
-    await deliverExistingUserInviteEmail(prisma, {
-      userId: existingUserId,
-      trainerUserId,
-      email: normalizedEmail,
-      emailSender,
-    });
-  } else {
-    await deliverInviteEmail(prisma, { trainerUserId, email: normalizedEmail, emailSender });
-  }
+  const invite = await createPendingInvite(prisma, { trainerId, email: normalizedEmail, requiresConsent });
+  await deliverInviteEmail(prisma, { trainerUserId, email: normalizedEmail, emailSender, requiresConsent });
 
   return { outcome: StudentInviteOutcome.INVITED, invite: withEffectiveStatus(invite) };
 }
@@ -504,7 +395,12 @@ export async function resendStudentInvite(
     throwResendCooldown(STUDENT_INVITE_RESEND_COOLDOWN_MS);
   }
 
-  const delivered = await deliverResendEmail(prisma, { trainerUserId, email: invite.email, emailSender });
+  const delivered = await deliverInviteEmail(prisma, {
+    trainerUserId,
+    email: invite.email,
+    emailSender,
+    requiresConsent: invite.requiresConsent === true,
+  });
   if (!delivered) {
     await rollbackResendBookkeeping(prisma, { previous: invite, resentAt: now });
     throw new AppError({
@@ -547,14 +443,17 @@ async function hasStudentCapacity(prisma, trainerId) {
 
 /**
  * Atomically claims a pending invite (pending -> accepted) and creates the
- * TrainerStudent link. Returns false when the invite was no longer pending
- * (e.g. revoked concurrently), in which case nothing is linked.
+ * TrainerStudent link, then joins the student to the trainer's all-mode weekly
+ * championships outside the transaction. Returns false when the invite was no
+ * longer pending or already past its expiry at claim time (e.g. revoked or
+ * expired concurrently), in which case nothing is linked.
  */
 async function claimInviteAndLink(prisma, { invite, studentId, activeOnPlan }) {
-  return prisma.$transaction(async (tx) => {
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claimedAt = new Date();
     const { count } = await tx.studentInvite.updateMany({
-      where: { id: invite.id, status: StudentInviteStatus.PENDING },
-      data: { status: StudentInviteStatus.ACCEPTED, studentId, acceptedAt: new Date() },
+      where: { id: invite.id, status: StudentInviteStatus.PENDING, expiresAt: { gte: claimedAt } },
+      data: { status: StudentInviteStatus.ACCEPTED, studentId, acceptedAt: claimedAt },
     });
     if (count === 0) return false;
 
@@ -565,9 +464,28 @@ async function claimInviteAndLink(prisma, { invite, studentId, activeOnPlan }) {
     await tx.user.update({ where: { id: studentId }, data: { status: UserStatus.ACTIVE } });
     return true;
   });
+  if (claimed) await joinInvitedStudentToChallenges(prisma, invite.trainerId, studentId);
+  return claimed;
 }
 
-async function acceptSingleInvite(prisma, { invite, user }) {
+// Live "all" mode (CAMP-13): puts the invited student in the trainer's open all-mode weekly championships; a failure is logged and the link kept
+async function joinInvitedStudentToChallenges(prisma, trainerId, studentId) {
+  try {
+    await joinAllModeChallenges(prisma, trainerId, studentId, new Date());
+  } catch (err) {
+    console.error(
+      { trainerId, studentId, err },
+      `[challenge-sync] failed to add student ${studentId} to the all-mode championships of trainer ${trainerId}`,
+    );
+  }
+}
+
+/**
+ * Accepts one pending invite for the user: claims it, links the student (inactive when over the plan cap) and fires the link side effects.
+ *
+ * @returns {Promise<boolean>} false when the invite was no longer pending or had expired at claim time (nothing is linked)
+ */
+export async function acceptSingleInvite(prisma, { invite, user }) {
   // Over the plan cap the link is still created (inactive) so the invite is
   // never lost; the trainer sees the BLOCKED_ON_PLAN blocker.
   const activeOnPlan = await hasStudentCapacity(prisma, invite.trainerId);
@@ -580,7 +498,7 @@ async function acceptSingleInvite(prisma, { invite, user }) {
 }
 
 /**
- * Accepts the pending student invites of the user's verified email (patient invites need explicit consent); never throws.
+ * Accepts the pending student invites of the user's verified email, except the ones that need explicit consent (requiresConsent, like patient invites); never throws.
  *
  * @returns {Promise<number>} number of invites accepted
  */
@@ -591,7 +509,7 @@ export async function acceptPendingInvitesForUser(prisma, user) {
   let acceptedCount = 0;
   try {
     const pendingInvites = await prisma.studentInvite.findMany({
-      where: { email, status: StudentInviteStatus.PENDING },
+      where: { email, status: StudentInviteStatus.PENDING, requiresConsent: false },
       select: { id: true, trainerId: true, expiresAt: true },
     });
 

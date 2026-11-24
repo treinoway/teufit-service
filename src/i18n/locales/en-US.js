@@ -146,6 +146,11 @@ export default {
       semiannual: 'Semiannual',
       annual: 'Annual',
     },
+    subscriptionServiceType: {
+      training: 'Training',
+      nutrition: 'Nutrition',
+      both: 'Both',
+    },
     feedbackCategory: {
       BUG: 'Problem',
       SUGGESTION: 'Suggestion',
@@ -167,6 +172,39 @@ export default {
       revoked: 'Revoked',
       expired: 'Expired',
       declined: 'Declined',
+    },
+    studentFeedbackMilestone: {
+      D7: '7 days',
+      D15: '15 days',
+      D21: '21 days',
+      D30: '30 days',
+      RECURRING: 'Every 30 days',
+      ADHOC: 'Manual send',
+    },
+    studentFeedbackStatus: {
+      pending: 'Pending',
+      answered: 'Answered',
+      expired: 'Expired',
+    },
+    studentFeedbackQuestionType: {
+      score: 'Score',
+      stars: 'Stars',
+      open: 'Open',
+    },
+    studentFeedbackBand: {
+      attention: 'Attention',
+      stable: 'Stable',
+      good: 'Good',
+    },
+    studentFeedbackPillar: {
+      training_adherence: 'Adherence (training)',
+      diet_adherence: 'Adherence (meal plan)',
+      evolution: 'Progress',
+      routine: 'Routine',
+      sleep: 'Sleep',
+      hydration: 'Hydration',
+      report: 'Report',
+      other: 'Other',
     },
   },
 
@@ -254,6 +292,18 @@ export default {
     'consistencyRanking.pause.weekNotEditable': 'This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.',
     'consistencyRanking.season.notFound': 'Season not found.',
     'consistencyRanking.target.notEditable': 'This target can only be lowered during the running week, down to zero and never above the original target.',
+    'consistencyRanking.privacy.invalid': 'Invalid privacy choice. Choose to appear by name or as a team student, under the current term version.',
+
+    // Student feedback
+    'studentFeedback.notFound': 'Feedback not found.',
+    'studentFeedback.expired': 'The time to answer this feedback is over.',
+    'studentFeedback.alreadySubmitted': 'This feedback was already submitted.',
+    'studentFeedback.alreadyPending': 'This student already has a pending feedback.',
+    'studentFeedback.requiredAnswerMissing': 'Answer every required question before submitting.',
+    'studentFeedback.invalidAnswer': 'One of the answers is invalid.',
+    'studentFeedbackTemplate.notFound': 'Feedback template not found.',
+    'studentFeedbackTemplate.readOnly': 'The TeuFit default template cannot be changed. Create your own from it.',
+    'studentFeedbackTemplate.invalid': 'The feedback template has invalid data.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercise not found in this training template.',
@@ -272,6 +322,12 @@ export default {
     'challenge.filter.empty': 'No students match the filter criteria.',
     'challenge.durationExceeded': 'Challenge duration cannot exceed 365 days.',
     'challenge.notActive': 'This challenge is not active.',
+    'challenge.weeks.invalid': 'Invalid start or length. Pick a Monday from the current week on and 1 to 12 weeks.',
+    'challenge.minPodium.invalid': 'Invalid podium minimum. Use 1 up to the championship weeks, at most 4.',
+    'challenge.notClosable': 'Only a running weekly championship can be closed early.',
+    'challenge.notWeekly': 'This championship has no consistency standings.',
+    'challenge.scoringRule.invalid': 'Invalid scoring. The weights of the five pillars must be integers from 0 to 100 adding up to 100, and at least one pillar must be active.',
+    'challenge.visibility.invalid': 'Invalid visibility. Choose off, position only or full live ranking.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',
@@ -357,6 +413,8 @@ export default {
     'subscription.cycleAlreadyExists': 'This billing cycle already exists.',
     'subscription.invalidAmount': 'Invalid amount. Use at most two decimal places and no more than 99,999,999.99.',
     'subscription.invalidPaidAt': 'Invalid payment date: it cannot be in the future or more than a year before the subscription start.',
+    'subscription.serviceTypeNotAllowed': 'Your professional profile does not allow this service type on a plan.',
+    'professional.notFound': 'Professional profile not found.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'You have reached the student limit for your plan. Upgrade to unlock more slots.',
@@ -383,6 +441,7 @@ export default {
     'admin.queryTimeout': 'The query took too long. Narrow the search and try again.',
     'admin.userNotFound': 'User not found.',
     'admin.protocolNotFound': 'Protocol not found.',
+    'admin.sessionNotFound': 'Workout session not found.',
     // Tutorials ("How to use")
     'tutorial.notFound': 'Tutorial not found.',
     'tutorial.invalidVideoType': 'Unsupported video format. Use MP4, WebM or MOV.',
@@ -419,6 +478,7 @@ export default {
     'studentInvite.alreadyPending': 'There is already a pending invite for this email.',
     'studentInvite.dailyLimit': 'You have reached the daily invite limit. Please try again later.',
     'studentInvite.emailSendFailed': 'We could not send the invite email. Please try again.',
+    'studentInvite.expired': 'This invite has expired. Ask your trainer for a new one.',
     'student.accountDeactivated': 'This student account is deactivated.',
 
     // Email verification
@@ -430,6 +490,8 @@ export default {
     'emailVerification.userNotFound': 'User not found.',
     'emailVerification.dailyLimit': 'You have requested too many codes today. Please try again later.',
     'emailVerification.sendFailed': 'We could not send the verification email. Please try again.',
+    'emailVerification.required': 'Confirm your email to continue.',
+    'signup.emailInUse': 'This email already has an account. Sign in to continue.',
 
     // Password reset
     'auth.email.required': 'Email is required.',
@@ -472,6 +534,11 @@ export default {
 
   notes: {
     autoCompleted24h: '[Workout auto-completed after 24h of inactivity]',
+  },
+
+  // Texts stored in a student feedback template when the service creates it
+  studentFeedback: {
+    starterQuestionText: 'How was your week?',
   },
 
   validation: {

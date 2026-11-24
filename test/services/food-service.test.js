@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Prisma } from '@prisma/client';
 import {
   searchFoods,
   getFoodById,
@@ -13,6 +14,7 @@ const NUTRITIONIST_ID = 'nutri-1';
 const FOOD_ID = 'food-1';
 const GROUP_ID = 'group-1';
 const HTTP_NOT_FOUND = 404;
+const HIDDEN_SOURCES = [FoodSource.TBCA];
 
 // Test helper: build a Food row as returned by Prisma.
 function makeFood(overrides = {}) {
@@ -64,6 +66,26 @@ function makePrisma() {
       findUnique: vi.fn().mockResolvedValue({ id: GROUP_ID }),
     },
   };
+}
+
+// Test helper: bound values of the WHERE clause (first interpolation) passed to $queryRaw; the ORDER BY binds every source.
+function whereValues(db) {
+  const [, whereClause] = db.$queryRaw.mock.calls[0];
+  return Prisma.sql`${whereClause}`.values;
+}
+
+// Test helper: true when a row satisfies a Prisma where with equality, notIn and OR.
+function matchesWhere(row, where) {
+  return Object.entries(where).every(([key, condition]) => {
+    if (key === 'OR') return condition.some((branch) => matchesWhere(row, branch));
+    if (condition && typeof condition === 'object' && 'notIn' in condition) return !condition.notIn.includes(row[key]);
+    return row[key] === condition;
+  });
+}
+
+// Test helper: findFirst mock that applies the where to the given rows.
+function findFirstOver(rows) {
+  return async ({ where }) => rows.find((row) => matchesWhere(row, where)) ?? null;
 }
 
 describe('searchFoods', () => {
@@ -137,6 +159,43 @@ describe('searchFoods', () => {
     const values = db.$queryRaw.mock.calls[0].slice(1);
     expect(values).toContain(100);
   });
+
+  describe('hidden sources (TBCA licensing)', () => {
+    it('should not bind the tbca source in the default search', async () => {
+      await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, query: 'feijao' });
+
+      expect(whereValues(db)).not.toContain(FoodSource.TBCA);
+    });
+
+    it('should still bind the taco source in the default search', async () => {
+      await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, query: 'feijao' });
+
+      expect(whereValues(db)).toContain(FoodSource.TACO);
+    });
+
+    it('should return no items without querying when only tbca is requested', async () => {
+      const result = await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, sources: [FoodSource.TBCA] });
+
+      expect(result).toEqual({ items: [] });
+      expect(db.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('should search taco only when tbca and taco are requested', async () => {
+      await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, sources: [FoodSource.TBCA, FoodSource.TACO] });
+
+      const values = whereValues(db);
+      expect(values).toContain(FoodSource.TACO);
+      expect(values).not.toContain(FoodSource.TBCA);
+    });
+
+    it('should still search custom foods when tbca and custom are requested', async () => {
+      await searchFoods(db, { nutritionistId: NUTRITIONIST_ID, sources: [FoodSource.TBCA, FoodSource.CUSTOM] });
+
+      const values = whereValues(db);
+      expect(values).toContain(NUTRITIONIST_ID);
+      expect(values).not.toContain(FoodSource.TBCA);
+    });
+  });
 });
 
 describe('getFoodById', () => {
@@ -154,24 +213,57 @@ describe('getFoodById', () => {
     expect(result).toEqual(makeFoodDto());
   });
 
-  it('should restrict visibility to public foods and the caller custom foods', async () => {
+  it('should restrict visibility to non-hidden public foods and the caller custom foods', async () => {
     db.food.findFirst.mockResolvedValue(makeFood());
 
     await getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
 
     expect(db.food.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: FOOD_ID, OR: [{ nutritionistId: null }, { nutritionistId: NUTRITIONIST_ID }] } }),
+      expect.objectContaining({
+        where: {
+          id: FOOD_ID,
+          OR: [{ nutritionistId: null, source: { notIn: HIDDEN_SOURCES } }, { nutritionistId: NUTRITIONIST_ID }],
+        },
+      }),
     );
   });
 
-  it('should only see public foods without a nutritionist', async () => {
+  it('should only see non-hidden public foods without a nutritionist', async () => {
     db.food.findFirst.mockResolvedValue(makeFood());
 
     await getFoodById(db, { foodId: FOOD_ID });
 
     expect(db.food.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: FOOD_ID, OR: [{ nutritionistId: null }] } }),
+      expect.objectContaining({ where: { id: FOOD_ID, OR: [{ nutritionistId: null, source: { notIn: HIDDEN_SOURCES } }] } }),
     );
+  });
+
+  it('should throw 404 FOOD_NOT_FOUND for a public TBCA food', async () => {
+    db.food.findFirst.mockImplementation(findFirstOver([makeFood({ source: FoodSource.TBCA })]));
+
+    await expect(getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID })).rejects.toMatchObject({
+      httpStatus: HTTP_NOT_FOUND,
+      error: NutritionErrorCode.FOOD_NOT_FOUND,
+      messageCode: NutritionMessageCode.FOOD_NOT_FOUND,
+    });
+  });
+
+  it('should still return a public TACO food', async () => {
+    db.food.findFirst.mockImplementation(findFirstOver([makeFood()]));
+
+    const result = await getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
+
+    expect(result).toEqual(makeFoodDto());
+  });
+
+  it('should still return the caller own custom food', async () => {
+    db.food.findFirst.mockImplementation(
+      findFirstOver([makeFood({ source: FoodSource.CUSTOM, nutritionistId: NUTRITIONIST_ID })]),
+    );
+
+    const result = await getFoodById(db, { nutritionistId: NUTRITIONIST_ID, foodId: FOOD_ID });
+
+    expect(result).toEqual(makeFoodDto({ source: FoodSource.CUSTOM }));
   });
 
   it('should throw 404 FOOD_NOT_FOUND when the food is not accessible', async () => {

@@ -1,4 +1,4 @@
-import { LLM_PROVIDERS } from '../constants/ai.js'
+import { LLM_PROVIDERS, LLM_EFFORTS } from '../constants/ai.js'
 
 const API_KEY_ENV = 'ANTHROPIC_API_KEY'
 
@@ -29,4 +29,10 @@ export function checkLlmConfiguration(logger) {
     return false
   }
   return true
+}
+
+// Reads ANTHROPIC_EFFORT at call time; returns null when unset, blank or not a known level.
+export function resolveEffort() {
+  const effort = process.env.ANTHROPIC_EFFORT?.trim().toLowerCase()
+  return LLM_EFFORTS.includes(effort) ? effort : null
 }

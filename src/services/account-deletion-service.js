@@ -56,6 +56,7 @@ export async function deleteOwnAccount(userId, logger = console) {
 
     await tx.anamnesisResponse.deleteMany({ where: { studentId: userId } });
     await tx.studentAnamnesis.deleteMany({ where: { studentId: userId } });
+    await tx.studentFeedbackRequest.deleteMany({ where: { studentId: userId } });
 
     await tx.aiConversation.deleteMany({ where: { userId } });
 
@@ -69,6 +70,10 @@ export async function deleteOwnAccount(userId, logger = console) {
     await tx.dietProtocol.deleteMany({ where: { assigneeId: userId } });
     await tx.patientInvite.deleteMany({
       where: user.email ? { OR: [{ patientId: userId }, { email: user.email.trim().toLowerCase() }] } : { patientId: userId },
+    });
+
+    await tx.studentInvite.deleteMany({
+      where: user.email ? { OR: [{ studentId: userId }, { email: user.email.trim().toLowerCase() }] } : { studentId: userId },
     });
 
     await tx.aiInteractionLog.updateMany({

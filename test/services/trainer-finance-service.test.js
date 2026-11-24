@@ -11,19 +11,17 @@ import {
   PaymentStatus,
   EffectivePaymentStatus,
   SubscriptionStatus,
-  SubscriptionErrorCode,
 } from '../../src/constants/subscription.js';
 
 const { Decimal } = Prisma;
 
-const TRAINER_USER_ID = 'trainer-user-1';
 const TRAINER_ID = 'trainer-1';
+const OWNER = { userId: 'trainer-user-uuid', trainerId: TRAINER_ID, nutritionistId: null };
 // 12:00 BRT on 2026-06-10
 const NOW = new Date('2026-06-10T15:00:00Z');
 const TODAY = new Date('2026-06-10T00:00:00Z');
 
 const mockPrisma = {
-  trainer: { findUnique: vi.fn() },
   subscriptionPayment: { findMany: vi.fn() },
 };
 
@@ -54,6 +52,7 @@ function makePayment({
     updatedAt: null,
     subscription: {
       status: subscriptionStatus,
+      serviceType: 'training',
       student: { id: studentId, firstName, lastName, avatarUrl: `key-${studentId}` },
       plan: { id: 'plan-1', name: 'Plano', recurrence: 'monthly' },
     },
@@ -63,7 +62,6 @@ function makePayment({
 beforeEach(() => {
   vi.resetAllMocks();
   paymentSeq = 0;
-  mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   ensureUpcomingCycles.mockResolvedValue({ subscriptionsChecked: 0, cyclesCreated: 0 });
 });
 
@@ -75,7 +73,7 @@ describe('getFinanceOverview', () => {
     const logger = { error: vi.fn() };
 
     const result = await getFinanceOverview(
-      mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW, logger },
+      mockPrisma, OWNER, { month: '2026-06' }, { now: NOW, logger },
     );
 
     expect(logger.error).toHaveBeenCalledOnce();
@@ -89,26 +87,18 @@ describe('getFinanceOverview', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(
-      getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW }),
+      getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW }),
     ).resolves.toBeDefined();
     expect(spy).toHaveBeenCalledOnce();
-  });
-
-  it('throws 404 TRAINER_NOT_FOUND when the user has no trainer profile', async () => {
-    mockPrisma.trainer.findUnique.mockResolvedValue(null);
-
-    await expect(
-      getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW }),
-    ).rejects.toMatchObject({ httpStatus: 404, error: SubscriptionErrorCode.TRAINER_NOT_FOUND });
   });
 
   it('generates upcoming cycles scoped to the trainer BEFORE reading payments', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
 
-    await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+    await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
     expect(ensureUpcomingCycles).toHaveBeenCalledWith(mockPrisma, {
-      trainerId: TRAINER_ID,
+      owner: OWNER,
       today: TODAY,
     });
     expect(ensureUpcomingCycles.mock.invocationCallOrder[0]).toBeLessThan(
@@ -120,7 +110,7 @@ describe('getFinanceOverview', () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
     const justAfterUtcRollover = new Date('2026-07-01T01:00:00Z'); // still June 30 in SP
 
-    const result = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, {}, { now: justAfterUtcRollover });
+    const result = await getFinanceOverview(mockPrisma, OWNER, {}, { now: justAfterUtcRollover });
 
     expect(result.month).toBe('2026-06');
   });
@@ -128,7 +118,7 @@ describe('getFinanceOverview', () => {
   it('builds the row filter: paid in the SP month window, pending due before next month, or overdue', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
 
-    await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-05' }, { now: NOW });
+    await getFinanceOverview(mockPrisma, OWNER, { month: '2026-05' }, { now: NOW });
 
     const args = mockPrisma.subscriptionPayment.findMany.mock.calls[0][0];
     expect(args.where.subscription).toEqual({ trainerId: TRAINER_ID });
@@ -148,7 +138,7 @@ describe('getFinanceOverview', () => {
   it('reads payments with a single findMany that includes subscription, student and plan (fixed query budget)', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([makePayment()]);
 
-    await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+    await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
     expect(mockPrisma.subscriptionPayment.findMany).toHaveBeenCalledOnce();
     const { include } = mockPrisma.subscriptionPayment.findMany.mock.calls[0][0];
@@ -159,7 +149,7 @@ describe('getFinanceOverview', () => {
   it('returns zeroed KPIs and delinquencyRate 0 (no division by zero) for an empty month', async () => {
     mockPrisma.subscriptionPayment.findMany.mockResolvedValue([]);
 
-    const result = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+    const result = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
     expect(result.kpis).toEqual({
       receivedAmount: '0.00',
@@ -190,7 +180,7 @@ describe('getFinanceOverview', () => {
     it('sums amounts per effective status with Decimal precision', async () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue(mixedRows());
 
-      const { kpis } = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+      const { kpis } = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
       expect(kpis).toMatchObject({
         receivedAmount: '100.30',
@@ -205,7 +195,7 @@ describe('getFinanceOverview', () => {
     it('counts overdue debt of cancelled subscriptions', async () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue(mixedRows());
 
-      const { payments } = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+      const { payments } = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
       const cancelledSubRow = payments.find((row) => row.subscriptionStatus === SubscriptionStatus.CANCELLED);
       expect(cancelledSubRow.effectiveStatus).toBe(EffectivePaymentStatus.OVERDUE);
@@ -215,7 +205,7 @@ describe('getFinanceOverview', () => {
     it('computes distinct billed / overdue students and the delinquency percentage (2 dp)', async () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue(mixedRows());
 
-      const { kpis } = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+      const { kpis } = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
       expect(kpis.billedStudents).toBe(3);
       expect(kpis.overdueStudents).toBe(1);
@@ -227,7 +217,7 @@ describe('getFinanceOverview', () => {
         makePayment({ studentId: 'a', dueDate: '2026-05-01' }),
       ]);
 
-      const { kpis } = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+      const { kpis } = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
       expect(kpis.delinquencyRate).toBe(100);
       expect(typeof kpis.delinquencyRate).toBe('number');
@@ -243,7 +233,7 @@ describe('getFinanceOverview', () => {
 
       const { payments } = await getFinanceOverview(
         mockPrisma,
-        TRAINER_USER_ID,
+        OWNER,
         { month: '2026-06' },
         { now: NOW, resolveAvatarUrl },
       );
@@ -268,7 +258,7 @@ describe('getFinanceOverview', () => {
 
       await getFinanceOverview(
         mockPrisma,
-        TRAINER_USER_ID,
+        OWNER,
         { month: '2026-06' },
         { now: NOW, resolveAvatarUrl },
       );
@@ -293,7 +283,7 @@ describe('getFinanceOverview', () => {
 
       await getFinanceOverview(
         mockPrisma,
-        TRAINER_USER_ID,
+        OWNER,
         { month: '2026-06' },
         { now: NOW, resolveAvatarUrl },
       );
@@ -304,7 +294,7 @@ describe('getFinanceOverview', () => {
     it('falls back to the stored avatar value when no resolver is injected', async () => {
       mockPrisma.subscriptionPayment.findMany.mockResolvedValue([makePayment({ studentId: 'a' })]);
 
-      const { payments } = await getFinanceOverview(mockPrisma, TRAINER_USER_ID, { month: '2026-06' }, { now: NOW });
+      const { payments } = await getFinanceOverview(mockPrisma, OWNER, { month: '2026-06' }, { now: NOW });
 
       expect(payments[0].student.avatarUrl).toBe('key-a');
     });

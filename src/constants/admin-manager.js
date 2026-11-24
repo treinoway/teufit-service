@@ -19,6 +19,7 @@ export const AdminManagerMessageCode = Object.freeze({
   QUERY_TIMEOUT: 'admin.queryTimeout',
   USER_NOT_FOUND: 'admin.userNotFound',
   PROTOCOL_NOT_FOUND: 'admin.protocolNotFound',
+  SESSION_NOT_FOUND: 'admin.sessionNotFound',
 });
 
 export const ADMIN_MANAGER_PAGE_SIZE_DEFAULT = 20;

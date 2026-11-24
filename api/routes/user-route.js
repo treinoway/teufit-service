@@ -1,4 +1,4 @@
-import { authenticate, requireBetaAccess } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { getUserProfileById, setActiveProfileToTrainer, setActiveProfileToNutritionist, updateUserProfile } from '../../src/services/user-service.js';
 import { parseIncludeParameter } from '../../src/helpers/query-parser.js';
 import { ALLOWED_USER_RELATIONS } from '../../src/constants/user-relations.js';
@@ -60,7 +60,7 @@ export async function userRoutes(fastify) {
       config: {
         rateLimit: config.rateLimit.user.becomeTrainer,
       },
-      preHandler: [authenticate, requireBetaAccess()],
+      preHandler: [authenticate],
       schema: becomeTrainerSchema,
     },
     async (request, reply) => {
@@ -97,7 +97,7 @@ export async function userRoutes(fastify) {
       config: {
         rateLimit: config.rateLimit.user.becomeNutritionist,
       },
-      preHandler: [authenticate, requireBetaAccess()],
+      preHandler: [authenticate],
       schema: becomeNutritionistSchema,
     },
     async (request, reply) => {

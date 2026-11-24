@@ -95,19 +95,14 @@ beforeEach(() => {
 });
 
 describe('signupWithInvite grants BETA', () => {
-  it('should create a BETA ACTIVE platform subscription for the new trainer', async () => {
+  it('should not write a second BETA subscription itself', async () => {
     await signupWithInvite({ code: CODE, password: PASSWORD });
 
-    expect(betaGrants()).toEqual([
-      expect.objectContaining({
-        trainerId: TRAINER_ID,
-        tier: BETA_TIER,
-        status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE,
-      }),
-    ]);
+    expect(setActiveProfileToTrainer).toHaveBeenCalledTimes(1);
+    expect(betaGrants()).toEqual([]);
   });
 
-  it('should write the subscription inside the signup transaction', async () => {
+  it('should grant the trainer profile (and its BETA subscription) inside the signup transaction', async () => {
     const tx = {
       ...prisma,
       platformSubscription: { create: vi.fn().mockResolvedValue({}), upsert: vi.fn().mockResolvedValue({}) },
@@ -116,9 +111,9 @@ describe('signupWithInvite grants BETA', () => {
 
     await signupWithInvite({ code: CODE, password: PASSWORD });
 
-    const granted =
-      tx.platformSubscription.create.mock.calls.length + tx.platformSubscription.upsert.mock.calls.length;
-    expect(granted).toBe(1);
+    expect(setActiveProfileToTrainer).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ tx }));
+    expect(tx.platformSubscription.create).not.toHaveBeenCalled();
+    expect(tx.platformSubscription.upsert).not.toHaveBeenCalled();
     expect(prisma.platformSubscription.create).not.toHaveBeenCalled();
     expect(prisma.platformSubscription.upsert).not.toHaveBeenCalled();
   });

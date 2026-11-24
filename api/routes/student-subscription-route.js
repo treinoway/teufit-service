@@ -9,6 +9,7 @@ import {
   getSubscriptionById,
   cancelSubscription,
 } from '../../src/services/student-subscription-service.js';
+import { resolveTrainerOwnerOrThrow } from '../../src/services/professional-owner-service.js';
 import {
   assignPlanSchema,
   listSubscriptionsByStudentSchema,
@@ -18,64 +19,47 @@ import {
   cancelSubscriptionSchema,
 } from '../schemas/student-subscription-route.schema.js';
 
-export async function studentSubscriptionRoutes(fastify) {
+/**
+ * Registers the student-subscription routes under a prefix for one kind of owner.
+ *
+ * @param {import('fastify').FastifyInstance} fastify
+ * @param {{ prefix: string, preHandler: Function[], resolveOwner: Function, schemas: object }} config
+ */
+export function registerStudentSubscriptionRoutes(fastify, { prefix, preHandler, resolveOwner, schemas }) {
   fastify.post(
-    '/trainer/students/:studentId/subscriptions',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: assignPlanSchema,
-    },
+    `${prefix}/students/:studentId/subscriptions`,
+    { preHandler, schema: schemas.assignPlan },
     async (request, reply) => {
-      const result = await assignPlanToStudent(
-        prisma,
-        request.user.id,
-        request.params.studentId,
-        request.body,
-      );
+      const owner = await resolveOwner(prisma, request.user.id);
+      const result = await assignPlanToStudent(prisma, owner, request.params.studentId, request.body);
       return reply.status(201).send(result);
     },
   );
 
   fastify.get(
-    '/trainer/students/:studentId/subscriptions',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: listSubscriptionsByStudentSchema,
-    },
+    `${prefix}/students/:studentId/subscriptions`,
+    { preHandler, schema: schemas.listSubscriptionsByStudent },
     async (request, reply) => {
-      const subscriptions = await listSubscriptionsByStudent(
-        prisma,
-        request.user.id,
-        request.params.studentId,
-      );
-      return reply.send(subscriptions);
+      const owner = await resolveOwner(prisma, request.user.id);
+      return reply.send(await listSubscriptionsByStudent(prisma, owner, request.params.studentId));
     },
   );
 
   fastify.get(
-    '/trainer/students/:studentId/subscriptions/active',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: getActiveSubscriptionByStudentSchema,
-    },
+    `${prefix}/students/:studentId/subscriptions/active`,
+    { preHandler, schema: schemas.getActiveSubscriptionByStudent },
     async (request, reply) => {
-      const subscription = await getActiveSubscriptionByStudent(
-        prisma,
-        request.user.id,
-        request.params.studentId,
-      );
-      return reply.send(subscription);
+      const owner = await resolveOwner(prisma, request.user.id);
+      return reply.send(await getActiveSubscriptionByStudent(prisma, owner, request.params.studentId));
     },
   );
 
   fastify.get(
-    '/trainer/subscriptions',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: listSubscriptionsSchema,
-    },
+    `${prefix}/subscriptions`,
+    { preHandler, schema: schemas.listSubscriptions },
     async (request, reply) => {
-      const subscriptions = await listSubscriptions(prisma, request.user.id, {
+      const owner = await resolveOwner(prisma, request.user.id);
+      const subscriptions = await listSubscriptions(prisma, owner, {
         status: request.query.status ?? null,
         planId: request.query.planId ?? null,
       });
@@ -84,35 +68,40 @@ export async function studentSubscriptionRoutes(fastify) {
   );
 
   fastify.get(
-    '/trainer/subscriptions/:id',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: getSubscriptionByIdSchema,
-    },
+    `${prefix}/subscriptions/:id`,
+    { preHandler, schema: schemas.getSubscriptionById },
     async (request, reply) => {
-      const subscription = await getSubscriptionById(
-        prisma,
-        request.user.id,
-        request.params.id,
-      );
-      return reply.send(subscription);
+      const owner = await resolveOwner(prisma, request.user.id);
+      return reply.send(await getSubscriptionById(prisma, owner, request.params.id));
     },
   );
 
   fastify.post(
-    '/trainer/subscriptions/:id/cancel',
-    {
-      preHandler: [authenticate, requireRole(Roles.TRAINER)],
-      schema: cancelSubscriptionSchema,
-    },
+    `${prefix}/subscriptions/:id/cancel`,
+    { preHandler, schema: schemas.cancelSubscription },
     async (request, reply) => {
-      const subscription = await cancelSubscription(
-        prisma,
-        request.user.id,
-        request.params.id,
-        { reason: request.body?.reason ?? null },
-      );
+      const owner = await resolveOwner(prisma, request.user.id);
+      const subscription = await cancelSubscription(prisma, owner, request.params.id, {
+        reason: request.body?.reason ?? null,
+      });
       return reply.send(subscription);
     },
   );
+}
+
+// Registers the trainer-only /trainer subscription routes.
+export async function studentSubscriptionRoutes(fastify) {
+  registerStudentSubscriptionRoutes(fastify, {
+    prefix: '/trainer',
+    preHandler: [authenticate, requireRole(Roles.TRAINER)],
+    resolveOwner: resolveTrainerOwnerOrThrow,
+    schemas: {
+      assignPlan: assignPlanSchema,
+      listSubscriptionsByStudent: listSubscriptionsByStudentSchema,
+      getActiveSubscriptionByStudent: getActiveSubscriptionByStudentSchema,
+      listSubscriptions: listSubscriptionsSchema,
+      getSubscriptionById: getSubscriptionByIdSchema,
+      cancelSubscription: cancelSubscriptionSchema,
+    },
+  });
 }

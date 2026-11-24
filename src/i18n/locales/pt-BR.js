@@ -150,6 +150,11 @@ export default {
       semiannual: 'Semestral',
       annual: 'Anual',
     },
+    subscriptionServiceType: {
+      training: 'Treino',
+      nutrition: 'Nutrição',
+      both: 'Ambos',
+    },
     feedbackCategory: {
       BUG: 'Problema',
       SUGGESTION: 'Sugestão',
@@ -171,6 +176,39 @@ export default {
       revoked: 'Revogado',
       expired: 'Expirado',
       declined: 'Recusado',
+    },
+    studentFeedbackMilestone: {
+      D7: '7 dias',
+      D15: '15 dias',
+      D21: '21 dias',
+      D30: '30 dias',
+      RECURRING: 'A cada 30 dias',
+      ADHOC: 'Envio manual',
+    },
+    studentFeedbackStatus: {
+      pending: 'Pendente',
+      answered: 'Respondido',
+      expired: 'Expirado',
+    },
+    studentFeedbackQuestionType: {
+      score: 'Nota',
+      stars: 'Estrelas',
+      open: 'Aberta',
+    },
+    studentFeedbackBand: {
+      attention: 'Atenção',
+      stable: 'Estável',
+      good: 'Bom',
+    },
+    studentFeedbackPillar: {
+      training_adherence: 'Adesão (treino)',
+      diet_adherence: 'Adesão (plano alimentar)',
+      evolution: 'Evolução',
+      routine: 'Rotina',
+      sleep: 'Sono',
+      hydration: 'Hidratação',
+      report: 'Relato',
+      other: 'Outro',
     },
   },
 
@@ -258,6 +296,18 @@ export default {
     'consistencyRanking.pause.weekNotEditable': 'Esta semana já foi encerrada ou está a mais de 12 semanas à frente, e não pode ser pausada nem reativada.',
     'consistencyRanking.season.notFound': 'Temporada não encontrada.',
     'consistencyRanking.target.notEditable': 'A meta só pode ser reduzida na semana em andamento, de zero até a meta original.',
+    'consistencyRanking.privacy.invalid': 'Escolha de privacidade inválida. Escolha aparecer com teu nome ou como Aluno do time, na versão atual do termo.',
+
+    // Student feedback
+    'studentFeedback.notFound': 'Feedback não encontrado.',
+    'studentFeedback.expired': 'O prazo para responder este feedback terminou.',
+    'studentFeedback.alreadySubmitted': 'Este feedback já foi enviado.',
+    'studentFeedback.alreadyPending': 'Este aluno já tem um feedback pendente.',
+    'studentFeedback.requiredAnswerMissing': 'Responda todas as perguntas obrigatórias antes de enviar.',
+    'studentFeedback.invalidAnswer': 'Uma das respostas é inválida.',
+    'studentFeedbackTemplate.notFound': 'Modelo de feedback não encontrado.',
+    'studentFeedbackTemplate.readOnly': 'O modelo padrão do TeuFit não pode ser alterado. Crie o seu a partir dele.',
+    'studentFeedbackTemplate.invalid': 'O modelo de feedback tem dados inválidos.',
 
     // Training template exercises
     'trainingTemplateExercise.notFound': 'Exercício não encontrado neste modelo de treino.',
@@ -276,6 +326,12 @@ export default {
     'challenge.filter.empty': 'Nenhum aluno atende aos critérios do filtro.',
     'challenge.durationExceeded': 'A duração do campeonato não pode ultrapassar 365 dias.',
     'challenge.notActive': 'Este campeonato não está ativo.',
+    'challenge.weeks.invalid': 'Início ou duração inválidos. Escolha uma segunda-feira a partir da semana atual e de 1 a 12 semanas.',
+    'challenge.minPodium.invalid': 'Mínimo de semanas para o pódio inválido. Use de 1 até o número de semanas do campeonato, no máximo 4.',
+    'challenge.notClosable': 'Só um campeonato em semanas em andamento pode ser encerrado antes.',
+    'challenge.notWeekly': 'Este campeonato não tem classificação de constância.',
+    'challenge.scoringRule.invalid': 'Pontuação inválida. Os pesos dos cinco pilares devem ser inteiros de 0 a 100 com soma 100, e ao menos um pilar deve estar ativo.',
+    'challenge.visibility.invalid': 'Visibilidade inválida. Escolha Desligado, Só a posição do aluno ou Ranking completo ao vivo.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',
@@ -357,6 +413,8 @@ export default {
     'subscription.cycleAlreadyExists': 'Este ciclo de cobrança já existe.',
     'subscription.invalidAmount': 'Valor inválido. Use até duas casas decimais e no máximo 99.999.999,99.',
     'subscription.invalidPaidAt': 'Data de pagamento inválida: não pode ser futura nem anterior a um ano antes do início da assinatura.',
+    'subscription.serviceTypeNotAllowed': 'Seu perfil profissional não permite este tipo de serviço no plano.',
+    'professional.notFound': 'Perfil profissional não encontrado.',
 
     // Platform plan (SaaS gating)
     'platformPlan.studentCapExceeded': 'Você atingiu o limite de alunos do seu plano. Atualize para liberar mais espaço.',
@@ -387,6 +445,7 @@ export default {
     'admin.queryTimeout': 'A consulta demorou demais. Refine a busca e tente novamente.',
     'admin.userNotFound': 'Usuário não encontrado.',
     'admin.protocolNotFound': 'Rotina não encontrada.',
+    'admin.sessionNotFound': 'Sessão de treino não encontrada.',
     // Tutorials ("Como usar")
     'tutorial.notFound': 'Tutorial não encontrado.',
     'tutorial.invalidVideoType': 'Formato de vídeo não suportado. Use MP4, WebM ou MOV.',
@@ -423,6 +482,7 @@ export default {
     'studentInvite.alreadyPending': 'Já existe um convite pendente para este e-mail.',
     'studentInvite.dailyLimit': 'Você atingiu o limite diário de convites. Tente novamente mais tarde.',
     'studentInvite.emailSendFailed': 'Não foi possível enviar o e-mail do convite. Tente novamente.',
+    'studentInvite.expired': 'Este convite expirou. Peça um novo convite ao seu treinador.',
     'student.accountDeactivated': 'A conta deste aluno está desativada.',
 
     // Email verification
@@ -434,6 +494,8 @@ export default {
     'emailVerification.userNotFound': 'Usuário não encontrado.',
     'emailVerification.dailyLimit': 'Você solicitou códigos demais hoje. Tente novamente mais tarde.',
     'emailVerification.sendFailed': 'Não foi possível enviar o e-mail de verificação. Tente novamente.',
+    'emailVerification.required': 'Confirme seu e-mail para continuar.',
+    'signup.emailInUse': 'Este e-mail já tem uma conta. Entre para continuar.',
 
     // Password reset
     'auth.email.required': 'O e-mail é obrigatório.',
@@ -476,6 +538,11 @@ export default {
 
   notes: {
     autoCompleted24h: '[Treino concluído automaticamente após 24h sem atividade]',
+  },
+
+  // Texts stored in a student feedback template when the service creates it
+  studentFeedback: {
+    starterQuestionText: 'Como foi a sua semana?',
   },
 
   validation: {

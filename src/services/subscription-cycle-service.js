@@ -27,6 +27,7 @@ import {
 } from '../constants/subscription.js';
 import { addDaysMs, formatDateOnly } from '../helpers/date-helpers.js';
 import { computeAmount, computeNextCycle } from '../helpers/subscription-helpers.js';
+import { ownerScopeWhere } from '../helpers/subscription-owner-helpers.js';
 
 /**
  * Cycles that must exist for one subscription so that no cycle starts later
@@ -155,18 +156,25 @@ async function generateForBatch(prisma, subscriptions, generationLimit, today, m
   return insertCyclesForActiveSubscriptions(prisma, rowsToCreate);
 }
 
+// Where fragment limiting the generator to an owner, a single trainer, or nobody (all owners).
+function buildGenerationScope({ owner, trainerId }) {
+  if (owner) return ownerScopeWhere(owner);
+  return trainerId ? { trainerId } : {};
+}
+
 /**
  * Ensure every active subscription has its cycles materialized up to
  * `today + CYCLE_GENERATION_LEAD_DAYS`.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {{ trainerId?: string, today: Date }} options - `today` is the
- *   business-timezone civil day (midnight UTC); omit `trainerId` to process
- *   every trainer (cron).
+ * @param {{ owner?: object, trainerId?: string, today: Date }} options - `today` is the
+ *   business-timezone civil day (midnight UTC); `owner` scopes to every row of a
+ *   professional user, `trainerId` to one trainer; omit both for every owner (cron).
  * @returns {Promise<{ subscriptionsChecked: number, cyclesCreated: number }>}
  */
-export async function ensureUpcomingCycles(prisma, { trainerId, today }) {
+export async function ensureUpcomingCycles(prisma, { owner, trainerId, today }) {
   const generationLimit = addDaysMs(today, CYCLE_GENERATION_LEAD_DAYS);
+  const ownerFilter = buildGenerationScope({ owner, trainerId });
   let subscriptionsChecked = 0;
   let cyclesCreated = 0;
   let lastSeenId;
@@ -175,7 +183,7 @@ export async function ensureUpcomingCycles(prisma, { trainerId, today }) {
     const subscriptions = await prisma.studentSubscription.findMany({
       where: {
         status: SubscriptionStatus.ACTIVE,
-        ...(trainerId ? { trainerId } : {}),
+        ...ownerFilter,
         ...(lastSeenId ? { id: { gt: lastSeenId } } : {}),
       },
       select: {

@@ -6,7 +6,6 @@ import {
   SubscriptionMessageCode,
   MAX_MONEY_AMOUNT,
   MONEY_DECIMAL_PLACES,
-  SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX,
 } from '../constants/subscription.js';
 import { addMonthsClamped, dateWithClampedDay, formatDateOnly } from './date-helpers.js';
 import { deriveEffectiveStatus } from './payment-status-helpers.js';
@@ -108,14 +107,6 @@ export function computeNextCycle(subscription, lastCycle, today = null) {
   }
 
   return { cycleIndex, ...bounds };
-}
-
-/**
- * Key of the advisory lock that serializes assign/unlink for one
- * trainer/student pair (hashed by Postgres with hashtext()).
- */
-export function buildAssignmentLockKey(trainerId, studentId) {
-  return `${SUBSCRIPTION_ASSIGNMENT_LOCK_PREFIX}:${trainerId}:${studentId}`;
 }
 
 /**

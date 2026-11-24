@@ -15,7 +15,7 @@ const inviteIdParamsSchema = {
   },
 };
 
-const studentInviteSchema = {
+export const studentInviteSchema = {
   type: 'object',
   required: ['id', 'email', 'status', 'expiresAt', 'lastSentAt', 'sendCount', 'createdAt', 'canResend', 'resendAvailableAt'],
   properties: {
@@ -60,12 +60,15 @@ const tags = ['trainer'];
 
 export const inviteStudentSchema = {
   tags,
-  summary: 'Add a student by email: link an existing user or invite a new one',
+  summary: 'Invite a student by email (nobody is linked without the student\'s own action)',
   description:
-    'If the email belongs to a registered user with a VERIFIED email, the student is linked immediately (outcome "linked", `student` present). '
-    + 'Otherwise (no user, or a user whose email is not verified yet) a pending invite is created and emailed (outcome "invited", `invite` present); '
-    + 'it is accepted automatically once the student signs up and verifies that email. The plan student cap is checked when inviting. '
-    + 'At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds); direct links do not count.',
+    'Always creates a pending invite and emails it (outcome "invited", `invite` present). '
+    + 'If the email already has an account (verified or not) the student must accept or decline it in the app (GET /my/trainer/invites); '
+    + 'otherwise it is accepted automatically once the student signs up and verifies that email. '
+    + 'Outcome "linked" and `student` stay in the contract but are no longer produced. The plan student cap is checked when inviting. '
+    + 'At most 50 invites can be created per trainer per rolling 24h (429 studentInvite.dailyLimit with details.retryAfterSeconds). '
+    + 'A sender whose email is not confirmed can create 3 invites per rolling 24h; the next one answers 403 emailVerification.required '
+    + '(accounts created before the open-signup cut-off are exempt).',
   security: [{ bearerAuth: [] }],
   body: {
     type: 'object',
@@ -88,7 +91,10 @@ export const inviteStudentSchema = {
     },
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
-    403: errorResponseSchema,
+    403: {
+      description: 'Not a trainer, plan student cap reached (platformPlan.studentCapExceeded) or sender email not confirmed after 3 invites in 24h (emailVerification.required)',
+      ...errorResponseSchema,
+    },
     409: {
       description: 'Already linked (student.alreadyLinked), already pending (studentInvite.alreadyPending) or trainer profile missing',
       ...errorResponseSchema,
@@ -148,7 +154,8 @@ export const listStudentInvitesSchema = {
 export const resendStudentInviteSchema = {
   tags,
   summary: 'Resend a pending student invite',
-  description: '1 hour cooldown between sends, max 5 sends per invite. Resending an expired pending invite revives it (new 30 day expiry).',
+  description: '1 hour cooldown between sends, max 5 sends per invite. Resending an expired pending invite revives it (new 30 day expiry). '
+    + 'An invite that waits for the consent of an existing account resends the "open the app" email; no verification code is sent.',
   security: [{ bearerAuth: [] }],
   params: inviteIdParamsSchema,
   response: {

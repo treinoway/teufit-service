@@ -272,6 +272,7 @@ export const listPaymentsByStudentSchema = {
             properties: {
               ...paymentSchema.properties,
               ...i18nField('subscriptionStatus', 'subscriptionStatus'),
+              ...i18nField('serviceType', 'subscriptionServiceType'),
               plan: {
                 type: 'object',
                 properties: {

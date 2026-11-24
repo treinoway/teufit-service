@@ -77,3 +77,23 @@ export async function lockTrainingTemplateForUpdate(tx, id) {
 export async function lockDietProtocolForUpdate(tx, id) {
   await tx.$queryRaw`SELECT id FROM diet_protocols WHERE id = ${id}::uuid FOR NO KEY UPDATE`;
 }
+
+/**
+ * Acquire a FOR NO KEY UPDATE lock on the `student_feedback_requests` row, so draft saves and the submit of one request queue.
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {string} id - StudentFeedbackRequest UUID
+ */
+export async function lockStudentFeedbackRequestForUpdate(tx, id) {
+  await tx.$queryRaw`SELECT id FROM student_feedback_requests WHERE id = ${id}::uuid FOR NO KEY UPDATE`;
+}
+
+/**
+ * Acquire a FOR UPDATE lock on the `student_feedback_templates` row, so saves, deletes and milestone choices of one template queue; new requests wait on it through the key-share lock of their foreign key.
+ *
+ * @param {object} tx - Prisma interactive transaction client
+ * @param {string} id - StudentFeedbackTemplate UUID
+ */
+export async function lockStudentFeedbackTemplateForUpdate(tx, id) {
+  await tx.$queryRaw`SELECT id FROM student_feedback_templates WHERE id = ${id}::uuid FOR UPDATE`;
+}

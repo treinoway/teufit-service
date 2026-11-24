@@ -1,5 +1,13 @@
 import { errorResponseSchema, badRequestErrorResponseSchema } from './error-response.schema.js';
-import { challengeParticipantModeValues, challengeStatusValues } from '../../src/constants/challenge.js';
+import {
+  CHALLENGE_DESCRIPTION_MAX_LENGTH,
+  challengeFormatValues,
+  challengeOwnerTypeValues,
+  challengeParticipantModeValues,
+  challengeStatusValues,
+  challengeVisibilityValues,
+} from '../../src/constants/challenge.js';
+import { Faixa, WeekStatus, pillarValues } from '../../src/constants/consistency-ranking.js';
 import { i18nField } from '../../src/i18n/schema-helpers.js';
 
 const authHeaders = {
@@ -34,8 +42,88 @@ const challengeSchema = {
     ptsWorkoutFeedback: { type: 'integer', nullable: true },
     dailyPointsCap: { type: 'integer', nullable: true },
     anonymousRanking: { type: 'boolean' },
+    format: { type: 'string', enum: challengeFormatValues, description: '"dates" (free dates, points only) or "weeks" (Monday start, whole weeks, consistency standings)' },
+    weeks: { type: 'integer', nullable: true, description: 'Number of weeks; weekly format only' },
+    currentWeek: { type: 'integer', nullable: true, description: 'Running week number ("Semana X de Y"); weekly format while running' },
+    minPodiumWeeks: { type: 'integer', nullable: true, description: 'Valid weeks needed for the podium; weekly format only' },
+    description: { type: 'string', nullable: true },
+    visibility: { type: 'string', enum: challengeVisibilityValues },
+    ownerType: { type: 'string', enum: challengeOwnerTypeValues },
+    closeRequestedAt: { type: 'string', format: 'date-time', nullable: true, description: 'When the trainer asked to end it early' },
+    closedAt: { type: 'string', format: 'date-time', nullable: true, description: 'When the final standings were frozen' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
+  },
+};
+
+const pillarWeightsSchema = {
+  type: 'object',
+  properties: Object.fromEntries(pillarValues.map((pillar) => [pillar, { type: 'integer', minimum: 0, maximum: 100 }])),
+};
+
+const participantPreviewSchema = {
+  type: 'object',
+  properties: {
+    studentId: { type: 'string', format: 'uuid' },
+    firstName: { type: 'string', nullable: true },
+    lastName: { type: 'string', nullable: true },
+    avatarUrl: { type: 'string', nullable: true },
+  },
+};
+
+// Trainer view of a championship: the shared shape plus its scoring rule and, in the list, the participants preview
+const trainerChallengeSchema = {
+  type: 'object',
+  properties: {
+    ...challengeSchema.properties,
+    weights: {
+      ...pillarWeightsSchema,
+      nullable: true,
+      description: 'Pillar weights of a weekly championship (sum 100); null in the dates format',
+    },
+    activePillars: {
+      type: 'array',
+      items: { type: 'string', enum: pillarValues },
+      description: 'Active pillars of a weekly championship; empty in the dates format',
+    },
+    participantsPreview: {
+      type: 'array',
+      items: participantPreviewSchema,
+      description: 'List only: up to 4 participants by join order',
+    },
+  },
+};
+
+const challengeDescriptionBodyField = {
+  type: 'string',
+  maxLength: CHALLENGE_DESCRIPTION_MAX_LENGTH,
+  nullable: true,
+};
+
+const weeklyScheduleBodyFields = {
+  startWeek: {
+    type: 'string',
+    format: 'date',
+    description: 'Weekly format: start Monday (YYYY-MM-DD, trainer time zone), the current week or a later one',
+  },
+  weeks: { type: 'integer', description: 'Weekly format: 1 to 12 weeks' },
+  minPodiumWeeks: {
+    type: 'integer',
+    description: 'Weekly format: valid weeks needed for the podium, 1 to min(4, weeks); defaults to the trainer ranking config',
+  },
+};
+
+// Loose on purpose: the service validates the rule and answers 400 challenge.scoringRule.invalid with details.field (CPD-08)
+const scoringRuleBodyFields = {
+  weights: {
+    type: 'object',
+    properties: Object.fromEntries(pillarValues.map((pillar) => [pillar, { type: 'number' }])),
+    description: 'Weekly format: weight of each of the five pillars, integers 0 to 100 summing 100; sent with activePillars, or both omitted to copy the trainer ranking config on creation',
+  },
+  activePillars: {
+    type: 'array',
+    items: { type: 'string' },
+    description: `Weekly format: non-empty list of distinct pillars (${pillarValues.join(', ')})`,
   },
 };
 
@@ -74,6 +162,17 @@ const rankingEntrySchema = {
   },
 };
 
+const trainerRankingEntrySchema = {
+  type: 'object',
+  properties: {
+    ...rankingEntrySchema.properties,
+    workouts: { type: 'integer', description: 'Completed workouts in the challenge window' },
+    bonusPoints: { type: 'integer', description: 'Points from trainer bonuses' },
+    pointsThisWeek: { type: 'integer', description: 'Points since Monday 00:00 in the trainer time zone' },
+    streakDays: { type: 'integer', description: 'Consecutive days with a completed workout, ending today or yesterday' },
+  },
+};
+
 const participantEntrySchema = {
   type: 'object',
   properties: {
@@ -95,12 +194,18 @@ export const createChallengeSchema = {
   headers: authHeaders,
   body: {
     type: 'object',
-    required: ['name', 'startDate', 'endDate', 'participantMode'],
+    required: ['name', 'participantMode'],
     additionalProperties: false,
+    description: 'Without `format: "weeks"` the challenge uses free dates and needs startDate and endDate. Any owner type sent is ignored.',
     properties: {
       name: { type: 'string', minLength: 1, maxLength: 100 },
-      startDate: { type: 'string', format: 'date' },
-      endDate: { type: 'string', format: 'date' },
+      startDate: { type: 'string', format: 'date', description: 'Dates format only (required there)' },
+      endDate: { type: 'string', format: 'date', description: 'Dates format only (required there)' },
+      format: { type: 'string', enum: challengeFormatValues },
+      ...weeklyScheduleBodyFields,
+      ...scoringRuleBodyFields,
+      description: challengeDescriptionBodyField,
+      visibility: { type: 'string', enum: challengeVisibilityValues },
       participantMode: { type: 'string', enum: challengeParticipantModeValues },
       filter: filterCriteriaBodySchema,
       studentIds: {
@@ -112,7 +217,7 @@ export const createChallengeSchema = {
     },
   },
   response: {
-    201: challengeSchema,
+    201: trainerChallengeSchema,
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
@@ -133,7 +238,7 @@ export const listChallengesSchema = {
     },
   },
   response: {
-    200: { type: 'array', items: challengeSchema },
+    200: { type: 'array', items: trainerChallengeSchema },
     401: errorResponseSchema,
     403: errorResponseSchema,
     500: errorResponseSchema,
@@ -151,7 +256,7 @@ export const getChallengeSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -161,7 +266,7 @@ export const getChallengeSchema = {
 
 export const updateChallengeSchema = {
   tags: ['challenges'],
-  summary: 'Update challenge name, dates, and/or point rules (pts fields only on scheduled)',
+  summary: 'Update a challenge; weekly format: every field while scheduled, only name, description, anonymous ranking and visibility while running',
   security: [{ bearerAuth: [] }],
   headers: authHeaders,
   params: {
@@ -176,11 +281,15 @@ export const updateChallengeSchema = {
       name: { type: 'string', minLength: 1, maxLength: 100 },
       startDate: { type: 'string', format: 'date' },
       endDate: { type: 'string', format: 'date' },
+      ...weeklyScheduleBodyFields,
+      ...scoringRuleBodyFields,
+      description: challengeDescriptionBodyField,
+      visibility: { type: 'string', enum: challengeVisibilityValues },
       ...challengePtsOverrideBodyFields,
     },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     400: badRequestErrorResponseSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
@@ -201,7 +310,7 @@ export const cancelChallengeSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: challengeSchema,
+    200: trainerChallengeSchema,
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -241,7 +350,7 @@ export const getChallengeRankingSchema = {
     properties: { id: { type: 'string', format: 'uuid' } },
   },
   response: {
-    200: { type: 'array', items: rankingEntrySchema },
+    200: { type: 'array', items: trainerRankingEntrySchema },
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
@@ -325,6 +434,7 @@ export const removeParticipantSchema = {
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,
+    409: errorResponseSchema,
     500: errorResponseSchema,
   },
 };
@@ -362,7 +472,153 @@ export const previewParticipantsSchema = {
   },
 };
 
+// ─── Trainer weekly championship schemas ───────────────────────────────────────
+
+const idParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', format: 'uuid' } },
+};
+
+export const closeChallengeSchema = {
+  tags: ['challenges'],
+  summary: 'End a running weekly championship early: the running week becomes the last one and it closes at that week close',
+  security: [{ bearerAuth: [] }],
+  headers: authHeaders,
+  params: idParams,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        ...challengeSchema.properties,
+        closesAt: { type: 'string', format: 'date-time', description: 'Close instant of the running week, when the championship closes' },
+      },
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
+const consistencyEnteringSchema = {
+  type: 'object',
+  nullable: true,
+  description: 'Present while the participant lacks the valid weeks for the podium',
+  properties: {
+    validWeeks: { type: 'integer' },
+    required: { type: 'integer' },
+  },
+};
+
+const challengeConsistencyRowSchema = {
+  type: 'object',
+  properties: {
+    studentId: { type: 'string', format: 'uuid' },
+    name: { type: 'string', description: 'Full name, also with anonymous ranking on' },
+    displayName: { type: 'string', description: 'First name and initial of the last name' },
+    initials: { type: 'string' },
+    position: { type: 'integer', nullable: true, description: 'Null for participants still entering' },
+    eligible: { type: 'boolean' },
+    faixa: { type: 'string', enum: Object.values(Faixa) },
+    average: { type: 'number', nullable: true, description: 'Average over the championship valid weeks' },
+    validWeeks: { type: 'integer' },
+    weeks100: { type: 'integer' },
+    weeksAt100: { type: 'integer' },
+    streak: { type: 'integer' },
+    currentWeekScore: { type: 'number', nullable: true, description: 'Partial score of the running week; null once closed' },
+    weekStatus: { type: 'string', enum: Object.values(WeekStatus), nullable: true },
+    entering: consistencyEnteringSchema,
+    weeksMissing: { type: 'integer', description: 'Valid weeks still missing for the podium' },
+  },
+};
+
+const consistencySummarySchema = {
+  type: 'object',
+  description: 'Numbers of the consistency cards',
+  properties: {
+    classified: { type: 'integer', description: 'Participants with a podium position' },
+    entering: { type: 'integer', description: 'Participants still entering' },
+    leaderAverage: { type: 'number', nullable: true, description: 'Average of the 1st place' },
+    leaderLead: { type: 'number', nullable: true, description: 'Average of the 1st minus the 2nd; null with fewer than 2 classified' },
+    championshipAverage: { type: 'number', nullable: true, description: 'Mean of the classified averages' },
+  },
+};
+
+export const getChallengeConsistencySchema = {
+  tags: ['challenges'],
+  summary: 'Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed',
+  security: [{ bearerAuth: [] }],
+  headers: authHeaders,
+  params: idParams,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        challenge: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            description: { type: 'string', nullable: true },
+            startDate: { type: 'string', format: 'date' },
+            endDate: { type: 'string', format: 'date' },
+            weeks: { type: 'integer' },
+            minPodiumWeeks: { type: 'integer' },
+            anonymousRanking: { type: 'boolean' },
+            visibility: { type: 'string', enum: challengeVisibilityValues },
+            closeRequestedAt: { type: 'string', format: 'date-time', nullable: true },
+            closedAt: { type: 'string', format: 'date-time', nullable: true },
+            participantCount: { type: 'integer' },
+          },
+        },
+        ...i18nField('status', 'challengeStatus'),
+        currentWeek: { type: 'integer', nullable: true, description: 'Week number while running; the number of weeks once closed' },
+        closesAt: { type: 'string', format: 'date-time', nullable: true, description: 'Close instant of the running week' },
+        rows: { type: 'array', items: challengeConsistencyRowSchema },
+        entering: { type: 'array', items: challengeConsistencyRowSchema },
+        summary: consistencySummarySchema,
+        privacyCounts: {
+          type: 'object',
+          description: 'How the participants appear in the app: by name, as "Aluno do time" by choice, or still to answer the privacy term',
+          properties: {
+            name: { type: 'integer' },
+            anonymous: { type: 'integer' },
+            pending: { type: 'integer' },
+          },
+        },
+      },
+    },
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+    409: errorResponseSchema,
+    500: errorResponseSchema,
+  },
+};
+
 // ─── Student challenge schemas ─────────────────────────────────────────────────
+
+// List item of the student: the shared shape plus the student's consistency in a running or closed weekly championship
+const myChallengeListItemSchema = {
+  type: 'object',
+  properties: {
+    ...challengeSchema.properties,
+    consistency: {
+      type: 'object',
+      nullable: true,
+      description: 'Weekly format, running or closed: figures of the student as the visibility allows; null otherwise',
+      properties: {
+        visibility: { type: 'string', enum: challengeVisibilityValues, description: 'Effective visibility: "off" for a minor' },
+        position: { type: 'integer', nullable: true },
+        total: { type: 'integer', nullable: true },
+        faixa: { type: 'string', enum: Object.values(Faixa), nullable: true },
+        average: { type: 'number', nullable: true },
+      },
+    },
+  },
+};
 
 export const listMyChallengesSchema = {
   tags: ['challenges'],
@@ -374,10 +630,11 @@ export const listMyChallengesSchema = {
     properties: {
       trainerId: { type: 'string', format: 'uuid' },
       status: { type: 'string', enum: challengeStatusValues },
+      format: { type: 'string', enum: challengeFormatValues, description: 'Only championships of this format; the app asks for "weeks"' },
     },
   },
   response: {
-    200: { type: 'array', items: challengeSchema },
+    200: { type: 'array', items: myChallengeListItemSchema },
     401: errorResponseSchema,
     500: errorResponseSchema,
   },
@@ -416,8 +673,18 @@ export const getMyChallengeRankingSchema = {
     200: {
       type: 'object',
       properties: {
-        entries: { type: 'array', items: rankingEntrySchema },
-        myPosition: { type: 'integer', nullable: true },
+        entries: {
+          type: 'array',
+          description: 'Weekly championship: the constancy privacy applies ("Aluno do time" without photo when pending, anonymous, minor or anonymous ranking), a colleague carries an opaque studentId, only the own row with visibility "position" and none with "off"',
+          items: {
+            type: 'object',
+            properties: {
+              ...rankingEntrySchema.properties,
+              isMe: { type: 'boolean', description: 'The requesting student; weekly championships only' },
+            },
+          },
+        },
+        myPosition: { type: 'integer', nullable: true, description: 'Null in a weekly championship with visibility "off" or for a minor' },
         myPoints: { type: 'integer' },
       },
     },

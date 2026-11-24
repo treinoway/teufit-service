@@ -5,6 +5,7 @@ import { toFoodDto, foodColumns } from '../helpers/nutrition-food.js';
 import {
   FoodSource,
   foodSourceValues,
+  HIDDEN_FOOD_SOURCES,
   FOOD_SEARCH_LIMIT_DEFAULT,
   FOOD_SEARCH_LIMIT_MAX,
   NutritionErrorCode,
@@ -13,9 +14,9 @@ import {
 
 const GROUP_INCLUDE = { foodGroup: { select: { id: true, name: true } } };
 
-// SQL visibility rule: requested public sources plus the caller's own custom foods.
+// SQL visibility rule: requested non-hidden public sources plus the caller's own custom foods.
 function buildSourceCondition({ sources, nutritionistId }) {
-  const publicSources = sources.filter((source) => source !== FoodSource.CUSTOM);
+  const publicSources = sources.filter((source) => source !== FoodSource.CUSTOM && !HIDDEN_FOOD_SOURCES.includes(source));
   const clauses = [];
   if (publicSources.length > 0) {
     clauses.push(Prisma.sql`(f.nutritionist_id IS NULL AND f.source IN (${Prisma.join(publicSources)}))`);
@@ -49,7 +50,7 @@ function selectMatchingIds(db, { sourceCondition, query, groupId, limit }) {
 }
 
 /**
- * Searches foods across TACO, TBCA and the caller's own custom foods (accent/case-insensitive).
+ * Searches visible public foods (TACO) and the caller's own custom foods (accent/case-insensitive).
  *
  * @returns {Promise<{ items: object[] }>}
  */
@@ -76,11 +77,14 @@ function foodNotFound() {
 }
 
 /**
- * Food row visible to the caller (public or own custom food) or 404.
+ * Food row visible to the caller (non-hidden public or own custom food) or 404.
  */
 export async function requireAccessibleFood(db, { nutritionistId = null, foodId }) {
   const food = await db.food.findFirst({
-    where: { id: foodId, OR: [{ nutritionistId: null }, ...(nutritionistId ? [{ nutritionistId }] : [])] },
+    where: {
+      id: foodId,
+      OR: [{ nutritionistId: null, source: { notIn: HIDDEN_FOOD_SOURCES } }, ...(nutritionistId ? [{ nutritionistId }] : [])],
+    },
     include: GROUP_INCLUDE,
   });
   if (!food) throw foodNotFound();

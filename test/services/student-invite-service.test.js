@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../src/config/email-handler.js', () => ({
-  default: { sendStudentInviteEmail: vi.fn(), sendExistingUserStudentInviteEmail: vi.fn() },
+  default: { sendStudentInviteEmail: vi.fn(), sendExistingUserStudentInviteEmail: vi.fn(), sendStudentInviteOpenAppEmail: vi.fn() },
 }));
 vi.mock('../../src/services/email-verification-service.js', () => ({
   issueCodeRespectingLimits: vi.fn(),
-  markVerificationSendFailed: vi.fn(),
-  confirmVerificationCodeDelivered: vi.fn(),
-  isUserEmailVerified: vi.fn(),
 }));
 vi.mock('../../src/helpers/email-lookup.js', () => ({
   findUserIdByEmailCaseInsensitive: vi.fn(),
@@ -25,19 +22,18 @@ vi.mock('../../src/services/trainer-onboarding-service.js', () => ({
 vi.mock('../../src/services/briefing-service.js', () => ({
   markBriefingDirty: vi.fn(),
 }));
+vi.mock('../../src/services/challenge-participant-sync.js', () => ({
+  joinAllModeChallenges: vi.fn(),
+}));
 
 import emailHandler from '../../src/config/email-handler.js';
-import {
-  issueCodeRespectingLimits,
-  markVerificationSendFailed,
-  confirmVerificationCodeDelivered,
-  isUserEmailVerified,
-} from '../../src/services/email-verification-service.js';
+import { issueCodeRespectingLimits } from '../../src/services/email-verification-service.js';
 import { findUserIdByEmailCaseInsensitive } from '../../src/helpers/email-lookup.js';
 import { assertStudentCap } from '../../src/services/platform-plan-service.js';
 import { linkStudentByEmail } from '../../src/services/trainer-service.js';
 import { maybeMarkFirstStudentLinked, maybeMarkFirstStudentInvited } from '../../src/services/trainer-onboarding-service.js';
 import { markBriefingDirty } from '../../src/services/briefing-service.js';
+import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
 import { AppError } from '../../src/errors/app-error.js';
 import { PLATFORM_PLAN_ERRORS } from '../../src/constants/platform-plan.js';
 import {
@@ -68,16 +64,15 @@ const INVITE_ID = 'invite-1';
 const STUDENT_EMAIL = 'student@example.com';
 const NOW = new Date('2026-09-29T12:00:00.000Z');
 const MS_PER_MINUTE = 60 * 1000;
-const ISSUED_CODE = '482913';
-const ISSUED_TOKEN_ID = 'token-issued';
-const ISSUED_CREATED_AT = new Date('2026-09-29T11:59:59.000Z');
-
-const ISSUED = {
-  code: ISSUED_CODE,
-  tokenId: ISSUED_TOKEN_ID,
-  userId: 'user-9',
-  createdAt: ISSUED_CREATED_AT,
-};
+const VERIFIED_ACCOUNT = { id: 'acc-verified' };
+const ACCOUNT_STATES = [
+  ['a verified email', VERIFIED_ACCOUNT],
+  ['an unverified email', null],
+];
+const EMAIL_FAILURES = [
+  ['a thrown error', (fn) => fn.mockRejectedValue(new Error('resend down'))],
+  ['a returned Resend error', (fn) => fn.mockResolvedValue({ data: null, error: { message: 'rejected' } })],
+];
 
 function makePrisma() {
   const prisma = {
@@ -142,14 +137,8 @@ describe('student-invite-service', () => {
     emailSender = {
       sendStudentInviteEmail: vi.fn().mockResolvedValue(undefined),
       sendExistingUserStudentInviteEmail: vi.fn().mockResolvedValue(undefined),
+      sendStudentInviteOpenAppEmail: vi.fn().mockResolvedValue(undefined),
     };
-    issueCodeRespectingLimits.mockResolvedValue(ISSUED);
-    markVerificationSendFailed.mockResolvedValue(undefined);
-    confirmVerificationCodeDelivered.mockResolvedValue(undefined);
-    // Delegate to the (mocked) prisma so tests keep driving verification via prisma.account.findFirst.
-    isUserEmailVerified.mockImplementation(async (p, userId) =>
-      Boolean(await p.account.findFirst({ where: { userId, verifiedAt: { not: null } }, select: { id: true } })),
-    );
     prisma.user.findUnique.mockResolvedValue({ firstName: 'Ana', lastName: 'Coach', email: STUDENT_EMAIL, deletedAt: null });
     findUserIdByEmailCaseInsensitive.mockResolvedValue(null);
     prisma.studentInvite.findMany.mockResolvedValue([]);
@@ -159,6 +148,7 @@ describe('student-invite-service', () => {
     assertStudentCap.mockResolvedValue(undefined);
     maybeMarkFirstStudentLinked.mockResolvedValue(undefined);
     markBriefingDirty.mockResolvedValue(undefined);
+    joinAllModeChallenges.mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -168,59 +158,7 @@ describe('student-invite-service', () => {
   describe('inviteStudent', () => {
     const args = () => ({ trainerId: TRAINER_ID, trainerUserId: TRAINER_USER_ID, email: '  Student@Example.COM ' });
 
-    describe('when the email belongs to a registered user with a verified email', () => {
-      const STUDENT_USER_ID = 'user-9';
-
-      beforeEach(() => {
-        findUserIdByEmailCaseInsensitive.mockResolvedValue(STUDENT_USER_ID);
-        prisma.user.findUnique.mockResolvedValue({ id: STUDENT_USER_ID, email: 'Student@Example.com', deletedAt: null });
-        linkStudentByEmail.mockResolvedValue({ id: STUDENT_USER_ID });
-      });
-
-      it('should link immediately with the stored email and return outcome linked', async () => {
-        const result = await inviteStudent(prisma, args(), { emailSender });
-
-        expect(findUserIdByEmailCaseInsensitive).toHaveBeenCalledWith(prisma, STUDENT_EMAIL);
-        expect(prisma.account.findFirst).toHaveBeenCalledWith({
-          where: { userId: STUDENT_USER_ID, verifiedAt: { not: null } },
-          select: { id: true },
-        });
-        expect(linkStudentByEmail).toHaveBeenCalledWith({
-          trainerId: TRAINER_ID,
-          trainerUserId: TRAINER_USER_ID,
-          email: 'Student@Example.com',
-        });
-        expect(result).toEqual({ outcome: StudentInviteOutcome.LINKED, student: { id: STUDENT_USER_ID } });
-      });
-
-      it('should not create an invite, send an invite email or apply caps when linking', async () => {
-        await inviteStudent(prisma, args(), { emailSender });
-
-        expect(prisma.studentInvite.create).not.toHaveBeenCalled();
-        expect(emailSender.sendStudentInviteEmail).not.toHaveBeenCalled();
-        expect(assertStudentCap).not.toHaveBeenCalled();
-        expect(prisma.studentInvite.findMany).not.toHaveBeenCalled();
-      });
-
-      it('should mark this trainer\'s pending invite for the email accepted with the student id', async () => {
-        await inviteStudent(prisma, args(), { emailSender });
-
-        expect(prisma.studentInvite.updateMany).toHaveBeenCalledWith({
-          where: { trainerId: TRAINER_ID, email: STUDENT_EMAIL, status: StudentInviteStatus.PENDING },
-          data: { status: StudentInviteStatus.ACCEPTED, studentId: STUDENT_USER_ID, acceptedAt: NOW },
-        });
-      });
-
-      it('should not mark any invite accepted when linking fails', async () => {
-        const failure = new AppError({ httpStatus: 409, error: 'X', messageCode: 'x.y', message: 'x' });
-        linkStudentByEmail.mockRejectedValue(failure);
-
-        await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toBe(failure);
-        expect(prisma.studentInvite.updateMany).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('when the email belongs to a registered user with an unverified email', () => {
+    describe.each(ACCOUNT_STATES)('when the email belongs to a registered user with %s', (_label, verifiedAccount) => {
       const STUDENT_USER_ID = 'user-9';
 
       beforeEach(() => {
@@ -230,77 +168,62 @@ describe('student-invite-service', () => {
             ? { id: STUDENT_USER_ID, email: STUDENT_EMAIL, deletedAt: null }
             : { firstName: 'Ana', lastName: 'Coach' },
         );
-        prisma.account.findFirst.mockResolvedValue(null);
+        prisma.account.findFirst.mockResolvedValue(verifiedAccount);
         prisma.studentInvite.create.mockImplementation(async ({ data }) => makeInvite(data));
       });
 
-      it('should create a pending invite and return outcome invited without linking', async () => {
+      it('should create a pending invite that needs consent and return outcome invited without linking', async () => {
         const result = await inviteStudent(prisma, args(), { emailSender });
 
+        expect(findUserIdByEmailCaseInsensitive).toHaveBeenCalledWith(prisma, STUDENT_EMAIL);
         expect(linkStudentByEmail).not.toHaveBeenCalled();
+        expect(prisma.trainerStudent.createMany).not.toHaveBeenCalled();
         expect(prisma.studentInvite.create).toHaveBeenCalledTimes(1);
+        expect(prisma.studentInvite.create).toHaveBeenCalledWith({
+          data: {
+            trainerId: TRAINER_ID,
+            email: STUDENT_EMAIL,
+            requiresConsent: true,
+            expiresAt: new Date(NOW.getTime() + STUDENT_INVITE_TTL_MS),
+          },
+        });
         expect(result.outcome).toBe(StudentInviteOutcome.INVITED);
         expect(result.invite.status).toBe(StudentInviteStatus.PENDING);
+        expect(result).not.toHaveProperty('student');
       });
 
-      it('should send the existing-user variant email carrying the issued code, and apply the daily and student caps', async () => {
+      it('should send the "open the app" email without a verification code, and apply the daily and student caps', async () => {
         await inviteStudent(prisma, args(), { emailSender });
 
-        expect(issueCodeRespectingLimits).toHaveBeenCalledWith(prisma, STUDENT_USER_ID);
-        expect(emailSender.sendExistingUserStudentInviteEmail).toHaveBeenCalledWith({
-          to: STUDENT_EMAIL,
-          trainerName: 'Ana Coach',
-          code: ISSUED_CODE,
-        });
+        expect(emailSender.sendStudentInviteOpenAppEmail).toHaveBeenCalledTimes(1);
+        expect(emailSender.sendStudentInviteOpenAppEmail).toHaveBeenCalledWith({ to: STUDENT_EMAIL, trainerName: 'Ana Coach' });
+        expect(emailSender.sendExistingUserStudentInviteEmail).not.toHaveBeenCalled();
         expect(emailSender.sendStudentInviteEmail).not.toHaveBeenCalled();
-        expect(markVerificationSendFailed).not.toHaveBeenCalled();
-        expect(confirmVerificationCodeDelivered).toHaveBeenCalledWith(prisma, ISSUED);
+        expect(issueCodeRespectingLimits).not.toHaveBeenCalled();
         expect(prisma.studentInvite.findMany).toHaveBeenCalledTimes(1);
         expect(assertStudentCap).toHaveBeenCalledWith(prisma, TRAINER_ID);
       });
 
-      it('should still invite and send the variant with code null when issuing is blocked by cooldown or cap', async () => {
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-        issueCodeRespectingLimits.mockRejectedValue(
-          new AppError({ httpStatus: 429, error: 'X', messageCode: 'x.y', message: 'blocked' }),
-        );
+      it.each(EMAIL_FAILURES)('should still invite when the "open the app" email fails with %s', async (_failure, arrange) => {
+        arrange(emailSender.sendStudentInviteOpenAppEmail);
 
         const result = await inviteStudent(prisma, args(), { emailSender });
 
         expect(result.outcome).toBe(StudentInviteOutcome.INVITED);
-        expect(emailSender.sendExistingUserStudentInviteEmail).toHaveBeenCalledWith({
-          to: STUDENT_EMAIL,
-          trainerName: 'Ana Coach',
-          code: null,
+        expect(console.error).toHaveBeenCalled();
+      });
+
+      it('should propagate the cap error, create nothing and send no email when over the student cap', async () => {
+        assertStudentCap.mockRejectedValue(capExceededError());
+
+        await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toMatchObject({
+          error: PLATFORM_PLAN_ERRORS.STUDENT_CAP_EXCEEDED.code,
         });
-        expect(markVerificationSendFailed).not.toHaveBeenCalled();
+        expect(prisma.studentInvite.create).not.toHaveBeenCalled();
+        expect(emailSender.sendStudentInviteOpenAppEmail).not.toHaveBeenCalled();
       });
 
-      it.each([
-        ['a thrown error', (fn) => fn.mockRejectedValue(new Error('resend down'))],
-        ['a returned Resend error', (fn) => fn.mockResolvedValue({ data: null, error: { message: 'rejected' } })],
-      ])('should still invite and mark the issued token undelivered when the variant email fails with %s', async (_label, arrange) => {
-        arrange(emailSender.sendExistingUserStudentInviteEmail);
-
-        const result = await inviteStudent(prisma, args(), { emailSender });
-
-        expect(result.outcome).toBe(StudentInviteOutcome.INVITED);
-        expect(markVerificationSendFailed).toHaveBeenCalledWith(prisma, ISSUED_TOKEN_ID);
-        expect(confirmVerificationCodeDelivered).not.toHaveBeenCalled();
-      });
-
-      it('should not mark any token when the variant email fails and no code was issued', async () => {
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-        issueCodeRespectingLimits.mockRejectedValue(new Error('blocked'));
-        emailSender.sendExistingUserStudentInviteEmail.mockRejectedValue(new Error('resend down'));
-
-        await expect(inviteStudent(prisma, args(), { emailSender })).resolves.toMatchObject({
-          outcome: StudentInviteOutcome.INVITED,
-        });
-        expect(markVerificationSendFailed).not.toHaveBeenCalled();
-      });
-
-      it('should throw 422 student.cannotLinkSelf when the unverified user is the trainer', async () => {
+      it('should throw 422 student.cannotLinkSelf when the user is the trainer', async () => {
         prisma.user.findUnique.mockResolvedValue({ id: TRAINER_USER_ID, email: STUDENT_EMAIL, deletedAt: null });
         findUserIdByEmailCaseInsensitive.mockResolvedValue(TRAINER_USER_ID);
 
@@ -312,7 +235,7 @@ describe('student-invite-service', () => {
         expect(prisma.studentInvite.create).not.toHaveBeenCalled();
       });
 
-      it('should throw 409 student.alreadyLinked when the unverified user is already linked to this trainer', async () => {
+      it('should throw 409 student.alreadyLinked when the user is already linked to this trainer', async () => {
         prisma.trainerStudent.findUnique.mockResolvedValue({ trainerId: TRAINER_ID });
 
         await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toMatchObject({
@@ -335,7 +258,7 @@ describe('student-invite-service', () => {
         });
       });
 
-      it('should throw 422 student.accountDeactivated when the user is soft-deleted, even if unverified', async () => {
+      it('should throw 422 student.accountDeactivated when the user is soft-deleted', async () => {
         prisma.user.findUnique.mockResolvedValue({ id: STUDENT_USER_ID, email: STUDENT_EMAIL, deletedAt: new Date() });
 
         await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toMatchObject({
@@ -382,13 +305,6 @@ describe('student-invite-service', () => {
         expect(linkStudentByEmail).not.toHaveBeenCalled();
       });
 
-      it('should propagate errors thrown by linkStudentByEmail', async () => {
-        prisma.user.findUnique.mockResolvedValue({ id: 'user-9', email: STUDENT_EMAIL, deletedAt: null });
-        const failure = new AppError({ httpStatus: 409, error: 'X', messageCode: 'student.alreadyLinked', message: 'x' });
-        linkStudentByEmail.mockRejectedValue(failure);
-
-        await expect(inviteStudent(prisma, args(), { emailSender })).rejects.toBe(failure);
-      });
     });
 
     describe('first-invite onboarding milestone', () => {
@@ -427,14 +343,14 @@ describe('student-invite-service', () => {
         expect(maybeMarkFirstStudentInvited).toHaveBeenCalledWith(expect.objectContaining({ trainerId: TRAINER_ID }));
       });
 
-      it('should not mark the milestone when the student is linked immediately (no invite is created)', async () => {
+      it('should mark the milestone when the invite goes to a registered user with a verified email (no direct link any more)', async () => {
         findUserIdByEmailCaseInsensitive.mockResolvedValue('user-9');
         prisma.user.findUnique.mockResolvedValue({ id: 'user-9', email: STUDENT_EMAIL, deletedAt: null });
-        linkStudentByEmail.mockResolvedValue({ id: 'user-9' });
 
         await inviteStudent(prisma, args(), { emailSender });
 
-        expect(maybeMarkFirstStudentInvited).not.toHaveBeenCalled();
+        expect(linkStudentByEmail).not.toHaveBeenCalled();
+        expect(maybeMarkFirstStudentInvited).toHaveBeenCalledWith(expect.objectContaining({ trainerId: TRAINER_ID }));
       });
 
       it('should not mark the milestone when the invite row cannot be created', async () => {
@@ -458,11 +374,13 @@ describe('student-invite-service', () => {
           data: {
             trainerId: TRAINER_ID,
             email: STUDENT_EMAIL,
+            requiresConsent: false,
             expiresAt: new Date(NOW.getTime() + STUDENT_INVITE_TTL_MS),
           },
         });
         expect(result.outcome).toBe(StudentInviteOutcome.INVITED);
         expect(result.invite.email).toBe(STUDENT_EMAIL);
+        expect(emailSender.sendStudentInviteOpenAppEmail).not.toHaveBeenCalled();
       });
 
       it('should expire this trainer\'s time-expired pending invite for the email before creating a new one', async () => {
@@ -1003,114 +921,55 @@ describe('student-invite-service', () => {
       });
     });
 
-    describe('when the invite email belongs to an existing user with an unverified email', () => {
-      const STUDENT_USER_ID = 'user-9';
-
+    describe('when the invite waits for the consent of an existing account', () => {
       beforeEach(() => {
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-        findUserIdByEmailCaseInsensitive.mockResolvedValue(STUDENT_USER_ID);
-        prisma.account.findFirst.mockResolvedValue(null);
-        prisma.user.findUnique.mockImplementation(async ({ where }) =>
-          where.id === STUDENT_USER_ID
-            ? { deletedAt: null }
-            : { firstName: 'Ana', lastName: 'Coach' },
-        );
+        prisma.studentInvite.findFirst.mockResolvedValue(makeInvite({ requiresConsent: true }));
       });
 
-      it('should send the existing-user variant with an issued code instead of the generic email', async () => {
+      it.each(ACCOUNT_STATES)('should send the "open the app" email, and no code, to an account with %s', async (_label, verifiedAccount) => {
+        prisma.account.findFirst.mockResolvedValue(verifiedAccount);
+
         await resendStudentInvite(prisma, args(), { emailSender });
 
-        expect(issueCodeRespectingLimits).toHaveBeenCalledWith(prisma, STUDENT_USER_ID);
-        expect(emailSender.sendExistingUserStudentInviteEmail).toHaveBeenCalledWith({
-          to: STUDENT_EMAIL,
-          trainerName: 'Ana Coach',
-          code: ISSUED_CODE,
-        });
+        expect(emailSender.sendStudentInviteOpenAppEmail).toHaveBeenCalledTimes(1);
+        expect(emailSender.sendStudentInviteOpenAppEmail).toHaveBeenCalledWith({ to: STUDENT_EMAIL, trainerName: 'Ana Coach' });
+        expect(emailSender.sendExistingUserStudentInviteEmail).not.toHaveBeenCalled();
         expect(emailSender.sendStudentInviteEmail).not.toHaveBeenCalled();
+        expect(issueCodeRespectingLimits).not.toHaveBeenCalled();
       });
 
-      it('should close older codes only after the variant email is delivered', async () => {
-        await resendStudentInvite(prisma, args(), { emailSender });
-
-        expect(confirmVerificationCodeDelivered).toHaveBeenCalledWith(prisma, ISSUED);
-        expect(markVerificationSendFailed).not.toHaveBeenCalled();
-      });
-
-      it('should send the variant with code null and still succeed when issuing is blocked', async () => {
-        issueCodeRespectingLimits.mockRejectedValue(
-          new AppError({ httpStatus: 429, error: 'X', messageCode: 'x.y', message: 'blocked' }),
-        );
-
-        await expect(resendStudentInvite(prisma, args(), { emailSender })).resolves.toBeDefined();
-
-        expect(emailSender.sendExistingUserStudentInviteEmail).toHaveBeenCalledWith({
-          to: STUDENT_EMAIL,
-          trainerName: 'Ana Coach',
-          code: null,
-        });
-        expect(confirmVerificationCodeDelivered).not.toHaveBeenCalled();
-      });
-
-      it('should not fail the resend when code issuing throws an unexpected error', async () => {
-        issueCodeRespectingLimits.mockRejectedValue(new Error('db down'));
-
-        await expect(resendStudentInvite(prisma, args(), { emailSender })).resolves.toBeDefined();
-        expect(emailSender.sendExistingUserStudentInviteEmail).toHaveBeenCalledTimes(1);
-      });
-
-      it.each([
-        ['a thrown error', (fn) => fn.mockRejectedValue(new Error('resend down'))],
-        ['a returned Resend error', (fn) => fn.mockResolvedValue({ data: null, error: { message: 'rejected' } })],
-      ])('should throw 502, mark the issued code undelivered and roll back bookkeeping on %s', async (_label, arrange) => {
-        arrange(emailSender.sendExistingUserStudentInviteEmail);
+      it.each(EMAIL_FAILURES)('should throw 502 and roll back bookkeeping on %s', async (_label, arrange) => {
+        arrange(emailSender.sendStudentInviteOpenAppEmail);
 
         await expect(resendStudentInvite(prisma, args(), { emailSender })).rejects.toMatchObject({
           httpStatus: 502,
           messageCode: StudentInviteMessageCode.EMAIL_SEND_FAILED,
         });
-        expect(markVerificationSendFailed).toHaveBeenCalledWith(prisma, ISSUED_TOKEN_ID);
-        expect(confirmVerificationCodeDelivered).not.toHaveBeenCalled();
         expect(prisma.studentInvite.updateMany).toHaveBeenLastCalledWith(
           expect.objectContaining({ data: expect.objectContaining({ sendCount: { decrement: 1 } }) }),
         );
       });
-
-      it('should throw 502 without marking any code when the email fails and no code was issued', async () => {
-        issueCodeRespectingLimits.mockRejectedValue(new Error('blocked'));
-        emailSender.sendExistingUserStudentInviteEmail.mockRejectedValue(new Error('resend down'));
-
-        await expect(resendStudentInvite(prisma, args(), { emailSender })).rejects.toMatchObject({ httpStatus: 502 });
-        expect(markVerificationSendFailed).not.toHaveBeenCalled();
-      });
     });
 
-    describe('when the invite email does not need a verification code', () => {
+    describe('when the invite was created before the account existed (no consent needed)', () => {
       const OWNER_ID = 'user-9';
 
-      it('should send the generic email when the existing user is already verified', async () => {
+      it.each([
+        ['is still unverified', { deletedAt: null }, null],
+        ['is already verified', { deletedAt: null }, VERIFIED_ACCOUNT],
+        ['is soft-deleted', { deletedAt: new Date() }, null],
+      ])('should send the generic email, never the verification-code variant, when the existing user %s', async (_label, owner, verifiedAccount) => {
         findUserIdByEmailCaseInsensitive.mockResolvedValue(OWNER_ID);
         prisma.user.findUnique.mockImplementation(async ({ where }) =>
-          where.id === OWNER_ID ? { deletedAt: null } : { firstName: 'Ana', lastName: 'Coach' },
+          where.id === OWNER_ID ? owner : { firstName: 'Ana', lastName: 'Coach' },
         );
-        prisma.account.findFirst.mockResolvedValue({ id: 'acc-verified' });
+        prisma.account.findFirst.mockResolvedValue(verifiedAccount);
 
         await resendStudentInvite(prisma, args(), { emailSender });
 
         expect(emailSender.sendStudentInviteEmail).toHaveBeenCalledTimes(1);
         expect(emailSender.sendExistingUserStudentInviteEmail).not.toHaveBeenCalled();
-        expect(issueCodeRespectingLimits).not.toHaveBeenCalled();
-      });
-
-      it('should send the generic email when the existing user is soft-deleted', async () => {
-        findUserIdByEmailCaseInsensitive.mockResolvedValue(OWNER_ID);
-        prisma.user.findUnique.mockImplementation(async ({ where }) =>
-          where.id === OWNER_ID ? { deletedAt: new Date() } : { firstName: 'Ana', lastName: 'Coach' },
-        );
-        prisma.account.findFirst.mockResolvedValue(null);
-
-        await resendStudentInvite(prisma, args(), { emailSender });
-
-        expect(emailSender.sendStudentInviteEmail).toHaveBeenCalledTimes(1);
+        expect(emailSender.sendStudentInviteOpenAppEmail).not.toHaveBeenCalled();
         expect(issueCodeRespectingLimits).not.toHaveBeenCalled();
       });
 
@@ -1121,7 +980,7 @@ describe('student-invite-service', () => {
         expect(issueCodeRespectingLimits).not.toHaveBeenCalled();
       });
 
-      it('should fall back to the generic email when the recipient lookup fails', async () => {
+      it('should not depend on a recipient lookup: a failing lookup cannot break the resend', async () => {
         findUserIdByEmailCaseInsensitive.mockRejectedValue(new Error('db down'));
 
         await expect(resendStudentInvite(prisma, args(), { emailSender })).resolves.toBeDefined();
@@ -1203,13 +1062,13 @@ describe('student-invite-service', () => {
       expect(prisma.studentInvite.findMany).not.toHaveBeenCalled();
     });
 
-    it('should query pending invites by the normalized email', async () => {
+    it('should query the pending invites of the normalized email that need no consent', async () => {
       prisma.studentInvite.findMany.mockResolvedValue([]);
 
       await acceptPendingInvitesForUser(prisma, user);
 
       expect(prisma.studentInvite.findMany).toHaveBeenCalledWith({
-        where: { email: STUDENT_EMAIL, status: StudentInviteStatus.PENDING },
+        where: { email: STUDENT_EMAIL, status: StudentInviteStatus.PENDING, requiresConsent: false },
         select: { id: true, trainerId: true, expiresAt: true },
       });
     });
@@ -1221,7 +1080,7 @@ describe('student-invite-service', () => {
 
       expect(accepted).toBe(1);
       expect(prisma.studentInvite.updateMany).toHaveBeenCalledWith({
-        where: { id: INVITE_ID, status: StudentInviteStatus.PENDING },
+        where: { id: INVITE_ID, status: StudentInviteStatus.PENDING, expiresAt: { gte: NOW } },
         data: { status: StudentInviteStatus.ACCEPTED, studentId: 'student-1', acceptedAt: NOW },
       });
       expect(prisma.trainerStudent.createMany).toHaveBeenCalledWith({
@@ -1359,6 +1218,55 @@ describe('student-invite-service', () => {
 
       await expect(acceptPendingInvitesForUser(prisma, user)).resolves.toBe(0);
       expect(console.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('claimInviteAndLink', () => {
+    const user = { id: 'student-1', email: STUDENT_EMAIL };
+    const pending = () => ({ id: INVITE_ID, trainerId: TRAINER_ID, expiresAt: new Date(NOW.getTime() + STUDENT_INVITE_TTL_MS) });
+
+    beforeEach(() => {
+      prisma.studentInvite.findMany.mockResolvedValue([pending()]);
+      prisma.studentInvite.updateMany.mockResolvedValue({ count: 1 });
+      prisma.trainerStudent.createMany.mockResolvedValue({ count: 1 });
+      prisma.user.update.mockResolvedValue({});
+    });
+
+    it('CAMP-13 adds the invited student to all-mode weekly championships', async () => {
+      joinAllModeChallenges.mockResolvedValue(2);
+
+      const accepted = await acceptPendingInvitesForUser(prisma, user);
+
+      expect(accepted).toBe(1);
+      expect(joinAllModeChallenges).toHaveBeenCalledWith(prisma, TRAINER_ID, 'student-1', NOW);
+      expect(joinAllModeChallenges.mock.invocationCallOrder[0])
+        .toBeGreaterThan(prisma.trainerStudent.createMany.mock.invocationCallOrder[0]);
+    });
+
+    it('CAMP-13 keeps the link and logs when joining the championships fails', async () => {
+      const failure = new Error('championships down');
+      joinAllModeChallenges.mockRejectedValue(failure);
+
+      const accepted = await acceptPendingInvitesForUser(prisma, user);
+
+      expect(accepted).toBe(1);
+      expect(prisma.trainerStudent.createMany).toHaveBeenCalledWith({
+        data: [{ trainerId: TRAINER_ID, studentId: 'student-1', activeOnPlan: true }],
+        skipDuplicates: true,
+      });
+      expect(markBriefingDirty).toHaveBeenCalledWith(prisma, TRAINER_ID);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({ trainerId: TRAINER_ID, studentId: 'student-1', err: failure }),
+        expect.any(String),
+      );
+    });
+
+    it('CAMP-13 does not touch the championships when the invite was no longer pending', async () => {
+      prisma.studentInvite.updateMany.mockResolvedValue({ count: 0 });
+
+      await acceptPendingInvitesForUser(prisma, user);
+
+      expect(joinAllModeChallenges).not.toHaveBeenCalled();
     });
   });
 });

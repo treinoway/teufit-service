@@ -3,6 +3,9 @@ import { NotFoundAppError } from '../errors/app-error.js';
 import { computeAge, toNumber } from '../helpers/nutrition-sheet.js';
 import { hasPendingChanges } from '../helpers/nutrition-plan-view.js';
 import { loadAdherenceByPatient } from './nutrition-adherence-service.js';
+import { buildProfessionalAssignmentLockKey } from '../helpers/subscription-owner-helpers.js';
+import { resolveOwnerRows } from './professional-owner-service.js';
+import { cancelSubscriptionsAfterUnlink, UnlinkedProfessional } from './unlink-billing-service.js';
 import { PlanStatus, PatientLinkStatus, NutritionErrorCode, NutritionMessageCode } from '../constants/nutrition.js';
 
 // Builds the patient-not-found error.
@@ -151,12 +154,24 @@ export async function getPatientRow(prisma, { nutritionistId, patientId }) {
 }
 
 /**
- * Soft-unlinks a patient from the nutritionist.
+ * Soft-unlinks a patient and cancels the billing that depended on the link, under the assignment lock.
  */
-export async function unlinkPatient(prisma, { nutritionistId, patientId }) {
+export async function unlinkPatient(prisma, { nutritionistId, patientId, userId }) {
   const link = await requirePatientLink(prisma, { nutritionistId, patientId });
-  await prisma.nutritionistPatient.update({
-    where: { id: link.id },
-    data: { deletedAt: new Date(), status: PatientLinkStatus.INACTIVE },
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${buildProfessionalAssignmentLockKey(userId, patientId)}))`;
+    await tx.nutritionistPatient.update({
+      where: { id: link.id },
+      data: { deletedAt: now, status: PatientLinkStatus.INACTIVE },
+    });
+    const owner = { ...(await resolveOwnerRows(tx, userId)), nutritionistId };
+    await cancelSubscriptionsAfterUnlink(tx, {
+      owner,
+      studentId: patientId,
+      unlinked: UnlinkedProfessional.NUTRITIONIST,
+      now,
+    });
   });
 }
