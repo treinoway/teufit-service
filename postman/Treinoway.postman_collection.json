@@ -13122,7 +13122,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"weights\": { \"workouts\": 70, \"diet\": 0, \"cardio\": 30, \"feedback\": 0, \"hydration\": 0 },\n  \"activePillars\": [\"workouts\", \"cardio\"]\n}",
+              "raw": "{\n  \"name\": \"Verão 2027\",\n  \"description\": \"Prêmio: camiseta para o pódio\",\n  \"format\": \"weeks\",\n  \"startWeek\": \"2027-01-04\",\n  \"weeks\": 8,\n  \"minPodiumWeeks\": 2,\n  \"participantMode\": \"all\",\n  \"visibility\": \"full\",\n  \"weights\": { \"workouts\": 70, \"diet\": 0, \"cardio\": 30, \"feedback\": 0, \"hydration\": 0 },\n  \"activePillars\": [\"workouts\", \"cardio\"]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -13139,7 +13139,7 @@
                 "challenges"
               ]
             },
-            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored.\n\nScoring rule (weekly format): `weights` (the five pillars, integers 0 to 100 summing 100) and `activePillars` (non-empty, distinct pillars), sent together; omit both to copy the trainer ranking config. An invalid or partial rule answers 400 challenge.scoringRule.invalid with `details.field` (`weights` or `activePillars`). XP rules left out are copied from the trainer gamification config."
+            "description": "Create a championship in the weekly format: starts on a Monday (trainer time zone), lasts 1 to 12 whole weeks and ranks by consistency; points keep counting. Without `format: \"weeks\"` the request creates a free-dates championship. Any ownerType sent is ignored.\n\nScoring rule (weekly format): `weights` (the five pillars, integers 0 to 100 summing 100) and `activePillars` (non-empty, distinct pillars), sent together; omit both to copy the trainer ranking config. An invalid or partial rule answers 400 challenge.scoringRule.invalid with `details.field` (`weights` or `activePillars`). XP rules left out are copied from the trainer gamification config.\n\nVisibility in the app (`visibility`): `off` (Desligado: the student sees only the own week), `position` (Só a posição do aluno) or `full` (Ranking completo ao vivo, the default). It can change at any time before the end (PATCH) and applies on the next read of that championship; another value answers 400 challenge.visibility.invalid."
           },
           "response": []
         },
@@ -13413,7 +13413,7 @@
                 }
               ]
             },
-            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Weeks are scored with the championship weights and active pillars. `summary` carries the card numbers: classified, entering, leaderAverage, leaderLead (1st minus 2nd) and championshipAverage. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship."
+            "description": "Consistency standings of a weekly championship: empty while scheduled, live while running, frozen once closed. Weeks are scored with the championship weights and active pillars. `summary` carries the card numbers: classified, entering, leaderAverage, leaderLead (1st minus 2nd) and championshipAverage. Rows carry position, eligible, faixa, average, validWeeks, weeks100, streak, currentWeekScore and entering. 409 challenge.notWeekly for a free-dates championship. `privacyCounts` { name, anonymous, pending } tells how the participants appear in the app: by name, as \"Aluno do time\" by choice, or still to answer the privacy term."
           },
           "response": []
         },
@@ -13610,10 +13610,15 @@
                   "key": "status",
                   "value": "active",
                   "disabled": true
+                },
+                {
+                  "key": "format",
+                  "value": "weeks",
+                  "disabled": true
                 }
               ]
             },
-            "description": "List challenges the student participates in"
+            "description": "List challenges the student participates in, without cancelled ones, ordered running by nearest end, next by nearest start and closed by latest end. Optional `format` (`weeks` or `dates`) keeps only that format; the app asks for `weeks`. Each running or closed weekly championship carries `consistency` (`visibility`, `position`, `total`, `faixa`, `average`) as the championship visibility allows: `position` drops the average, `off` (and a student under 18) drops every figure; null for free-dates and scheduled ones."
           },
           "response": []
         },
@@ -13679,6 +13684,45 @@
               ]
             },
             "description": "Get challenge leaderboard with own position highlighted"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Challenge Consistency",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/challenges/:id/consistency?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "challenges",
+                ":id",
+                "consistency"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Consistency classification of a weekly championship as a participant sees it, already anonymized on the server. `challenge` (name, description, status, weeks, currentWeek, participantCount, closedAt), `visibility`, `closesAt` of the running week, `privacy`, `me` (\"Minha constância\": appearsAs, position, total, faixa, average, weeks100 { done, of }, streak, entering, firstPlaceShared, the live week by pillar, weekStrip and effectiveWeights) and `board` (podium or club100 with tieSentence, neighbors, entering, total and one page of 20 items). Peer rows carry only key (opaque, per response), displayName (\"Aluno do time\" when pending, anonymous, under 18 or with the championship anonymous ranking), initials, avatarUrl, position, average, faixa, streak and isMe: never ids, e-mail, phone or pillars. Visibility `position`: board null and no average; `off` (also for a student under 18): board null and no position. Scheduled: me and board null. Closed: the frozen final standings. 404 challenge.notFound when the student is not a participant, or the championship is cancelled or in the free-dates format."
           },
           "response": []
         }
@@ -24893,6 +24937,76 @@
               "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"resource.notFound\",\n  \"message\": \"Resource not found.\",\n  \"details\": {}\n}"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Consistency Ranking - My",
+      "item": [
+        {
+          "name": "Get My Consistency Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/my/consistency-ranking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "consistency-ranking"
+              ]
+            },
+            "description": "Home card and Ranking tab of the student app. `state` is `ok` or `no_trainer` (no active trainer link: week and highlight null). `week`: score, status, paused, closesAt and one row per active pillar with a target (done, expected, missing, complete), plus `missingPhrase` (\"Faltam ...\" over the active pillars). Scored with the weights of the highlighted championship, or with the trainer general ranking without one. `highlight`: the running weekly championship that ends first (then started first, then by name) with challengeId, name, visibility, position, total, faixa and average as its visibility allows; null without one. `othersCount`: other running weekly championships (\"+N campeonatos\"). `privacy`: appearAs (`name`, `anonymous` or `pending`), termVersion and acceptedAt."
+          },
+          "response": []
+        },
+        {
+          "name": "Set My Consistency Privacy",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appearAs\": \"name\",\n  \"termVersion\": \"2026-11-v1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/my/consistency-ranking/privacy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "my",
+                "consistency-ranking",
+                "privacy"
+              ]
+            },
+            "description": "Stores how the student appears to the other participants of every championship: `name` (first name and initial of the last name) or `anonymous` (\"Aluno do time\", no photo), with the date and the current term version. Storing it again only moves the date; the score never changes. Returns { appearAs, termVersion, acceptedAt }. 400 consistencyRanking.privacy.invalid for another choice or an outdated term version."
+          },
+          "response": []
         }
       ]
     },
