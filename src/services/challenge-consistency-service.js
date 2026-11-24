@@ -343,8 +343,14 @@ function frozenRow(row, required) {
   };
 }
 
-// Final standings stored when the championship closed (CAMP-37: later changes do not touch them)
-async function frozenStandings(prisma, challenge) {
+/**
+ * Final standings stored when the championship closed (CAMP-37: later changes do not touch them).
+ *
+ * @param {object} prisma
+ * @param {object} challenge - stored weekly championship
+ * @returns {Promise<{ rows: object[], entering: object[] }>}
+ */
+export async function frozenStandings(prisma, challenge) {
   const stored = await prisma.challengeConsistencyStanding.findMany({
     where: { challengeId: challenge.id },
     include: { student: STUDENT_SELECT },
