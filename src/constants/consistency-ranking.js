@@ -69,6 +69,7 @@ export const ConsistencyErrorCode = Object.freeze({
   SEASON_NOT_FOUND: 'CONSISTENCY_SEASON_NOT_FOUND',
   TARGET_NOT_EDITABLE: 'CONSISTENCY_TARGET_NOT_EDITABLE',
   TRAINER_PROFILE_MISSING: 'CONSISTENCY_TRAINER_PROFILE_MISSING',
+  PRIVACY_INVALID: 'CONSISTENCY_PRIVACY_INVALID',
 });
 
 export const ConsistencyMessageCode = Object.freeze({
@@ -77,6 +78,7 @@ export const ConsistencyMessageCode = Object.freeze({
   SEASON_NOT_FOUND: 'consistencyRanking.season.notFound',
   TARGET_NOT_EDITABLE: 'consistencyRanking.target.notEditable',
   TRAINER_PROFILE_MISSING: 'trainer.notFound',
+  PRIVACY_INVALID: 'consistencyRanking.privacy.invalid',
 });
 
 // Season band shown next to a student's average (AD-011)
@@ -133,3 +135,53 @@ export const PANEL_RULE_RANGES = Object.freeze({
   batchCount: Object.freeze({ min: 2, max: 20 }),
   batchMinutes: Object.freeze({ min: 10, max: 120 }),
 });
+
+// Version of the privacy term the student accepts; a choice stored under another version counts as pending (APP-21)
+export const CONSISTENCY_PRIVACY_TERM_VERSION = '2026-11-v1';
+
+// How a student appears to the other participants of a championship (APP-20 to APP-24)
+export const AppearAs = Object.freeze({
+  NAME: 'name',
+  ANONYMOUS: 'anonymous',
+  PENDING: 'pending',
+});
+
+// Choices a student can store; pending only means there is no valid choice
+export const appearAsChoiceValues = Object.freeze([AppearAs.NAME, AppearAs.ANONYMOUS]);
+
+// Name shown for a participant hidden from the viewer: anonymous, pending, minor or anonymous championship (APP-22, APP-24, APP-42, APP-64)
+export const ANONYMOUS_DISPLAY_NAME = 'Aluno do time';
+
+// Rows per page of the full championship list a student reads (APP-14)
+export const STUDENT_BOARD_PAGE_SIZE = 20;
+
+// Age from which a student appears by name and sees the championship standings (APP-42)
+export const ADULT_AGE = 18;
+
+// State of the student overview: ok, or no active trainer link (APP-34)
+export const StudentOverviewState = Object.freeze({
+  OK: 'ok',
+  NO_TRAINER: 'no_trainer',
+});
+
+// Status of each week in the student's championship strip (APP-27)
+export const WeekStripStatus = Object.freeze({
+  FULL: 'full',
+  BELOW: 'below',
+  PAUSED: 'paused',
+  NEUTRAL: 'neutral',
+  LIVE: 'live',
+  FUTURE: 'future',
+});
+
+// Singular and plural nouns of each pillar in the "Faltam..." sentence (APP-04)
+export const PILLAR_MISSING_NOUNS = Object.freeze({
+  [Pillar.WORKOUTS]: Object.freeze(['treino', 'treinos']),
+  [Pillar.CARDIO]: Object.freeze(['cardio', 'cardios']),
+  [Pillar.FEEDBACK]: Object.freeze(['check-in', 'check-ins']),
+  [Pillar.HYDRATION]: Object.freeze(['dia de hidratação', 'dias de hidratação']),
+  [Pillar.DIET]: Object.freeze(['dia de dieta', 'dias de dieta']),
+});
+
+// Sentence of a week with nothing missing in the active pillars (APP-04)
+export const WEEK_COMPLETE_SENTENCE = 'Tudo feito: tua semana tá fechada em 100%.';

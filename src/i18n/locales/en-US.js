@@ -292,6 +292,7 @@ export default {
     'consistencyRanking.pause.weekNotEditable': 'This week is closed or more than 12 weeks ahead, so it cannot be paused or resumed.',
     'consistencyRanking.season.notFound': 'Season not found.',
     'consistencyRanking.target.notEditable': 'This target can only be lowered during the running week, down to zero and never above the original target.',
+    'consistencyRanking.privacy.invalid': 'Invalid privacy choice. Choose to appear by name or as a team student, under the current term version.',
 
     // Student feedback
     'studentFeedback.notFound': 'Feedback not found.',
@@ -326,6 +327,7 @@ export default {
     'challenge.notClosable': 'Only a running weekly championship can be closed early.',
     'challenge.notWeekly': 'This championship has no consistency standings.',
     'challenge.scoringRule.invalid': 'Invalid scoring. The weights of the five pillars must be integers from 0 to 100 adding up to 100, and at least one pillar must be active.',
+    'challenge.visibility.invalid': 'Invalid visibility. Choose off, position only or full live ranking.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'You do not have an active training protocol.',

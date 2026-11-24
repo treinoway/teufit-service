@@ -15,6 +15,7 @@ import { weekBounds, weekStartFor } from '../helpers/consistency-week.js';
 import { formatDateOnly } from '../helpers/date-helpers.js';
 import { getConfig, ruleForWeek } from './consistency-config-service.js';
 import { faixaFor } from './consistency-insights-service.js';
+import { championshipPrivacyCounts } from './consistency-privacy-service.js';
 import { evaluateRunningWeek } from './consistency-standings-service.js';
 
 const { Decimal } = Prisma;
@@ -343,8 +344,14 @@ function frozenRow(row, required) {
   };
 }
 
-// Final standings stored when the championship closed (CAMP-37: later changes do not touch them)
-async function frozenStandings(prisma, challenge) {
+/**
+ * Final standings stored when the championship closed (CAMP-37: later changes do not touch them).
+ *
+ * @param {object} prisma
+ * @param {object} challenge - stored weekly championship
+ * @returns {Promise<{ rows: object[], entering: object[] }>}
+ */
+export async function frozenStandings(prisma, challenge) {
   const stored = await prisma.challengeConsistencyStanding.findMany({
     where: { challengeId: challenge.id },
     include: { student: STUDENT_SELECT },
@@ -364,7 +371,7 @@ async function frozenStandings(prisma, challenge) {
  * @param {string} trainerUserId - authenticated trainer's user id
  * @param {string} challengeId
  * @param {Date} [now]
- * @returns {Promise<{ challenge: object, status: string, currentWeek: number|null, closesAt: Date|null, rows: object[], entering: object[], summary: object }>}
+ * @returns {Promise<{ challenge: object, status: string, privacyCounts: object, currentWeek: number|null, closesAt: Date|null, rows: object[], entering: object[], summary: object }>}
  */
 export async function getChallengeConsistency(prisma, trainerUserId, challengeId, now = new Date()) {
   const challenge = await ownedChallenge(prisma, trainerUserId, challengeId);
@@ -372,7 +379,8 @@ export async function getChallengeConsistency(prisma, trainerUserId, challengeId
   const { timeZone } = await getConfig(prisma, challenge.trainerId, now);
   const status = weeklyStatus(challenge, { now, timeZone });
   const participantCount = await prisma.challengeParticipant.count({ where: { challengeId } });
-  const base = { challenge: summarize(challenge, participantCount), status };
+  const privacyCounts = await championshipPrivacyCounts(prisma, challengeId, participantCount);
+  const base = { challenge: summarize(challenge, participantCount), status, privacyCounts };
 
   if (status === ChallengeStatus.COMPLETED) {
     const { rows, entering } = await frozenStandings(prisma, challenge);

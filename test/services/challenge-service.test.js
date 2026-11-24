@@ -6,11 +6,19 @@ import {
   ChallengeStatus,
 } from '../../src/constants/challenge.js';
 import { AppError } from '../../src/errors/app-error.js';
+import { AppearAs, CONSISTENCY_PRIVACY_TERM_VERSION, Faixa } from '../../src/constants/consistency-ranking.js';
+import { materializeTargets } from '../../src/services/consistency-target-service.js';
+import { countDone } from '../../src/services/consistency-progress-service.js';
+import { countsFrom, createWorld, weeklyResult } from '../helpers/consistency-student-world.js';
 
 // Mock platform-plan-service — gating is tested separately
 vi.mock('../../src/services/platform-plan-service.js', () => ({
   assertCanCreateChallenge: vi.fn().mockResolvedValue(undefined),
 }));
+
+// Targets and done counts come from protocols and SQL; the student list tests read them from the in-memory world
+vi.mock('../../src/services/consistency-target-service.js', async (importOriginal) => ({ ...(await importOriginal()), materializeTargets: vi.fn() }));
+vi.mock('../../src/services/consistency-progress-service.js', async (importOriginal) => ({ ...(await importOriginal()), countDone: vi.fn() }));
 
 // ─── Prisma mock ───────────────────────────────────────────────────────────────
 
@@ -55,6 +63,7 @@ import {
   addParticipants,
   removeParticipant,
   getStudentChallenge,
+  listStudentChallenges,
 } from '../../src/services/challenge-service.js';
 import { assertCanCreateChallenge } from '../../src/services/platform-plan-service.js';
 import { joinAllModeChallenges } from '../../src/services/challenge-participant-sync.js';
@@ -710,6 +719,39 @@ describe('challenge-service', () => {
       expect(mockPrisma.challenge.update).not.toHaveBeenCalled();
     });
 
+    it('APP-37 validates and stores the visibility of a weekly championship', async () => {
+      let record = weeklyRecord();
+      mockPrisma.challenge.findUnique.mockImplementation(async () => record);
+      mockPrisma.challenge.update.mockImplementation(async ({ data }) => {
+        record = { ...record, ...data };
+        return record;
+      });
+      mockPrisma.challengeParticipant.count.mockResolvedValue(3);
+      const setVisibility = (visibility) => updateChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data: { visibility },
+      });
+
+      const positionOnly = await setVisibility('position');
+      expect(positionOnly).toMatchObject({ status: ChallengeStatus.ACTIVE, visibility: 'position' });
+      expect(record.visibility).toBe('position');
+
+      await expect(setVisibility('public')).rejects.toMatchObject({
+        httpStatus: 400,
+        error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+        messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+        details: { field: 'visibility' },
+      });
+      expect(record.visibility).toBe('position');
+
+      const off = await setVisibility('off');
+      expect(off.visibility).toBe('off');
+      expect(record.visibility).toBe('off');
+
+      record = { ...record, closedAt: new Date('2026-11-16T00:10:00.000Z') };
+      await expect(setVisibility('full')).rejects.toMatchObject({ httpStatus: 409, error: ChallengeErrorCode.CHALLENGE_ALREADY_ENDED });
+      expect(record.visibility).toBe('off');
+    });
+
     it('CPD-15 answers 409 for weights of a running championship', async () => {
       const update = (data) => updateChallenge({
         prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, challengeId: CHALLENGE_ID, now: WEDNESDAY_SP, data,
@@ -890,6 +932,22 @@ describe('challenge-service', () => {
         ownerType: 'trainer',
         participantCount: 1,
       });
+    });
+
+    it('APP-37 validates the visibility on creation and stores the chosen one', async () => {
+      const positionOnly = await createChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, now: WEDNESDAY_SP, data: weeklyBody({ visibility: 'position' }),
+      });
+      expect(positionOnly.visibility).toBe('position');
+
+      await expect(createChallenge({
+        prisma: mockPrisma, trainerUserId: TRAINER_USER_ID, now: WEDNESDAY_SP, data: weeklyBody({ visibility: 'public' }),
+      })).rejects.toMatchObject({
+        httpStatus: 400,
+        error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+        messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+      });
+      expect(mockTx.challenge.create).toHaveBeenCalledTimes(1);
     });
 
     it('CAMP-61 ignores an owner type sent in the body', async () => {
@@ -1475,5 +1533,129 @@ describe('challenge-service', () => {
       expect(added).toEqual({ added: 1, participantCount: 1 });
       expect(mockPrisma.consistencyRankingConfig.findUnique).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Wednesday 2026-11-25 12:00 in São Paulo; the running week starts Monday 2026-11-23 (student list tests)
+const LIST_NOW = new Date('2026-11-25T15:00:00.000Z');
+const LIST_OLD_LINK = new Date('2026-01-01T12:00:00.000Z');
+const LIST_JOINED = new Date('2026-10-01T12:00:00.000Z');
+// In-memory world of the student list tests
+let world;
+
+// Championship row as Prisma stores it, weekly by default; endDate is the Sunday of its last week
+const storedChampionship = (id, name, startWeek, weeks, overrides = {}) => {
+  const startDate = dateOnly(startWeek);
+  return {
+    ...weeklyRecord({ id, name, startDate, endDate: new Date(startDate.getTime() + (weeks * 7 - 1) * 86400000), weeks }),
+    trainerId: TRAINER_ID,
+    startScheduledAt: null,
+    weights: { workouts: 30, diet: 30, cardio: 15, feedback: 15, hydration: 10 },
+    activePillars: ['workouts', 'cardio'],
+    ...overrides,
+  };
+};
+
+// Adds a linked student who chose to appear by name
+const addListStudent = (id, firstName, lastName) => {
+  world.tables.user.push({ id, firstName, lastName, username: id, avatarUrl: null, birthDate: null });
+  world.tables.trainerStudent.push({ id: `ts-${id}`, trainerId: TRAINER_ID, studentId: id, activeOnPlan: true, createdAt: LIST_OLD_LINK });
+  world.tables.consistencyPrivacyPref.push({ id: `pp-${id}`, studentId: id, appearAs: AppearAs.NAME, termVersion: CONSISTENCY_PRIVACY_TERM_VERSION, acceptedAt: LIST_OLD_LINK });
+};
+
+// Adds a championship with its participants
+const addListChampionship = (row, studentIds) => {
+  world.tables.challenge.push(row);
+  for (const studentId of studentIds) {
+    world.tables.challengeParticipant.push({ id: `cp-${row.id}-${studentId}`, challengeId: row.id, studentId, createdAt: LIST_JOINED });
+  }
+  return row;
+};
+
+// Ana (100, 100), Camila (66.6667, 100 -> 83.3334) and Bruno (33.3333, 66.6667 -> 50) in the two closed weeks before the running one
+const listExampleTeam = () => {
+  addListStudent('ana', 'Ana', 'Souza');
+  addListStudent('camila', 'Camila', 'Rocha');
+  addListStudent('bruno', 'Bruno', 'Costa');
+  for (const [studentId, done] of [['ana', [4, 4]], ['camila', [2, 4]], ['bruno', [0, 2]]]) {
+    ['2026-11-09', '2026-11-16'].forEach((week, index) => {
+      world.tables.consistencyWeeklyResult.push(weeklyResult(TRAINER_ID, studentId, week, { workouts: [done[index], 4], cardio: [2, 2] }));
+    });
+  }
+};
+
+// List of Camila
+const camilaList = (options = {}) => listStudentChallenges({ prisma: world.prisma, studentId: 'camila', now: LIST_NOW, ...options });
+
+describe('listStudentChallenges', () => {
+  beforeEach(() => {
+    world = createWorld();
+    materializeTargets.mockImplementation(countsFrom(world.targets));
+    countDone.mockImplementation(countsFrom(world.done));
+  });
+
+  it('APP-39 adds position, average and band to each weekly championship', async () => {
+    listExampleTeam();
+    addListChampionship(storedChampionship('verao', 'Verão 2027', '2026-11-09', 6), ['ana', 'camila', 'bruno']);
+    addListChampionship(storedChampionship('so-posicao', 'Só a posição', '2026-11-09', 6, { visibility: 'position' }), ['ana', 'camila', 'bruno']);
+    addListChampionship(storedChampionship('outubro', 'Outubro', '2026-10-05', 4, { closedAt: new Date('2026-11-02T00:30:00.000Z') }), ['ana', 'camila']);
+    world.tables.challengeConsistencyStanding.push(
+      { id: 'cs-1', challengeId: 'outubro', studentId: 'camila', position: 1, eligible: true, average: 96, validWeeks: 4, weeks100: 2, streak: 2, frozenAt: LIST_NOW },
+      { id: 'cs-2', challengeId: 'outubro', studentId: 'ana', position: 2, eligible: true, average: 91, validWeeks: 4, weeks100: 1, streak: 0, frozenAt: LIST_NOW },
+    );
+    addListChampionship(storedChampionship('dezembro', 'Dezembro', '2026-12-07', 4), ['camila']);
+    addListChampionship(makeChallengeRecord({ id: 'xp', name: 'Só XP', format: 'dates', startDate: dateOnly('2026-11-01'), endDate: dateOnly('2026-11-30') }), ['camila']);
+
+    const list = await camilaList();
+    const byId = Object.fromEntries(list.map((item) => [item.id, item]));
+
+    expect(byId.verao).toMatchObject({ name: 'Verão 2027', status: ChallengeStatus.ACTIVE, currentWeek: 3, participantCount: 3 });
+    expect(byId.verao.consistency).toEqual({ visibility: 'full', position: 2, total: 3, faixa: Faixa.STEADY, average: 83.3334 });
+    expect(byId['so-posicao'].consistency).toEqual({ visibility: 'position', position: 2, total: 3, faixa: Faixa.STEADY, average: null });
+    expect(byId.outubro.consistency).toEqual({ visibility: 'full', position: 1, total: 2, faixa: Faixa.CONSTANT, average: 96 });
+    expect(byId.dezembro.consistency).toBeNull();
+    expect(byId.xp).toMatchObject({ format: 'dates', consistency: null });
+    expect(await camilaList({ format: 'weeks' })).toHaveLength(4);
+  });
+
+  it('APP-52 orders running by nearest end, next by nearest start and closed by latest end', async () => {
+    addListStudent('camila', 'Camila', 'Rocha');
+    const closedAt = new Date('2026-11-10T00:30:00.000Z');
+    addListChampionship(storedChampionship('running-late', 'Termina 20/12', '2026-11-09', 6), ['camila']);
+    addListChampionship(storedChampionship('running-soon', 'Termina 06/12', '2026-11-16', 3), ['camila']);
+    addListChampionship(storedChampionship('next-late', 'Começa 14/12', '2026-12-14', 2), ['camila']);
+    addListChampionship(storedChampionship('next-soon', 'Começa 07/12', '2026-12-07', 2), ['camila']);
+    addListChampionship(storedChampionship('closed-old', 'Fechou 08/11', '2026-10-26', 2, { closedAt }), ['camila']);
+    addListChampionship(storedChampionship('closed-recent', 'Fechou 22/11', '2026-10-12', 6, { closedAt: new Date('2026-11-23T00:30:00.000Z') }), ['camila']);
+
+    const list = await camilaList();
+
+    expect(list.map((item) => item.id)).toEqual(['running-soon', 'running-late', 'next-soon', 'next-late', 'closed-recent', 'closed-old']);
+  });
+
+  it('APP-62 drops a championship the student was removed from', async () => {
+    listExampleTeam();
+    addListChampionship(storedChampionship('verao', 'Verão 2027', '2026-11-09', 6), ['ana', 'camila', 'bruno']);
+    addListChampionship(storedChampionship('turma', 'Turma da manhã', '2026-11-16', 6), ['camila']);
+    const before = await camilaList();
+
+    world.tables.challengeParticipant = world.tables.challengeParticipant.filter((row) => !(row.challengeId === 'verao' && row.studentId === 'camila'));
+    const after = await camilaList();
+
+    expect(before.map((item) => item.id)).toEqual(['verao', 'turma']);
+    expect(after.map((item) => item.id)).toEqual(['turma']);
+  });
+
+  it('APP-63 drops a cancelled championship', async () => {
+    listExampleTeam();
+    const verao = addListChampionship(storedChampionship('verao', 'Verão 2027', '2026-11-09', 6), ['ana', 'camila', 'bruno']);
+    addListChampionship(storedChampionship('turma', 'Turma da manhã', '2026-11-16', 6), ['camila']);
+    addListChampionship(makeChallengeRecord({ id: 'xp-cancelado', name: 'XP cancelado', cancelledAt: new Date('2026-11-20T12:00:00.000Z') }), ['camila']);
+
+    verao.cancelledAt = new Date('2026-11-24T12:00:00.000Z');
+    const list = await camilaList();
+
+    expect(list.map((item) => item.id)).toEqual(['turma']);
+    expect(await camilaList({ status: ChallengeStatus.CANCELLED })).toEqual([]);
   });
 });

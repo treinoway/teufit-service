@@ -75,6 +75,7 @@ model User {
   consistencyWeekPauses         ConsistencyWeekPause[]
   consistencyContactLogs        ConsistencyContactLog[]
   studentFeedbackRequests       StudentFeedbackRequest[]
+  consistencyPrivacyPref        ConsistencyPrivacyPref?
 
   // Added for the manager backoffice user list (ORDER BY created_at DESC).
   @@index([createdAt])
@@ -1918,6 +1919,21 @@ model ConsistencyWeeklyResult {
   @@index([trainerId, seasonId])
   @@index([trainerId, studentId, weekStart(sort: Desc)])
   @@map("consistency_weekly_results")
+}
+
+// How a student appears to the other participants of the consistency championships, one choice per student (F3, APP-21)
+model ConsistencyPrivacyPref {
+  id          String    @id @default(uuid()) @db.Uuid
+  studentId   String    @unique @map("student_id") @db.Uuid
+  // "name" or "anonymous"; a choice made under another term version counts as pending
+  appearAs    String    @map("appear_as") @db.Text
+  termVersion String    @map("term_version") @db.Text
+  acceptedAt  DateTime  @map("accepted_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("consistency_privacy_prefs")
 }
 
 model ConsistencyWeekClose {

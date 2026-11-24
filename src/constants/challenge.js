@@ -74,6 +74,7 @@ export const ChallengeErrorCode = Object.freeze({
   CHALLENGE_NOT_CLOSABLE: 'CHALLENGE_NOT_CLOSABLE',
   CHALLENGE_NOT_WEEKLY: 'CHALLENGE_NOT_WEEKLY',
   CHALLENGE_INVALID_SCORING_RULE: 'CHALLENGE_INVALID_SCORING_RULE',
+  CHALLENGE_INVALID_VISIBILITY: 'CHALLENGE_INVALID_VISIBILITY',
 });
 
 export const ChallengeMessageCode = Object.freeze({
@@ -96,4 +97,5 @@ export const ChallengeMessageCode = Object.freeze({
   CHALLENGE_NOT_CLOSABLE: 'challenge.notClosable',
   CHALLENGE_NOT_WEEKLY: 'challenge.notWeekly',
   CHALLENGE_INVALID_SCORING_RULE: 'challenge.scoringRule.invalid',
+  CHALLENGE_INVALID_VISIBILITY: 'challenge.visibility.invalid',
 });

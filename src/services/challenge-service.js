@@ -9,10 +9,13 @@ import {
   ChallengeStatus,
   ChallengeVisibility,
   SCORING_RULE_FIELDS,
+  challengeVisibilityValues,
 } from '../constants/challenge.js';
 import { currentWeekOf, validateWeeksInput, weeklyStatus, weeksSpan } from '../helpers/challenge-weeks.js';
+import { effectiveVisibility, isMinor, visibleFigures } from '../helpers/consistency-anonymize.js';
 import { weekStartFor } from '../helpers/consistency-week.js';
-import { formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
+import { civilDateInTimeZone, formatDateOnly, parseDateOnlyAsUtc } from '../helpers/date-helpers.js';
+import { computeChallengeStandings, frozenStandings } from './challenge-consistency-service.js';
 import { getConfig, scoringRuleProblems } from './consistency-config-service.js';
 import { assertCanCreateChallenge } from './platform-plan-service.js';
 
@@ -29,6 +32,12 @@ const WEEKLY_OPEN_FIELDS = Object.freeze(['name', 'description', 'anonymousRanki
 const WEEKLY_SCHEDULE_FIELDS = Object.freeze(['startWeek', 'weeks', 'minPodiumWeeks']);
 const FREE_DATE_FIELDS = Object.freeze(['startDate', 'endDate']);
 const PARTICIPANTS_PREVIEW_SIZE = 4;
+// Section order of the student's list: running, then next, then closed (APP-52)
+const STUDENT_LIST_SECTION = Object.freeze({
+  [ChallengeStatus.ACTIVE]: 0,
+  [ChallengeStatus.SCHEDULED]: 1,
+  [ChallengeStatus.COMPLETED]: 2,
+});
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -298,6 +307,7 @@ function validateDateRange(startDateStr, endDateStr, checkStartInFuture = false)
  * @returns {Promise<{ fields: object, weeklyContext: { now: Date, timeZone: string }, config: object }>}
  */
 async function resolveWeeklyFields(prisma, trainerId, data, now) {
+  assertValidVisibility(data.visibility);
   const config = await getConfig(prisma, trainerId, now);
   const minPodiumWeeks = data.minPodiumWeeks ?? Math.min(config.minPodiumWeeks, data.weeks);
   validateWeeksInput({ startWeek: data.startWeek, weeks: data.weeks, minPodiumWeeks }, { timeZone: config.timeZone, now });
@@ -314,6 +324,18 @@ async function resolveWeeklyFields(prisma, trainerId, data, now) {
     weeklyContext: { now, timeZone: config.timeZone },
     config,
   };
+}
+
+// 400 for a visibility other than off, position or full (APP-35, APP-37); absent keeps the stored one
+function assertValidVisibility(visibility) {
+  if (visibility === undefined || challengeVisibilityValues.includes(visibility)) return;
+  throw new AppError({
+    httpStatus: 400,
+    error: ChallengeErrorCode.CHALLENGE_INVALID_VISIBILITY,
+    messageCode: ChallengeMessageCode.CHALLENGE_INVALID_VISIBILITY,
+    message: `visibility must be one of ${challengeVisibilityValues.join(', ')}`,
+    details: { field: 'visibility' },
+  });
 }
 
 // 400 naming the first field of a scoring rule that breaks the ranking config rules (CPD-08)
@@ -431,6 +453,7 @@ async function updateWeeklyChallenge(prisma, challenge, data, now) {
   const status = weeklyStatus(challenge, weeklyContext);
   assertWeeklyOpen(status);
   if (status !== ChallengeStatus.SCHEDULED) assertWeeklyScheduleLocked(data);
+  assertValidVisibility(data.visibility);
 
   const openFields = pickDefined(data, WEEKLY_OPEN_FIELDS);
   if (openFields.name !== undefined) openFields.name = openFields.name.trim();
@@ -1046,32 +1069,70 @@ export async function removeParticipant({ prisma, trainerUserId, challengeId, st
 
 // ─── Student-facing challenge access ──────────────────────────────────────────
 
+// Order inside a section: running by nearest end, next by nearest start, closed by latest end, then by name (APP-52)
+function byStudentListOrder(a, b) {
+  const section = STUDENT_LIST_SECTION[a.status] - STUDENT_LIST_SECTION[b.status];
+  if (section !== 0) return section;
+  const byDate = {
+    [ChallengeStatus.ACTIVE]: a.endDate.localeCompare(b.endDate),
+    [ChallengeStatus.SCHEDULED]: a.startDate.localeCompare(b.startDate),
+    [ChallengeStatus.COMPLETED]: b.endDate.localeCompare(a.endDate),
+  }[a.status];
+  return byDate || a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+}
+
+// Live standings of a running weekly championship, frozen ones of a closed one, null otherwise
+function studentStandingsOf(prisma, challenge, status, now) {
+  if (status === ChallengeStatus.ACTIVE) return computeChallengeStandings(prisma, challenge, now);
+  if (status === ChallengeStatus.COMPLETED) return frozenStandings(prisma, challenge);
+  return null;
+}
+
+// Position, average and band of the student in a weekly championship, as the visibility and the minors rule allow (APP-39, APP-61)
+async function studentConsistencyOf(prisma, studentId, challenge, status, { birthDate, weeklyContext }) {
+  if (!isWeekly(challenge)) return null;
+  const standings = await studentStandingsOf(prisma, challenge, status, weeklyContext.now);
+  if (!standings) return null;
+  const minor = isMinor(birthDate, civilDateInTimeZone(weeklyContext.now, weeklyContext.timeZone));
+  const visibility = effectiveVisibility(challenge.visibility, minor);
+  const own = [...standings.rows, ...standings.entering].find((row) => row.studentId === studentId);
+  const figures = { position: own?.position ?? null, total: standings.rows.length, faixa: own?.faixa ?? null, average: own?.average ?? null };
+  return { visibility, ...visibleFigures(figures, visibility) };
+}
+
 /**
- * List challenges a student participates in, optionally filtered by trainerId/status.
+ * Championships the student participates in, without cancelled ones, each weekly one with the student's consistency, in the APP-52 order.
+ *
+ * @param {object} deps
+ * @param {object} deps.prisma
+ * @param {string} deps.studentId
+ * @param {string|null} [deps.trainerId]
+ * @param {string|null} [deps.status] - one of ChallengeStatus
+ * @param {string|null} [deps.format] - one of ChallengeFormat
+ * @param {Date} [deps.now]
+ * @returns {Promise<object[]>}
  */
-export async function listStudentChallenges({ prisma, studentId, trainerId, status, now = new Date() }) {
-  const where = {
-    participants: {
-      some: { studentId },
-    },
-  };
+export async function listStudentChallenges({ prisma, studentId, trainerId, status, format, now = new Date() }) {
+  const where = { participants: { some: { studentId } }, cancelledAt: null };
+  if (trainerId) where.trainerId = trainerId;
+  if (format) where.format = format;
 
-  if (trainerId) {
-    where.trainerId = trainerId;
-  }
-
-  const challenges = await prisma.challenge.findMany({
-    where,
-    include: { _count: { select: { participants: true } } },
-    orderBy: { startDate: 'desc' },
-  });
-
+  const [challenges, student] = await Promise.all([
+    prisma.challenge.findMany({ where, include: { _count: { select: { participants: true } } } }),
+    prisma.user.findUnique({ where: { id: studentId }, select: { birthDate: true } }),
+  ]);
   const weeklyContexts = await weeklyContextsFor(prisma, challenges, now);
-  const formatted = challenges.map((c) => formatChallenge(c, c._count.participants, weeklyContexts.get(c.trainerId)));
-
-  if (!status) return formatted;
-
-  return formatted.filter((c) => c.status === status);
+  const listed = challenges
+    .map((challenge) => ({ challenge, item: formatChallenge(challenge, challenge._count.participants, weeklyContexts.get(challenge.trainerId)) }))
+    .filter(({ item }) => item.status !== ChallengeStatus.CANCELLED && (!status || item.status === status));
+  const withConsistency = await Promise.all(listed.map(async ({ challenge, item }) => ({
+    ...item,
+    consistency: await studentConsistencyOf(prisma, studentId, challenge, item.status, {
+      birthDate: student?.birthDate ?? null,
+      weeklyContext: weeklyContexts.get(challenge.trainerId),
+    }),
+  })));
+  return withConsistency.sort(byStudentListOrder);
 }
 
 /**

@@ -87533,6 +87533,21 @@
                           "description": "Mean of the classified averages"
                         }
                       }
+                    },
+                    "privacyCounts": {
+                      "type": "object",
+                      "description": "How the participants appear in the app: by name, as \"Aluno do time\" by choice, or still to answer the privacy term",
+                      "properties": {
+                        "name": {
+                          "type": "integer"
+                        },
+                        "anonymous": {
+                          "type": "integer"
+                        },
+                        "pending": {
+                          "type": "integer"
+                        }
+                      }
                     }
                   }
                 }
@@ -89198,6 +89213,19 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "dates",
+                "weeks"
+              ]
+            },
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "description": "Only championships of this format; the app asks for \"weeks\""
           }
         ],
         "security": [
@@ -89354,6 +89382,45 @@
                         "type": "string",
                         "format": "date-time",
                         "nullable": true
+                      },
+                      "consistency": {
+                        "type": "object",
+                        "nullable": true,
+                        "description": "Weekly format, running or closed: figures of the student as the visibility allows; null otherwise",
+                        "properties": {
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "off",
+                              "position",
+                              "full"
+                            ],
+                            "description": "Effective visibility: \"off\" for a minor"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "total": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "faixa": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "constant",
+                              "steady",
+                              "restarting",
+                              "entering"
+                            ],
+                            "nullable": true
+                          },
+                          "average": {
+                            "type": "number",
+                            "nullable": true
+                          }
+                        }
                       }
                     }
                   }
@@ -89826,6 +89893,7 @@
                   "properties": {
                     "entries": {
                       "type": "array",
+                      "description": "Weekly championship: the constancy privacy applies (\"Aluno do time\" without photo when pending, anonymous, minor or anonymous ranking), a colleague carries an opaque studentId, only the own row with visibility \"position\" and none with \"off\"",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -89850,13 +89918,18 @@
                           },
                           "points": {
                             "type": "integer"
+                          },
+                          "isMe": {
+                            "type": "boolean",
+                            "description": "The requesting student; weekly championships only"
                           }
                         }
                       }
                     },
                     "myPosition": {
                       "type": "integer",
-                      "nullable": true
+                      "nullable": true,
+                      "description": "Null in a weekly championship with visibility \"off\" or for a minor"
                     },
                     "myPoints": {
                       "type": "integer"
@@ -89909,6 +89982,842 @@
             }
           },
           "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/challenges/{id}/consistency": {
+      "get": {
+        "summary": "Consistency classification of a weekly championship as a participant sees it, anonymized and with the visibility applied",
+        "tags": [
+          "challenges"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "description": "Page of the full classified list, 20 rows each"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challenge": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "x-i18n": "challengeStatus"
+                        },
+                        "statusLabel": {
+                          "type": "string"
+                        },
+                        "startDate": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "endDate": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "weeks": {
+                          "type": "integer"
+                        },
+                        "currentWeek": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "participantCount": {
+                          "type": "integer"
+                        },
+                        "closedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "position",
+                        "full"
+                      ],
+                      "description": "Effective visibility: \"off\" for a minor"
+                    },
+                    "closesAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true,
+                      "description": "Close instant of the running week"
+                    },
+                    "me": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Null for a scheduled championship",
+                      "properties": {
+                        "appearsAs": {
+                          "type": "string",
+                          "description": "Name the others see for the student"
+                        },
+                        "position": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "total": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "faixa": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "constant",
+                            "steady",
+                            "restarting",
+                            "entering"
+                          ],
+                          "nullable": true
+                        },
+                        "average": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "weeks100": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "done": {
+                              "type": "integer"
+                            },
+                            "of": {
+                              "type": "integer"
+                            }
+                          },
+                          "description": "Weeks at 100% out of the closed weeks of the championship"
+                        },
+                        "streak": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "entering": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "validWeeks": {
+                              "type": "integer"
+                            },
+                            "required": {
+                              "type": "integer",
+                              "nullable": true
+                            },
+                            "weeksMissing": {
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "firstPlaceShared": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "Others sharing the 1st place with the student"
+                        },
+                        "week": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "score": {
+                              "type": "number",
+                              "nullable": true,
+                              "description": "Partial score of the week; null without a target"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "valid",
+                                "neutral",
+                                "paused"
+                              ]
+                            },
+                            "paused": {
+                              "type": "boolean"
+                            },
+                            "closesAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "pillars": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "pillar": {
+                                    "type": "string",
+                                    "enum": [
+                                      "workouts",
+                                      "diet",
+                                      "cardio",
+                                      "feedback",
+                                      "hydration"
+                                    ]
+                                  },
+                                  "done": {
+                                    "type": "integer"
+                                  },
+                                  "expected": {
+                                    "type": "integer"
+                                  },
+                                  "missing": {
+                                    "type": "integer"
+                                  },
+                                  "complete": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "missingPhrase": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "\"Faltam ...\" sentence, the complete-week sentence, or null without a target"
+                            }
+                          }
+                        },
+                        "weekStrip": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "week": {
+                                "type": "integer"
+                              },
+                              "weekStart": {
+                                "type": "string",
+                                "format": "date"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "full",
+                                  "below",
+                                  "paused",
+                                  "neutral",
+                                  "live",
+                                  "future"
+                                ]
+                              },
+                              "score": {
+                                "type": "number",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        },
+                        "effectiveWeights": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "pillar": {
+                                "type": "string",
+                                "enum": [
+                                  "workouts",
+                                  "diet",
+                                  "cardio",
+                                  "feedback",
+                                  "hydration"
+                                ]
+                              },
+                              "weight": {
+                                "type": "integer"
+                              },
+                              "percent": {
+                                "type": "number",
+                                "description": "Share of the active weights, one decimal"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "board": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Classification of the championship; null unless the visibility is \"full\"",
+                      "properties": {
+                        "podium": {
+                          "type": "array",
+                          "nullable": true,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "description": "Opaque key, stable only inside this response"
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "description": "First name and initial of the last name, or \"Aluno do time\""
+                              },
+                              "initials": {
+                                "type": "string"
+                              },
+                              "avatarUrl": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "position": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "average": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "faixa": {
+                                "type": "string",
+                                "enum": [
+                                  "full",
+                                  "constant",
+                                  "steady",
+                                  "restarting",
+                                  "entering"
+                                ],
+                                "nullable": true
+                              },
+                              "streak": {
+                                "type": "integer"
+                              },
+                              "isMe": {
+                                "type": "boolean"
+                              },
+                              "shared": {
+                                "type": "boolean",
+                                "description": "The place is shared (\"Nº dividido\")"
+                              }
+                            }
+                          },
+                          "description": "Null when Clube 100% replaces it"
+                        },
+                        "club100": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "total": {
+                              "type": "integer"
+                            },
+                            "members": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "key": {
+                                    "type": "string",
+                                    "description": "Opaque key, stable only inside this response"
+                                  },
+                                  "displayName": {
+                                    "type": "string",
+                                    "description": "First name and initial of the last name, or \"Aluno do time\""
+                                  },
+                                  "initials": {
+                                    "type": "string"
+                                  },
+                                  "avatarUrl": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "position": {
+                                    "type": "integer",
+                                    "nullable": true
+                                  },
+                                  "average": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "faixa": {
+                                    "type": "string",
+                                    "enum": [
+                                      "full",
+                                      "constant",
+                                      "steady",
+                                      "restarting",
+                                      "entering"
+                                    ],
+                                    "nullable": true
+                                  },
+                                  "streak": {
+                                    "type": "integer"
+                                  },
+                                  "isMe": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "tieSentence": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "neighbors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "description": "Opaque key, stable only inside this response"
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "description": "First name and initial of the last name, or \"Aluno do time\""
+                              },
+                              "initials": {
+                                "type": "string"
+                              },
+                              "avatarUrl": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "position": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "average": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "faixa": {
+                                "type": "string",
+                                "enum": [
+                                  "full",
+                                  "constant",
+                                  "steady",
+                                  "restarting",
+                                  "entering"
+                                ],
+                                "nullable": true
+                              },
+                              "streak": {
+                                "type": "integer"
+                              },
+                              "isMe": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          "description": "The student with up to 2 above and 2 below"
+                        },
+                        "entering": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "description": "Opaque key, stable only inside this response"
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "description": "First name and initial of the last name, or \"Aluno do time\""
+                              },
+                              "initials": {
+                                "type": "string"
+                              },
+                              "avatarUrl": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "position": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "average": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "faixa": {
+                                "type": "string",
+                                "enum": [
+                                  "full",
+                                  "constant",
+                                  "steady",
+                                  "restarting",
+                                  "entering"
+                                ],
+                                "nullable": true
+                              },
+                              "streak": {
+                                "type": "integer"
+                              },
+                              "isMe": {
+                                "type": "boolean"
+                              },
+                              "validWeeks": {
+                                "type": "integer"
+                              },
+                              "required": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "weeksMissing": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "total": {
+                          "type": "integer",
+                          "description": "Classified participants"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "pageSize": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "description": "Opaque key, stable only inside this response"
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "description": "First name and initial of the last name, or \"Aluno do time\""
+                              },
+                              "initials": {
+                                "type": "string"
+                              },
+                              "avatarUrl": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "position": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "average": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "faixa": {
+                                "type": "string",
+                                "enum": [
+                                  "full",
+                                  "constant",
+                                  "steady",
+                                  "restarting",
+                                  "entering"
+                                ],
+                                "nullable": true
+                              },
+                              "streak": {
+                                "type": "integer"
+                              },
+                              "isMe": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          "description": "One page of the full classified list"
+                        }
+                      }
+                    },
+                    "privacy": {
+                      "type": "object",
+                      "description": "How the student appears to the other participants, one choice for every championship",
+                      "properties": {
+                        "appearAs": {
+                          "type": "string",
+                          "enum": [
+                            "name",
+                            "anonymous",
+                            "pending"
+                          ],
+                          "description": "\"pending\" until the student answers the current term version"
+                        },
+                        "termVersion": {
+                          "type": "string",
+                          "description": "Current version of the privacy term"
+                        },
+                        "acceptedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -127430,6 +128339,515 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/consistency-ranking": {
+      "get": {
+        "summary": "Student overview: live week, highlighted championship, other running championships and the privacy choice",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "no_trainer"
+                      ],
+                      "description": "\"no_trainer\" without an active trainer link"
+                    },
+                    "week": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "score": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Partial score of the week; null without a target"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "valid",
+                            "neutral",
+                            "paused"
+                          ]
+                        },
+                        "paused": {
+                          "type": "boolean"
+                        },
+                        "closesAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "pillars": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "pillar": {
+                                "type": "string",
+                                "enum": [
+                                  "workouts",
+                                  "diet",
+                                  "cardio",
+                                  "feedback",
+                                  "hydration"
+                                ]
+                              },
+                              "done": {
+                                "type": "integer"
+                              },
+                              "expected": {
+                                "type": "integer"
+                              },
+                              "missing": {
+                                "type": "integer"
+                              },
+                              "complete": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        },
+                        "missingPhrase": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "\"Faltam ...\" sentence, the complete-week sentence, or null without a target"
+                        }
+                      }
+                    },
+                    "highlight": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Running weekly championship that ends first; null without one. Figures follow the championship visibility",
+                      "properties": {
+                        "challengeId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "off",
+                            "position",
+                            "full"
+                          ],
+                          "description": "Effective visibility: \"off\" for a minor"
+                        },
+                        "position": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "total": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "faixa": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "constant",
+                            "steady",
+                            "restarting",
+                            "entering"
+                          ],
+                          "nullable": true
+                        },
+                        "average": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "othersCount": {
+                      "type": "integer",
+                      "description": "Other running weekly championships (\"+N campeonatos\")"
+                    },
+                    "privacy": {
+                      "type": "object",
+                      "description": "How the student appears to the other participants, one choice for every championship",
+                      "properties": {
+                        "appearAs": {
+                          "type": "string",
+                          "enum": [
+                            "name",
+                            "anonymous",
+                            "pending"
+                          ],
+                          "description": "\"pending\" until the student answers the current term version"
+                        },
+                        "termVersion": {
+                          "type": "string",
+                          "description": "Current version of the privacy term"
+                        },
+                        "acceptedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/consistency-ranking/privacy": {
+      "put": {
+        "summary": "Store how the student appears to the other participants of every championship",
+        "tags": [
+          "consistency-ranking"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "appearAs",
+                  "termVersion"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "appearAs": {
+                    "type": "string",
+                    "enum": [
+                      "name",
+                      "anonymous"
+                    ]
+                  },
+                  "termVersion": {
+                    "type": "string",
+                    "description": "Must be the current term version"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How the student appears to the other participants, one choice for every championship",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "How the student appears to the other participants, one choice for every championship",
+                  "properties": {
+                    "appearAs": {
+                      "type": "string",
+                      "enum": [
+                        "name",
+                        "anonymous",
+                        "pending"
+                      ],
+                      "description": "\"pending\" until the student answers the current term version"
+                    },
+                    "termVersion": {
+                      "type": "string",
+                      "description": "Current version of the privacy term"
+                    },
+                    "acceptedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
             "description": "Default Response",
             "content": {
               "application/json": {
