@@ -3,9 +3,11 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
 import { createAdminWithToken } from '../helpers/admin-users.js';
-import { createUser, auth, expectErrorContract } from '../helpers/nutrition-e2e.js';
+import { createUser, auth } from '../helpers/nutrition-e2e.js';
 import config from '../../config/index.js';
 import { Roles } from '../../src/constants/roles.js';
+import ptBR from '../../src/i18n/locales/pt-BR.js';
+import enUS from '../../src/i18n/locales/en-US.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -13,7 +15,7 @@ const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 const INVITE_REQUIRED = 'INVITE_REQUIRED';
 const INVITE_REQUIRED_MESSAGE_CODE = 'invite.required';
 
-e2eDescribe('e2e: PATCH /become-nutritionist beta gate', () => {
+e2eDescribe('e2e: PATCH /become-nutritionist without the beta gate (open signup)', () => {
   let app;
   let adminToken;
   let originalGateEnabled;
@@ -58,42 +60,37 @@ e2eDescribe('e2e: PATCH /become-nutritionist beta gate', () => {
     expect(redeemed.statusCode).toBe(200);
   }
 
-  it('should answer 403 INVITE_REQUIRED for a user without beta access', async () => {
+  it('should not answer INVITE_REQUIRED for a user without an invite, even with the gate flag on', async () => {
     const user = await createUser(app);
 
     const res = await withGateEnabled(() =>
       app.inject({ method: 'PATCH', url: '/become-nutritionist', headers: auth(user.accessToken) }),
     );
 
-    expectErrorContract(res, { statusCode: 403, error: INVITE_REQUIRED, messageCode: INVITE_REQUIRED_MESSAGE_CODE });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().error).not.toBe(INVITE_REQUIRED);
   });
 
   it.each([
-    ['pt-BR', /treinador/i],
-    ['en-US', /trainer/i],
-  ])('should not mention a trainer invite in the %s message of the nutritionist gate', async (language, trainerWording) => {
-    const user = await createUser(app);
-
-    const res = await withGateEnabled(() =>
-      app.inject({ method: 'PATCH', url: '/become-nutritionist', headers: { ...auth(user.accessToken), 'app-language': language } }),
-    );
-
-    const body = expectErrorContract(res, { statusCode: 403, error: INVITE_REQUIRED, messageCode: INVITE_REQUIRED_MESSAGE_CODE });
-    expect(body.message).not.toMatch(trainerWording);
+    ['pt-BR', ptBR, /treinador/i],
+    ['en-US', enUS, /trainer/i],
+  ])('should keep the %s invite.required message free of trainer wording (no route answers it any more)', (_language, locale, trainerWording) => {
+    expect(locale.errors[INVITE_REQUIRED_MESSAGE_CODE]).toEqual(expect.any(String));
+    expect(locale.errors[INVITE_REQUIRED_MESSAGE_CODE]).not.toMatch(trainerWording);
   });
 
-  it('should not grant the nutritionist role to a user without beta access', async () => {
+  it('should grant the nutritionist role to a user without an invite', async () => {
     const user = await createUser(app);
-    await withGateEnabled(() =>
+    const res = await withGateEnabled(() =>
       app.inject({ method: 'PATCH', url: '/become-nutritionist', headers: auth(user.accessToken) }),
     );
 
-    const probe = await app.inject({ method: 'GET', url: '/nutritionist/patients', headers: auth(user.accessToken) });
+    const probe = await app.inject({ method: 'GET', url: '/nutritionist/patients', headers: auth(res.json().token.accessToken) });
 
-    expect(probe.statusCode).toBe(403);
+    expect(probe.statusCode).toBe(200);
   });
 
-  it('should grant the nutritionist role to a user with beta access', async () => {
+  it('should grant the nutritionist role to a user who redeemed an invite', async () => {
     const user = await createUser(app);
     await redeemInviteFor(user);
 

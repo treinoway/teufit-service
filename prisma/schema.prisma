@@ -15,6 +15,8 @@ model User {
   email        String? @unique @db.Text
   passwordHash String? @map("password_hash") @db.Text
   status       String  @default("pending") @db.Text
+  // Acquisition path of the account; null for every path except the ones in src/constants/signup-source.js.
+  signupSource String? @map("signup_source") @db.Text
 
   // Personal data (single source of truth)
   firstName String?   @map("first_name") @db.Text
@@ -30,47 +32,50 @@ model User {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  accounts                   Account[]
-  healthDetail               UserHealthDetail?
-  trainer                    Trainer?
-  address                    Address?
-  socials                    SocialNetwork?
-  refreshTokens              RefreshToken[]
-  passwordResetTokens        PasswordResetToken[]
-  nutritionist               Nutritionist?
-  preferences                UserPreferences?
-  protocolsAsAssignee        TrainingProtocol[]
-  trainers                   TrainerStudent[]
-  workoutSessions            WorkoutSession[]
-  studentAnamneses           StudentAnamnesis[]
-  anamnesisResponses         AnamnesisResponse[]         @relation("AnamnesisResponseStudent")
-  anamnesisResponsesFilled   AnamnesisResponse[]         @relation("AnamnesisResponseFiller")
-  aiConversations            AiConversation[]
-  challengeParticipants      ChallengeParticipant[]
-  pointTransactions          PointTransaction[]
-  pointBalances              PointBalance[]
-  nutritionistPatients       NutritionistPatient[]
-  metabolicProfiles          PatientMetabolicProfile[]
-  dietProtocolsAsPatient     DietProtocol[]
-  dietMealLogs               DietMealLog[]
-  dietSwapLogs               DietSwapLog[]
-  waterLogs                  WaterLog[]
-  patientInvitesAccepted     PatientInvite[]
-  videosCreated              Video[]
-  tutorialsCreated           Tutorial[]
-  studentSubscriptions       StudentSubscription[]
-  aiUsageEventsAsStudent     AiUsageEvent[]              @relation("aiUsageStudent")
-  aiTokenUsagesAsStudent     AiTokenUsage[]              @relation("aiTokenUsageStudent")
-  aiInteractionLogsAsStudent AiInteractionLog[]          @relation("aiInteractionLogStudent")
-  invitesSent                TrainerInvite[]             @relation("InvitesSent")
-  invitesRedeemed            TrainerInvite[]             @relation("InvitesRedeemed")
-  emailVerificationTokens    EmailVerificationToken[]
-  studentInvitesAccepted     StudentInvite[]
-  consistencyWeeklyTargets   ConsistencyWeeklyTarget[]
-  consistencyWeeklyResults   ConsistencyWeeklyResult[]
-  consistencySeasonStandings ConsistencySeasonStanding[]
-  consistencyWeekPauses      ConsistencyWeekPause[]
-  consistencyContactLogs     ConsistencyContactLog[]
+  accounts                      Account[]
+  healthDetail                  UserHealthDetail?
+  trainer                       Trainer?
+  address                       Address?
+  socials                       SocialNetwork?
+  refreshTokens                 RefreshToken[]
+  passwordResetTokens           PasswordResetToken[]
+  nutritionist                  Nutritionist?
+  preferences                   UserPreferences?
+  protocolsAsAssignee           TrainingProtocol[]
+  trainers                      TrainerStudent[]
+  workoutSessions               WorkoutSession[]
+  studentAnamneses              StudentAnamnesis[]
+  anamnesisResponses            AnamnesisResponse[]            @relation("AnamnesisResponseStudent")
+  anamnesisResponsesFilled      AnamnesisResponse[]            @relation("AnamnesisResponseFiller")
+  aiConversations               AiConversation[]
+  challengeParticipants         ChallengeParticipant[]
+  pointTransactions             PointTransaction[]
+  pointBalances                 PointBalance[]
+  nutritionistPatients          NutritionistPatient[]
+  metabolicProfiles             PatientMetabolicProfile[]
+  dietProtocolsAsPatient        DietProtocol[]
+  dietMealLogs                  DietMealLog[]
+  dietSwapLogs                  DietSwapLog[]
+  waterLogs                     WaterLog[]
+  patientInvitesAccepted        PatientInvite[]
+  videosCreated                 Video[]
+  tutorialsCreated              Tutorial[]
+  studentSubscriptions          StudentSubscription[]
+  aiUsageEventsAsStudent        AiUsageEvent[]                 @relation("aiUsageStudent")
+  aiTokenUsagesAsStudent        AiTokenUsage[]                 @relation("aiTokenUsageStudent")
+  aiInteractionLogsAsStudent    AiInteractionLog[]             @relation("aiInteractionLogStudent")
+  invitesSent                   TrainerInvite[]                @relation("InvitesSent")
+  invitesRedeemed               TrainerInvite[]                @relation("InvitesRedeemed")
+  emailVerificationTokens       EmailVerificationToken[]
+  studentInvitesAccepted        StudentInvite[]
+  consistencyWeeklyTargets      ConsistencyWeeklyTarget[]
+  consistencyWeeklyResults      ConsistencyWeeklyResult[]
+  consistencySeasonStandings    ConsistencySeasonStanding[]
+  challengeConsistencyStandings ChallengeConsistencyStanding[]
+  consistencyWeekPauses         ConsistencyWeekPause[]
+  consistencyContactLogs        ConsistencyContactLog[]
+  studentFeedbackRequests       StudentFeedbackRequest[]
+  consistencyPrivacyPref        ConsistencyPrivacyPref?
 
   // Added for the manager backoffice user list (ORDER BY created_at DESC).
   @@index([createdAt])
@@ -161,6 +166,9 @@ model Trainer {
   consistencySeasonStandings ConsistencySeasonStanding[]
   consistencyWeekPauses      ConsistencyWeekPause[]
   consistencyContactLogs     ConsistencyContactLog[]
+  studentFeedbackConfig      StudentFeedbackConfig?
+  studentFeedbackRequests    StudentFeedbackRequest[]
+  studentFeedbackTemplates   StudentFeedbackTemplate[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -357,11 +365,13 @@ model Nutritionist {
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  patients          NutritionistPatient[]
-  metabolicProfiles PatientMetabolicProfile[]
-  dietProtocols     DietProtocol[]
-  patientInvites    PatientInvite[]
-  customFoods       Food[]
+  patients             NutritionistPatient[]
+  subscriptionPlans    SubscriptionPlan[]
+  studentSubscriptions StudentSubscription[]
+  metabolicProfiles    PatientMetabolicProfile[]
+  dietProtocols        DietProtocol[]
+  patientInvites       PatientInvite[]
+  customFoods          Food[]
 
   @@map("nutritionists")
 }
@@ -959,16 +969,52 @@ model Challenge {
   dailyPointsCap      Int?    @map("daily_points_cap")
   anonymousRanking    Boolean @default(false) @map("anonymous_ranking")
 
+  // Weekly format (consistency ranking): "dates" keeps the free-date XP-only behaviour
+  format           String    @default("dates") @db.Text
+  weeks            Int?
+  minPodiumWeeks   Int?      @map("min_podium_weeks")
+  description      String?   @db.Text
+  visibility       String    @default("full") @db.Text
+  ownerType        String    @default("trainer") @map("owner_type") @db.Text
+  closeRequestedAt DateTime? @map("close_requested_at") @db.Timestamptz(6)
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(6)
+  // Instant an edit last moved the start Monday; weeks started before it are neutral (CAMP-11)
+  startScheduledAt DateTime? @map("start_scheduled_at") @db.Timestamptz(6)
+  // Scoring rule copied into a weekly championship (null and empty for the dates format)
+  weights          Json?
+  activePillars    String[]  @default([]) @map("active_pillars")
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trainer           Trainer                @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainer           Trainer                        @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   participants      ChallengeParticipant[]
   pointTransactions PointTransaction[]
+  standings         ChallengeConsistencyStanding[]
 
   @@index([trainerId, startDate])
   @@index([trainerId, endDate])
+  @@index([format, closedAt])
   @@map("challenges")
+}
+
+model ChallengeConsistencyStanding {
+  id          String   @id @default(uuid()) @db.Uuid
+  challengeId String   @map("challenge_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  position    Int?
+  eligible    Boolean
+  average     Decimal? @db.Decimal(7, 4)
+  validWeeks  Int      @map("valid_weeks")
+  weeks100    Int      @map("weeks_100")
+  streak      Int
+  frozenAt    DateTime @map("frozen_at") @db.Timestamptz(6)
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  student   User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, studentId])
+  @@map("challenge_consistency_standings")
 }
 
 model ChallengeParticipant {
@@ -1277,7 +1323,13 @@ model WaterLog {
 
 model SubscriptionPlan {
   id              String   @id @default(uuid()) @db.Uuid
-  trainerId       String   @map("trainer_id") @db.Uuid
+  // Exactly one of trainerId / nutritionistId is set (CHECK
+  // subscription_plans_exactly_one_owner, raw SQL in migration
+  // nutritionist_finance_owner — Prisma cannot express it).
+  trainerId       String?  @map("trainer_id") @db.Uuid
+  nutritionistId  String?  @map("nutritionist_id") @db.Uuid
+  // training | nutrition | both (see ServiceType in constants/subscription.js).
+  serviceType     String   @default("training") @map("service_type") @db.Text
   name            String   @db.Text
   description     String?  @db.Text
   recurrence      String   @db.Text
@@ -1290,16 +1342,24 @@ model SubscriptionPlan {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  trainer       Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainer       Trainer?              @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  // Restrict: billing history is accounting data and is never dropped with the professional row.
+  nutritionist  Nutritionist?         @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
   subscriptions StudentSubscription[]
 
   @@index([trainerId, deletedAt])
+  @@index([nutritionistId, deletedAt])
   @@map("subscription_plans")
 }
 
 model StudentSubscription {
   id                 String    @id @default(uuid()) @db.Uuid
-  trainerId          String    @map("trainer_id") @db.Uuid
+  // Exactly one of trainerId / nutritionistId is set (CHECK
+  // student_subscriptions_exactly_one_owner, raw SQL in migration
+  // nutritionist_finance_owner). Snapshot of the plan owner at assign time.
+  trainerId          String?   @map("trainer_id") @db.Uuid
+  nutritionistId     String?   @map("nutritionist_id") @db.Uuid
+  serviceType        String    @default("training") @map("service_type") @db.Text
   studentId          String    @map("student_id") @db.Uuid
   planId             String    @map("plan_id") @db.Uuid
   recurrence         String    @db.Text
@@ -1315,18 +1375,23 @@ model StudentSubscription {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trainer  Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  student  User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  plan     SubscriptionPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
-  payments SubscriptionPayment[]
+  trainer      Trainer?              @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  nutritionist Nutritionist?         @relation(fields: [nutritionistId], references: [id], onDelete: Restrict)
+  student      User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments     SubscriptionPayment[]
 
   @@index([trainerId, status])
+  @@index([nutritionistId, status])
   @@index([studentId, status])
   @@index([planId])
   // NOTE: a partial unique index (trainer_id, student_id) WHERE status = 'active'
   // (student_subscriptions_one_active_per_pair, raw SQL in migration
   // per_trainer_active_subscription_unique) exists in the database — Prisma
   // cannot express it. A student may have one active subscription per trainer.
+  // Its nutritionist twin (nutritionist_id, student_id) WHERE status = 'active'
+  // is student_subscriptions_one_active_per_nutritionist_pair (same migration
+  // family: nutritionist_finance_owner).
   @@map("student_subscriptions")
 }
 
@@ -1628,6 +1693,8 @@ model StudentInvite {
   sendCount  Int       @default(1) @map("send_count")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // true when the email already had an account at invite time: the student answers in the app, never auto-accepted
+  requiresConsent Boolean @default(false) @map("requires_consent")
 
   trainer Trainer @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   student User?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
@@ -1835,7 +1902,8 @@ model ConsistencyWeeklyResult {
   id        String   @id @default(uuid()) @db.Uuid
   trainerId String   @map("trainer_id") @db.Uuid
   studentId String   @map("student_id") @db.Uuid
-  seasonId  String   @map("season_id") @db.Uuid
+  // Null when the week closed without an active team season, for a weekly championship (CAMP-72)
+  seasonId  String?  @map("season_id") @db.Uuid
   weekStart DateTime @map("week_start") @db.Date
   status    String   @db.Text
   score     Decimal? @db.Decimal(7, 4)
@@ -1843,14 +1911,29 @@ model ConsistencyWeeklyResult {
   weights   Json
   closedAt  DateTime @map("closed_at") @db.Timestamptz(6)
 
-  trainer Trainer           @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  student User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  season  ConsistencySeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  trainer Trainer            @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  season  ConsistencySeason? @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
   @@unique([trainerId, studentId, weekStart])
   @@index([trainerId, seasonId])
   @@index([trainerId, studentId, weekStart(sort: Desc)])
   @@map("consistency_weekly_results")
+}
+
+// How a student appears to the other participants of the consistency championships, one choice per student (F3, APP-21)
+model ConsistencyPrivacyPref {
+  id          String    @id @default(uuid()) @db.Uuid
+  studentId   String    @unique @map("student_id") @db.Uuid
+  // "name" or "anonymous"; a choice made under another term version counts as pending
+  appearAs    String    @map("appear_as") @db.Text
+  termVersion String    @map("term_version") @db.Text
+  acceptedAt  DateTime  @map("accepted_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("consistency_privacy_prefs")
 }
 
 model ConsistencyWeekClose {
@@ -1917,4 +2000,150 @@ model ConsistencyContactLog {
 
   @@index([trainerId, studentId, createdAt(sort: Desc)])
   @@map("consistency_contact_logs")
+}
+
+// Student feedback to the trainer: questionnaire template (general when trainerId is null)
+model StudentFeedbackTemplate {
+  id        String  @id @default(uuid()) @db.Uuid
+  trainerId String? @map("trainer_id") @db.Uuid
+  name      String  @db.Text
+  isGeneral Boolean @default(false) @map("is_general")
+  version   Int     @default(1)
+  parentId  String? @map("parent_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  trainer   Trainer?                  @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  parent    StudentFeedbackTemplate?  @relation("StudentFeedbackTemplateVersions", fields: [parentId], references: [id], onDelete: Restrict)
+  forks     StudentFeedbackTemplate[] @relation("StudentFeedbackTemplateVersions")
+  questions StudentFeedbackQuestion[]
+  requests  StudentFeedbackRequest[]
+
+  // Configs whose milestone uses this template
+  d7Configs        StudentFeedbackConfig[] @relation("StudentFeedbackConfigD7Template")
+  d15Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD15Template")
+  d21Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD21Template")
+  d30Configs       StudentFeedbackConfig[] @relation("StudentFeedbackConfigD30Template")
+  recurringConfigs StudentFeedbackConfig[] @relation("StudentFeedbackConfigRecurringTemplate")
+
+  // A partial unique index (raw SQL in the migration) allows a single non-deleted general template
+  @@index([trainerId])
+  @@map("student_feedback_templates")
+}
+
+// One question of a student feedback template; `condition` hides it unless the request meets it (has_meal_plan)
+model StudentFeedbackQuestion {
+  id          String  @id @default(uuid()) @db.Uuid
+  templateId  String  @map("template_id") @db.Uuid
+  order       Int     @default(0)
+  text        String  @db.Text
+  helpText    String? @map("help_text") @db.Text
+  // score (0-10) | stars (1-5) | open
+  type        String  @db.Text
+  pillar      String  @db.Text
+  required    Boolean @default(false)
+  minLabel    String? @map("min_label") @db.Text
+  maxLabel    String? @map("max_label") @db.Text
+  invertScore Boolean @default(false) @map("invert_score")
+  condition   String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  template StudentFeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  answers  StudentFeedbackAnswer[]
+
+  @@index([templateId, order])
+  @@map("student_feedback_questions")
+}
+
+// Per-trainer automatic sending settings; enabledAt is stamped on each off -> on switch (no retroactive milestones)
+model StudentFeedbackConfig {
+  id              String    @id @default(uuid()) @db.Uuid
+  trainerId       String    @unique @map("trainer_id") @db.Uuid
+  autoSendEnabled Boolean   @default(false) @map("auto_send_enabled")
+  enabledAt       DateTime? @map("enabled_at") @db.Timestamptz(6)
+  d7              Boolean   @default(true)
+  d15             Boolean   @default(true)
+  d21             Boolean   @default(true)
+  d30             Boolean   @default(true)
+  recurring       Boolean   @default(true)
+
+  // Template of each milestone; null = the general template
+  d7TemplateId        String? @map("d7_template_id") @db.Uuid
+  d15TemplateId       String? @map("d15_template_id") @db.Uuid
+  d21TemplateId       String? @map("d21_template_id") @db.Uuid
+  d30TemplateId       String? @map("d30_template_id") @db.Uuid
+  recurringTemplateId String? @map("recurring_template_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer           Trainer                  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  d7Template        StudentFeedbackTemplate? @relation("StudentFeedbackConfigD7Template", fields: [d7TemplateId], references: [id], onDelete: SetNull)
+  d15Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD15Template", fields: [d15TemplateId], references: [id], onDelete: SetNull)
+  d21Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD21Template", fields: [d21TemplateId], references: [id], onDelete: SetNull)
+  d30Template       StudentFeedbackTemplate? @relation("StudentFeedbackConfigD30Template", fields: [d30TemplateId], references: [id], onDelete: SetNull)
+  recurringTemplate StudentFeedbackTemplate? @relation("StudentFeedbackConfigRecurringTemplate", fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+
+  @@map("student_feedback_configs")
+}
+
+// One feedback sent to a student; dueAt identifies the milestone occurrence (null for ad-hoc sends)
+model StudentFeedbackRequest {
+  id             String    @id @default(uuid()) @db.Uuid
+  trainerId      String    @map("trainer_id") @db.Uuid
+  studentId      String    @map("student_id") @db.Uuid
+  templateId     String    @map("template_id") @db.Uuid
+  // D7 | D15 | D21 | D30 | RECURRING | ADHOC
+  milestone      String    @db.Text
+  // pending | answered | expired
+  status         String    @default("pending") @db.Text
+  hasMealPlan    Boolean   @default(false) @map("has_meal_plan")
+  dueAt          DateTime? @map("due_at") @db.Timestamptz(6)
+  sentAt         DateTime  @map("sent_at") @db.Timestamptz(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  reminderSentAt DateTime? @map("reminder_sent_at") @db.Timestamptz(6)
+  submittedAt    DateTime? @map("submitted_at") @db.Timestamptz(6)
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  overallIndex   Int?      @map("overall_index")
+  // attention | stable | good
+  band           String?   @db.Text
+  // { [pillar]: 0-100 } computed on submit
+  pillarScores   Json?     @map("pillar_scores")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trainer  Trainer                 @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  student  User                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template StudentFeedbackTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  answers  StudentFeedbackAnswer[]
+
+  @@unique([trainerId, studentId, dueAt])
+  @@index([trainerId, sentAt(sort: Desc)])
+  @@index([studentId, status])
+  @@index([status, expiresAt])
+  @@map("student_feedback_requests")
+}
+
+// Answer to one question of a request (draft until the request is submitted)
+model StudentFeedbackAnswer {
+  id         String  @id @default(uuid()) @db.Uuid
+  requestId  String  @map("request_id") @db.Uuid
+  questionId String  @map("question_id") @db.Uuid
+  score      Int?
+  text       String? @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  request  StudentFeedbackRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  question StudentFeedbackQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, questionId])
+  @@index([questionId])
+  @@map("student_feedback_answers")
 }

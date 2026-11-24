@@ -23,6 +23,7 @@ import { nutritionistRoutes } from './routes/nutritionist-route.js';
 import { userRoutes } from './routes/user-route.js';
 import { trainerInviteRoutes, trainerInvitePreviewRoutes } from './routes/trainer-invite-route.js';
 import { studentInviteRoutes } from './routes/student-invite-route.js';
+import { myTrainerInviteRoutes } from './routes/my-trainer-invite-route.js';
 import { addressRoutes } from './routes/address-route.js';
 import { trainingProtocolTemplateRoutes } from './routes/training-protocol-template-route.js';
 import { trainingProtocolRoutes } from './routes/training-protocol-route.js';
@@ -55,25 +56,32 @@ import { studentSubscriptionRoutes } from './routes/student-subscription-route.j
 import { subscriptionPaymentRoutes } from './routes/subscription-payment-route.js';
 import { trainerBriefingRoutes } from './routes/trainer-briefing-route.js';
 import { consistencyRankingRoutes } from './routes/consistency-ranking-route.js';
+import { myConsistencyRankingRoutes } from './routes/my-consistency-ranking-route.js';
 import { adminConsistencyRankingRoutes } from './routes/admin-consistency-ranking-route.js';
 import { trainerDashboardRoutes } from './routes/trainer-dashboard-route.js';
 import { trainerFinanceRoutes } from './routes/trainer-finance-route.js';
+import { professionalRoutes } from './routes/professional-route.js';
 import { platformPlanRoutes } from './routes/platform-plan-route.js';
 import { adminTrainerRoutes } from './routes/admin-trainer-route.js';
 import { adminManagerRoutes } from './routes/admin-manager-route.js';
 import { trainerFeedbackRoutes } from './routes/trainer-feedback-route.js';
 import { adminFeedbackRoutes } from './routes/admin-feedback-route.js';
+import { studentFeedbackRoutes } from './routes/student-feedback-route.js';
 import { createAdminPrisma } from '../src/db-admin.js';
+import { getLlmProvider } from '../src/llm/index.js';
+import { createAiTracer } from '../src/observability/ai-tracer.js';
 import { adminAiUsageRoutes } from './routes/admin-ai-usage-route.js';
 import { adminDebugRoutes } from './routes/admin-debug-route.js';
 import { asaasWebhookRoutes } from './routes/asaas-webhook-route.js';
 import { startBriefingCron } from '../src/jobs/briefing-cron.js';
 import { startSubscriptionCycleCron } from '../src/jobs/subscription-cycle-cron.js';
 import { startConsistencyCloseCron } from '../src/jobs/consistency-close-cron.js';
+import { startStudentFeedbackCron } from '../src/jobs/student-feedback-cron.js';
 import { authenticate } from './hooks/auth-hook.js';
 import { languageOnRequestHook, applyLabelsPreSerializationHook } from './hooks/i18n-hook.js';
 import { createSignedFileHook } from './hooks/signed-file-hook.js';
 import s3BucketHandler from '../src/config/s3-bucket-handler.js';
+import emailHandler from '../src/config/email-handler.js';
 import { resolveExerciseVideoUrl } from '../src/helpers/exercise-video-key.js';
 import { healthRoutes } from './routes/health-route.js';
 import { checkLlmConfiguration } from '../src/llm/config.js';
@@ -114,6 +122,29 @@ function decorateAdminDb(fastify, injectedAdminDb) {
   });
 }
 
+// Decorates the iArnold tracer (injected override or built from config) and flushes it on shutdown.
+function decorateAiTracer(fastify, injectedTracer) {
+  const aiTracer = injectedTracer ?? createAiTracer({ config, logger: fastify.log });
+  fastify.decorate('aiTracer', aiTracer);
+  fastify.addHook('onClose', async () => {
+    await aiTracer.shutdown();
+  });
+}
+
+// Decorates the single shared LLM provider (injected override or built once); null when the provider is misconfigured.
+function decorateLlmProvider(fastify, injectedProvider) {
+  let llmProvider = injectedProvider ?? null;
+  if (!llmProvider) {
+    try {
+      llmProvider = getLlmProvider();
+    } catch {
+      // why: checkLlmConfiguration already logged the misconfiguration; a null provider makes the AI routes answer 503.
+      llmProvider = null;
+    }
+  }
+  fastify.decorate('llmProvider', llmProvider);
+}
+
 export async function buildServer(options = {}) {
   // Fail fast: once Asaas is actually configured (ASAAS_API_KEY set) in
   // production/staging, boot without a webhook secret must not succeed — otherwise
@@ -145,6 +176,8 @@ export async function buildServer(options = {}) {
   // Make prisma available to route handlers and services that need transactions.
   fastify.decorate('prisma', prisma);
   decorateAdminDb(fastify, options.adminDb);
+  decorateAiTracer(fastify, options.aiTracer);
+  decorateLlmProvider(fastify, options.llmProvider);
 
   // 1. Read language header before auth so all handlers see request.language
   fastify.addHook('onRequest', languageOnRequestHook);
@@ -389,6 +422,7 @@ export async function buildServer(options = {}) {
     await fastify.register(userRoutes);
     await fastify.register(trainerInviteRoutes);
     await fastify.register(studentInviteRoutes);
+    await fastify.register(myTrainerInviteRoutes);
     await fastify.register(addressRoutes);
     await fastify.register(trainingProtocolTemplateRoutes);
     await fastify.register(trainingProtocolRoutes);
@@ -421,14 +455,17 @@ export async function buildServer(options = {}) {
     await fastify.register(subscriptionPaymentRoutes);
     await fastify.register(trainerBriefingRoutes);
     await fastify.register(consistencyRankingRoutes);
+    await fastify.register(myConsistencyRankingRoutes);
     await fastify.register(adminConsistencyRankingRoutes);
     await fastify.register(trainerDashboardRoutes);
     await fastify.register(trainerFinanceRoutes);
+    await fastify.register(professionalRoutes);
     await fastify.register(platformPlanRoutes);
     await fastify.register(adminTrainerRoutes);
     await fastify.register(adminManagerRoutes);
     await fastify.register(trainerFeedbackRoutes);
     await fastify.register(adminFeedbackRoutes);
+    await fastify.register(studentFeedbackRoutes);
     await fastify.register(adminAiUsageRoutes);
     await fastify.register(adminDebugRoutes);
   });
@@ -460,6 +497,14 @@ export async function buildServer(options = {}) {
   if (consistencyCloseCronEnabled) {
     startConsistencyCloseCron(prisma, fastify.log);
     fastify.log.info('[cron:consistency-close] every-15-minutes UTC close scheduled');
+  }
+
+  const studentFeedbackCronEnabled =
+    process.env.NODE_ENV === 'production' ||
+    parseBool(process.env.ENABLE_STUDENT_FEEDBACK_CRON, false);
+  if (studentFeedbackCronEnabled) {
+    startStudentFeedbackCron(prisma, fastify.log, emailHandler);
+    fastify.log.info('[cron:student-feedback] every-15-minutes UTC tick scheduled');
   }
 
   return fastify;

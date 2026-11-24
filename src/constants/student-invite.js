@@ -3,6 +3,7 @@ export const StudentInviteStatus = Object.freeze({
   ACCEPTED: 'accepted',
   REVOKED: 'revoked',
   EXPIRED: 'expired',
+  DECLINED: 'declined',
 });
 
 export const studentInviteStatusValues = Object.freeze(Object.values(StudentInviteStatus));
@@ -23,6 +24,7 @@ export const StudentInviteErrorCode = Object.freeze({
   DAILY_LIMIT: 'STUDENT_INVITE_DAILY_LIMIT',
   EMAIL_SEND_FAILED: 'STUDENT_INVITE_EMAIL_SEND_FAILED',
   CANNOT_LINK_SELF: 'CANNOT_LINK_SELF',
+  EXPIRED: 'STUDENT_INVITE_EXPIRED',
 });
 
 export const StudentInviteMessageCode = Object.freeze({
@@ -37,6 +39,7 @@ export const StudentInviteMessageCode = Object.freeze({
   EMAIL_SEND_FAILED: 'studentInvite.emailSendFailed',
   CANNOT_LINK_SELF: 'student.cannotLinkSelf',
   ALREADY_LINKED: 'student.alreadyLinked',
+  EXPIRED: 'studentInvite.expired',
 });
 
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -53,3 +56,8 @@ export const STUDENT_INVITE_LIST_PAGE_SIZE_MAX = 100;
 // count (resends are bounded per invite by cooldown + STUDENT_INVITE_MAX_SENDS).
 export const STUDENT_INVITE_DAILY_MAX = 50;
 export const STUDENT_INVITE_DAILY_WINDOW_MS = MS_PER_DAY;
+
+// Invites a sender with an UNVERIFIED email may create in the same rolling window
+// (STUDENT_INVITE_DAILY_WINDOW_MS); the next one answers emailVerification.required.
+// Student and patient invites are counted separately.
+export const UNVERIFIED_SENDER_INVITE_MAX = 3;

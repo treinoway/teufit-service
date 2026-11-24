@@ -203,6 +203,53 @@ describe('email-handler rendered emails', () => {
     });
   });
 
+  describe('sendStudentInviteOpenAppEmail', () => {
+    const sendOpenApp = (trainerName = 'Ana Coach') =>
+      emailHandler.sendStudentInviteOpenAppEmail({ to: 'student@example.com', trainerName });
+
+    it('should name the trainer in the subject and the heading', async () => {
+      await sendOpenApp();
+
+      const { to, subject, html } = lastEmail();
+      expect(to).toBe('student@example.com');
+      expect(subject).toBe('[Teufit] Ana Coach te convidou no Teufit');
+      expect(html).toContain('Ana Coach te convidou no Teufit');
+    });
+
+    it('should tell the student to open the app, updated, to accept or decline', async () => {
+      await sendOpenApp();
+
+      const { html } = lastEmail();
+      expect(html).toContain('Abra o app Teufit');
+      expect(html).toContain('aceitar ou recusar');
+      expect(html).toContain('atualize o app');
+    });
+
+    it('should carry the store badges and no closed-beta wording or legacy brand', async () => {
+      await sendOpenApp();
+
+      const { html } = lastEmail();
+      expect(html).toContain(APP_STORE_URL);
+      expect(html).toContain(PLAY_STORE_URL);
+      expect(html).not.toMatch(/teste fechado/i);
+      expectNoLegacyBranding(lastEmail());
+    });
+
+    it('should fall back to a generic trainer label and keep the subject on one line', async () => {
+      await sendOpenApp('\r\n');
+
+      const { subject, html } = lastEmail();
+      expect(subject).toBe('[Teufit] Seu treinador te convidou no Teufit');
+      expect(html).toContain('Seu treinador te convidou no Teufit');
+    });
+
+    it('should escape HTML in the trainer name', async () => {
+      await sendOpenApp('<b>Ana</b>');
+
+      expect(lastEmail().html).not.toContain('<b>Ana</b>');
+    });
+  });
+
   describe('sendStudentLinkedEmail', () => {
     beforeEach(async () => {
       await emailHandler.sendStudentLinkedEmail({ to: 'student@example.com', trainerName: 'Ana Coach' });
@@ -213,6 +260,12 @@ describe('email-handler rendered emails', () => {
       expect(html).toContain(APP_STORE_URL);
       expect(html).toContain(PLAY_STORE_URL);
       expectNoLegacyBranding(lastEmail());
+    });
+
+    it('should no longer mention the closed beta', () => {
+      const { subject, html } = lastEmail();
+      expect(subject).not.toMatch(/teste fechado/i);
+      expect(html).not.toMatch(/teste fechado/i);
     });
   });
 

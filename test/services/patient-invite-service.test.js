@@ -62,6 +62,7 @@ function makePrisma() {
       count: vi.fn(),
     },
     nutritionistPatient: { findUnique: vi.fn().mockResolvedValue(null), findFirst: vi.fn().mockResolvedValue(null) },
+    account: { findFirst: vi.fn().mockResolvedValue({ id: 'sender-account-1' }) },
   };
   prisma.$transaction = vi.fn(async (callback) => callback(prisma));
   return prisma;

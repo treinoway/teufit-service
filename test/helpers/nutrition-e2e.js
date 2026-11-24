@@ -92,7 +92,7 @@ export async function createLinkedPatient(app, nutritionist, { birthDate } = {})
   return patient;
 }
 
-/** Seeds public foods (TACO/TBCA) and returns them by key. Per-100g values mirror the spec examples. */
+/** Seeds public foods and returns them by key; beansTbca is the only (hidden) TBCA food. Per-100g values mirror the spec examples. */
 export async function seedFoods() {
   const meats = await prisma.foodGroup.create({ data: { name: 'Carnes', code: 'carnes' } });
   const cereals = await prisma.foodGroup.create({ data: { name: 'Cereais', code: 'cereais' } });
@@ -113,11 +113,11 @@ export async function seedFoods() {
       },
     });
   const chicken = await make(meats, 'taco', 'Frango, filé, grelhado', 159, 32, 0, 2.5, 0, { grams: 100, label: '1 filé médio' });
-  const patinho = await make(meats, 'tbca', 'Patinho, grelhado', 219, 35.9, 0, 7.3, 0, { grams: 100, label: '1 bife' });
+  const patinho = await make(meats, 'taco', 'Patinho, grelhado', 219, 35.9, 0, 7.3, 0, { grams: 100, label: '1 bife' });
   const rice = await make(cereals, 'taco', 'Arroz, integral, cozido', 124, 2.6, 25.8, 1, 2.7, { grams: 125, label: '4 colheres de sopa' });
   const beansTaco = await make(legumes, 'taco', 'Feijão, carioca, cozido', 76, 4.8, 13.6, 0.5, 8.5, { grams: 100, label: '1 concha' });
   const beansTbca = await make(legumes, 'tbca', 'Feijão, preto, cozido', 77, 4.5, 14, 0.5, 8.4, { grams: 100, label: '1 concha' });
-  const acai = await make(cereals, 'tbca', 'Açaí, polpa', 58, 0.8, 6.2, 3.9, 2.6, { grams: 100, label: '1 porção' });
+  const acai = await make(cereals, 'taco', 'Açaí, polpa', 58, 0.8, 6.2, 3.9, 2.6, { grams: 100, label: '1 porção' });
   return { groups: { meats, cereals, legumes }, chicken, patinho, rice, beansTaco, beansTbca, acai };
 }
 

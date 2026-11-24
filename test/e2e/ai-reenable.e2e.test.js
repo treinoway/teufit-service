@@ -5,6 +5,7 @@ import { setupApp } from '../helpers/setup-app.js'
 import { cleanDatabase } from '../helpers/db-cleanup.js'
 import { provisionTrainerPlan } from '../helpers/platform-plan.js'
 import { signupVerified } from '../helpers/signup-user.js'
+import { linkStudentByInvite } from '../helpers/link-student.js'
 import { getBillingMonth, PLAN_LIMITS, PLATFORM_PLAN_ERRORS } from '../../src/constants/platform-plan.js'
 import { AI_TOOLS, AI_ERRORS, AI_MESSAGE_CODES } from '../../src/constants/ai.js'
 import ptBR from '../../src/i18n/locales/pt-BR.js'
@@ -102,7 +103,8 @@ describe('e2e: iArnold re-enable hardening', () => {
     vi.unstubAllEnvs()
   })
 
-  async function createTrainer({ tier = null } = {}) {
+  // why: become-trainer grants BETA now, so a trainer without AI is provisioned as FREE explicitly.
+  async function createTrainer({ tier = 'FREE' } = {}) {
     const email = uniqueEmail('trainer')
     const signupRes = await signupVerified(app, { method: 'POST', url: '/auth/signup', payload: { email, password: PASSWORD } })
     const { user: { id: userId }, token: { accessToken: userToken } } = signupRes.json()
@@ -117,12 +119,7 @@ describe('e2e: iArnold re-enable hardening', () => {
     const email = uniqueEmail('student')
     const signupRes = await signupVerified(app, { method: 'POST', url: '/auth/signup', payload: { email, password: PASSWORD } })
     const { user: { id: studentId } } = signupRes.json()
-    await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainer.accessToken}` },
-      payload: { email },
-    })
+    await linkStudentByInvite(app, { trainerToken: trainer.accessToken, email })
     return { studentId }
   }
 

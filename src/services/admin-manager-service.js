@@ -1,5 +1,7 @@
 import { AppError, NotFoundAppError } from '../errors/app-error.js';
 import { formatDateOnly } from '../helpers/date-helpers.js';
+import { computeBestSet, resolveEffectiveExerciseId } from '../helpers/best-set.js';
+import { WorkoutSessionStatus } from '../constants/training.js';
 import {
   ADMIN_MANAGER_ERROR_UNAVAILABLE,
   ADMIN_MANAGER_PAGE_SIZE_DEFAULT,
@@ -456,6 +458,7 @@ function toSessionItem(session) {
     startedAt: session.startedAt,
     finishedAt: session.finishedAt,
     durationSec: session.durationSeconds,
+    deletedAt: session.deletedAt,
   };
 }
 
@@ -471,6 +474,7 @@ async function listUserSessionsQuery(adminDb, { userId, ...pagination }) {
         startedAt: true,
         finishedAt: true,
         durationSeconds: true,
+        deletedAt: true,
         training: { select: { name: true } },
       },
       orderBy: [{ startedAt: 'desc' }, { id: 'asc' }],
@@ -482,6 +486,162 @@ async function listUserSessionsQuery(adminDb, { userId, ...pagination }) {
   return toPage(rows.map(toSessionItem), total, paging);
 }
 
+const SESSION_DETAIL_SELECT = {
+  id: true,
+  userId: true,
+  status: true,
+  startedAt: true,
+  finishedAt: true,
+  durationSeconds: true,
+  notes: true,
+  deletedAt: true,
+  training: { select: { id: true, name: true } },
+  user: { select: { id: true, firstName: true, lastName: true, email: true } },
+  exerciseLogs: {
+    orderBy: [{ order: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      exerciseId: true,
+      order: true,
+      status: true,
+      notes: true,
+      substitutedByExerciseId: true,
+      exercise: {
+        select: {
+          id: true,
+          name: true,
+          sets: true,
+          repetitions: true,
+          prescriptionMode: true,
+          duration: true,
+          hasLoad: true,
+          suggestedLoad: true,
+          restInterval: true,
+        },
+      },
+      setLogs: {
+        orderBy: [{ setNumber: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          setNumber: true,
+          repetitions: true,
+          load: true,
+          duration: true,
+          rpe: true,
+          restSeconds: true,
+          completed: true,
+          notes: true,
+        },
+      },
+    },
+  },
+};
+
+// Finds, per effective exercise, the student's latest completed non-deleted log finished before the cutoff.
+function findPreviousExerciseLogRows(adminDb, { userId, exerciseIds, finishedBefore }) {
+  return adminDb.$queryRaw`
+    SELECT DISTINCT ON (el.exercise_id)
+      el.id,
+      el.exercise_id,
+      el.workout_session_id,
+      ws.finished_at
+    FROM exercise_logs el
+    JOIN workout_sessions ws ON ws.id = el.workout_session_id
+    WHERE el.exercise_id = ANY(${exerciseIds}::uuid[])
+      AND ws.user_id = ${userId}::uuid
+      AND ws.status = ${WorkoutSessionStatus.COMPLETED}
+      AND ws.deleted_at IS NULL
+      AND ws.finished_at < ${finishedBefore}::timestamptz
+    ORDER BY el.exercise_id, ws.finished_at DESC, el.id
+  `;
+}
+
+// Loads the completed sets of the given exercise logs, grouped by exercise log id.
+async function loadCompletedSetsByExerciseLog(adminDb, exerciseLogIds) {
+  const setLogs = await adminDb.setLog.findMany({
+    where: { exerciseLogId: { in: exerciseLogIds }, completed: true },
+    select: { exerciseLogId: true, setNumber: true, repetitions: true, load: true, duration: true, rpe: true, restSeconds: true, completed: true },
+    orderBy: [{ exerciseLogId: 'asc' }, { setNumber: 'asc' }],
+  });
+  const setsByExerciseLog = new Map();
+  for (const setLog of setLogs) {
+    setsByExerciseLog.set(setLog.exerciseLogId, [...(setsByExerciseLog.get(setLog.exerciseLogId) ?? []), setLog]);
+  }
+  return setsByExerciseLog;
+}
+
+// Maps a previous exercise log row and its completed sets to the previousLog shape.
+function toPreviousLog(row, completedSets) {
+  return {
+    workoutSessionId: row.workout_session_id,
+    finishedAt: row.finished_at,
+    setLogs: completedSets.map(({ setNumber, repetitions, load, duration }) => ({ setNumber, repetitions, load, duration })),
+    bestSet: computeBestSet(completedSets),
+  };
+}
+
+// Returns the previousLog per effective exercise id, as the student saw it when this session started.
+async function loadPreviousLogsByExercise(adminDb, session) {
+  const exerciseIds = [...new Set(session.exerciseLogs.map(resolveEffectiveExerciseId))];
+  if (exerciseIds.length === 0) return new Map();
+  const rows = await findPreviousExerciseLogRows(adminDb, { userId: session.userId, exerciseIds, finishedBefore: session.startedAt });
+  if (rows.length === 0) return new Map();
+  const setsByExerciseLog = await loadCompletedSetsByExerciseLog(adminDb, rows.map((row) => row.id));
+  return new Map(rows.map((row) => [row.exercise_id, toPreviousLog(row, setsByExerciseLog.get(row.id) ?? [])]));
+}
+
+// Returns the names of the substitute exercises used in the session, keyed by exercise id.
+async function loadSubstituteNames(adminDb, exerciseLogs) {
+  const substituteIds = [...new Set(exerciseLogs.map((log) => log.substitutedByExerciseId).filter(Boolean))];
+  if (substituteIds.length === 0) return new Map();
+  const exercises = await adminDb.exercise.findMany({ where: { id: { in: substituteIds } }, select: { id: true, name: true } });
+  return new Map(exercises.map((exercise) => [exercise.id, exercise.name]));
+}
+
+// Maps an exercise log row to the API item with its substitute name and previousLog.
+function toSessionExerciseLog(log, { substituteNames, previousLogs }) {
+  return {
+    id: log.id,
+    order: log.order,
+    status: log.status,
+    notes: log.notes,
+    exercise: log.exercise,
+    substitutedByExerciseId: log.substitutedByExerciseId,
+    substitutedByExerciseName: substituteNames.get(log.substitutedByExerciseId) ?? null,
+    setLogs: log.setLogs,
+    previousLog: previousLogs.get(resolveEffectiveExerciseId(log)) ?? null,
+  };
+}
+
+// Maps a session row and its lookups to the session detail response.
+function toSessionDetail(session, lookups) {
+  return {
+    id: session.id,
+    status: session.status,
+    startedAt: session.startedAt,
+    finishedAt: session.finishedAt,
+    durationSec: session.durationSeconds,
+    notes: session.notes,
+    deletedAt: session.deletedAt,
+    training: session.training,
+    student: session.user,
+    exerciseLogs: session.exerciseLogs.map((log) => toSessionExerciseLog(log, lookups)),
+  };
+}
+
+// Returns one workout session (any status, soft-deleted included) with its logs, sets and previous logs.
+async function getSessionDetailQuery(adminDb, { sessionId }) {
+  const session = await adminDb.workoutSession.findUnique({ where: { id: sessionId }, select: SESSION_DETAIL_SELECT });
+  if (!session) {
+    throw new NotFoundAppError({ messageCode: AdminManagerMessageCode.SESSION_NOT_FOUND, message: 'Session not found', details: {} });
+  }
+  const [substituteNames, previousLogs] = await Promise.all([
+    loadSubstituteNames(adminDb, session.exerciseLogs),
+    loadPreviousLogsByExercise(adminDb, session),
+  ]);
+  return toSessionDetail(session, { substituteNames, previousLogs });
+}
+
 export const listUsers = withTimeoutMapping(listUsersQuery);
 export const getUserOverview = withTimeoutMapping(getUserOverviewQuery);
 export const listUserStudents = withTimeoutMapping(listUserStudentsQuery);
@@ -490,3 +650,4 @@ export const listUserProtocols = withTimeoutMapping(listUserProtocolsQuery);
 export const getProtocolDetail = withTimeoutMapping(getProtocolDetailQuery);
 export const listUserTemplates = withTimeoutMapping(listUserTemplatesQuery);
 export const listUserSessions = withTimeoutMapping(listUserSessionsQuery);
+export const getSessionDetail = withTimeoutMapping(getSessionDetailQuery);

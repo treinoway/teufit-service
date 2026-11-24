@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getConfig, ruleForWeek, updateConfig } from '../../src/services/consistency-config-service.js';
+import { getConfig, ruleForWeek, scoringRuleProblems, updateConfig } from '../../src/services/consistency-config-service.js';
 import { ConsistencyErrorCode, ConsistencyMessageCode, DEFAULT_CONFIG } from '../../src/constants/consistency-ranking.js';
 
 const TRAINER_ID = 'trainer-1';
@@ -264,5 +264,27 @@ describe('panel rules', () => {
       expect(Object.keys(error.details)).toEqual([field]);
     }
     expectNoWrites(prisma);
+  });
+});
+
+describe('scoringRuleProblems', () => {
+  const ACTIVE = ['workouts', 'cardio'];
+
+  it('CPD-08 flags weights that miss a pillar, leave 0 to 100 or do not sum 100 and an empty, repeated or unknown pillar list', () => {
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: ACTIVE })).toEqual({ weights: null, activePillars: null });
+
+    const { hydration: _dropped, ...missingPillar } = VALID_WEIGHTS;
+    expect(scoringRuleProblems({ weights: missingPillar, activePillars: ACTIVE }).weights).toBe('invalid');
+    expect(scoringRuleProblems({ weights: { ...VALID_WEIGHTS, steps: 0 }, activePillars: ACTIVE }).weights).toBe('invalid');
+    expect(scoringRuleProblems({ weights: undefined, activePillars: ACTIVE }).weights).toBe('invalid');
+    expect(scoringRuleProblems({ weights: { ...VALID_WEIGHTS, workouts: 120, diet: -80 }, activePillars: ACTIVE }).weights).toBe('outOfRange');
+    expect(scoringRuleProblems({ weights: { ...VALID_WEIGHTS, workouts: 39.5, diet: 0.5 }, activePillars: ACTIVE }).weights).toBe('outOfRange');
+    expect(scoringRuleProblems({ weights: { ...VALID_WEIGHTS, workouts: 50 }, activePillars: ACTIVE }).weights).toBe('sumNot100');
+
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: [] }).activePillars).toBe('invalid');
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: ['workouts', 'workouts'] }).activePillars).toBe('invalid');
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: ['workouts', 'steps'] }).activePillars).toBe('invalid');
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: undefined }).activePillars).toBe('invalid');
+    expect(scoringRuleProblems({ weights: VALID_WEIGHTS, activePillars: ['diet'] })).toEqual({ weights: null, activePillars: null });
   });
 });

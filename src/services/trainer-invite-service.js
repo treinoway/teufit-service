@@ -543,15 +543,11 @@ async function createTrainerAccountFromInvite(invite, passwordHash) {
     });
     if (count === 0) throw await resolveLostClaimError(tx, invite.id);
 
-    // Same grant as /become-trainer and redeemInvite, on the tx client: the
+    // Same grant as /become-trainer and redeemInvite (BETA subscription included), on the tx client: the
     // global client cannot see the uncommitted user.
     const preferences = await setActiveProfileToTrainer(user.id, {
       tx,
       onCommit: (task) => afterCommitTasks.push(task),
-    });
-    const trainerId = await findTrainerIdByUserId(tx, user.id);
-    await tx.platformSubscription.create({
-      data: { trainerId, tier: PLATFORM_PLAN_TIERS.BETA, status: PLATFORM_SUBSCRIPTION_STATUSES.ACTIVE },
     });
     // The signup code flow is superseded by the invite proof for this inbox.
     await tx.pendingSignup.deleteMany({ where: { email: normalizedEmail } });

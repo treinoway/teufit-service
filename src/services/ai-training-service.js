@@ -27,7 +27,11 @@ import { updateTraining } from "./training-service.js";
 import { updateExercise } from "./exercise-service.js";
 
 import { TOOLS } from "./ai-tool-definitions.js";
-import { buildSystemPrompt, sanitizeUserMessage, wrapUserInput } from "./ai-prompt.js";
+import { summarizeToolResult } from "../helpers/ai-tool-summary.js";
+import { unwrapRefTag, sanitizeToolInputIds } from "../helpers/ai-tool-input.js";
+import { buildSystemPrompt, sanitizeUserMessage, wrapUserInput, PROMPT_VERSION } from "./ai-prompt.js";
+import { startGuardedTurn } from "../observability/ai-tracer.js";
+import { AI_TRACE } from "../constants/ai-tracing.js";
 import { isExplicitConfirmation, lastAssistantAskedForConfirmation } from "../helpers/ai-confirmation.js";
 import { translate } from "../i18n/index.js";
 import { getLlmProvider } from "../llm/index.js";
@@ -39,6 +43,7 @@ import { toLinkCreateInput } from "../helpers/advanced-technique-refs.js";
 import { inheritSelectionBatch } from "./advanced-technique-service.js";
 
 const CONVERSATION_TITLE_MAX_LENGTH = 100;
+const NOOP_TRACE = startGuardedTurn(null);
 
 // Resolves the active LLM model identifier for interaction and token-usage logging.
 function resolveActiveModelId() {
@@ -205,106 +210,6 @@ function logAiAction(userId, toolName, toolInput, result) {
   };
   if (!result.success) logData.error = result.error;
   console.info(`AI tool executed: ${toolName}`, JSON.stringify(logData));
-}
-
-/**
- * Summarize a tool result for the LLM's second call.
- * The full Prisma response can be huge (nested relations, UUIDs, timestamps).
- * The model only needs a short summary to generate a human-friendly response.
- */
-function summarizeToolResult(toolResult) {
-  if (!toolResult.success) {
-    return {
-      success: false,
-      error: toolResult.error,
-      message: toolResult.message,
-    };
-  }
-
-  const data = toolResult.data;
-  if (!data) return { success: true };
-
-  // Protocol template with trainings
-  if (data.trainings && Array.isArray(data.trainings)) {
-    return {
-      success: true,
-      name: data.name,
-      type: data.type,
-      trainingsCount: data.trainings.length,
-      trainings: data.trainings.map((t) => ({
-        name: t.trainingTemplate?.name || t.name,
-        weekDay: t.weekDay,
-        exercisesCount: t.trainingTemplate?.trainingTemplateExerciseTemplates?.length ?? null,
-        exercises: t.trainingTemplate?.trainingTemplateExerciseTemplates?.map((e) => ({
-          name: e.name || e.exerciseTemplate?.name || "exercício",
-          sets: e.sets ?? null,
-          repetitions: e.repetitions ?? null,
-          restInterval: e.restInterval ?? null,
-          hasLoad: e.hasLoad ?? null,
-          suggestedLoad: e.suggestedLoad ?? null,
-        })) ?? [],
-      })),
-    };
-  }
-
-  // Training template with exercises
-  if (
-    data.trainingTemplateExerciseTemplates &&
-    Array.isArray(data.trainingTemplateExerciseTemplates)
-  ) {
-    return {
-      success: true,
-      name: data.name,
-      category: data.category,
-      exercisesCount: data.trainingTemplateExerciseTemplates.length,
-      exercises: data.trainingTemplateExerciseTemplates.map((e) => ({
-        name: e.name || e.exerciseTemplate?.name || "exercício",
-        sets: e.sets ?? null,
-        repetitions: e.repetitions ?? null,
-        restInterval: e.restInterval ?? null,
-        hasLoad: e.hasLoad ?? null,
-        suggestedLoad: e.suggestedLoad ?? null,
-      })),
-    };
-  }
-
-  // AI performance snapshot (student dashboard data for iArnold)
-  if (data.sessionCounts && typeof data.sessionCounts === 'object') {
-    return {
-      success: true,
-      studentId: data.studentId,
-      studentName: data.studentName,
-      window: data.window,
-      sessionCounts: data.sessionCounts,
-      totalSessions: data.totalSessions,
-      completionRate: data.completionRate,
-      lastSessionAt: data.lastSessionAt,
-      currentProtocol: data.currentProtocol,
-      topExercises: (data.topExercises ?? []).map((e) => ({
-        exerciseId: e.exerciseId,
-        name: e.name,
-        hasLoad: e.hasLoad,
-        sessionCount: e.sessionCount,
-        lastPerformedAt: e.lastPerformedAt,
-        latestMaxLoad: e.latestMaxLoad,
-        latestAvgLoad: e.latestAvgLoad,
-        latestTotalVolume: e.latestTotalVolume,
-        maxLoadDelta: e.maxLoadDelta,
-        maxLoadDeltaPct: e.maxLoadDeltaPct,
-      })),
-    };
-  }
-
-  if (Array.isArray(data.results)) {
-    return { success: true, results: data.results };
-  }
-
-  // Single entity (exercise template, protocol import, etc.)
-  return {
-    success: true,
-    name: data.name,
-    id: data.id,
-  };
 }
 
 /**
@@ -606,40 +511,6 @@ function inheritLibraryTechniques(tx, trainerId, templates) {
 }
 
 // --- Tool executor ---
-
-// LLM sometimes passes [TYPE_REF:uuid] wrapper tags instead of raw UUIDs in tool arguments.
-// This happens when the model reads the reference tag literally from context strings rather
-// than extracting just the id — historically triggered the reorder_exercises_in_training bug
-// where exerciseIds were passed as ["[EXERCISE_REF:abc-123]", ...] instead of ["abc-123", ...].
-// Strips the wrapper and returns the inner value; passes through raw ids and null/undefined untouched.
-const REF_TAG_PATTERN = /^\[[A-Z_]+:(.+)\]$/;
-
-function unwrapRefTag(value) {
-  if (value == null) return value;
-  const trimmed = String(value).trim();
-  const match = REF_TAG_PATTERN.exec(trimmed);
-  return match ? match[1] : trimmed;
-}
-
-// Sanitize all *Id (scalar) and *Ids (array) fields at any depth in a tool input so that wrapped
-// ref tags are stripped before reaching service validators. Applied globally because every *Id field
-// is a raw UUID by contract — tags belong only in context strings, never in tool arguments.
-function sanitizeToolInputIds(input) {
-  if (Array.isArray(input)) return input.map(sanitizeToolInputIds);
-  if (!input || typeof input !== 'object') return input;
-  const sanitized = { ...input };
-  for (const key of Object.keys(sanitized)) {
-    const value = sanitized[key];
-    if (key.endsWith('Id') && typeof value === 'string') {
-      sanitized[key] = unwrapRefTag(value);
-    } else if (key.endsWith('Ids') && Array.isArray(value)) {
-      sanitized[key] = value.map((item) => (typeof item === 'string' ? unwrapRefTag(item) : sanitizeToolInputIds(item)));
-    } else if (value && typeof value === 'object') {
-      sanitized[key] = sanitizeToolInputIds(value);
-    }
-  }
-  return sanitized;
-}
 
 // Keeps the non-empty string queries of a library search, bounded in count and length; null when none.
 function normalizeLibraryQueries(rawQueries) {
@@ -1422,7 +1293,7 @@ function toHistoryEntry(msg) {
   return { role: msg.role, content };
 }
 
-async function loadConversationHistory(conversationId, userId) {
+async function loadConversationHistory(conversationId, userId, provider) {
   const windowSize = AI_LIMITS.MAX_HISTORY_ITEMS * 2;
 
   const conversation = await prisma.aiConversation.findUnique({
@@ -1455,7 +1326,6 @@ async function loadConversationHistory(conversationId, userId) {
   }
   const orderedMessages = messages.slice(startIndex);
 
-  const provider = getLlmProvider();
   const history = [];
   // Tracks the rawContent of the last assistant message that had tool calls,
   // so the immediately following tool_result record can reconstruct the pair.
@@ -1562,7 +1432,7 @@ function isUnansweredRetry(conversation, message) {
 }
 
 // Loads or creates the conversation, builds the trainer context and saves the user message (once on retries).
-async function setupConversation(userId, { message, conversationId }, knownTrainerId) {
+async function setupConversation(userId, { message, conversationId }, knownTrainerId, provider) {
   let conversation;
   let conversationHistory = [];
   let isNewConversation = false;
@@ -1570,7 +1440,7 @@ async function setupConversation(userId, { message, conversationId }, knownTrain
   let isRetryOfUnanswered = false;
 
   if (conversationId) {
-    const loaded = await loadConversationHistory(conversationId, userId);
+    const loaded = await loadConversationHistory(conversationId, userId, provider);
     conversation = loaded.conversation;
     conversationHistory = loaded.history;
     isRetryOfUnanswered = isUnansweredRetry(conversation, message);
@@ -1738,6 +1608,28 @@ async function* modelChunks(provider, params, streaming) {
   yield { type: "complete", response: await provider.chat(params) };
 }
 
+// Builds the generation input: the first call of a turn carries the prompt as sent, later ones only what was appended.
+function generationInput(params, traceState) {
+  if (traceState.baseMessageCount === null) {
+    traceState.baseMessageCount = params.messages.length;
+    return { system: params.system, messages: params.messages };
+  }
+  return {
+    system: { sameAs: AI_TRACE.FIRST_GENERATION_REF, promptVersion: PROMPT_VERSION },
+    messages: params.messages.slice(traceState.baseMessageCount),
+  };
+}
+
+// Builds the tracing options of one model-call attempt.
+function generationOptions(attempt, params, traceState) {
+  return {
+    attempt,
+    model: resolveActiveModelId(),
+    input: generationInput(params, traceState),
+    modelParameters: { maxTokens: params.maxTokens },
+  };
+}
+
 // Tells whether a model reply carries nothing usable (no text, no tool call).
 function isEmptyModelResponse(response, streamedAny) {
   return (
@@ -1753,14 +1645,16 @@ function isEmptyModelResponse(response, streamedAny) {
  * are retried with backoff; once text has been streamed a failure is final.
  * Yields text_delta chunks followed by one { type: "result", response }.
  */
-async function* callModel(provider, params, { streaming, meter, signal }) {
+async function* callModel(provider, params, { streaming, meter, signal, trace = NOOP_TRACE, traceState = { baseMessageCount: null } }) {
   for (let attempt = 1; attempt <= AI_RETRY.MAX_ATTEMPTS; attempt++) {
     let streamedAny = false;
     let response = null;
+    const gen = trace.generation(generationOptions(attempt, params, traceState));
 
     try {
       for await (const chunk of modelChunks(provider, params, streaming)) {
         if (chunk.type === "text_delta") {
+          if (!streamedAny) gen.firstToken();
           streamedAny = true;
           yield chunk;
         } else if (chunk.type === "complete") {
@@ -1768,6 +1662,7 @@ async function* callModel(provider, params, { streaming, meter, signal }) {
         }
       }
     } catch (err) {
+      gen.fail(err);
       const retryable =
         !signal?.aborted && !streamedAny && attempt < AI_RETRY.MAX_ATTEMPTS && isRetryableLlmError(err);
       if (!retryable) throw err;
@@ -1779,8 +1674,11 @@ async function* callModel(provider, params, { streaming, meter, signal }) {
     }
 
     if (!response) {
-      throw Object.assign(new Error("LLM call completed without a final response"), { status: 502 });
+      const missing = Object.assign(new Error("LLM call completed without a final response"), { status: 502 });
+      gen.fail(missing);
+      throw missing;
     }
+    gen.end({ output: response.rawContent, usage: response.usage, stopReason: response.stopReason });
 
     if (isEmptyModelResponse(response, streamedAny) && attempt < AI_RETRY.MAX_ATTEMPTS) {
       console.warn(
@@ -1976,8 +1874,11 @@ async function* runToolCall(turn, { userId, provider, params, response, callOpti
 
   yield { event: "status", data: { message: `${toolStatusLabel(toolCall.name, turn.language)}...` } };
 
+  const toolSpan = turn.trace.tool({ name: toolCall.name, input: sanitizeToolInputIds(toolCall.input) });
   const startExec = Date.now();
   const toolResult = await executeTool(userId, toolCall.name, toolCall.input);
+  const toolSummary = summarizeToolResult(toolResult);
+  toolSpan.end({ success: toolResult.success, output: toolSummary });
   console.info(
     `[AI] Tool ${toolCall.name} done: success=${toolResult.success}, duration=${Date.now() - startExec}ms`,
   );
@@ -1991,7 +1892,7 @@ async function* runToolCall(turn, { userId, provider, params, response, callOpti
   }
 
   const actionsExecuted = [{ tool: toolCall.name, success: toolResult.success, data: toolResult.data }];
-  const summarizedResult = JSON.stringify(summarizeToolResult(toolResult));
+  const summarizedResult = JSON.stringify(toolSummary);
 
   await saveAssistantMessage(turn.conversationId, response.text || "", actionsExecuted, response.rawContent);
   await saveToolResultMessage(turn.conversationId, [{ toolCallId: toolCall.id, content: summarizedResult }]);
@@ -2039,14 +1940,15 @@ async function* runToolCall(turn, { userId, provider, params, response, callOpti
  * Order: availability, trainer, student ownership, plan gate, then conversation setup, so a
  * refused turn never writes. Yields status / text_delta events and a final done event.
  */
-async function* runTurn(userId, { message, conversationId, studentId = null }, { signal, meter, streaming, language }) {
+async function* runTurn(userId, { message, conversationId, studentId = null }, { signal, meter, streaming, language, trace = NOOP_TRACE, provider }) {
   assertAiAvailable();
   const trainerId = await resolveTrainerId(userId);
   if (studentId) await assertStudentOwned(trainerId, studentId);
   await assertCanUseAi(prisma, trainerId, studentId ?? null);
   const studentFocus = studentId ? await loadStudentFocus(userId, trainerId, studentId) : null;
 
-  const setup = await setupConversation(userId, { message, conversationId }, trainerId);
+  const turnProvider = provider ?? getLlmProvider();
+  const setup = await setupConversation(userId, { message, conversationId }, trainerId, turnProvider);
   const turn = {
     trainerId,
     studentId,
@@ -2057,8 +1959,11 @@ async function* runTurn(userId, { message, conversationId, studentId = null }, {
     history: setup.conversationHistory,
     startedAt: Date.now(),
     language,
+    trace,
+    provider: turnProvider,
   };
   meter.setContext({ trainerId, conversationId: turn.conversationId });
+  trace.setContext({ trainerId, conversationId: turn.conversationId, studentId });
 
   try {
     yield* runModelTurn(userId, turn, setup, studentFocus, { signal, streaming });
@@ -2079,7 +1984,7 @@ async function* runModelTurn(userId, turn, setup, studentFocus, { signal, stream
   const { message, meter } = turn;
   yield { event: "status", data: { message: `${translate("ai.status", "analyzing", turn.language)}...` } };
 
-  const provider = getLlmProvider();
+  const { provider } = turn;
   const params = {
     system: buildSystemPrompt(setup.context, studentFocus),
     tools: TOOLS,
@@ -2090,7 +1995,7 @@ async function* runModelTurn(userId, turn, setup, studentFocus, { signal, stream
     maxTokens: AI_LIMITS.MAX_TOKENS,
     signal,
   };
-  const callOptions = { streaming, meter, signal };
+  const callOptions = { streaming, meter, signal, trace: turn.trace, traceState: { baseMessageCount: null } };
 
   let first;
   try {
@@ -2108,6 +2013,7 @@ async function* runModelTurn(userId, turn, setup, studentFocus, { signal, stream
 
   if (response.stopReason === "tool_use" && response.toolCalls.length > 0) {
     const blockedText = checkEnforcementBlocked(response, setup.conversationHistory, message);
+    if (blockedText !== null) turn.trace.event(AI_TRACE.EVENT_GUARD_BLOCKED, { tool: response.toolCalls[0].name });
     if (blockedText === null) {
       yield* runToolCall(turn, { userId, provider, params, response, callOptions });
       return;
@@ -2123,26 +2029,58 @@ async function* runModelTurn(userId, turn, setup, studentFocus, { signal, stream
   yield { event: "done", data: { conversationId: turn.conversationId, message: responseText, actionsExecuted: [] } };
 }
 
+// Starts the trace of one turn on the injected tracer (no-op when absent or faulty).
+function startTurnTrace(tracer, kind, requestId, message) {
+  return startGuardedTurn(tracer, { kind, requestId, input: message, promptVersion: PROMPT_VERSION });
+}
+
+// Closes the turn trace as ended, failed or aborted, depending on how the turn finished.
+function settleTurnTrace(trace, { signal, output, failure, streaming }) {
+  if (failure) return signal?.aborted || (streaming && failure.aborted) ? trace.abort() : trace.fail(failure);
+  if (output !== null) return trace.end({ output });
+  if (streaming || signal?.aborted) return trace.abort();
+  console.warn("[AI] Turn finished without a done event; closing its trace with an empty output");
+  return trace.end({ output: "" });
+}
+
 // Runs one non-streaming chat turn and records its summed token usage, even when it fails.
-export async function processAiChat(userId, args, { signal, language } = {}) {
+export async function processAiChat(userId, args, { signal, language, tracer, requestId, provider } = {}) {
   const meter = createTurnUsageMeter();
+  const trace = startTurnTrace(tracer, AI_TRACE.KIND_CHAT, requestId, args.message);
+  let output = null;
+  let failure = null;
   try {
     let result = null;
-    for await (const event of runTurn(userId, args, { signal, meter, streaming: false, language })) {
+    for await (const event of runTurn(userId, args, { signal, meter, streaming: false, language, trace, provider })) {
       if (event.event === "done") result = event.data;
     }
+    output = result?.message ?? null;
     return result;
+  } catch (err) {
+    failure = err;
+    throw err;
   } finally {
+    settleTurnTrace(trace, { signal, output, failure, streaming: false });
     await meter.flush(prisma, { provider: resolveProviderName(), model: resolveActiveModelId() });
   }
 }
 
 // Runs one streaming turn and records its summed token usage, even when the client aborts.
-export async function* processAiChatStream(userId, args, { signal, language } = {}) {
+export async function* processAiChatStream(userId, args, { signal, language, tracer, requestId, provider } = {}) {
   const meter = createTurnUsageMeter();
+  const trace = startTurnTrace(tracer, AI_TRACE.KIND_STREAM, requestId, args.message);
+  let output = null;
+  let failure = null;
   try {
-    yield* runTurn(userId, args, { signal, meter, streaming: true, language });
+    for await (const event of runTurn(userId, args, { signal, meter, streaming: true, language, trace, provider })) {
+      if (event.event === "done") output = event.data.message;
+      yield event;
+    }
+  } catch (err) {
+    failure = err;
+    throw err;
   } finally {
+    settleTurnTrace(trace, { signal, output, failure, streaming: true });
     await meter.flush(prisma, { provider: resolveProviderName(), model: resolveActiveModelId() });
   }
 }

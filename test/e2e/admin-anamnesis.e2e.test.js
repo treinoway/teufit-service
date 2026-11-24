@@ -10,6 +10,7 @@ import {
 } from '../../src/constants/anamnesis.js';
 import { Roles } from '../../src/constants/roles.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -300,12 +301,7 @@ e2eDescribe('e2e: admin anamnesis', () => {
       const { userId: studentId, email: studentEmail } = await createStudentWithToken();
 
       // Link trainer-student
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
       // Create public anamnesis and link to student
       const createResp = await createPublicAnamnesis(adminToken, { title: 'Linked Anamnesis' });
@@ -396,12 +392,7 @@ e2eDescribe('e2e: admin anamnesis', () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { userId: studentId, email: studentEmail } = await createStudentWithToken();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
       const { id: anamnesisId } = (await createPublicAnamnesis(adminToken)).json();
 

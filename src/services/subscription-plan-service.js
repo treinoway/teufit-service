@@ -6,27 +6,44 @@ import {
   SubscriptionStatus,
 } from '../constants/subscription.js';
 import { assertValidMoneyAmount, assertValidPercentage } from '../helpers/subscription-helpers.js';
+import {
+  defaultServiceType,
+  ownerScopeWhere,
+  resolvePlanOwnerColumns,
+  serviceTypeNotAllowedError,
+} from '../helpers/subscription-owner-helpers.js';
 
 const { Decimal } = Prisma;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function resolveTrainerOrThrow(prisma, userId) {
-  const trainer = await prisma.trainer.findUnique({
-    where: { userId },
-    select: { id: true },
+// Builds the 404 for a plan outside the owner's scope.
+function planNotFoundError() {
+  return new AppError({
+    httpStatus: 404,
+    error: SubscriptionErrorCode.PLAN_NOT_FOUND,
+    messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
+    message: 'Subscription plan not found',
   });
+}
 
-  if (!trainer) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.TRAINER_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.TRAINER_NOT_FOUND,
-      message: 'Trainer profile not found',
-    });
-  }
+// Loads a plan owned by any of the owner's professional rows or throws 404.
+async function findOwnedPlanOrThrow(prisma, owner, planId) {
+  const plan = await prisma.subscriptionPlan.findFirst({
+    where: { id: planId, ...ownerScopeWhere(owner) },
+  });
+  if (!plan) throw planNotFoundError();
+  return plan;
+}
 
-  return trainer;
+// Resolves the service type a patch moves a plan to, refusing a change of owner row.
+function resolvePatchedServiceType(owner, existing, patch) {
+  if (patch.serviceType === undefined) return existing.serviceType;
+  const columns = resolvePlanOwnerColumns(owner, patch.serviceType);
+  const sameOwnerRow =
+    columns.trainerId === existing.trainerId && columns.nutritionistId === existing.nutritionistId;
+  if (!sameOwnerRow) throw serviceTypeNotAllowedError(patch.serviceType);
+  return patch.serviceType;
 }
 
 /**
@@ -73,10 +90,12 @@ export function validateDiscount(price, discountPercent, discountAmount) {
   }
 }
 
-function formatPlan(plan, activeSubscriptionCount) {
+function formatPlan(plan, activeSubscriptionCount, activeSubscriptionCountByKind) {
   return {
     id: plan.id,
-    trainerId: plan.trainerId,
+    trainerId: plan.trainerId ?? null,
+    nutritionistId: plan.nutritionistId ?? null,
+    serviceType: plan.serviceType,
     name: plan.name,
     description: plan.description ?? null,
     recurrence: plan.recurrence,
@@ -86,6 +105,7 @@ function formatPlan(plan, activeSubscriptionCount) {
     billingDay: plan.billingDay ?? null,
     isArchived: plan.deletedAt != null,
     ...(activeSubscriptionCount !== undefined ? { activeSubscriptionCount } : {}),
+    ...(activeSubscriptionCountByKind ? { activeSubscriptionCountByKind } : {}),
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt ?? null,
   };
@@ -93,8 +113,9 @@ function formatPlan(plan, activeSubscriptionCount) {
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
-export async function createPlan(prisma, userId, data) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
+export async function createPlan(prisma, owner, data) {
+  const serviceType = data.serviceType ?? defaultServiceType(owner);
+  const ownerColumns = resolvePlanOwnerColumns(owner, serviceType);
 
   assertValidMoneyAmount(data.price);
   assertValidMoneyAmount(data.discountAmount);
@@ -103,7 +124,8 @@ export async function createPlan(prisma, userId, data) {
 
   const plan = await prisma.subscriptionPlan.create({
     data: {
-      trainerId: trainer.id,
+      ...ownerColumns,
+      serviceType,
       name: data.name,
       description: data.description ?? null,
       recurrence: data.recurrence,
@@ -117,67 +139,73 @@ export async function createPlan(prisma, userId, data) {
   return formatPlan(plan);
 }
 
-export async function listPlans(prisma, userId, { includeArchived = false } = {}) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
+// Counts active subscriptions per plan, split by whether the subscriber is linked to the owner as trainer student.
+async function countActiveSubscriptionsByKind(prisma, owner, planIds) {
+  const subscriptions = await prisma.studentSubscription.findMany({
+    where: { planId: { in: planIds }, status: SubscriptionStatus.ACTIVE },
+    select: { planId: true, studentId: true },
+  });
+  const studentIds = [...new Set(subscriptions.map((subscription) => subscription.studentId))];
+  const links = owner.trainerId && studentIds.length > 0
+    ? await prisma.trainerStudent.findMany({
+      where: { trainerId: owner.trainerId, studentId: { in: studentIds } },
+      select: { studentId: true },
+    })
+    : [];
+  const linkedStudentIds = new Set(links.map((link) => link.studentId));
 
+  const countsByPlanId = new Map();
+  for (const { planId, studentId } of subscriptions) {
+    const counts = countsByPlanId.get(planId) ?? { students: 0, patients: 0 };
+    if (linkedStudentIds.has(studentId)) counts.students += 1;
+    else counts.patients += 1;
+    countsByPlanId.set(planId, counts);
+  }
+  return countsByPlanId;
+}
+
+const EMPTY_KIND_COUNTS = Object.freeze({ students: 0, patients: 0 });
+
+export async function listPlans(prisma, owner, { includeArchived = false, includeKindCounts = false } = {}) {
   const plans = await prisma.subscriptionPlan.findMany({
     where: {
-      trainerId: trainer.id,
+      ...ownerScopeWhere(owner),
       deletedAt: includeArchived ? undefined : null,
     },
     orderBy: [{ createdAt: 'desc' }],
   });
 
   // One batched groupBy for every listed plan — never a count per plan.
+  const planIds = plans.map((plan) => plan.id);
   const activeCounts = plans.length === 0
     ? []
     : await prisma.studentSubscription.groupBy({
       by: ['planId'],
       where: {
-        planId: { in: plans.map((plan) => plan.id) },
+        planId: { in: planIds },
         status: SubscriptionStatus.ACTIVE,
       },
       _count: { _all: true },
     });
   const activeCountByPlanId = new Map(activeCounts.map((row) => [row.planId, row._count._all]));
+  const kindCountsByPlanId = includeKindCounts && plans.length > 0
+    ? await countActiveSubscriptionsByKind(prisma, owner, planIds)
+    : new Map();
 
-  return plans.map((plan) => formatPlan(plan, activeCountByPlanId.get(plan.id) ?? 0));
+  return plans.map((plan) => formatPlan(
+    plan,
+    activeCountByPlanId.get(plan.id) ?? 0,
+    includeKindCounts ? kindCountsByPlanId.get(plan.id) ?? EMPTY_KIND_COUNTS : undefined,
+  ));
 }
 
-export async function getPlanById(prisma, userId, planId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  const plan = await prisma.subscriptionPlan.findFirst({
-    where: { id: planId, trainerId: trainer.id },
-  });
-
-  if (!plan) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
-      message: 'Subscription plan not found',
-    });
-  }
-
+export async function getPlanById(prisma, owner, planId) {
+  const plan = await findOwnedPlanOrThrow(prisma, owner, planId);
   return formatPlan(plan);
 }
 
-export async function updatePlan(prisma, userId, planId, patch) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  const existing = await prisma.subscriptionPlan.findFirst({
-    where: { id: planId, trainerId: trainer.id },
-  });
-
-  if (!existing) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
-      message: 'Subscription plan not found',
-    });
-  }
+export async function updatePlan(prisma, owner, planId, patch) {
+  const existing = await findOwnedPlanOrThrow(prisma, owner, planId);
 
   if (existing.deletedAt != null) {
     throw new AppError({
@@ -188,6 +216,7 @@ export async function updatePlan(prisma, userId, planId, patch) {
     });
   }
 
+  const serviceType = resolvePatchedServiceType(owner, existing, patch);
   assertValidMoneyAmount(patch.price);
   assertValidMoneyAmount(patch.discountAmount);
   assertValidPercentage(patch.discountPercent);
@@ -206,6 +235,7 @@ export async function updatePlan(prisma, userId, planId, patch) {
       name: patch.name !== undefined ? patch.name : existing.name,
       description: patch.description !== undefined ? patch.description : existing.description,
       recurrence: patch.recurrence !== undefined ? patch.recurrence : existing.recurrence,
+      serviceType,
       price: new Decimal(newPrice),
       discountPercent:
         newDiscountPercent != null ? new Decimal(newDiscountPercent) : null,
@@ -218,21 +248,8 @@ export async function updatePlan(prisma, userId, planId, patch) {
   return formatPlan(updated);
 }
 
-export async function archivePlan(prisma, userId, planId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  const existing = await prisma.subscriptionPlan.findFirst({
-    where: { id: planId, trainerId: trainer.id },
-  });
-
-  if (!existing) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
-      message: 'Subscription plan not found',
-    });
-  }
+export async function archivePlan(prisma, owner, planId) {
+  const existing = await findOwnedPlanOrThrow(prisma, owner, planId);
 
   // Idempotent: if already archived, preserve the original timestamp rather than overwriting it.
   const updated = await prisma.subscriptionPlan.update({
@@ -243,21 +260,8 @@ export async function archivePlan(prisma, userId, planId) {
   return formatPlan(updated);
 }
 
-export async function unarchivePlan(prisma, userId, planId) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
-  const existing = await prisma.subscriptionPlan.findFirst({
-    where: { id: planId, trainerId: trainer.id },
-  });
-
-  if (!existing) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.PLAN_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.PLAN_NOT_FOUND,
-      message: 'Subscription plan not found',
-    });
-  }
+export async function unarchivePlan(prisma, owner, planId) {
+  await findOwnedPlanOrThrow(prisma, owner, planId);
 
   const updated = await prisma.subscriptionPlan.update({
     where: { id: planId },

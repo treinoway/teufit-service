@@ -22,6 +22,37 @@ export const challengeStatusValues = Object.freeze(Object.values(ChallengeStatus
 export const CHALLENGE_NAME_MAX_LENGTH = 100;
 export const CHALLENGE_MAX_DURATION_DAYS = 365;
 
+export const ChallengeFormat = Object.freeze({
+  DATES: 'dates',
+  WEEKS: 'weeks',
+});
+
+export const challengeFormatValues = Object.freeze(Object.values(ChallengeFormat));
+
+export const ChallengeVisibility = Object.freeze({
+  OFF: 'off',
+  POSITION: 'position',
+  FULL: 'full',
+});
+
+export const challengeVisibilityValues = Object.freeze(Object.values(ChallengeVisibility));
+
+export const ChallengeOwnerType = Object.freeze({
+  TRAINER: 'trainer',
+  PLATFORM: 'platform',
+});
+
+export const challengeOwnerTypeValues = Object.freeze(Object.values(ChallengeOwnerType));
+
+export const CHALLENGE_DESCRIPTION_MAX_LENGTH = 280;
+export const CHALLENGE_MIN_WEEKS = 1;
+export const CHALLENGE_MAX_WEEKS = 12;
+export const CHALLENGE_MIN_PODIUM_WEEKS = 1;
+export const CHALLENGE_MAX_PODIUM_WEEKS = 4;
+
+// Body fields of a weekly championship's own scoring rule (AD-051)
+export const SCORING_RULE_FIELDS = Object.freeze(['weights', 'activePillars']);
+
 // Error codes
 export const ChallengeErrorCode = Object.freeze({
   CHALLENGE_NOT_FOUND: 'CHALLENGE_NOT_FOUND',
@@ -38,6 +69,12 @@ export const ChallengeErrorCode = Object.freeze({
   CHALLENGE_DURATION_EXCEEDED: 'CHALLENGE_DURATION_EXCEEDED',
   CHALLENGE_NOT_SCHEDULABLE: 'CHALLENGE_NOT_ACTIVE',
   TRAINER_PROFILE_MISSING: 'TRAINER_PROFILE_MISSING',
+  CHALLENGE_INVALID_WEEKS: 'CHALLENGE_INVALID_WEEKS',
+  CHALLENGE_INVALID_MIN_PODIUM: 'CHALLENGE_INVALID_MIN_PODIUM',
+  CHALLENGE_NOT_CLOSABLE: 'CHALLENGE_NOT_CLOSABLE',
+  CHALLENGE_NOT_WEEKLY: 'CHALLENGE_NOT_WEEKLY',
+  CHALLENGE_INVALID_SCORING_RULE: 'CHALLENGE_INVALID_SCORING_RULE',
+  CHALLENGE_INVALID_VISIBILITY: 'CHALLENGE_INVALID_VISIBILITY',
 });
 
 export const ChallengeMessageCode = Object.freeze({
@@ -55,4 +92,10 @@ export const ChallengeMessageCode = Object.freeze({
   CHALLENGE_DURATION_EXCEEDED: 'challenge.durationExceeded',
   CHALLENGE_NOT_SCHEDULABLE: 'challenge.notActive',
   TRAINER_PROFILE_MISSING: 'trainer.notFound',
+  CHALLENGE_INVALID_WEEKS: 'challenge.weeks.invalid',
+  CHALLENGE_INVALID_MIN_PODIUM: 'challenge.minPodium.invalid',
+  CHALLENGE_NOT_CLOSABLE: 'challenge.notClosable',
+  CHALLENGE_NOT_WEEKLY: 'challenge.notWeekly',
+  CHALLENGE_INVALID_SCORING_RULE: 'challenge.scoringRule.invalid',
+  CHALLENGE_INVALID_VISIBILITY: 'challenge.visibility.invalid',
 });

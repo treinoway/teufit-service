@@ -11,13 +11,14 @@ vi.mock('../../src/services/platform-plan-service.js', () => ({
 const mockTx = {
   $queryRaw: vi.fn(),
   $executeRaw: vi.fn(),
+  trainer: { findUnique: vi.fn() },
+  nutritionist: { findFirst: vi.fn() },
   trainerStudent: { findFirst: vi.fn() },
   studentSubscription: { findMany: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
   subscriptionPayment: { create: vi.fn(), updateMany: vi.fn() },
 };
 
 const mockPrisma = {
-  trainer: { findUnique: vi.fn() },
   trainerStudent: { findFirst: vi.fn() },
   subscriptionPlan: { findFirst: vi.fn() },
   $transaction: vi.fn(async (fn) => fn(mockTx)),
@@ -27,6 +28,7 @@ import { assignPlanToStudent } from '../../src/services/student-subscription-ser
 
 const TRAINER_USER_ID = 'trainer-user-uuid';
 const TRAINER_ID = 'trainer-record-uuid';
+const OWNER = { userId: TRAINER_USER_ID, trainerId: TRAINER_ID, nutritionistId: null };
 const STUDENT_ID = 'student-uuid-1';
 const PLAN_ID = 'plan-uuid-1';
 const NOW = new Date('2026-06-10T15:00:00Z');
@@ -63,13 +65,12 @@ function makeOldSubscription() {
 // Assigns the plan with the clock fixed at NOW.
 function assignOn(startDate, data = {}) {
   return assignPlanToStudent(
-    mockPrisma, TRAINER_USER_ID, STUDENT_ID, { planId: PLAN_ID, startDate, ...data }, NOW,
+    mockPrisma, OWNER, STUDENT_ID, { planId: PLAN_ID, startDate, ...data }, NOW,
   );
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockPrisma.trainer.findUnique.mockResolvedValue({ id: TRAINER_ID });
   mockPrisma.trainerStudent.findFirst.mockResolvedValue({ id: 'link-uuid' });
   mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(makePlan());
   mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockTx));

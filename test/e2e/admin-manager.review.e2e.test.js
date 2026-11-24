@@ -11,7 +11,7 @@ const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 
 const OK_STATUS = 200;
-const MANAGER_ROUTE_COUNT = 8;
+const MANAGER_ROUTE_COUNT = 9;
 const MANAGER_URL_PREFIX = '/admin/manager';
 const EXPECTED_RATE_LIMIT = { max: 60, timeWindow: '1 minute', groupId: 'admin-manager' };
 const PROTOCOL_START_DATE = '2026-03-05';

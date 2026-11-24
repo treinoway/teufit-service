@@ -7,6 +7,13 @@ import { StudentBlocker } from '../../src/constants/student-blocker.js';
 import { SubscriptionStatus, PaymentStatus } from '../../src/constants/subscription.js';
 import { todayInBusinessTz, addDaysMs } from '../../src/helpers/date-helpers.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
+import {
+  StudentInviteStatus,
+  StudentInviteOutcome,
+  StudentInviteErrorCode,
+  StudentInviteMessageCode,
+} from '../../src/constants/student-invite.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -138,46 +145,59 @@ e2eDescribe('e2e: link student to trainer by email', () => {
   }
 
   async function linkStudent(trainerToken, studentEmail) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    expect(res.statusCode).toBe(201);
-    return res.json();
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail });
   }
 
-  describe('POST /trainer/students', () => {
-    it('links a student and returns their basic profile', async () => {
-      const { accessToken: trainerToken, userId: trainerUserId } = await createTrainerWithToken();
+  function postLegacyLink(headers, payload) {
+    return app.inject({ method: 'POST', url: '/trainer/students', headers, payload });
+  }
+
+  const bearer = (token) => ({ authorization: `Bearer ${token}` });
+
+  describe('POST /trainer/students (legacy direct link, now the invite flow)', () => {
+    it('answers 202 { outcome: invited, invite } for an existing account and links nothing', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
       const { email: studentEmail, userId: studentId } = await createStudent();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      const res = await postLegacyLink(bearer(trainerToken), { email: studentEmail });
 
-      expect(res.statusCode).toBe(201);
+      expect(res.statusCode).toBe(202);
       const body = res.json();
       expect(body).toMatchObject({
-        id: studentId,
-        email: studentEmail,
+        outcome: StudentInviteOutcome.INVITED,
+        invite: { id: expect.any(String), email: studentEmail, status: StudentInviteStatus.PENDING, studentId: null },
       });
-      expect(body).toHaveProperty('firstName');
-      expect(body).toHaveProperty('lastName');
-      expect(body).toHaveProperty('avatarUrl');
+      expect(body).not.toHaveProperty('student');
+      expect(body).not.toHaveProperty('firstName');
 
-      const trainer = await prisma.trainer.findUnique({ where: { userId: trainerUserId } });
       const link = await prisma.trainerStudent.findUnique({
-        where: { trainerId_studentId: { trainerId: trainer.id, studentId } },
+        where: { trainerId_studentId: { trainerId, studentId } },
+      });
+      expect(link).toBeNull();
+      const invite = await prisma.studentInvite.findUnique({ where: { id: body.invite.id } });
+      expect(invite).toMatchObject({ trainerId, status: StudentInviteStatus.PENDING, requiresConsent: true });
+    });
+
+    it('links the student only after they accept the invite in the app', async () => {
+      const { accessToken: trainerToken, trainerId } = await createTrainerWithToken();
+      const { email: studentEmail, userId: studentId, accessToken: studentToken } = await createStudent();
+      const { invite } = (await postLegacyLink(bearer(trainerToken), { email: studentEmail })).json();
+
+      const acceptRes = await app.inject({
+        method: 'POST',
+        url: `/my/trainer/invites/${invite.id}/accept`,
+        headers: bearer(studentToken),
+        payload: {},
+      });
+
+      expect(acceptRes.statusCode).toBe(200);
+      const link = await prisma.trainerStudent.findUnique({
+        where: { trainerId_studentId: { trainerId, studentId } },
       });
       expect(link).not.toBeNull();
     });
 
-    it('marks a pending student active once the trainer links them', async () => {
+    it('marks a pending student active once they accept the invite of the trainer', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { email: studentEmail, userId: studentId } = await createStudent();
       await prisma.user.update({ where: { id: studentId }, data: { status: 'pending' } });
@@ -188,41 +208,42 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       expect(student.status).toBe('active');
     });
 
-    it('returns 404 when no user exists with that email', async () => {
+    it('answers 202 with an invite that needs no consent when no user exists with that email', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: 'nonexistent@example.com' },
-      });
+      const res = await postLegacyLink(bearer(trainerToken), { email: 'nonexistent@example.com' });
 
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(202);
       expect(res.json()).toMatchObject({
-        error: 'NOT_FOUND',
-        messageCode: 'student.notFound',
+        outcome: StudentInviteOutcome.INVITED,
+        invite: { email: 'nonexistent@example.com', status: StudentInviteStatus.PENDING },
+      });
+      const invite = await prisma.studentInvite.findUnique({ where: { id: res.json().invite.id } });
+      expect(invite.requiresConsent).toBe(false);
+    });
+
+    it('returns 409 studentInvite.alreadyPending when the same account is invited twice before answering', async () => {
+      const { accessToken: trainerToken } = await createTrainerWithToken();
+      const { email: studentEmail } = await createStudent();
+
+      const first = await postLegacyLink(bearer(trainerToken), { email: studentEmail });
+      expect(first.statusCode).toBe(202);
+
+      const second = await postLegacyLink(bearer(trainerToken), { email: studentEmail });
+
+      expect(second.statusCode).toBe(409);
+      expect(second.json()).toMatchObject({
+        error: StudentInviteErrorCode.ALREADY_PENDING,
+        messageCode: StudentInviteMessageCode.ALREADY_PENDING,
       });
     });
 
     it('returns 409 when student is already linked to the trainer', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
       const { email: studentEmail } = await createStudent();
+      await linkStudent(trainerToken, studentEmail);
 
-      const first = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
-      expect(first.statusCode).toBe(201);
-
-      const second = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      const second = await postLegacyLink(bearer(trainerToken), { email: studentEmail });
 
       expect(second.statusCode).toBe(409);
       expect(second.json()).toMatchObject({
@@ -234,12 +255,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     it('returns 422 when the trainer tries to link themselves', async () => {
       const { accessToken: trainerToken, email: trainerEmail } = await createTrainerWithToken();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: trainerEmail },
-      });
+      const res = await postLegacyLink(bearer(trainerToken), { email: trainerEmail });
 
       expect(res.statusCode).toBe(422);
       expect(res.json()).toMatchObject({
@@ -251,12 +267,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     it('returns 400 when email is missing', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: {},
-      });
+      const res = await postLegacyLink(bearer(trainerToken), {});
 
       expect(res.statusCode).toBe(400);
     });
@@ -264,12 +275,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     it('returns 400 when email format is invalid', async () => {
       const { accessToken: trainerToken } = await createTrainerWithToken();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: 'not-an-email' },
-      });
+      const res = await postLegacyLink(bearer(trainerToken), { email: 'not-an-email' });
 
       expect(res.statusCode).toBe(400);
     });
@@ -277,27 +283,18 @@ e2eDescribe('e2e: link student to trainer by email', () => {
     it('returns 403 when the user does not have the TRAINER role', async () => {
       const { accessToken } = await createStudent();
 
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${accessToken}` },
-        payload: { email: 'anyone@example.com' },
-      });
+      const res = await postLegacyLink(bearer(accessToken), { email: 'anyone@example.com' });
 
       expect(res.statusCode).toBe(403);
     });
 
     it('returns 401 when unauthenticated', async () => {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        payload: { email: 'anyone@example.com' },
-      });
+      const res = await postLegacyLink({}, { email: 'anyone@example.com' });
 
       expect(res.statusCode).toBe(401);
     });
 
-    it('allows the same student to be linked to multiple trainers', async () => {
+    it('allows the same student to be invited by, and linked to, multiple trainers', async () => {
       const { accessToken: trainerToken1 } = await createTrainerWithToken();
 
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -305,21 +302,8 @@ e2eDescribe('e2e: link student to trainer by email', () => {
 
       const { email: studentEmail, userId: studentId } = await createStudent();
 
-      const res1 = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken1}` },
-        payload: { email: studentEmail },
-      });
-      expect(res1.statusCode).toBe(201);
-
-      const res2 = await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken2}` },
-        payload: { email: studentEmail },
-      });
-      expect(res2.statusCode).toBe(201);
+      await linkStudent(trainerToken1, studentEmail);
+      await linkStudent(trainerToken2, studentEmail);
 
       const links = await prisma.trainerStudent.findMany({ where: { studentId } });
       expect(links).toHaveLength(2);
@@ -346,18 +330,8 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       const { email: email2, userId: studentId2 } = await createStudent();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: email1 },
-      });
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: email2 },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: email1 });
+      await linkStudentByInvite(app, { trainerToken, email: email2 });
 
       const res = await app.inject({
         method: 'GET',
@@ -389,24 +363,9 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       const { email: exclusiveEmail, userId: exclusiveId } = await createStudent();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken1}` },
-        payload: { email: sharedEmail },
-      });
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken2}` },
-        payload: { email: sharedEmail },
-      });
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken2}` },
-        payload: { email: exclusiveEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken: trainerToken1, email: sharedEmail });
+      await linkStudentByInvite(app, { trainerToken: trainerToken2, email: sharedEmail });
+      await linkStudentByInvite(app, { trainerToken: trainerToken2, email: exclusiveEmail });
 
       const res = await app.inject({
         method: 'GET',
@@ -846,18 +805,8 @@ e2eDescribe('e2e: link student to trainer by email', () => {
         data: { firstName: 'Bruno', lastName: 'Silva' },
       });
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail1 },
-      });
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail2 },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail1 });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail2 });
 
       const byName = await app.inject({
         method: 'GET',
@@ -882,12 +831,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       const { accessToken: trainerToken2 } = await createTrainerWithToken();
       const { email: studentEmail } = await createStudent();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken2}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken: trainerToken2, email: studentEmail });
 
       const res = await app.inject({
         method: 'GET',
@@ -1022,12 +966,7 @@ e2eDescribe('e2e: link student to trainer by email', () => {
       const { accessToken: trainerToken, userId: trainerUserId } = await createTrainerWithToken();
       const { email: studentEmail, userId: studentId } = await createStudent();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken, email: studentEmail });
 
       const res = await app.inject({
         method: 'DELETE',
@@ -1085,18 +1024,8 @@ e2eDescribe('e2e: link student to trainer by email', () => {
 
       const { email: studentEmail, userId: studentId } = await createStudent();
 
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken1}` },
-        payload: { email: studentEmail },
-      });
-      await app.inject({
-        method: 'POST',
-        url: '/trainer/students',
-        headers: { authorization: `Bearer ${trainerToken2}` },
-        payload: { email: studentEmail },
-      });
+      await linkStudentByInvite(app, { trainerToken: trainerToken1, email: studentEmail });
+      await linkStudentByInvite(app, { trainerToken: trainerToken2, email: studentEmail });
 
       const res = await app.inject({
         method: 'DELETE',

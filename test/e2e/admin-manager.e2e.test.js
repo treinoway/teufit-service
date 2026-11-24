@@ -10,6 +10,7 @@ import {
 import { prisma } from '../../src/db.js';
 import { createAdminPrisma } from '../../src/db-admin.js';
 import { Roles } from '../../src/constants/roles.js';
+import { ExerciseLogStatus, WorkoutSessionStatus } from '../../src/constants/training.js';
 import config from '../../config/index.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
@@ -28,6 +29,17 @@ const MANAGER_RATE_LIMIT = { max: 60, timeWindow: '1 minute' };
 const PROTOCOL_START_DATE = '2026-03-05';
 const PROTOCOL_END_DATE = '2026-04-30';
 const SESSION_BASE_TIME = Date.UTC(2026, 3, 1, 9, 0, 0);
+const DAY_MS = 86_400_000;
+const SESSION_LENGTH_MS = 3_000_000;
+const EARLIER_SETS = [
+  { setNumber: 1, repetitions: 10, load: 50, completed: true },
+  { setNumber: 2, repetitions: 8, load: 70, completed: true },
+  { setNumber: 3, repetitions: 12, load: 90, completed: false },
+];
+const LATER_SETS = [
+  { setNumber: 2, repetitions: 6, load: 60, rpe: 9, restSeconds: 120, completed: false, notes: 'Falhou' },
+  { setNumber: 1, repetitions: 10, load: 60, rpe: 8, restSeconds: 90, completed: true },
+];
 
 // Sends an authenticated (or anonymous when token is null) GET to a manager route.
 function get(app, url, accessToken) {
@@ -101,6 +113,35 @@ async function createSessions({ userId, trainingId, count }) {
   return sessionIds;
 }
 
+// Creates a completed session on the training with one logged exercise and its sets.
+async function createLoggedSession({ userId, trainingId, exerciseId, dayOffset, sets, deletedAt = null }) {
+  const startedAt = new Date(SESSION_BASE_TIME + dayOffset * DAY_MS);
+  return prisma.workoutSession.create({
+    data: {
+      userId,
+      trainingId,
+      status: WorkoutSessionStatus.COMPLETED,
+      startedAt,
+      finishedAt: new Date(startedAt.getTime() + SESSION_LENGTH_MS),
+      durationSeconds: SESSION_LENGTH_MS / 1000,
+      notes: `Sessão dia ${dayOffset}`,
+      deletedAt,
+      exerciseLogs: {
+        create: [{ exerciseId, status: ExerciseLogStatus.COMPLETED, order: 0, notes: 'Boa execução', setLogs: { create: sets } }],
+      },
+    },
+  });
+}
+
+// Creates a trainer, a linked student and a protocol, and returns the ids the session tests need.
+async function createSessionWorld(app) {
+  const trainer = await createTrainerWithToken(app);
+  const studentId = await linkNamedStudent(app, trainer.trainerId, { firstName: 'Bia', lastName: 'Souza' });
+  const { trainingA } = await createProtocolWithContent({ trainerId: trainer.trainerId, assigneeId: studentId, name: 'Hipertrofia' });
+  const exercise = await prisma.exercise.findFirst({ where: { trainingId: trainingA.id, name: 'Supino reto' } });
+  return { userId: studentId, studentId, trainingId: trainingA.id, exerciseId: exercise.id };
+}
+
 // Creates `count` training templates and one exercise template for the trainer.
 async function createTemplates({ trainerId, count }) {
   for (let index = 0; index < count; index += 1) {
@@ -138,6 +179,7 @@ e2eDescribe('e2e: admin manager (read-only backoffice)', () => {
       ['GET /admin/manager/users/:userId/templates', () => `/admin/manager/users/${UNKNOWN_ID}/templates?type=training`],
       ['GET /admin/manager/users/:userId/sessions', () => `/admin/manager/users/${UNKNOWN_ID}/sessions`],
       ['GET /admin/manager/protocols/:protocolId', () => `/admin/manager/protocols/${UNKNOWN_ID}`],
+      ['GET /admin/manager/sessions/:sessionId', () => `/admin/manager/sessions/${UNKNOWN_ID}`],
     ];
 
     it.each(routes)('%s returns 401 without a token', async (_name, buildUrl) => {
@@ -610,6 +652,7 @@ e2eDescribe('e2e: admin manager (read-only backoffice)', () => {
         startedAt: new Date(SESSION_BASE_TIME + 2 * 86_400_000).toISOString(),
         finishedAt: expect.any(String),
         durationSec: 3000,
+        deletedAt: null,
       });
       const startedAts = body.items.map((item) => item.startedAt);
       expect(startedAts).toEqual([...startedAts].sort().reverse());
@@ -633,6 +676,103 @@ e2eDescribe('e2e: admin manager (read-only backoffice)', () => {
       const body = (await get(app, `/admin/manager/users/${userId}/sessions`, admin.accessToken)).json();
 
       expect(body).toMatchObject({ items: [], total: 0 });
+    });
+  });
+
+  describe('session detail: GET /admin/manager/sessions/:sessionId', () => {
+    it('should return 404 admin.sessionNotFound for an unknown session', async () => {
+      const response = await get(app, `/admin/manager/sessions/${UNKNOWN_ID}`, admin.accessToken);
+
+      expect(response.statusCode).toBe(NOT_FOUND_STATUS);
+      expectErrorContract(response.json(), { error: 'NOT_FOUND', messageCode: 'admin.sessionNotFound' });
+    });
+
+    it('should return 400 for an invalid session id', async () => {
+      const response = await get(app, '/admin/manager/sessions/not-a-uuid', admin.accessToken);
+
+      expect(response.statusCode).toBe(BAD_REQUEST_STATUS);
+      expectErrorContract(response.json(), { error: 'VALIDATION_ERROR', messageCode: 'validation.failed' });
+    });
+
+    it('should return the full session with exercise logs, all sets and the earlier previousLog', async () => {
+      const world = await createSessionWorld(app);
+      const earlier = await createLoggedSession({ ...world, dayOffset: 0, sets: EARLIER_SETS });
+      const later = await createLoggedSession({ ...world, dayOffset: 2, sets: LATER_SETS });
+
+      const response = await get(app, `/admin/manager/sessions/${later.id}`, admin.accessToken);
+
+      expect(response.statusCode).toBe(OK_STATUS);
+      const body = response.json();
+      expect(body).toMatchObject({
+        id: later.id,
+        status: WorkoutSessionStatus.COMPLETED,
+        startedAt: later.startedAt.toISOString(),
+        finishedAt: later.finishedAt.toISOString(),
+        durationSec: SESSION_LENGTH_MS / 1000,
+        notes: 'Sessão dia 2',
+        deletedAt: null,
+        training: { id: world.trainingId, name: 'Treino A' },
+        student: { id: world.studentId, firstName: 'Bia', lastName: 'Souza', email: expect.any(String) },
+      });
+      expect(body.exerciseLogs).toHaveLength(1);
+      expect(body.exerciseLogs[0]).toMatchObject({
+        id: expect.any(String),
+        order: 0,
+        status: ExerciseLogStatus.COMPLETED,
+        notes: 'Boa execução',
+        substitutedByExerciseId: null,
+        substitutedByExerciseName: null,
+        exercise: {
+          id: world.exerciseId,
+          name: 'Supino reto',
+          sets: 4,
+          repetitions: [10, 10, 8, 8],
+          restInterval: 90,
+        },
+      });
+      expect(body.exerciseLogs[0].setLogs).toEqual([
+        { id: expect.any(String), setNumber: 1, repetitions: 10, load: 60, duration: null, rpe: 8, restSeconds: 90, completed: true, notes: null },
+        { id: expect.any(String), setNumber: 2, repetitions: 6, load: 60, duration: null, rpe: 9, restSeconds: 120, completed: false, notes: 'Falhou' },
+      ]);
+      expect(body.exerciseLogs[0].previousLog).toMatchObject({
+        workoutSessionId: earlier.id,
+        finishedAt: earlier.finishedAt.toISOString(),
+        setLogs: [
+          { setNumber: 1, repetitions: 10, load: 50, duration: null },
+          { setNumber: 2, repetitions: 8, load: 70, duration: null },
+        ],
+        bestSet: { setNumber: 2, load: 70, repetitions: 8 },
+      });
+    });
+
+    it('should return a null previousLog on the earlier session even though a later one exists', async () => {
+      const world = await createSessionWorld(app);
+      const earlier = await createLoggedSession({ ...world, dayOffset: 0, sets: EARLIER_SETS });
+      await createLoggedSession({ ...world, dayOffset: 2, sets: LATER_SETS });
+
+      const body = (await get(app, `/admin/manager/sessions/${earlier.id}`, admin.accessToken)).json();
+
+      expect(body.exerciseLogs[0].previousLog).toBeNull();
+    });
+
+    it('should ignore a soft-deleted earlier session when resolving previousLog', async () => {
+      const world = await createSessionWorld(app);
+      await createLoggedSession({ ...world, dayOffset: 0, sets: EARLIER_SETS, deletedAt: new Date() });
+      const later = await createLoggedSession({ ...world, dayOffset: 2, sets: LATER_SETS });
+
+      const body = (await get(app, `/admin/manager/sessions/${later.id}`, admin.accessToken)).json();
+
+      expect(body.exerciseLogs[0].previousLog).toBeNull();
+    });
+
+    it('should still return a soft-deleted session with its deletedAt', async () => {
+      const world = await createSessionWorld(app);
+      const deleted = await createLoggedSession({ ...world, dayOffset: 0, sets: EARLIER_SETS, deletedAt: new Date() });
+
+      const response = await get(app, `/admin/manager/sessions/${deleted.id}`, admin.accessToken);
+
+      expect(response.statusCode).toBe(OK_STATUS);
+      expect(response.json()).toMatchObject({ id: deleted.id, deletedAt: expect.any(String) });
     });
   });
 

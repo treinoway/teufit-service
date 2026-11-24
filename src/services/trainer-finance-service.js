@@ -4,7 +4,7 @@
  * One call replaces the previous per-subscription N+1 from the web client.
  *
  * Query budget (fixed, independent of roster size):
- *   1. resolve trainer
+ *   1. (owner is resolved by the route)
  *   2-3. ensureUpcomingCycles scoped to the trainer (active subscriptions +
  *        latest cycles; +1 conditional INSERT only when a cycle is due)
  *   4. ONE findMany with nested include of subscription/student/plan (Prisma's
@@ -26,10 +26,7 @@
  */
 
 import { Prisma } from '@prisma/client';
-import { AppError } from '../errors/app-error.js';
 import {
-  SubscriptionErrorCode,
-  SubscriptionMessageCode,
   PaymentStatus,
   EffectivePaymentStatus,
   PAYMENT_OVERDUE_GRACE_DAYS,
@@ -42,30 +39,16 @@ import {
 } from '../helpers/date-helpers.js';
 import { buildOverduePaymentWhere } from '../helpers/payment-status-helpers.js';
 import { formatPayment } from '../helpers/subscription-helpers.js';
+import { ownerScopeWhere } from '../helpers/subscription-owner-helpers.js';
 import { ensureUpcomingCycles } from './subscription-cycle-service.js';
 
 const { Decimal } = Prisma;
 const PERCENT_SCALE = 100;
 const PERCENT_DECIMAL_PLACES = 2;
 
-async function resolveTrainerOrThrow(prisma, userId) {
-  const trainer = await prisma.trainer.findUnique({ where: { userId }, select: { id: true } });
-
-  if (!trainer) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.TRAINER_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.TRAINER_NOT_FOUND,
-      message: 'Trainer profile not found',
-    });
-  }
-
-  return trainer;
-}
-
-function buildOverviewWhere(trainerId, today, monthWindow, nextMonthStart) {
+function buildOverviewWhere(owner, today, monthWindow, nextMonthStart) {
   return {
-    subscription: { trainerId },
+    subscription: ownerScopeWhere(owner),
     OR: [
       { status: PaymentStatus.PAID, paidAt: { gte: monthWindow.start, lt: monthWindow.end } },
       { status: PaymentStatus.PENDING, dueDate: { lt: nextMonthStart } },
@@ -110,30 +93,29 @@ function computeKpis(rows) {
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} userId - User.id of the authenticated trainer
+ * @param {{ userId: string, trainerId: string|null, nutritionistId: string|null }} owner - resolved professional owner
  * @param {{ month?: string }} [query] - "YYYY-MM" (business timezone); defaults to the current month
  * @param {{ now?: Date, logger?: { error: Function }, resolveAvatarUrl?: (stored: string|null) => Promise<string|null> }} [dependencies]
  */
 export async function getFinanceOverview(
   prisma,
-  userId,
+  owner,
   { month } = {},
   { now = new Date(), resolveAvatarUrl = async (stored) => stored ?? null, logger = console } = {},
 ) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
   const today = todayInBusinessTz(now);
   const yearMonth = month ?? currentYearMonthInBusinessTz(now);
 
   // Self-healing generation must never break the read: log and serve what exists.
   try {
-    await ensureUpcomingCycles(prisma, { trainerId: trainer.id, today });
+    await ensureUpcomingCycles(prisma, { owner, today });
   } catch (error) {
     logger.error({ err: error }, '[finance:overview] cycle generation failed; serving existing data');
   }
 
   const payments = await prisma.subscriptionPayment.findMany({
     where: buildOverviewWhere(
-      trainer.id,
+      owner,
       today,
       monthWindowInBusinessTz(yearMonth),
       firstDayOfNextMonthUtc(yearMonth),
@@ -143,6 +125,7 @@ export async function getFinanceOverview(
       subscription: {
         select: {
           status: true,
+          serviceType: true,
           student: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
           plan: { select: { id: true, name: true, recurrence: true } },
         },
@@ -165,6 +148,7 @@ export async function getFinanceOverview(
     return {
       ...formatPayment(payment, today),
       subscriptionStatus: subscription.status,
+      serviceType: subscription.serviceType,
       student: {
         id: student.id,
         name: [student.firstName, student.lastName].filter(Boolean).join(' '),
@@ -179,5 +163,30 @@ export async function getFinanceOverview(
     overdueGraceDays: PAYMENT_OVERDUE_GRACE_DAYS,
     kpis: computeKpis(rows),
     payments: rows,
+  };
+}
+
+/**
+ * Overdue debt across every owner row of a professional user (sidebar badge).
+ * Counts payments of any month, including those of cancelled subscriptions, like the overview.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ userId: string, trainerId: string|null, nutritionistId: string|null }} owner
+ * @param {{ now?: Date }} [options]
+ * @returns {Promise<{ overdueCount: number, overdueAmount: string }>}
+ */
+export async function getFinanceSummary(prisma, owner, { now = new Date() } = {}) {
+  const overdue = await prisma.subscriptionPayment.aggregate({
+    where: {
+      subscription: ownerScopeWhere(owner),
+      ...buildOverduePaymentWhere(todayInBusinessTz(now)),
+    },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+
+  return {
+    overdueCount: overdue._count._all,
+    overdueAmount: new Decimal(overdue._sum.amount ?? 0).toFixed(2),
   };
 }

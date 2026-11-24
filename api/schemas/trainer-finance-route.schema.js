@@ -30,6 +30,7 @@ const overviewPaymentSchema = {
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time', nullable: true },
     ...i18nField('subscriptionStatus', 'subscriptionStatus'),
+    ...i18nField('serviceType', 'subscriptionServiceType'),
     student: {
       type: 'object',
       properties: {
@@ -98,6 +99,28 @@ export const getFinanceOverviewSchema = {
       },
     },
     400: badRequestErrorResponseSchema,
+    401: errorResponseSchema,
+    403: errorResponseSchema,
+    404: errorResponseSchema,
+  },
+};
+
+export const getFinanceSummarySchema = {
+  tags: ['trainer-finance'],
+  summary: 'Overdue debt summary (sidebar badge)',
+  description:
+    'Count and total of overdue payments (pending AND dueDate < today - 3 days, any month, including ' +
+    'cancelled subscriptions) across every owner row of the caller. Does not generate cycles.',
+  security: [{ bearerAuth: [] }],
+  headers: authHeaders,
+  response: {
+    200: {
+      type: 'object',
+      properties: {
+        overdueCount: { type: 'integer' },
+        overdueAmount: moneyString,
+      },
+    },
     401: errorResponseSchema,
     403: errorResponseSchema,
     404: errorResponseSchema,

@@ -86,9 +86,25 @@ export async function assignPlanViaApi(app, accessToken, studentId, planId, star
   });
 }
 
-/** Direct-DB subscription (exact control over status/dates, bypasses the assign flow). */
+/** Direct-DB plan owned by a trainer row or a nutritionist row (exactly one of the two ids). */
+export async function createPlanRow({
+  trainerId = null,
+  nutritionistId = null,
+  serviceType = 'training',
+  name = 'Plano Direto',
+  recurrence = SubscriptionRecurrence.MONTHLY,
+  price = 100,
+}) {
+  return prisma.subscriptionPlan.create({
+    data: { trainerId, nutritionistId, serviceType, name, recurrence, price },
+  });
+}
+
+/** Direct-DB subscription owned by a trainer row or a nutritionist row (exactly one id), bypassing the assign flow. */
 export async function createSubscriptionRow({
-  trainerId,
+  trainerId = null,
+  nutritionistId = null,
+  serviceType = 'training',
   studentId,
   planId,
   startDate = businessDay(-60),
@@ -99,6 +115,8 @@ export async function createSubscriptionRow({
   return prisma.studentSubscription.create({
     data: {
       trainerId,
+      nutritionistId,
+      serviceType,
       studentId,
       planId,
       recurrence,

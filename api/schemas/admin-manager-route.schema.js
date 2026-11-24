@@ -29,6 +29,12 @@ const protocolIdParams = {
   properties: { protocolId: UUID },
 };
 
+const sessionIdParams = {
+  type: 'object',
+  required: ['sessionId'],
+  properties: { sessionId: UUID },
+};
+
 // Builds the page/pageSize querystring properties shared by every paginated route.
 function paginationProperties() {
   return {
@@ -287,6 +293,119 @@ export const listUserSessionsSchema = {
       startedAt: DATE_TIME,
       finishedAt: NULLABLE_DATE_TIME,
       durationSec: NULLABLE_INTEGER,
+      deletedAt: NULLABLE_DATE_TIME,
     }),
+  ),
+};
+
+const NULLABLE_NUMBER = { type: 'number', nullable: true };
+
+const sessionSetLogProperties = {
+  id: UUID,
+  setNumber: { type: 'integer' },
+  repetitions: NULLABLE_INTEGER,
+  load: NULLABLE_NUMBER,
+  duration: { ...NULLABLE_INTEGER, description: 'Seconds' },
+  rpe: NULLABLE_INTEGER,
+  restSeconds: NULLABLE_INTEGER,
+  completed: { type: 'boolean' },
+  notes: NULLABLE_STRING,
+};
+
+const previousSetLogProperties = {
+  setNumber: { type: 'integer' },
+  repetitions: NULLABLE_INTEGER,
+  load: NULLABLE_NUMBER,
+  duration: { ...NULLABLE_INTEGER, description: 'Seconds' },
+};
+
+const bestSetSchema = {
+  type: 'object',
+  nullable: true,
+  description: 'Completed set with the highest load × repetitions; null when none qualifies',
+  properties: {
+    setNumber: { type: 'integer' },
+    load: { type: 'number' },
+    repetitions: { type: 'integer' },
+    duration: NULLABLE_INTEGER,
+    rpe: NULLABLE_INTEGER,
+    restSeconds: NULLABLE_INTEGER,
+    completed: { type: 'boolean' },
+    tonnage: { type: 'number' },
+  },
+  additionalProperties: false,
+};
+
+const previousLogSchema = {
+  type: 'object',
+  nullable: true,
+  description: 'Last completed session of the student that finished before this session started, for the same effective exercise',
+  properties: {
+    workoutSessionId: UUID,
+    finishedAt: DATE_TIME,
+    setLogs: { type: 'array', items: { type: 'object', properties: previousSetLogProperties, additionalProperties: false } },
+    bestSet: bestSetSchema,
+  },
+  additionalProperties: false,
+};
+
+const sessionExerciseProperties = {
+  id: UUID,
+  name: { type: 'string' },
+  sets: NULLABLE_INTEGER,
+  repetitions: exerciseProperties.repetitions,
+  prescriptionMode: NULLABLE_STRING,
+  duration: { ...NULLABLE_INTEGER, description: 'Seconds (duration-mode exercises)' },
+  hasLoad: { type: 'boolean' },
+  suggestedLoad: NULLABLE_NUMBER,
+  restInterval: { ...NULLABLE_INTEGER, description: 'Seconds' },
+};
+
+const sessionExerciseLogProperties = {
+  id: UUID,
+  order: { type: 'integer' },
+  status: { type: 'string' },
+  notes: NULLABLE_STRING,
+  exercise: { type: 'object', properties: sessionExerciseProperties, additionalProperties: false },
+  substitutedByExerciseId: { ...UUID, nullable: true },
+  substitutedByExerciseName: NULLABLE_STRING,
+  setLogs: { type: 'array', items: { type: 'object', properties: sessionSetLogProperties, additionalProperties: false } },
+  previousLog: previousLogSchema,
+};
+
+export const getSessionDetailSchema = {
+  tags: [ADMIN_MANAGER_TAG],
+  summary: 'Workout session with exercise logs, sets and previous logs, read-only — admin only',
+  security: SECURITY,
+  params: sessionIdParams,
+  response: buildResponses(
+    {
+      type: 'object',
+      properties: {
+        id: UUID,
+        status: { type: 'string' },
+        startedAt: DATE_TIME,
+        finishedAt: NULLABLE_DATE_TIME,
+        durationSec: NULLABLE_INTEGER,
+        notes: NULLABLE_STRING,
+        deletedAt: NULLABLE_DATE_TIME,
+        training: {
+          type: 'object',
+          properties: { id: UUID, name: { type: 'string' } },
+          additionalProperties: false,
+        },
+        student: {
+          type: 'object',
+          properties: { id: UUID, firstName: NULLABLE_STRING, lastName: NULLABLE_STRING, email: NULLABLE_STRING },
+          additionalProperties: false,
+        },
+        exerciseLogs: {
+          type: 'array',
+          items: { type: 'object', properties: sessionExerciseLogProperties, additionalProperties: false },
+        },
+      },
+      additionalProperties: false,
+    },
+    { withNotFound: true },
   ),
 };

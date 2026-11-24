@@ -1,3 +1,4 @@
+import { ChallengeFormat } from '../constants/challenge.js';
 import { SeasonStatus, WeekStatus } from '../constants/consistency-ranking.js';
 import { isEligible, liveAverage, rankStandings, scoreWeek, seasonFigures } from '../helpers/consistency-math.js';
 import { doneWindow, weekBounds, weekStartFor } from '../helpers/consistency-week.js';
@@ -54,7 +55,7 @@ function buildResult(link, ctx) {
   const base = {
     trainerId: ctx.trainerId,
     studentId: link.studentId,
-    seasonId: ctx.season.id,
+    seasonId: ctx.seasonId,
     weekStart: ctx.weekStartDate,
     pillars: pillarCounts(expected, done),
     weights: { weights: ctx.rule.weights, activePillars: ctx.rule.activePillars },
@@ -139,13 +140,12 @@ async function closeSeason(tx, season, weekStartDate, now) {
   await tx.consistencySeason.update({ where: { id: season.id }, data: { status: SeasonStatus.CLOSED, closedAt: now } });
 }
 
-// Everything the result rows of a week depend on, read once per trainer and week
-async function loadWeekContext(tx, season, weekStart, now) {
-  const { trainerId } = season;
+// Everything the result rows of a week depend on, read once per trainer and week; onlyStudentIds narrows the active links
+async function loadWeekContext(tx, { trainerId, seasonId, onlyStudentIds = null }, weekStart, now) {
   const rule = await ruleForWeek(tx, trainerId, weekStart);
   const previousRule = await ruleForWeek(tx, trainerId, addWeeks(weekStart, -1));
   const links = await tx.trainerStudent.findMany({
-    where: { trainerId, activeOnPlan: true },
+    where: { trainerId, activeOnPlan: true, ...(onlyStudentIds ? { studentId: { in: onlyStudentIds } } : {}) },
     select: { studentId: true, createdAt: true },
   });
   const ids = links.map((link) => link.studentId);
@@ -156,7 +156,7 @@ async function loadWeekContext(tx, season, weekStart, now) {
   ]);
   const ctx = {
     trainerId,
-    season,
+    seasonId,
     rule,
     now,
     targets,
@@ -168,26 +168,59 @@ async function loadWeekContext(tx, season, weekStart, now) {
   return { links, ctx };
 }
 
+// Open weekly championship filter (not closed nor cancelled), with extra conditions
+function openWeeklyChampionships(extra = {}) {
+  return { format: ChallengeFormat.WEEKS, closedAt: null, cancelledAt: null, ...extra };
+}
+
+// Participants of the trainer's open weekly championships holding the Monday; null when no such championship exists
+async function championshipStudentIds(tx, trainerId, mondayDate) {
+  const challenges = await tx.challenge.findMany({
+    where: openWeeklyChampionships({ trainerId, startDate: { lte: mondayDate }, endDate: { gte: mondayDate } }),
+    select: { participants: { select: { studentId: true } } },
+  });
+  if (challenges.length === 0) return null;
+  return [...new Set(challenges.flatMap((challenge) => challenge.participants.map((row) => row.studentId)))];
+}
+
+// Stores one result per active student in scope for the week
+async function storeWeek(tx, scope, weekStart, now) {
+  const { links, ctx } = await loadWeekContext(tx, scope, weekStart, now);
+  const rows = links.map((link) => buildResult(link, ctx));
+  await tx.consistencyWeeklyResult.createMany({ data: rows, skipDuplicates: true });
+  return { rows, weekStartDate: ctx.weekStartDate };
+}
+
+// Writes the closed-week mark of the trainer's week
+function markWeekClosed(tx, trainerId, weekStartDate, now, studentsCount) {
+  return tx.consistencyWeekClose.create({ data: { trainerId, weekStart: weekStartDate, closedAt: now, studentsCount } });
+}
+
+// Week close without an active season: results only for the students of a weekly championship holding the week (CAMP-72)
+async function closeChampionshipWeek(tx, trainerId, weekStart, now) {
+  const studentIds = await championshipStudentIds(tx, trainerId, dbDateOf(weekStart));
+  if (!studentIds) return null;
+  const { rows, weekStartDate } = await storeWeek(tx, { trainerId, seasonId: null, onlyStudentIds: studentIds }, weekStart, now);
+  await markWeekClosed(tx, trainerId, weekStartDate, now, rows.length);
+  return { studentsCount: rows.length, seasonClosed: false };
+}
+
 /**
- * Closes one week of the trainer's active season inside the caller's transaction: stores one result per active student, freezes the season when it ends, and writes the closed-week mark.
+ * Closes one week of the trainer inside the caller's transaction: with an active season, stores one result per active student, freezes the season when it ends and writes the closed-week mark; without one, does the same only for the students of the weekly championships holding the week (CAMP-72).
  *
  * @param {object} tx - Prisma transaction client
  * @param {string} trainerId
  * @param {{ year: number, month: number, day: number }} weekStart - civil Monday
  * @param {Date} [now]
- * @returns {Promise<{ studentsCount: number, seasonClosed: boolean }|null>} null when the trainer has no active season
+ * @returns {Promise<{ studentsCount: number, seasonClosed: boolean }|null>} null when the trainer has neither an active season nor a weekly championship holding the week
  */
 export async function closeWeek(tx, trainerId, weekStart, now = new Date()) {
   const season = await tx.consistencySeason.findFirst({ where: { trainerId, status: SeasonStatus.ACTIVE } });
-  if (!season) return null;
-  const { links, ctx } = await loadWeekContext(tx, season, weekStart, now);
-  const rows = links.map((link) => buildResult(link, ctx));
-  await tx.consistencyWeeklyResult.createMany({ data: rows, skipDuplicates: true });
-  const seasonClosed = endsSeason(season, ctx.weekStartDate);
-  if (seasonClosed) await closeSeason(tx, season, ctx.weekStartDate, now);
-  await tx.consistencyWeekClose.create({
-    data: { trainerId, weekStart: ctx.weekStartDate, closedAt: now, studentsCount: rows.length },
-  });
+  if (!season) return closeChampionshipWeek(tx, trainerId, weekStart, now);
+  const { rows, weekStartDate } = await storeWeek(tx, { trainerId, seasonId: season.id }, weekStart, now);
+  const seasonClosed = endsSeason(season, weekStartDate);
+  if (seasonClosed) await closeSeason(tx, season, weekStartDate, now);
+  await markWeekClosed(tx, trainerId, weekStartDate, now, rows.length);
   return { studentsCount: rows.length, seasonClosed };
 }
 
@@ -233,27 +266,81 @@ function logClosed(logger, trainerId, weekKey, outcome) {
   );
 }
 
-// Closes the due weeks of one season in order; a failure stops this trainer (its later weeks depend on it) and is logged
-async function closeSeasonWeeks(prisma, logger, season, now) {
-  const dueWeeks = await findDueWeeks(prisma, season, now);
+// Closes the trainer's due weeks in order; a failure stops this trainer (its later weeks depend on it) and is logged
+async function closeWeeksInOrder(prisma, logger, trainerId, dueWeeks, now) {
   for (const weekStart of dueWeeks) {
     const weekKey = dateKey(dbDateOf(weekStart));
     try {
-      const outcome = await closeWeekLocked(prisma, season.trainerId, weekStart, now);
-      if (outcome) logClosed(logger, season.trainerId, weekKey, outcome);
+      const outcome = await closeWeekLocked(prisma, trainerId, weekStart, now);
+      if (outcome) logClosed(logger, trainerId, weekKey, outcome);
       if (outcome?.seasonClosed) return;
     } catch (err) {
       logger.error(
-        { trainerId: season.trainerId, weekStart: weekKey, err },
-        `[consistency-close] failed to close week ${weekKey} for trainer ${season.trainerId}`,
+        { trainerId, weekStart: weekKey, err },
+        `[consistency-close] failed to close week ${weekKey} for trainer ${trainerId}`,
       );
       return;
     }
   }
 }
 
+// Closes the due weeks of one season in order
+async function closeSeasonWeeks(prisma, logger, season, now) {
+  await closeWeeksInOrder(prisma, logger, season.trainerId, await findDueWeeks(prisma, season, now), now);
+}
+
+// Started open weekly championships grouped by trainer, only for trainers without an active season (CAMP-72)
+async function championshipsWithoutSeason(prisma, now) {
+  const challenges = await prisma.challenge.findMany({
+    where: openWeeklyChampionships({ startDate: { lte: now } }),
+    select: { trainerId: true, startDate: true, endDate: true },
+    orderBy: [{ trainerId: 'asc' }],
+  });
+  if (challenges.length === 0) return new Map();
+  const seasons = await prisma.consistencySeason.findMany({
+    where: { status: SeasonStatus.ACTIVE, trainerId: { in: [...new Set(challenges.map((row) => row.trainerId))] } },
+    select: { trainerId: true },
+  });
+  const withSeason = new Set(seasons.map((row) => row.trainerId));
+  const byTrainer = new Map();
+  for (const row of challenges.filter((challenge) => !withSeason.has(challenge.trainerId))) {
+    byTrainer.set(row.trainerId, [...(byTrainer.get(row.trainerId) ?? []), row]);
+  }
+  return byTrainer;
+}
+
+// Mondays of the championships whose close instant has passed and that have no closed-week mark, oldest first
+async function findChampionshipDueWeeks(prisma, trainerId, challenges, now) {
+  const times = new Set();
+  for (const challenge of challenges) {
+    for (let time = challenge.startDate.getTime(); time <= challenge.endDate.getTime(); time += MS_PER_WEEK) times.add(time);
+  }
+  const mondays = [...times].sort((a, b) => a - b).map((time) => new Date(time));
+  const marks = await prisma.consistencyWeekClose.findMany({ where: { trainerId, weekStart: { in: mondays } } });
+  const closed = new Set(marks.map((mark) => dateKey(mark.weekStart)));
+  const due = [];
+  for (const monday of mondays) {
+    const weekStart = civilOf(monday);
+    const rule = await ruleForWeek(prisma, trainerId, weekStart);
+    if (weekBounds(weekStart, rule).closeInstant.getTime() > now.getTime()) break;
+    if (!closed.has(dateKey(monday))) due.push(weekStart);
+  }
+  return due;
+}
+
+// Closes the championship weeks of each trainer without an active season, one trainer failing not stopping the others (CAMP-72)
+async function closeChampionshipWeeks(prisma, logger, now) {
+  for (const [trainerId, challenges] of await championshipsWithoutSeason(prisma, now)) {
+    try {
+      await closeWeeksInOrder(prisma, logger, trainerId, await findChampionshipDueWeeks(prisma, trainerId, challenges, now), now);
+    } catch (err) {
+      logger.error({ trainerId, weekStart: null, err }, `[consistency-close] failed to list due weeks for trainer ${trainerId}`);
+    }
+  }
+}
+
 /**
- * Closes, in order, every due week of each trainer's active season, once each (advisory lock per trainer and week); a failing trainer is logged and retried on the next run.
+ * Closes, in order, every due week of each trainer's active season and, for trainers without one, of their open weekly championships (CAMP-72), once each (advisory lock per trainer and week); a failing trainer is logged and retried on the next run.
  *
  * @param {object} prisma
  * @param {{ info: Function, error: Function }} logger
@@ -275,6 +362,7 @@ export async function closeDueWeeks(prisma, logger, now = new Date()) {
       );
     }
   }
+  await closeChampionshipWeeks(prisma, logger, now);
 }
 
 // Whether the Monday falls inside the season's weeks

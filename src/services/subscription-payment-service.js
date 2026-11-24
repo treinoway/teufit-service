@@ -24,6 +24,7 @@ import {
   computeNextCycle,
   formatPayment,
 } from '../helpers/subscription-helpers.js';
+import { ownerScopeWhere } from '../helpers/subscription-owner-helpers.js';
 import { insertCyclesForActiveSubscriptions } from './subscription-cycle-service.js';
 
 const MIDDAY_HOUR = 12;
@@ -32,27 +33,10 @@ const { Decimal } = Prisma;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function resolveTrainerOrThrow(prisma, userId) {
-  const trainer = await prisma.trainer.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!trainer) {
-    throw new AppError({
-      httpStatus: 404,
-      error: SubscriptionErrorCode.TRAINER_NOT_FOUND,
-      messageCode: SubscriptionMessageCode.TRAINER_NOT_FOUND,
-      message: 'Trainer profile not found',
-    });
-  }
-
-  return trainer;
-}
-
-async function resolveSubscriptionOrThrow(prisma, trainerId, subscriptionId) {
+// Loads a subscription owned by any of the owner's rows or throws 404.
+async function resolveSubscriptionOrThrow(prisma, owner, subscriptionId) {
   const subscription = await prisma.studentSubscription.findFirst({
-    where: { id: subscriptionId, trainerId },
+    where: { id: subscriptionId, ...ownerScopeWhere(owner) },
   });
 
   if (!subscription) {
@@ -67,15 +51,16 @@ async function resolveSubscriptionOrThrow(prisma, trainerId, subscriptionId) {
   return subscription;
 }
 
-async function resolvePaymentOrThrow(prisma, trainerId, paymentId) {
+// Loads a payment whose subscription is owned by any of the owner's rows or throws 404.
+async function resolvePaymentOrThrow(prisma, owner, paymentId) {
   const payment = await prisma.subscriptionPayment.findFirst({
-    where: { id: paymentId },
+    where: { id: paymentId, subscription: ownerScopeWhere(owner) },
     include: {
-      subscription: { select: { trainerId: true, status: true, cancelledAt: true, startDate: true } },
+      subscription: { select: { status: true, cancelledAt: true, startDate: true } },
     },
   });
 
-  if (!payment || payment.subscription.trainerId !== trainerId) {
+  if (!payment) {
     throw new AppError({
       httpStatus: 404,
       error: SubscriptionErrorCode.PAYMENT_NOT_FOUND,
@@ -180,9 +165,8 @@ function throwCycleAlreadyExists() {
  * time (see insertCyclesForActiveSubscriptions), so a cancel racing with this
  * call can never leave a fresh pending charge behind.
  */
-export async function createPayment(prisma, userId, subscriptionId, data, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  const subscription = await resolveSubscriptionOrThrow(prisma, trainer.id, subscriptionId);
+export async function createPayment(prisma, owner, subscriptionId, data, now = new Date()) {
+  const subscription = await resolveSubscriptionOrThrow(prisma, owner, subscriptionId);
 
   if (subscription.status === SubscriptionStatus.CANCELLED) {
     throw conflict({
@@ -247,9 +231,8 @@ export async function createPayment(prisma, userId, subscriptionId, data, now = 
   return formatPayment(payment, today);
 }
 
-export async function listPaymentsBySubscription(prisma, userId, subscriptionId, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  await resolveSubscriptionOrThrow(prisma, trainer.id, subscriptionId);
+export async function listPaymentsBySubscription(prisma, owner, subscriptionId, now = new Date()) {
+  await resolveSubscriptionOrThrow(prisma, owner, subscriptionId);
 
   const payments = await prisma.subscriptionPayment.findMany({
     where: { subscriptionId },
@@ -262,20 +245,38 @@ export async function listPaymentsBySubscription(prisma, userId, subscriptionId,
 
 const STUDENT_SUMMARY_SELECT = { id: true, firstName: true, lastName: true, avatarUrl: true };
 
+// Person of a trainer-student or nutritionist-patient link row.
+function personOfLink(link) {
+  // why: TrainerStudent names the person `student`, NutritionistPatient names it `patient`
+  return link?.student ?? link?.patient ?? null;
+}
+
+// Finds the person through the live trainer or patient link of the owner, or null.
+async function findLinkedPerson(prisma, owner, studentId) {
+  if (owner.trainerId) {
+    const trainerLink = await prisma.trainerStudent.findFirst({
+      where: { trainerId: owner.trainerId, studentId },
+      select: { student: { select: STUDENT_SUMMARY_SELECT } },
+    });
+    if (trainerLink) return personOfLink(trainerLink);
+  }
+  if (owner.nutritionistId) {
+    const patientLink = await prisma.nutritionistPatient.findFirst({
+      where: { nutritionistId: owner.nutritionistId, patientId: studentId, deletedAt: null },
+      select: { patient: { select: STUDENT_SUMMARY_SELECT } },
+    });
+    return personOfLink(patientLink);
+  }
+  return null;
+}
+
 /**
- * Student header for the history. Only exposed when the trainer has billing
+ * Student header for the history. Only exposed when the owner has billing
  * history with the student or a live link — otherwise null, so an arbitrary
  * studentId cannot be used to look up other users' names/avatars.
  */
-async function resolveStudentSummary(prisma, trainerId, studentId, payments, resolveAvatarUrl) {
-  let student = payments[0]?.subscription.student ?? null;
-  if (!student) {
-    const link = await prisma.trainerStudent.findFirst({
-      where: { trainerId, studentId },
-      select: { student: { select: STUDENT_SUMMARY_SELECT } },
-    });
-    student = link?.student ?? null;
-  }
+async function resolveStudentSummary(prisma, owner, studentId, payments, resolveAvatarUrl) {
+  const student = payments[0]?.subscription.student ?? (await findLinkedPerson(prisma, owner, studentId));
   if (!student) return null;
 
   return {
@@ -286,27 +287,26 @@ async function resolveStudentSummary(prisma, trainerId, studentId, payments, res
 }
 
 /**
- * Every payment of a student across all of the trainer's subscriptions
+ * Every payment of a student across all of the owner's subscriptions
  * (active and cancelled) plus a summary — 1 payments query + batched include
- * queries (fixed count). Scoped by trainerId only, so history stays reachable
+ * queries (fixed count). Scoped by owner only, so history stays reachable
  * after the student is unlinked.
  */
 export async function listPaymentsByStudent(
   prisma,
-  userId,
+  owner,
   studentId,
   now = new Date(),
   { resolveAvatarUrl = async (stored) => stored ?? null } = {},
 ) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-
   const payments = await prisma.subscriptionPayment.findMany({
-    where: { subscription: { trainerId: trainer.id, studentId } },
+    where: { subscription: { ...ownerScopeWhere(owner), studentId } },
     orderBy: [{ cycleStartDate: 'desc' }],
     include: {
       subscription: {
         select: {
           status: true,
+          serviceType: true,
           startDate: true,
           plan: { select: { id: true, name: true, recurrence: true } },
           student: { select: STUDENT_SUMMARY_SELECT },
@@ -315,7 +315,7 @@ export async function listPaymentsByStudent(
     },
   });
 
-  const student = await resolveStudentSummary(prisma, trainer.id, studentId, payments, resolveAvatarUrl);
+  const student = await resolveStudentSummary(prisma, owner, studentId, payments, resolveAvatarUrl);
 
   const today = todayInBusinessTz(now);
   let totalReceived = new Decimal(0);
@@ -333,6 +333,7 @@ export async function listPaymentsByStudent(
     return {
       ...formatPayment(payment, today),
       subscriptionStatus: payment.subscription.status,
+      serviceType: payment.subscription.serviceType,
       plan: payment.subscription.plan,
     };
   });
@@ -366,9 +367,8 @@ function settleAlreadyPaid(payment, requestedPaidAtDate, today) {
  * Paying an already paid payment is idempotent unless a different paidAt is
  * requested (409 — revert to pending first).
  */
-export async function markPaymentPaid(prisma, userId, paymentId, { paidAt } = {}, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  const payment = await resolvePaymentOrThrow(prisma, trainer.id, paymentId);
+export async function markPaymentPaid(prisma, owner, paymentId, { paidAt } = {}, now = new Date()) {
+  const payment = await resolvePaymentOrThrow(prisma, owner, paymentId);
 
   const today = todayInBusinessTz(now);
   const resolvedPaidAt = resolvePaidAt(paidAt, today, now, payment.subscription.startDate);
@@ -401,9 +401,8 @@ export async function markPaymentPaid(prisma, userId, paymentId, { paidAt } = {}
  * by the conditional write itself (two single-statement updates on voidedAt),
  * never from a stale read.
  */
-export async function markPaymentPending(prisma, userId, paymentId, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  const payment = await resolvePaymentOrThrow(prisma, trainer.id, paymentId);
+export async function markPaymentPending(prisma, owner, paymentId, now = new Date()) {
+  const payment = await resolvePaymentOrThrow(prisma, owner, paymentId);
   if (payment.status === PaymentStatus.CANCELLED) throwPaymentCancelled();
 
   const reopened = await prisma.subscriptionPayment.updateMany({
@@ -434,9 +433,8 @@ function throwForBlockedUpdate(status) {
   throwPaymentAlreadyPaid();
 }
 
-export async function updatePayment(prisma, userId, paymentId, patch, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  const payment = await resolvePaymentOrThrow(prisma, trainer.id, paymentId);
+export async function updatePayment(prisma, owner, paymentId, patch, now = new Date()) {
+  const payment = await resolvePaymentOrThrow(prisma, owner, paymentId);
   assertValidMoneyAmount(patch.amount);
 
   // Editing a paid payment would silently rewrite historical revenue; only notes are editable.
@@ -478,9 +476,8 @@ export async function updatePayment(prisma, userId, paymentId, patch, now = new 
  * voided payment is a no-op. Conditional write: a concurrent mark-paid wins
  * and the void answers 409 instead of overwriting the payment.
  */
-export async function voidPayment(prisma, userId, paymentId, now = new Date()) {
-  const trainer = await resolveTrainerOrThrow(prisma, userId);
-  const payment = await resolvePaymentOrThrow(prisma, trainer.id, paymentId);
+export async function voidPayment(prisma, owner, paymentId, now = new Date()) {
+  const payment = await resolvePaymentOrThrow(prisma, owner, paymentId);
 
   if (payment.status === PaymentStatus.PAID) throwPaymentAlreadyPaid();
 

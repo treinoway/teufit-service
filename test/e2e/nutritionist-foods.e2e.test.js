@@ -2,13 +2,25 @@ import 'dotenv/config';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { setupApp } from '../helpers/setup-app.js';
 import { cleanDatabase } from '../helpers/db-cleanup.js';
-import { createUser, createNutritionist, seedFoods, auth, expectErrorContract } from '../helpers/nutrition-e2e.js';
+import { prisma } from '../../src/db.js';
+import {
+  createUser,
+  createNutritionist,
+  createLinkedPatient,
+  seedFoods,
+  getPlan,
+  planWrite,
+  auth,
+  expectErrorContract,
+} from '../helpers/nutrition-e2e.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
 
 const Source = Object.freeze({ TACO: 'taco', TBCA: 'tbca', CUSTOM: 'custom' });
 const ALL_SOURCES = `${Source.TACO},${Source.TBCA},${Source.CUSTOM}`;
+const FOOD_NOT_FOUND = Object.freeze({ error: 'NUTRITION_FOOD_NOT_FOUND', messageCode: 'nutrition.food.notFound' });
+const LEGACY_TBCA_QUANTITY_G = 80;
 const CUSTOM_PER_100G = { kcal: 350, protein: 6, carbs: 55, fat: 12, fiber: 1.5 };
 const MAX_MACRO_PER_100G = 100;
 const MAX_KCAL_PER_100G = 1000;
@@ -98,19 +110,37 @@ e2eDescribe('e2e: foods search and custom foods', () => {
     it('should match accented queries against unaccented text and ignore case ("FEIJÃO")', async () => {
       const items = await search(nutri.accessToken, `q=${encodeURIComponent('FEIJÃO')}&sources=${ALL_SOURCES}`);
 
-      expect(items.map((food) => food.id).sort()).toEqual([foods.beansTaco.id, foods.beansTbca.id].sort());
+      expect(items.map((food) => food.id)).toEqual([foods.beansTaco.id]);
     });
 
-    it('should return TACO and TBCA together when both sources are requested', async () => {
+    it('should never return TBCA foods in the default search', async () => {
+      const items = await search(nutri.accessToken, 'q=feijao');
+
+      expect(items.map((food) => food.id)).toEqual([foods.beansTaco.id]);
+    });
+
+    it('should never return TBCA foods in a search without a query', async () => {
+      const items = await search(nutri.accessToken, `sources=${ALL_SOURCES}&limit=100`);
+
+      expect(items.map((food) => food.source)).not.toContain(Source.TBCA);
+    });
+
+    it('should return only TACO foods when TACO and TBCA are requested', async () => {
       const items = await search(nutri.accessToken, `q=feijao&sources=${Source.TACO},${Source.TBCA}`);
 
-      expect(new Set(items.map((food) => food.source))).toEqual(new Set([Source.TACO, Source.TBCA]));
+      expect(items.map((food) => food.id)).toEqual([foods.beansTaco.id]);
+    });
+
+    it('should return no items when only TBCA is requested', async () => {
+      const items = await search(nutri.accessToken, `q=feijao&sources=${Source.TBCA}`);
+
+      expect(items).toEqual([]);
     });
 
     it('should restrict to the requested source', async () => {
-      const items = await search(nutri.accessToken, `q=feijao&sources=${Source.TBCA}`);
+      const items = await search(nutri.accessToken, `q=feijao&sources=${Source.TACO}`);
 
-      expect(items.map((food) => food.id)).toEqual([foods.beansTbca.id]);
+      expect(items.map((food) => food.id)).toEqual([foods.beansTaco.id]);
     });
 
     it('should filter by group', async () => {
@@ -123,6 +153,107 @@ e2eDescribe('e2e: foods search and custom foods', () => {
       const items = await search(nutri.accessToken, `sources=${ALL_SOURCES}&limit=2`);
 
       expect(items).toHaveLength(2);
+    });
+  });
+
+  describe('GET /foods/:id', () => {
+    it('should return a TACO food', async () => {
+      const res = await app.inject({ method: 'GET', url: `/foods/${foods.beansTaco.id}`, headers: auth(nutri.accessToken) });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ id: foods.beansTaco.id, source: Source.TACO });
+    });
+
+    it('should answer 404 nutrition.food.notFound for a TBCA food', async () => {
+      const res = await app.inject({ method: 'GET', url: `/foods/${foods.beansTbca.id}`, headers: auth(nutri.accessToken) });
+
+      expectErrorContract(res, { statusCode: 404, ...FOOD_NOT_FOUND });
+    });
+  });
+
+  describe('TBCA foods in plans', () => {
+    let patient;
+
+    beforeEach(async () => {
+      patient = await createLinkedPatient(app, nutri);
+    });
+
+    async function planWithMeal() {
+      const plan = await getPlan(app, nutri, patient.userId);
+      return planWrite(app, nutri, 'POST', `/nutritionist/plans/${plan.id}/meals`, { name: 'Almoço', time: '12:00' });
+    }
+
+    async function planWithTacoItem() {
+      const plan = await planWithMeal();
+      return planWrite(app, nutri, 'POST', `/nutritionist/meal-options/${plan.meals[0].options[0].id}/items`, {
+        foodId: foods.beansTaco.id,
+        quantity: 100,
+        unit: 'g',
+      });
+    }
+
+    function snapshotOf(food) {
+      return {
+        foodId: food.id,
+        source: food.source,
+        name: food.name,
+        kcalPer100g: food.energyKcal,
+        proteinPer100g: food.proteinG,
+        carbsPer100g: food.carbohydratesG,
+        fatPer100g: food.totalFatG,
+        fiberPer100g: food.fiberG,
+      };
+    }
+
+    it('should answer 404 nutrition.food.notFound when adding a TBCA food as a meal item', async () => {
+      const plan = await planWithMeal();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/nutritionist/meal-options/${plan.meals[0].options[0].id}/items`,
+        headers: auth(nutri.accessToken),
+        payload: { foodId: foods.beansTbca.id, quantity: 100, unit: 'g' },
+      });
+
+      expectErrorContract(res, { statusCode: 404, ...FOOD_NOT_FOUND });
+    });
+
+    it('should answer 404 nutrition.food.notFound when adding a TBCA food as a substitute', async () => {
+      const plan = await planWithTacoItem();
+      const itemId = plan.meals[0].options[0].items[0].id;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/nutritionist/items/${itemId}/substitutes`,
+        headers: auth(nutri.accessToken),
+        payload: { foodId: foods.beansTbca.id },
+      });
+
+      expectErrorContract(res, { statusCode: 404, ...FOOD_NOT_FOUND });
+    });
+
+    it('should keep returning an existing TBCA item and substitute unchanged in the plan', async () => {
+      const plan = await planWithTacoItem();
+      const option = plan.meals[0].options[0];
+      const tacoItemId = option.items[0].id;
+      const legacyItem = await prisma.dietFoodItem.create({
+        data: { dietMealOptionId: option.id, ...snapshotOf(foods.beansTbca), quantity: LEGACY_TBCA_QUANTITY_G, order: 1 },
+      });
+      await prisma.dietItemSubstitute.create({
+        data: { dietFoodItemId: tacoItemId, ...snapshotOf(foods.beansTbca), quantity: LEGACY_TBCA_QUANTITY_G },
+      });
+
+      const reloaded = await getPlan(app, nutri, patient.userId);
+
+      const items = reloaded.meals[0].options[0].items;
+      expect(items.find((item) => item.id === legacyItem.id)).toMatchObject({
+        foodId: foods.beansTbca.id,
+        name: foods.beansTbca.name,
+        source: Source.TBCA,
+      });
+      expect(items.find((item) => item.id === tacoItemId).substitutes).toEqual([
+        expect.objectContaining({ foodId: foods.beansTbca.id, name: foods.beansTbca.name, source: Source.TBCA }),
+      ]);
     });
   });
 

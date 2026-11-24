@@ -8,6 +8,7 @@ import {
   isPurchasableTier,
   getBillingMonth,
 } from '../constants/platform-plan.js';
+import { assertEmailVerified } from './email-verified-guard.js';
 
 const FREE_TIER = 'FREE';
 const FREE_LIMITS = PLAN_LIMITS.FREE;
@@ -131,6 +132,13 @@ export async function assertCanCreateChallenge(prisma, trainerId) {
   }
 }
 
+// Throws 403 emailVerification.required unless the trainer's user has a verified email (AI has a real cost per call).
+async function assertTrainerEmailVerified(prisma, trainerId) {
+  const trainer = await prisma.trainer.findUnique({ where: { id: trainerId }, select: { userId: true } });
+  await assertEmailVerified(prisma, trainer?.userId);
+}
+
+// Throws unless the trainer may run an AI action now: plan and usage caps first, then a verified email.
 export async function assertCanUseAi(prisma, trainerId, studentId = null) {
   const { limits } = await getTrainerPlan(prisma, trainerId);
 
@@ -169,6 +177,8 @@ export async function assertCanUseAi(prisma, trainerId, studentId = null) {
       });
     }
   }
+
+  await assertTrainerEmailVerified(prisma, trainerId);
 }
 
 export async function recordAiAction(prisma, trainerId, studentId, action) {

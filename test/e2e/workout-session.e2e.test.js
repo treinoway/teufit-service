@@ -10,6 +10,7 @@ import {
   WorkoutSessionFinalizedMessageCode,
 } from '../../src/constants/training.js';
 import { signupVerified } from '../helpers/signup-user.js';
+import { linkStudentByInvite } from '../helpers/link-student.js';
 
 const hasDatabaseUrl = !!process.env.DATABASE_URL;
 const e2eDescribe = hasDatabaseUrl ? describe : describe.skip;
@@ -152,14 +153,7 @@ e2eDescribe('e2e: workout-sessions', () => {
   }
 
   async function linkTrainerStudent(trainerToken, studentEmail) {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/trainer/students',
-      headers: { authorization: `Bearer ${trainerToken}` },
-      payload: { email: studentEmail },
-    });
-    // Accept 201 (created) or 409 (already linked)
-    expect([201, 409]).toContain(response.statusCode);
+    await linkStudentByInvite(app, { trainerToken, email: studentEmail, allowAlreadyLinked: true });
   }
 
   // ─── POST /my/trainings/:trainingId/workout-sessions ──────────────────────

@@ -46,6 +46,7 @@ import {
   verifyEmailSchema,
   resendEmailVerificationSchema,
   signupVerifySchema,
+  signupDirectSchema,
   signupResendSchema,
 } from '../schemas/auth-route.schema.js';
 import { prisma } from '../../src/db.js';
@@ -56,6 +57,7 @@ import {
   processSignupRequest,
   processSignupResendRequest,
   purgeStalePendingSignups,
+  signupDirect,
   verifySignupCode,
 } from '../../src/services/signup-verification-service.js';
 import { signupWithInvite } from '../../src/services/trainer-invite-service.js';
@@ -193,6 +195,28 @@ export async function authRoutes(fastify) {
     async (request, reply) => {
       const { email, code, password } = request.body;
       const { user, linkedTrainers } = await verifySignupCode(prisma, { email, code, password });
+
+      const access = issueAccessToken({ fastify, user });
+      const refresh = await issueRefreshToken({ user });
+
+      return reply.status(201).send({
+        user: { id: user.id },
+        token: { accessToken: access.accessToken },
+        refreshToken: refresh.refreshToken,
+        linkedTrainers,
+      });
+    },
+  );
+
+  fastify.post(
+    '/auth/signup/direct',
+    {
+      config: { rateLimit: config.rateLimit.auth.signupDirect },
+      schema: signupDirectSchema,
+    },
+    async (request, reply) => {
+      const { email, password, firstName, lastName } = request.body;
+      const { user, linkedTrainers } = await signupDirect(prisma, { email, password, firstName, lastName });
 
       const access = issueAccessToken({ fastify, user });
       const refresh = await issueRefreshToken({ user });
