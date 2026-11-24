@@ -1625,8 +1625,8 @@ describe('listStudentChallenges', () => {
     addListChampionship(storedChampionship('running-soon', 'Termina 06/12', '2026-11-16', 3), ['camila']);
     addListChampionship(storedChampionship('next-late', 'Começa 14/12', '2026-12-14', 2), ['camila']);
     addListChampionship(storedChampionship('next-soon', 'Começa 07/12', '2026-12-07', 2), ['camila']);
-    addListChampionship(storedChampionship('closed-old', 'Fechou 25/10', '2026-10-12', 2, { closedAt }), ['camila']);
-    addListChampionship(storedChampionship('closed-recent', 'Fechou 08/11', '2026-10-26', 2, { closedAt }), ['camila']);
+    addListChampionship(storedChampionship('closed-old', 'Fechou 08/11', '2026-10-26', 2, { closedAt }), ['camila']);
+    addListChampionship(storedChampionship('closed-recent', 'Fechou 22/11', '2026-10-12', 6, { closedAt: new Date('2026-11-23T00:30:00.000Z') }), ['camila']);
 
     const list = await camilaList();
 
