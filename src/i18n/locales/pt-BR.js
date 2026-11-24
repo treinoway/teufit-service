@@ -296,6 +296,7 @@ export default {
     'consistencyRanking.pause.weekNotEditable': 'Esta semana já foi encerrada ou está a mais de 12 semanas à frente, e não pode ser pausada nem reativada.',
     'consistencyRanking.season.notFound': 'Temporada não encontrada.',
     'consistencyRanking.target.notEditable': 'A meta só pode ser reduzida na semana em andamento, de zero até a meta original.',
+    'consistencyRanking.privacy.invalid': 'Escolha de privacidade inválida. Escolha aparecer com teu nome ou como Aluno do time, na versão atual do termo.',
 
     // Student feedback
     'studentFeedback.notFound': 'Feedback não encontrado.',
@@ -330,6 +331,7 @@ export default {
     'challenge.notClosable': 'Só um campeonato em semanas em andamento pode ser encerrado antes.',
     'challenge.notWeekly': 'Este campeonato não tem classificação de constância.',
     'challenge.scoringRule.invalid': 'Pontuação inválida. Os pesos dos cinco pilares devem ser inteiros de 0 a 100 com soma 100, e ao menos um pilar deve estar ativo.',
+    'challenge.visibility.invalid': 'Visibilidade inválida. Escolha Desligado, Só a posição do aluno ou Ranking completo ao vivo.',
 
     // Workouts Today
     'workoutsToday.noActiveProtocol': 'Você não tem um protocolo de treino ativo.',
