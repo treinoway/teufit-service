@@ -963,7 +963,7 @@
   },
   "src/services/workout-session-service.js": {
     "local/function-header-comment": {
-      "count": 18
+      "count": 16
     },
     "local/no-comments-in-function": {
       "count": 30

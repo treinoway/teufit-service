@@ -445,6 +445,7 @@ export default {
     'admin.queryTimeout': 'A consulta demorou demais. Refine a busca e tente novamente.',
     'admin.userNotFound': 'Usuário não encontrado.',
     'admin.protocolNotFound': 'Rotina não encontrada.',
+    'admin.sessionNotFound': 'Sessão de treino não encontrada.',
     // Tutorials ("Como usar")
     'tutorial.notFound': 'Tutorial não encontrado.',
     'tutorial.invalidVideoType': 'Formato de vídeo não suportado. Use MP4, WebM ou MOV.',

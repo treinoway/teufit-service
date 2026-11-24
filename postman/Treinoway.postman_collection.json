@@ -11844,7 +11844,123 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"items\": [\n    {\n      \"id\": \"ws1\",\n      \"trainingName\": \"Treino A\",\n      \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n      \"durationSec\": 3300\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"ws1\",\n      \"trainingName\": \"Treino A\",\n      \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n      \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n      \"durationSec\": 3300,\n      \"deletedAt\": null\n    }\n  ],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 20\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Session Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "sessions",
+                ":sessionId"
+              ],
+              "variable": [
+                {
+                  "key": "sessionId",
+                  "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                  "description": "Workout session UUID"
+                }
+              ]
+            },
+            "description": "Full detail of a workout session (any student, including soft-deleted sessions): exercise logs, set logs and the previous log of the same exercise. Requires ADMIN role. Read-only, served from the isolated admin DB client. Errors: 400 validation, 401, 403 (not admin), 404 (admin.sessionNotFound), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get Session Detail - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "sessions",
+                    ":sessionId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "sessionId",
+                      "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                      "description": "Workout session UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f\",\n  \"status\": \"COMPLETED\",\n  \"startedAt\": \"2026-10-30T09:00:00.000Z\",\n  \"finishedAt\": \"2026-10-30T09:55:00.000Z\",\n  \"durationSec\": 3300,\n  \"notes\": null,\n  \"deletedAt\": null,\n  \"training\": {\n    \"id\": \"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d\",\n    \"name\": \"Treino A\"\n  },\n  \"student\": {\n    \"id\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n    \"firstName\": \"Maria\",\n    \"lastName\": \"Silva\",\n    \"email\": \"maria@example.com\"\n  },\n  \"exerciseLogs\": [\n    {\n      \"id\": \"c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f\",\n      \"order\": 1,\n      \"status\": \"COMPLETED\",\n      \"notes\": null,\n      \"exercise\": {\n        \"id\": \"e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b\",\n        \"name\": \"Supino reto\",\n        \"sets\": 3,\n        \"repetitions\": \"10\",\n        \"prescriptionMode\": \"REPS\",\n        \"duration\": null,\n        \"hasLoad\": true,\n        \"suggestedLoad\": 40,\n        \"restInterval\": 60\n      },\n      \"substitutedByExerciseId\": null,\n      \"substitutedByExerciseName\": null,\n      \"setLogs\": [\n        {\n          \"id\": \"f1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c\",\n          \"setNumber\": 1,\n          \"repetitions\": 10,\n          \"load\": 40,\n          \"duration\": null,\n          \"rpe\": 7,\n          \"restSeconds\": 60,\n          \"completed\": true,\n          \"notes\": null\n        }\n      ],\n      \"previousLog\": {\n        \"workoutSessionId\": \"7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f\",\n        \"finishedAt\": \"2026-10-27T10:00:00.000Z\",\n        \"setLogs\": [\n          {\n            \"setNumber\": 1,\n            \"repetitions\": 10,\n            \"load\": 37.5,\n            \"duration\": null\n          }\n        ],\n        \"bestSet\": {\n          \"setNumber\": 1,\n          \"load\": 37.5,\n          \"repetitions\": 10,\n          \"duration\": null,\n          \"rpe\": 7,\n          \"restSeconds\": 60,\n          \"completed\": true,\n          \"tonnage\": 375\n        }\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Session Detail - 404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/sessions/:sessionId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "sessions",
+                    ":sessionId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "sessionId",
+                      "value": "9d1f6a3e-2b47-4c85-a1e0-5f6b7c8d9e0f",
+                      "description": "Workout session UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"NOT_FOUND\",\n  \"messageCode\": \"admin.sessionNotFound\",\n  \"message\": \"Workout session not found.\",\n  \"details\": {}\n}"
             }
           ]
         }
