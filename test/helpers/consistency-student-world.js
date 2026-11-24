@@ -12,6 +12,9 @@ const RELATIONS = {
   challengeParticipant: { student: (world, row) => world.tables.user.find((user) => user.id === row.studentId) ?? null },
   challengeConsistencyStanding: { student: (world, row) => world.tables.user.find((user) => user.id === row.studentId) ?? null },
 };
+const RELATION_COUNTS = {
+  challenge: { participants: (world, row) => world.tables.challengeParticipant.filter((participant) => participant.challengeId === row.id).length },
+};
 const RELATION_FILTERS = {
   challenge: {
     participants: (world, row, filter) => world.tables.challengeParticipant.some(
@@ -63,6 +66,10 @@ function project(world, table, row, { select, include } = {}) {
   const base = select ? {} : { ...row };
   if (!shape) return base;
   for (const [field, spec] of Object.entries(shape)) {
+    if (field === '_count') {
+      base._count = Object.fromEntries(Object.keys(spec.select).map((name) => [name, RELATION_COUNTS[table][name](world, row)]));
+      continue;
+    }
     const relation = RELATIONS[table]?.[field];
     if (relation) {
       const related = relation(world, row);
