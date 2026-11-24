@@ -13,6 +13,11 @@ const BRAND = 'Teufit';
 const APP_STORE_URL = 'https://apps.apple.com/br/app/id6809516404';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=br.com.teufit.app';
 
+// The web app lives on the app subdomain; the root domain is the landing page and must no
+// longer serve email images.
+const WEB_APP_BASE_URL = 'https://app.teufit.com.br';
+const ROOT_DOMAIN_IMG_PREFIX = 'https://teufit.com.br/img/';
+
 describe('sanitizeSubjectText', () => {
   it.each([
     ['CR and LF', 'Ana\r\nCoach', 'Ana Coach'],
@@ -47,6 +52,12 @@ describe('store listing links (config.stores)', () => {
   it('should keep the App Store link free of the listing slug', () => {
     expect(config.stores.appStoreUrl).not.toContain('teufit-production');
     expect(config.stores.appStoreUrl).toMatch(/^https:\/\/apps\.apple\.com\/br\/app\/id[0-9]+$/);
+  });
+});
+
+describe('web app base URL (config.web)', () => {
+  it('should default to the app subdomain', () => {
+    expect(config.web.baseUrl).toBe(WEB_APP_BASE_URL);
   });
 });
 
@@ -235,6 +246,15 @@ describe('email-handler rendered emails', () => {
       expectNoLegacyBranding(lastEmail());
     });
 
+    it('should load the store badge images from the web app base URL', async () => {
+      await sendOpenApp();
+
+      const { html } = lastEmail();
+      expect(html).toContain(`${config.web.baseUrl}/img/app-store-badge-pt-br.png`);
+      expect(html).toContain(`${config.web.baseUrl}/img/google-play-badge-pt-br.png`);
+      expect(html).not.toContain(ROOT_DOMAIN_IMG_PREFIX);
+    });
+
     it('should fall back to a generic trainer label and keep the subject on one line', async () => {
       await sendOpenApp('\r\n');
 
@@ -303,7 +323,8 @@ describe('email-handler rendered emails', () => {
       await sendAssigned();
 
       const { html } = lastEmail();
-      expect(html).toContain('https://teufit.com.br/img/teufit-lockup.png');
+      expect(html).toContain(`${config.web.baseUrl}/img/teufit-lockup.png`);
+      expect(html).not.toContain(ROOT_DOMAIN_IMG_PREFIX);
       expect(html).not.toMatch(/<h1[^>]*>\s*TEUFIT\s*<\/h1>/);
     });
 

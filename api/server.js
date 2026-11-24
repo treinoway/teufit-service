@@ -16,6 +16,7 @@ import { rollbar } from '../src/rollbar.js';
 import { buildErrorPayload, normalizeError, normalizeErrorResponsePayload } from '../src/errors/index.js';
 import { translate } from '../src/i18n/index.js';
 import { parseBool } from '../src/helpers/env.js';
+import { buildAllowedOrigins, normalizeOrigin } from '../src/helpers/cors-origins.js';
 import { createErrorSerializerCacheFactory } from '../src/helpers/error-serializer-cache.js';
 import { authRoutes } from './routes/auth-route.js';
 import { trainerRoutes } from './routes/trainer-route.js';
@@ -287,15 +288,7 @@ export async function buildServer(options = {}) {
   // Register CORS support
   const isDevelopment = process.env.NODE_ENV === 'development';
   
-  // Define allowed origins - normalize URLs by removing trailing slashes
-  const normalizeUrl = (url) => url?.replace(/\/$/, '') || '';
-  const allowedOrigins = isDevelopment 
-    ? true // Allow all in development
-    : [
-        normalizeUrl(process.env.FRONTEND_URL),
-        normalizeUrl(process.env.FRONTEND_REDIRECT_URL),
-        normalizeUrl(process.env.BACKEND_URL), // Backend URL (e.g., for Swagger UI)
-      ].filter(Boolean); // Remove undefined/null values
+  const allowedOrigins = isDevelopment ? true : buildAllowedOrigins(process.env);
 
   await fastify.register(fastifyCors, {
     origin: (origin, callback) => {
@@ -310,7 +303,7 @@ export async function buildServer(options = {}) {
         return;
       }
 
-      const normalizedOrigin = normalizeUrl(origin);
+      const normalizedOrigin = normalizeOrigin(origin);
       
       // Check if origin is in allowed list
       if (allowedOrigins.includes(normalizedOrigin)) {
