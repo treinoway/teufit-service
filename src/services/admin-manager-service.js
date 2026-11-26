@@ -2,6 +2,7 @@ import { AppError, NotFoundAppError } from '../errors/app-error.js';
 import { formatDateOnly } from '../helpers/date-helpers.js';
 import { computeBestSet, resolveEffectiveExerciseId } from '../helpers/best-set.js';
 import { WorkoutSessionStatus } from '../constants/training.js';
+import { countPendingItems, getOverviewQuery } from './admin-overview-service.js';
 import {
   ADMIN_MANAGER_ERROR_UNAVAILABLE,
   ADMIN_MANAGER_PAGE_SIZE_DEFAULT,
@@ -651,3 +652,5 @@ export const getProtocolDetail = withTimeoutMapping(getProtocolDetailQuery);
 export const listUserTemplates = withTimeoutMapping(listUserTemplatesQuery);
 export const listUserSessions = withTimeoutMapping(listUserSessionsQuery);
 export const getSessionDetail = withTimeoutMapping(getSessionDetailQuery);
+export const getOverview = withTimeoutMapping(getOverviewQuery);
+export const getPending = withTimeoutMapping(countPendingItems);
