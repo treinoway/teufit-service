@@ -76,9 +76,14 @@ export const RECURRING_MILESTONE = Object.freeze({ milestone: StudentFeedbackMil
 export const SEND_HOUR = 9;
 export const SEND_TIME_ZONE = BUSINESS_TIMEZONE;
 export const REMINDER_AFTER_HOURS = 24;
-export const RESPONSE_WINDOW_DAYS = 3;
 
-export const STUDENT_FEEDBACK_CONFIG_FIELDS = Object.freeze(['autoSendEnabled', 'd7', 'd15', 'd21', 'd30', 'recurring']);
+// Days a student has to answer a request: the default, and the range a trainer can choose from
+export const RESPONSE_WINDOW_DAYS = 3;
+export const RESPONSE_WINDOW_MIN_DAYS = 1;
+export const RESPONSE_WINDOW_MAX_DAYS = 7;
+export const RESPONSE_WINDOW_FIELD = 'responseWindowDays';
+
+export const STUDENT_FEEDBACK_CONFIG_FIELDS = Object.freeze(['autoSendEnabled', 'd7', 'd15', 'd21', 'd30', 'recurring', RESPONSE_WINDOW_FIELD]);
 
 export const DEFAULT_STUDENT_FEEDBACK_CONFIG = Object.freeze({
   autoSendEnabled: false,
@@ -87,6 +92,7 @@ export const DEFAULT_STUDENT_FEEDBACK_CONFIG = Object.freeze({
   d21: true,
   d30: true,
   recurring: true,
+  [RESPONSE_WINDOW_FIELD]: RESPONSE_WINDOW_DAYS,
 });
 
 // Allowed integer range of an answer, per scored question type

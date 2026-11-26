@@ -2071,6 +2071,9 @@ model StudentFeedbackConfig {
   d30             Boolean   @default(true)
   recurring       Boolean   @default(true)
 
+  // Days a student has to answer a request sent from now on (1-7)
+  responseWindowDays Int @default(3) @map("response_window_days")
+
   // Template of each milestone; null = the general template
   d7TemplateId        String? @map("d7_template_id") @db.Uuid
   d15TemplateId       String? @map("d15_template_id") @db.Uuid

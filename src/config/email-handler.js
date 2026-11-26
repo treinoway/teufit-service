@@ -17,6 +17,11 @@ function escapeHtml(value) {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// A number of days in Portuguese, singular for one: "1 dia", "3 dias".
+function formatDayCount(days) {
+    return `${escapeHtml(days)} ${days === 1 ? 'dia' : 'dias'}`;
+}
+
 // Wraps a heading and body paragraphs in the Teufit transactional email layout.
 function renderTransactionalEmail({ title, heading, bodyHtml }) {
     return `
@@ -1264,9 +1269,9 @@ ${renderStoreButtonsBlock()}
     }
 
     /**
-     * Tells a student that their trainer asked for a feedback, answered in the mobile app within the window.
+     * Tells a student that their trainer asked for a feedback, answered in the mobile app within the response window of the trainer (the default one when the payload has none).
      */
-    sendStudentFeedbackRequestEmail({to, studentName: rawStudentName, trainerName: rawTrainerName}) {
+    sendStudentFeedbackRequestEmail({to, studentName: rawStudentName, trainerName: rawTrainerName, responseWindowDays = RESPONSE_WINDOW_DAYS}) {
         const trainerName = sanitizeSubjectText(rawTrainerName);
         const studentName = sanitizeSubjectText(rawStudentName);
         const trainerLabel = trainerName ? escapeHtml(trainerName) : 'Seu treinador';
@@ -1275,7 +1280,7 @@ ${renderStoreButtonsBlock()}
             heading: studentName ? `${escapeHtml(studentName)}, conte como está seu processo` : 'Conte como está seu processo',
             paragraphs: [
                 `${trainerLabel} quer saber como foram seus últimos dias. São poucas perguntas e leva só alguns minutos.`,
-                `Responda pelo app Teufit em até <strong>${RESPONSE_WINDOW_DAYS} dias</strong>.`,
+                `Responda pelo app Teufit em até <strong>${formatDayCount(responseWindowDays)}</strong>.`,
             ],
         });
         const subject = trainerName ? `[Teufit] ${trainerName} pediu seu feedback` : '[Teufit] Seu treinador pediu seu feedback';

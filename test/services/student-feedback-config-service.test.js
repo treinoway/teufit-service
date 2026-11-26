@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getConfig, updateConfig } from '../../src/services/student-feedback-config-service.js';
 import {
   DEFAULT_STUDENT_FEEDBACK_CONFIG,
+  RESPONSE_WINDOW_DAYS,
+  RESPONSE_WINDOW_MAX_DAYS,
   StudentFeedbackBand,
   StudentFeedbackErrorCode,
   StudentFeedbackInboxFilter,
@@ -18,7 +20,7 @@ const CONFIG_MODEL = 'studentFeedbackConfig';
 const NOW = new Date('2026-11-17T15:00:00Z');
 const LATER = new Date('2026-11-20T15:00:00Z');
 const ENABLED_BEFORE = new Date('2026-10-01T12:00:00Z');
-const DEFAULTS = Object.freeze({ autoSendEnabled: false, d7: true, d15: true, d21: true, d30: true, recurring: true });
+const DEFAULTS = Object.freeze({ autoSendEnabled: false, d7: true, d15: true, d21: true, d30: true, recurring: true, responseWindowDays: RESPONSE_WINDOW_DAYS });
 
 // Stored config row of a trainer
 function storedConfig(world, trainerId = TRAINER_ID) {
@@ -80,7 +82,7 @@ describe('student feedback config service', () => {
     it('returns the stored settings with only the contract fields', async () => {
       seedConfig(world, { d15: false, recurring: false, enabledAt: ENABLED_BEFORE });
 
-      expect(await getConfig(world.prisma, TRAINER_ID)).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: true, d30: true, recurring: false });
+      expect(await getConfig(world.prisma, TRAINER_ID)).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: true, d30: true, recurring: false, responseWindowDays: RESPONSE_WINDOW_DAYS });
     });
 
     it('does not read the settings of another trainer', async () => {
@@ -96,7 +98,7 @@ describe('student feedback config service', () => {
 
       const config = await updateConfig(world.prisma, TRAINER_ID, { d21: false }, NOW);
 
-      expect(config).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: false, d30: true, recurring: true });
+      expect(config).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: false, d30: true, recurring: true, responseWindowDays: RESPONSE_WINDOW_DAYS });
       expect(await getConfig(world.prisma, TRAINER_ID)).toEqual(config);
     });
 
@@ -117,7 +119,7 @@ describe('student feedback config service', () => {
     });
 
     it('accepts every field at once', async () => {
-      const input = { autoSendEnabled: true, d7: false, d15: false, d21: false, d30: false, recurring: false };
+      const input = { autoSendEnabled: true, d7: false, d15: false, d21: false, d30: false, recurring: false, responseWindowDays: RESPONSE_WINDOW_MAX_DAYS };
 
       expect(await updateConfig(world.prisma, TRAINER_ID, input, NOW)).toEqual(input);
     });
@@ -127,7 +129,7 @@ describe('student feedback config service', () => {
 
       const config = await updateConfig(world.prisma, TRAINER_ID, {}, NOW);
 
-      expect(config).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: true, d30: true, recurring: true });
+      expect(config).toEqual({ autoSendEnabled: true, d7: true, d15: false, d21: true, d30: true, recurring: true, responseWindowDays: RESPONSE_WINDOW_DAYS });
       expect(storedConfig(world).enabledAt).toEqual(ENABLED_BEFORE);
     });
 

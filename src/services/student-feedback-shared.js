@@ -6,6 +6,7 @@ import { AppError } from '../errors/app-error.js';
 import { PlanStatus } from '../constants/nutrition.js';
 import {
   MILESTONE_TEMPLATE_SLOTS,
+  RESPONSE_WINDOW_DAYS,
   StudentFeedbackErrorCode,
   StudentFeedbackMessageCode,
   StudentFeedbackQuestionCondition,
@@ -176,6 +177,16 @@ export function chosenTemplateId(config, milestone) {
   return slot ? (config?.[slot.column] ?? null) : null;
 }
 
+/**
+ * Days a student has to answer a request of the trainer; the default for a trainer that never saved or a row without the value.
+ *
+ * @param {object|null|undefined} config - stored StudentFeedbackConfig row
+ * @returns {number}
+ */
+export function responseWindowDaysOf(config) {
+  return config?.responseWindowDays ?? RESPONSE_WINDOW_DAYS;
+}
+
 // The non-deleted template of the trainer chosen for the milestone, or null when there is no usable choice
 async function findChosenTemplate(prisma, { trainerId, milestone, config }) {
   const chosenId = chosenTemplateId(config, milestone);
@@ -219,13 +230,13 @@ async function studentHasMealPlan(prisma, studentId) {
 }
 
 /**
- * Creates a pending request sent now, recording whether the student has a meal plan at this moment.
+ * Creates a pending request sent now that expires after the response window, recording whether the student has a meal plan at this moment.
  *
  * @param {object} tx - Prisma client or transaction
- * @param {{ trainerId: string, studentId: string, templateId: string, milestone: string, dueAt: Date|null, now: Date }} input
+ * @param {{ trainerId: string, studentId: string, templateId: string, milestone: string, dueAt: Date|null, now: Date, responseWindowDays?: number }} input - responseWindowDays: window of the trainer; the default when omitted
  * @returns {Promise<object>} the stored request
  */
-export async function createRequest(tx, { trainerId, studentId, templateId, milestone, dueAt, now }) {
+export async function createRequest(tx, { trainerId, studentId, templateId, milestone, dueAt, now, responseWindowDays }) {
   const hasMealPlan = await studentHasMealPlan(tx, studentId);
   return tx.studentFeedbackRequest.create({
     data: {
@@ -237,7 +248,7 @@ export async function createRequest(tx, { trainerId, studentId, templateId, mile
       hasMealPlan,
       dueAt,
       sentAt: now,
-      expiresAt: expiresAtFor(now),
+      expiresAt: expiresAtFor(now, responseWindowDays),
     },
   });
 }

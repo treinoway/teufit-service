@@ -25721,7 +25721,7 @@
                 }
               ]
             },
-            "description": "Feedbacks this trainer sent to the student, oldest first. pillars and openAnswers are empty unless the feedback was answered; variation between milestones is computed by the client. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 NOT_FOUND (student not linked), 500."
+            "description": "Feedbacks this trainer sent to the student, oldest first. pillars (with band and the scored answers behind each score) and openAnswers are empty unless the feedback was answered. autoSend reports whether automatic sending is on and the next automatic milestone the cron will really send (when an open request delays it, next names the milestone sent once that request is closed; next is null when off, nothing is left to send or the student is blocked on the plan); variation between milestones is computed by the client. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 404 NOT_FOUND (student not linked), 500."
           },
           "response": [
             {
@@ -25763,7 +25763,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"student\": {\n    \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n    \"name\": \"Camila Duarte\",\n    \"avatarUrl\": null\n  },\n  \"hasPending\": false,\n  \"feedbacks\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\",\n      \"pillars\": [\n        {\n          \"pillar\": \"training_adherence\",\n          \"pillarLabel\": \"Adesão (treino)\",\n          \"score\": 80\n        },\n        {\n          \"pillar\": \"sleep\",\n          \"pillarLabel\": \"Sono\",\n          \"score\": 75\n        }\n      ],\n      \"openAnswers\": [\n        {\n          \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n          \"question\": \"Quer contar algo para o seu treinador?\",\n          \"pillar\": \"report\",\n          \"pillarLabel\": \"Relato\",\n          \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n        }\n      ]\n    }\n  ]\n}"
+              "body": "{\n  \"student\": {\n    \"id\": \"c9e1b2a4-6d3f-4a8b-9e5c-0f1a2b3c4d51\",\n    \"name\": \"Camila Duarte\",\n    \"avatarUrl\": null\n  },\n  \"hasPending\": false,\n  \"autoSend\": {\n    \"enabled\": true,\n    \"next\": {\n      \"milestone\": \"D15\",\n      \"milestoneLabel\": \"15 dias\",\n      \"dueAt\": \"2026-11-25T12:00:00.000Z\"\n    }\n  },\n  \"feedbacks\": [\n    {\n      \"id\": \"2f0c1a6e-5b7d-4c1e-9a3b-6d2e8f4a1b01\",\n      \"milestone\": \"D7\",\n      \"milestoneLabel\": \"7 dias\",\n      \"status\": \"answered\",\n      \"statusLabel\": \"Respondido\",\n      \"sentAt\": \"2026-11-10T12:00:00.000Z\",\n      \"expiresAt\": \"2026-11-13T12:00:00.000Z\",\n      \"submittedAt\": \"2026-11-11T14:30:00.000Z\",\n      \"readAt\": null,\n      \"overallIndex\": 78,\n      \"band\": \"good\",\n      \"bandLabel\": \"Bom\",\n      \"pillars\": [\n        {\n          \"pillar\": \"training_adherence\",\n          \"pillarLabel\": \"Adesão (treino)\",\n          \"score\": 80,\n          \"band\": \"good\",\n          \"bandLabel\": \"Bom\",\n          \"answers\": [\n            {\n              \"questionId\": \"5b2e7d41-9c0a-4e83-b6f1-2a4d8c1e7f09\",\n              \"question\": \"Como foi sua adesão aos treinos?\",\n              \"type\": \"score\",\n              \"typeLabel\": \"Nota\",\n              \"value\": 8,\n              \"max\": 10,\n              \"inverted\": false\n            }\n          ]\n        },\n        {\n          \"pillar\": \"sleep\",\n          \"pillarLabel\": \"Sono\",\n          \"score\": 75,\n          \"band\": \"good\",\n          \"bandLabel\": \"Bom\",\n          \"answers\": [\n            {\n              \"questionId\": \"8c4f1a6b-2d7e-4b93-a0e5-6f3b9d2c1a74\",\n              \"question\": \"Como foi a qualidade do seu sono?\",\n              \"type\": \"stars\",\n              \"typeLabel\": \"Estrelas\",\n              \"value\": 4,\n              \"max\": 5,\n              \"inverted\": false\n            }\n          ]\n        }\n      ],\n      \"openAnswers\": [\n        {\n          \"questionId\": \"7a1d9c52-3e4b-4f6a-8d20-1b5c7e9f3a13\",\n          \"question\": \"Quer contar algo para o seu treinador?\",\n          \"pillar\": \"report\",\n          \"pillarLabel\": \"Relato\",\n          \"text\": \"Senti o treino de pernas pesado, mas evoluí nas cargas.\"\n        }\n      ]\n    }\n  ]\n}"
             }
           ]
         },
@@ -25800,7 +25800,7 @@
                 }
               ]
             },
-            "description": "Optional body {templateId}: without it (no body or {}) the general template is sent; otherwise the general one or one of the trainer. Creates an ADHOC feedback request and e-mails the student; works with auto-send off. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 403 STUDENT_BLOCKED_ON_PLAN, 404 NOT_FOUND (student not linked), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (templateId neither general nor the trainer's), 409 STUDENT_FEEDBACK_ALREADY_PENDING (studentFeedback.alreadyPending), 500.",
+            "description": "Optional body {templateId}: without it (no body or {}) the general template is sent; otherwise the general one or one of the trainer. Creates an ADHOC feedback request and e-mails the student; works with auto-send off. expiresAt is sentAt plus the trainer's response window (responseWindowDays, default 3). Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 403 STUDENT_BLOCKED_ON_PLAN, 404 NOT_FOUND (student not linked), 404 STUDENT_FEEDBACK_TEMPLATE_NOT_FOUND (templateId neither general nor the trainer's), 409 STUDENT_FEEDBACK_ALREADY_PENDING (studentFeedback.alreadyPending), 500.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"templateId\": \"7c9e6679-7425-40de-944b-e07fc1f90ae7\"\n}",
@@ -25889,7 +25889,7 @@
                 "config"
               ]
             },
-            "description": "Settings of the trainer. Defaults when never saved: autoSendEnabled false, every milestone true. Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
+            "description": "Settings of the trainer. Defaults when never saved: autoSendEnabled false, every milestone true, responseWindowDays 3 (days a student has to answer a feedback sent from now on). Requires TRAINER role. Errors: 401, 403 trainer.notFound, 500."
           },
           "response": [
             {
@@ -25923,7 +25923,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true,\n  \"responseWindowDays\": 3\n}"
             }
           ]
         },
@@ -25954,14 +25954,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+              "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false,\n  \"responseWindowDays\": 5\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Partial update: any subset of the booleans, no extra properties. Turning auto-send on never sends milestones that fell due before. Returns the full config. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
+            "description": "Partial update: any subset of the booleans plus optional responseWindowDays (integer 1-7), no extra properties. responseWindowDays applies to feedbacks sent afterwards; requests already sent keep their deadline. Turning auto-send on never sends milestones that fell due before. Returns the full config. Requires TRAINER role. Errors: 400 validation, 401, 403 trainer.notFound, 500."
           },
           "response": [
             {
@@ -25991,7 +25991,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false\n}",
+                  "raw": "{\n  \"autoSendEnabled\": true,\n  \"d21\": false,\n  \"responseWindowDays\": 5\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -26008,7 +26008,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true\n}"
+              "body": "{\n  \"autoSendEnabled\": true,\n  \"d7\": true,\n  \"d15\": true,\n  \"d21\": false,\n  \"d30\": true,\n  \"recurring\": true,\n  \"responseWindowDays\": 5\n}"
             }
           ]
         },

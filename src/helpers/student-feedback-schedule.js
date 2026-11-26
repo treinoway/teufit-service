@@ -78,27 +78,69 @@ export function dueMilestone({ linkedAt, config, now }) {
 }
 
 /**
+ * Next milestone after the given moment that the config will send, with its due instant, or null when none will (auto-send off or never stamped, or nothing enabled left).
+ *
+ * @param {{ linkedAt: Date, config: object|null, after: Date }} input
+ * @returns {{ milestone: string, dueAt: Date }|null}
+ */
+export function nextMilestone({ linkedAt, config, after }) {
+  if (!config?.autoSendEnabled || !config.enabledAt) return null;
+  const days = reachedDays(linkedAt, after);
+  const fixedDay = MILESTONE_DAYS.find((day) => day > days && config[MILESTONE_BY_DAY[day].toggle]);
+  if (fixedDay === undefined && !config[RECURRING_MILESTONE.toggle]) return null;
+  const day = fixedDay ?? nextRecurringDay(days);
+  return { milestone: milestoneOfDay(day).milestone, dueAt: milestoneDueAt(linkedAt, day) };
+}
+
+/**
  * Due instant of the next milestone after the given moment that the config will send, or null when none will.
  *
  * @param {{ linkedAt: Date, config: object|null, after: Date }} input
  * @returns {Date|null}
  */
 export function nextMilestoneAt({ linkedAt, config, after }) {
-  if (!config?.autoSendEnabled) return null;
-  const days = reachedDays(linkedAt, after);
-  const fixedDay = MILESTONE_DAYS.find((day) => day > days && config[MILESTONE_BY_DAY[day].toggle]);
-  if (fixedDay !== undefined) return milestoneDueAt(linkedAt, fixedDay);
-  return config[RECURRING_MILESTONE.toggle] ? milestoneDueAt(linkedAt, nextRecurringDay(days)) : null;
+  return nextMilestone({ linkedAt, config, after })?.dueAt ?? null;
+}
+
+// Whether a request still accepts answers, which stops the cron from sending another one to the pair
+function isOpen(request, now) {
+  return request.status === StudentFeedbackStatus.PENDING && request.expiresAt > now;
+}
+
+// Instant the last open request of the pair expires, or null when none is open
+function blockedUntil(requests, now) {
+  const expiries = requests.filter((request) => isOpen(request, now)).map((request) => request.expiresAt.getTime());
+  return expiries.length === 0 ? null : new Date(Math.max(...expiries));
+}
+
+// Whether the milestone occurrence due at the instant was already sent to the pair
+function wasSent(requests, dueAt) {
+  return requests.some((request) => request.dueAt?.getTime() === dueAt.getTime());
+}
+
+/**
+ * Next automatic send of a trainer-student pair as the cron will make it if nobody answers: while a request is open nothing goes out, and when it expires the cron sends the latest milestone reached by then (unless already sent), else the next one on time.
+ *
+ * @param {{ linkedAt: Date, config: object|null, now: Date, requests: { status: string, dueAt: Date|null, expiresAt: Date }[] }} input - requests: every request of the pair
+ * @returns {{ milestone: string, dueAt: Date }|null} dueAt is the instant the send goes out
+ */
+export function nextAutoSend({ linkedAt, config, now, requests }) {
+  const unblockedAt = blockedUntil(requests, now);
+  if (unblockedAt === null) return nextMilestone({ linkedAt, config, after: now });
+  const delayed = dueMilestone({ linkedAt, config, now: unblockedAt });
+  if (delayed && !wasSent(requests, delayed.dueAt)) return { milestone: delayed.milestone, dueAt: unblockedAt };
+  return nextMilestone({ linkedAt, config, after: unblockedAt });
 }
 
 /**
  * Instant a request sent at `sentAt` stops accepting answers.
  *
  * @param {Date} sentAt
+ * @param {number} [days] - response window of the trainer; the default window when omitted
  * @returns {Date}
  */
-export function expiresAtFor(sentAt) {
-  return new Date(sentAt.getTime() + RESPONSE_WINDOW_DAYS * DAY_MS);
+export function expiresAtFor(sentAt, days = RESPONSE_WINDOW_DAYS) {
+  return new Date(sentAt.getTime() + days * DAY_MS);
 }
 
 /**
