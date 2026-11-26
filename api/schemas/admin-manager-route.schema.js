@@ -5,7 +5,10 @@ import {
   ADMIN_MANAGER_SEARCH_MAX_LENGTH,
   ADMIN_MANAGER_TEMPLATE_TYPE,
   ADMIN_MANAGER_USER_KIND,
+  OVERVIEW_DEFAULT_PERIOD,
+  OVERVIEW_PERIODS,
 } from '../../src/constants/admin-manager.js';
+import { PLATFORM_PLAN_TIERS } from '../../src/constants/platform-plan.js';
 import { badRequestErrorResponseSchema, errorResponseSchema } from './error-response.schema.js';
 
 const ADMIN_MANAGER_TAG = 'Admin - Manager';
@@ -408,4 +411,100 @@ export const getSessionDetailSchema = {
     },
     { withNotFound: true },
   ),
+};
+
+const INTEGER = { type: 'integer' };
+const TIER = { type: 'string', enum: Object.values(PLATFORM_PLAN_TIERS) };
+
+// Builds a closed object schema where every listed property is required.
+function closedObject(properties) {
+  return { type: 'object', required: Object.keys(properties), properties, additionalProperties: false };
+}
+
+const kpiSchema = closedObject({ current: INTEGER, previous: INTEGER });
+const rangeSchema = closedObject({ from: DATE_TIME, to: DATE_TIME });
+
+const aiTopTrainerSchema = closedObject({
+  trainerId: UUID,
+  firstName: NULLABLE_STRING,
+  lastName: NULLABLE_STRING,
+  email: NULLABLE_STRING,
+  tier: TIER,
+  totalTokens: INTEGER,
+  estimatedCostUsd: { type: 'number', description: 'USD, rounded to cents; models without a price are left out' },
+});
+
+const aiUsageSchema = closedObject({
+  month: { type: 'string', description: 'Current UTC billing month, YYYY-MM' },
+  inputTokens: INTEGER,
+  outputTokens: INTEGER,
+  cacheReadTokens: INTEGER,
+  cacheWriteTokens: INTEGER,
+  totalTokens: INTEGER,
+  interactions: { ...INTEGER, description: 'Number of iArnold turns (ai_token_usage rows)' },
+  trainers: { ...INTEGER, description: 'Distinct trainers with usage this month' },
+  estimatedCostUsd: { type: 'number', description: 'USD, rounded to cents, over models with a known price' },
+  costComplete: { type: 'boolean', description: 'false when some usage is on a model without a price' },
+  topTrainers: { type: 'array', items: aiTopTrainerSchema },
+});
+
+const latestTrainerSchema = closedObject({
+  userId: UUID,
+  firstName: NULLABLE_STRING,
+  lastName: NULLABLE_STRING,
+  email: NULLABLE_STRING,
+  tier: TIER,
+  studentCount: INTEGER,
+  createdAt: DATE_TIME,
+});
+
+const pendingCountProperties = {
+  pendingInvites: { ...INTEGER, description: 'Trainer invites pending and not expired' },
+  newFeedbacks: { ...INTEGER, description: 'Trainer feedbacks with status NEW' },
+};
+
+export const getOverviewSchema = {
+  tags: [ADMIN_MANAGER_TAG],
+  summary: 'Manager dashboard overview for a 7/30/90-day period — admin only',
+  security: SECURITY,
+  querystring: {
+    type: 'object',
+    properties: {
+      period: { type: 'string', enum: Object.values(OVERVIEW_PERIODS), default: OVERVIEW_DEFAULT_PERIOD },
+    },
+    additionalProperties: false,
+  },
+  response: buildResponses(
+    closedObject({
+      period: { type: 'string', enum: Object.values(OVERVIEW_PERIODS) },
+      generatedAt: DATE_TIME,
+      range: rangeSchema,
+      previousRange: rangeSchema,
+      kpis: closedObject({
+        newTrainers: kpiSchema,
+        newStudents: kpiSchema,
+        activeTrainers: kpiSchema,
+        completedSessions: kpiSchema,
+      }),
+      weeklySignups: {
+        type: 'array',
+        description: 'Last 8 America/Sao_Paulo weeks, oldest first',
+        items: closedObject({ weekStart: DATE_ONLY, trainers: INTEGER, students: INTEGER }),
+      },
+      ai: aiUsageSchema,
+      plans: { type: 'array', items: closedObject({ tier: TIER, count: INTEGER }) },
+      pending: closedObject({
+        ...pendingCountProperties,
+        trainersWithoutStudents: { ...INTEGER, description: 'Live trainers older than 14 days with no live student' },
+      }),
+      latestTrainers: { type: 'array', items: latestTrainerSchema },
+    }),
+  ),
+};
+
+export const getPendingSchema = {
+  tags: [ADMIN_MANAGER_TAG],
+  summary: 'Pending manager items for the navigation badge — admin only',
+  security: SECURITY,
+  response: buildResponses(closedObject(pendingCountProperties)),
 };

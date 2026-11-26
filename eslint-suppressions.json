@@ -236,7 +236,7 @@
       "count": 2
     },
     "local/no-comments-in-function": {
-      "count": 64
+      "count": 60
     }
   },
   "config/environments/default.js": {

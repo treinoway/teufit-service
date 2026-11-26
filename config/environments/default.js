@@ -103,8 +103,8 @@ export default {
     env: process.env.ASAAS_ENV || 'sandbox',
   },
   web: {
-    // Used to build the trainer-invite magic link: `${baseUrl}/invite?code=...`
-    baseUrl: process.env.WEB_BASE_URL || 'https://teufit.com.br',
+    // Web app origin: trainer-invite magic link (`${baseUrl}/invite?code=...`), dashboard link and email image assets (`${baseUrl}/img/...`).
+    baseUrl: process.env.WEB_BASE_URL || 'https://app.teufit.com.br',
   },
   stores: {
     // Store listing links embedded in student emails. Both apps are published, so the

@@ -1,6 +1,8 @@
 import config from '../../config/index.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import {
+  getOverview,
+  getPending,
   getProtocolDetail,
   getSessionDetail,
   getUserOverview,
@@ -26,6 +28,14 @@ function managerRouteOptions(routeSchema) {
 
 // Registers the admin-only, read-only manager (backoffice) routes on the isolated admin client.
 export async function adminManagerRoutes(fastify) {
+  fastify.get('/admin/manager/overview', managerRouteOptions(schema.getOverviewSchema), async (request, reply) => {
+    return reply.send(await getOverview(fastify.adminDb, { period: request.query.period }));
+  });
+
+  fastify.get('/admin/manager/pending', managerRouteOptions(schema.getPendingSchema), async (_request, reply) => {
+    return reply.send(await getPending(fastify.adminDb));
+  });
+
   fastify.get('/admin/manager/users', managerRouteOptions(schema.listUsersSchema), async (request, reply) => {
     const { search, kind, page, pageSize } = request.query;
     return reply.send(await listUsers(fastify.adminDb, { search, kind, page, pageSize }));

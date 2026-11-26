@@ -39,7 +39,7 @@ function renderTransactionalEmail({ title, heading, bodyHtml }) {
                 <table role="presentation" style="width: 600px; max-width: 100%; border-collapse: collapse; background-color: #ffffff; box-shadow: 0 10px 18px rgba(16, 84, 178, 0.08); border-radius: 16px; overflow: hidden;">
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800;">
                         </td>
                     </tr>
                     <tr>
@@ -123,8 +123,8 @@ function renderStoreButtonsBlock() {
                                         <p style="margin: 0 0 12px; color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
                                             Baixe o app Teufit:
                                         </p>
-                                        ${renderStoreBadge({ href: config.stores.appStoreUrl, src: 'https://teufit.com.br/img/app-store-badge-pt-br.png', alt: 'Baixar na App Store', width: 120 })}
-                                        ${renderStoreBadge({ href: config.stores.playStoreUrl, src: 'https://teufit.com.br/img/google-play-badge-pt-br.png', alt: 'Disponível no Google Play', width: 135 })}
+                                        ${renderStoreBadge({ href: config.stores.appStoreUrl, src: `${config.web.baseUrl}/img/app-store-badge-pt-br.png`, alt: 'Baixar na App Store', width: 120 })}
+                                        ${renderStoreBadge({ href: config.stores.playStoreUrl, src: `${config.web.baseUrl}/img/google-play-badge-pt-br.png`, alt: 'Disponível no Google Play', width: 135 })}
                                     </td>
                                 </tr>
                             </table>`;
@@ -181,7 +181,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -261,7 +261,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
                     
@@ -388,7 +388,7 @@ class EmailHandler {
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -462,7 +462,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -574,7 +574,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -692,7 +692,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -820,7 +820,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -898,7 +898,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -983,7 +983,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -1106,7 +1106,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 
@@ -1196,7 +1196,7 @@ ${renderStoreButtonsBlock()}
                     <!-- Header -->
                     <tr>
                         <td style="background: #ffffff; padding: 36px 30px 28px; text-align: center; border-bottom: 1px solid #e2e8f0;">
-                            <img src="https://teufit.com.br/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                            <img src="${config.web.baseUrl}/img/teufit-lockup.png" alt="Teufit" width="180" style="display: block; margin: 0 auto; width: 180px; max-width: 60%; height: auto; border: 0; color: #1054B2; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                         </td>
                     </tr>
 

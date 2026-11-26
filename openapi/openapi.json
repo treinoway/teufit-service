@@ -138751,6 +138751,986 @@
         }
       }
     },
+    "/admin/manager/overview": {
+      "get": {
+        "summary": "Manager dashboard overview for a 7/30/90-day period — admin only",
+        "tags": [
+          "Admin - Manager"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d"
+              ],
+              "default": "30d"
+            },
+            "in": "query",
+            "name": "period",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "period",
+                    "generatedAt",
+                    "range",
+                    "previousRange",
+                    "kpis",
+                    "weeklySignups",
+                    "ai",
+                    "plans",
+                    "pending",
+                    "latestTrainers"
+                  ],
+                  "properties": {
+                    "period": {
+                      "type": "string",
+                      "enum": [
+                        "7d",
+                        "30d",
+                        "90d"
+                      ]
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "range": {
+                      "type": "object",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "previousRange": {
+                      "type": "object",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "to": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "kpis": {
+                      "type": "object",
+                      "required": [
+                        "newTrainers",
+                        "newStudents",
+                        "activeTrainers",
+                        "completedSessions"
+                      ],
+                      "properties": {
+                        "newTrainers": {
+                          "type": "object",
+                          "required": [
+                            "current",
+                            "previous"
+                          ],
+                          "properties": {
+                            "current": {
+                              "type": "integer"
+                            },
+                            "previous": {
+                              "type": "integer"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "newStudents": {
+                          "type": "object",
+                          "required": [
+                            "current",
+                            "previous"
+                          ],
+                          "properties": {
+                            "current": {
+                              "type": "integer"
+                            },
+                            "previous": {
+                              "type": "integer"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "activeTrainers": {
+                          "type": "object",
+                          "required": [
+                            "current",
+                            "previous"
+                          ],
+                          "properties": {
+                            "current": {
+                              "type": "integer"
+                            },
+                            "previous": {
+                              "type": "integer"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "completedSessions": {
+                          "type": "object",
+                          "required": [
+                            "current",
+                            "previous"
+                          ],
+                          "properties": {
+                            "current": {
+                              "type": "integer"
+                            },
+                            "previous": {
+                              "type": "integer"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "weeklySignups": {
+                      "type": "array",
+                      "description": "Last 8 America/Sao_Paulo weeks, oldest first",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "weekStart",
+                          "trainers",
+                          "students"
+                        ],
+                        "properties": {
+                          "weekStart": {
+                            "type": "string",
+                            "description": "YYYY-MM-DD"
+                          },
+                          "trainers": {
+                            "type": "integer"
+                          },
+                          "students": {
+                            "type": "integer"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "ai": {
+                      "type": "object",
+                      "required": [
+                        "month",
+                        "inputTokens",
+                        "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "totalTokens",
+                        "interactions",
+                        "trainers",
+                        "estimatedCostUsd",
+                        "costComplete",
+                        "topTrainers"
+                      ],
+                      "properties": {
+                        "month": {
+                          "type": "string",
+                          "description": "Current UTC billing month, YYYY-MM"
+                        },
+                        "inputTokens": {
+                          "type": "integer"
+                        },
+                        "outputTokens": {
+                          "type": "integer"
+                        },
+                        "cacheReadTokens": {
+                          "type": "integer"
+                        },
+                        "cacheWriteTokens": {
+                          "type": "integer"
+                        },
+                        "totalTokens": {
+                          "type": "integer"
+                        },
+                        "interactions": {
+                          "type": "integer",
+                          "description": "Number of iArnold turns (ai_token_usage rows)"
+                        },
+                        "trainers": {
+                          "type": "integer",
+                          "description": "Distinct trainers with usage this month"
+                        },
+                        "estimatedCostUsd": {
+                          "type": "number",
+                          "description": "USD, rounded to cents, over models with a known price"
+                        },
+                        "costComplete": {
+                          "type": "boolean",
+                          "description": "false when some usage is on a model without a price"
+                        },
+                        "topTrainers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "trainerId",
+                              "firstName",
+                              "lastName",
+                              "email",
+                              "tier",
+                              "totalTokens",
+                              "estimatedCostUsd"
+                            ],
+                            "properties": {
+                              "trainerId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "firstName": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "lastName": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "email": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "tier": {
+                                "type": "string",
+                                "enum": [
+                                  "FREE",
+                                  "PRO",
+                                  "PLATINUM",
+                                  "DIAMOND",
+                                  "BETA"
+                                ]
+                              },
+                              "totalTokens": {
+                                "type": "integer"
+                              },
+                              "estimatedCostUsd": {
+                                "type": "number",
+                                "description": "USD, rounded to cents; models without a price are left out"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "plans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "tier",
+                          "count"
+                        ],
+                        "properties": {
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "FREE",
+                              "PRO",
+                              "PLATINUM",
+                              "DIAMOND",
+                              "BETA"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "pending": {
+                      "type": "object",
+                      "required": [
+                        "pendingInvites",
+                        "newFeedbacks",
+                        "trainersWithoutStudents"
+                      ],
+                      "properties": {
+                        "pendingInvites": {
+                          "type": "integer",
+                          "description": "Trainer invites pending and not expired"
+                        },
+                        "newFeedbacks": {
+                          "type": "integer",
+                          "description": "Trainer feedbacks with status NEW"
+                        },
+                        "trainersWithoutStudents": {
+                          "type": "integer",
+                          "description": "Live trainers older than 14 days with no live student"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "latestTrainers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "userId",
+                          "firstName",
+                          "lastName",
+                          "email",
+                          "tier",
+                          "studentCount",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "firstName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastName": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "email": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "FREE",
+                              "PRO",
+                              "PLATINUM",
+                              "DIAMOND",
+                              "BETA"
+                            ]
+                          },
+                          "studentCount": {
+                            "type": "integer"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/manager/pending": {
+      "get": {
+        "summary": "Pending manager items for the navigation badge — admin only",
+        "tags": [
+          "Admin - Manager"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "pendingInvites",
+                    "newFeedbacks"
+                  ],
+                  "properties": {
+                    "pendingInvites": {
+                      "type": "integer",
+                      "description": "Trainer invites pending and not expired"
+                    },
+                    "newFeedbacks": {
+                      "type": "integer",
+                      "description": "Trainer feedbacks with status NEW"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message",
+                        "details"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "messageCode": {
+                          "type": "string",
+                          "enum": [
+                            "validation.failed"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "field": {
+                                "type": "string"
+                              },
+                              "validations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "messageCode": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "error",
+                        "messageCode",
+                        "message"
+                      ],
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "messageCode": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": true
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "messageCode",
+                    "message"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "messageCode": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/manager/users": {
       "get": {
         "summary": "List platform users with search and kind filter — admin only",
