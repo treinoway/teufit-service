@@ -11,6 +11,7 @@ import {
   fullNameOf,
   openRequestWhere,
   resolveTemplate,
+  responseWindowDaysOf,
   sendEmailSafely,
   tryLockStudentFeedback,
 } from './student-feedback-shared.js';
@@ -72,15 +73,16 @@ async function withoutBlockedLinks(prisma, dueLinks, now) {
   return dueLinks.filter(({ link }) => !blockedPairs.has(pairKey(link.trainerId, link.studentId)));
 }
 
-// Creates the request of a milestone once: skipped when it was already sent, or while the student has an open request of the trainer
+// Creates the request of a milestone once, with the response window of the trainer: skipped when it was already sent, or while the student has an open request of the trainer
 function createDueRequest(prisma, { link, due, templateId, now }) {
   const { trainerId, studentId } = link;
+  const responseWindowDays = responseWindowDaysOf(link.trainer.studentFeedbackConfig);
   return prisma.$transaction(async (tx) => {
     if (!(await tryLockStudentFeedback(tx, trainerId, studentId))) return null;
     // why: dueAt identifies the milestone occurrence; the page pre-filter ran outside the lock, so it is checked again here, and the unique (trainer, student, dueAt) index is the last guard.
     const blocking = await tx.studentFeedbackRequest.findFirst({ where: blockingRequestWhere({ link, due }, now), select: { id: true } });
     if (blocking) return null;
-    return createRequest(tx, { trainerId, studentId, templateId, milestone: due.milestone, dueAt: due.dueAt, now });
+    return createRequest(tx, { trainerId, studentId, templateId, milestone: due.milestone, dueAt: due.dueAt, now, responseWindowDays });
   });
 }
 
@@ -94,7 +96,8 @@ async function sendDueFeedback(prisma, emailSender, logger, { link, due, templat
   const request = await createDueRequest(prisma, { link, due, templateId, now });
   if (!request) return false;
   if (link.student.email) {
-    const payload = emailPayload(link.student, link.trainer.user, request.expiresAt);
+    const responseWindowDays = responseWindowDaysOf(link.trainer.studentFeedbackConfig);
+    const payload = { ...emailPayload(link.student, link.trainer.user, request.expiresAt), responseWindowDays };
     await sendEmailSafely((data) => emailSender.sendStudentFeedbackRequestEmail(data), payload, logger);
   }
   return true;

@@ -26,7 +26,7 @@ const UNREAD_COUNT_URL = '/trainer/student-feedbacks/unread-count';
 const CONFIG_URL = '/trainer/student-feedbacks/config';
 const UNKNOWN_UUID = '00000000-0000-4000-8000-000000000000';
 const OPEN_ANSWER_TEXT = 'Semana boa, só o sono que pesou';
-const DEFAULT_CONFIG = { autoSendEnabled: false, d7: true, d15: true, d21: true, d30: true, recurring: true };
+const DEFAULT_CONFIG = { autoSendEnabled: false, d7: true, d15: true, d21: true, d30: true, recurring: true, responseWindowDays: 3 };
 const FALLBACK_QUESTIONS = [
   { order: 1, text: 'Como foi tua adesão aos treinos?', type: StudentFeedbackQuestionType.SCORE, pillar: StudentFeedbackPillar.TRAINING_ADHERENCE, required: true },
   { order: 2, text: 'Como está teu sono?', type: StudentFeedbackQuestionType.STARS, pillar: StudentFeedbackPillar.SLEEP, required: true },

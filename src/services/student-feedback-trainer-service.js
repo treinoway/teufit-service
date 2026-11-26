@@ -3,6 +3,7 @@
  */
 
 import {
+  ANSWER_RANGES,
   AVERAGE_INDEX_SAMPLE_SIZE,
   INBOX_DEFAULT_LIMIT,
   INBOX_MAX_LIMIT,
@@ -23,12 +24,15 @@ import {
   notFoundError,
   openRequestWhere,
   resolveTemplate,
+  responseWindowDaysOf,
   sendEmailSafely,
   templateNotFoundError,
   tryLockStudentFeedback,
   usableTemplateWhere,
 } from './student-feedback-shared.js';
 import { AppError } from '../errors/app-error.js';
+import { nextAutoSend } from '../helpers/student-feedback-schedule.js';
+import { bandFor } from '../helpers/student-feedback-score.js';
 
 const DAY_MS = 86400000;
 const PERCENT = 100;
@@ -108,10 +112,46 @@ async function inboxSummary(prisma, trainerId, now) {
   };
 }
 
-// Pillar scores stored on an answered request as a list, in the canonical pillar order
+// Whether the answer is a filled answer to a scored question of the pillar
+function isScoredAnswerOf(answer, pillar) {
+  return answer.question.pillar === pillar && ANSWER_RANGES[answer.question.type] !== undefined && answer.score !== null && answer.score !== undefined;
+}
+
+// Scored answers of a pillar as the student gave them, with the maximum of their scale, in question order
+function toPillarAnswers(request, pillar) {
+  return request.answers
+    .filter((answer) => isScoredAnswerOf(answer, pillar))
+    .sort((left, right) => left.question.order - right.question.order)
+    .map(({ questionId, question, score }) => ({
+      questionId,
+      question: question.text,
+      type: question.type,
+      value: score,
+      max: ANSWER_RANGES[question.type].max,
+      inverted: question.invertScore === true,
+    }));
+}
+
+// Pillar scores stored on an answered request as a list, in the canonical pillar order, each with its band and the answers behind it
 function toPillars(request) {
   const scores = request.status === StudentFeedbackStatus.ANSWERED ? (request.pillarScores ?? {}) : {};
-  return studentFeedbackPillarValues.filter((pillar) => scores[pillar] !== undefined).map((pillar) => ({ pillar, score: scores[pillar] }));
+  return studentFeedbackPillarValues
+    .filter((pillar) => scores[pillar] !== undefined)
+    .map((pillar) => ({ pillar, score: scores[pillar], band: bandFor(scores[pillar]), answers: toPillarAnswers(request, pillar) }));
+}
+
+// Link of the pair and config of the trainer, what the auto-send state is computed from
+function findAutoSendSources(prisma, { trainerId, studentId }) {
+  return Promise.all([
+    prisma.trainerStudent.findUnique({ where: { trainerId_studentId: { trainerId, studentId } }, select: { createdAt: true, activeOnPlan: true } }),
+    prisma.studentFeedbackConfig.findUnique({ where: { trainerId } }),
+  ]);
+}
+
+// Auto-send state of the trainer and the next send the cron will make to this student given the requests of the pair; none while the student is blocked on the plan
+function toAutoSend([link, config], requests, now) {
+  const next = link?.activeOnPlan ? nextAutoSend({ linkedAt: link.createdAt, config, now, requests }) : null;
+  return { enabled: config?.autoSendEnabled === true, next };
 }
 
 // Text answers of an answered request with their question, in question order
@@ -130,26 +170,32 @@ async function assertTemplateStillUsable(tx, trainerId, templateId) {
 }
 
 // Creates the ad-hoc request unless the student still has an open one of this trainer or the template was retired meanwhile
-function createAdhocRequest(prisma, { trainerId, studentId, templateId, now }) {
+function createAdhocRequest(prisma, { trainerId, studentId, templateId, now, responseWindowDays }) {
   return prisma.$transaction(async (tx) => {
     if (!(await tryLockStudentFeedback(tx, trainerId, studentId))) throw alreadyPendingError();
     const open = await tx.studentFeedbackRequest.findFirst({ where: openRequestWhere(trainerId, studentId, now), select: { id: true } });
     if (open) throw alreadyPendingError();
-    const request = await createRequest(tx, { trainerId, studentId, templateId, milestone: StudentFeedbackMilestone.ADHOC, dueAt: null, now });
+    const request = await createRequest(tx, { trainerId, studentId, templateId, milestone: StudentFeedbackMilestone.ADHOC, dueAt: null, now, responseWindowDays });
     // why: the insert holds the foreign key's key-share lock on the template, so only after it can no save or delete retire the template unseen; a failure rolls the insert back.
     await assertTemplateStillUsable(tx, trainerId, templateId);
     return request;
   });
 }
 
+// Response window the trainer chose for the sends made from now on; the default when none was saved
+async function findResponseWindowDays(prisma, trainerId) {
+  const config = await prisma.studentFeedbackConfig.findUnique({ where: { trainerId }, select: { responseWindowDays: true } });
+  return responseWindowDaysOf(config);
+}
+
 // Sends the request e-mail of an ad-hoc feedback; a student without e-mail or a failing provider never fails the send
-async function announceRequest(prisma, emailSender, request, logger) {
+async function announceRequest(prisma, emailSender, { request, responseWindowDays }, logger) {
   const [student, trainer] = await Promise.all([
     prisma.user.findUnique({ where: { id: request.studentId }, select: { email: true, firstName: true, deletedAt: true } }),
     prisma.trainer.findUnique({ where: { id: request.trainerId }, select: { user: { select: PERSON_NAME_SELECT } } }),
   ]);
   if (!student?.email || student.deletedAt) return;
-  const payload = { to: student.email, studentName: student.firstName, trainerName: fullNameOf(trainer?.user), expiresAt: request.expiresAt };
+  const payload = { to: student.email, studentName: student.firstName, trainerName: fullNameOf(trainer?.user), expiresAt: request.expiresAt, responseWindowDays };
   await sendEmailSafely((data) => emailSender.sendStudentFeedbackRequestEmail(data), payload, logger);
 }
 
@@ -207,18 +253,19 @@ export async function markAsRead(prisma, trainerId, requestId, now = new Date())
 }
 
 /**
- * Feedbacks this trainer sent to one of their students, oldest first, with pillar scores and open answers of the answered ones.
+ * Feedbacks this trainer sent to one of their students, oldest first, with pillar scores, bands and answers of the answered ones, plus the auto-send state.
  *
  * @param {object} prisma
  * @param {string} trainerId - Trainer.id
  * @param {string} studentId - User.id; 404 when the student is not linked to the trainer
  * @param {Date} [now]
- * @returns {Promise<{ student: object, hasPending: boolean, feedbacks: object[] }>}
+ * @returns {Promise<{ student: object, hasPending: boolean, autoSend: { enabled: boolean, next: { milestone: string, dueAt: Date }|null }, feedbacks: object[] }>}
  */
 export async function getStudentHistory(prisma, trainerId, studentId, now = new Date()) {
   await assertStudentOfTrainer(prisma, trainerId, studentId);
-  const [student, requests] = await Promise.all([
+  const [student, autoSendSources, requests] = await Promise.all([
     prisma.user.findUnique({ where: { id: studentId }, select: STUDENT_SELECT }),
+    findAutoSendSources(prisma, { trainerId, studentId }),
     prisma.studentFeedbackRequest.findMany({
       where: { trainerId, studentId },
       orderBy: { sentAt: 'asc' },
@@ -228,12 +275,13 @@ export async function getStudentHistory(prisma, trainerId, studentId, now = new 
   return {
     student: toStudent(student),
     hasPending: requests.some((request) => request.status === StudentFeedbackStatus.PENDING && request.expiresAt > now),
+    autoSend: toAutoSend(autoSendSources, requests, now),
     feedbacks: requests.map((request) => ({ ...toRequestSummary(request), pillars: toPillars(request), openAnswers: toOpenAnswers(request) })),
   };
 }
 
 /**
- * Sends an ad-hoc feedback to a student of the trainer, whatever the auto-send setting; refused while the student has an open request of this trainer.
+ * Sends an ad-hoc feedback to a student of the trainer, whatever the auto-send setting, open for the response window of the trainer; refused while the student has an open request of this trainer.
  *
  * @param {object} prisma
  * @param {{ sendStudentFeedbackRequestEmail: Function }} emailSender
@@ -249,7 +297,8 @@ export async function sendAdhocFeedback(prisma, emailSender, trainerId, studentI
   await assertStudentActiveOnPlan(prisma, trainerId, studentId);
   const template = await resolveTemplate(prisma, { trainerId, milestone: StudentFeedbackMilestone.ADHOC, templateId: options?.templateId });
   if (!template) throw new AppError({ message: 'Student feedback general template is missing' });
-  const request = await createAdhocRequest(prisma, { trainerId, studentId, templateId: template.id, now });
-  await announceRequest(prisma, emailSender, request, logger);
+  const responseWindowDays = await findResponseWindowDays(prisma, trainerId);
+  const request = await createAdhocRequest(prisma, { trainerId, studentId, templateId: template.id, now, responseWindowDays });
+  await announceRequest(prisma, emailSender, { request, responseWindowDays }, logger);
   return { id: request.id, milestone: request.milestone, status: request.status, sentAt: request.sentAt, expiresAt: request.expiresAt };
 }

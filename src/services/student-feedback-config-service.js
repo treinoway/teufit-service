@@ -2,16 +2,17 @@
  * Per-trainer settings of the automatic student feedbacks: the switches and the template of each milestone.
  */
 
-import { DEFAULT_STUDENT_FEEDBACK_CONFIG, MILESTONE_TEMPLATE_SLOTS, STUDENT_FEEDBACK_CONFIG_FIELDS } from '../constants/student-feedback.js';
+import { DEFAULT_STUDENT_FEEDBACK_CONFIG, MILESTONE_TEMPLATE_SLOTS, RESPONSE_WINDOW_FIELD, STUDENT_FEEDBACK_CONFIG_FIELDS } from '../constants/student-feedback.js';
 import { lockStudentFeedbackTemplateForUpdate } from '../helpers/row-locks.js';
-import { templateNotFoundError, usableTemplateWhere } from './student-feedback-shared.js';
+import { responseWindowDaysOf, templateNotFoundError, usableTemplateWhere } from './student-feedback-shared.js';
 
 const UNIQUE_VIOLATION_CODE = 'P2002';
 
-// Contract fields of a stored row, or the defaults when the trainer never saved
+// Contract fields of a stored row, or the defaults when the trainer never saved; a row without a response window reads as the default one
 function toConfig(row) {
   const source = row ?? DEFAULT_STUDENT_FEEDBACK_CONFIG;
-  return Object.fromEntries(STUDENT_FEEDBACK_CONFIG_FIELDS.map((field) => [field, source[field]]));
+  const fields = Object.fromEntries(STUDENT_FEEDBACK_CONFIG_FIELDS.map((field) => [field, source[field]]));
+  return { ...fields, [RESPONSE_WINDOW_FIELD]: responseWindowDaysOf(row) };
 }
 
 // Config fields present in the request body
@@ -26,11 +27,11 @@ function enabledAtAfter(stored, next, now) {
 }
 
 /**
- * Feedback settings of the trainer; the defaults (auto-send off, every milestone on) when nothing was saved.
+ * Feedback settings of the trainer; the defaults (auto-send off, every milestone on, default response window) when nothing was saved.
  *
  * @param {object} prisma
  * @param {string} trainerId - Trainer.id
- * @returns {Promise<{ autoSendEnabled: boolean, d7: boolean, d15: boolean, d21: boolean, d30: boolean, recurring: boolean }>}
+ * @returns {Promise<{ autoSendEnabled: boolean, d7: boolean, d15: boolean, d21: boolean, d30: boolean, recurring: boolean, responseWindowDays: number }>}
  */
 export async function getConfig(prisma, trainerId) {
   const stored = await prisma.studentFeedbackConfig.findUnique({ where: { trainerId } });
@@ -54,7 +55,7 @@ async function saveConfig(prisma, trainerId, changes, now) {
  *
  * @param {object} prisma
  * @param {string} trainerId - Trainer.id
- * @param {object} changes - any subset of the config booleans
+ * @param {object} changes - any subset of the config booleans and responseWindowDays (used by the sends made from now on)
  * @param {Date} [now]
  * @returns {Promise<object>} full config
  */

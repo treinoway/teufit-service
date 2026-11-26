@@ -3,6 +3,9 @@ import { AppError } from '../../src/errors/app-error.js';
 import { PlanStatus } from '../../src/constants/nutrition.js';
 import {
   RESPONSE_WINDOW_DAYS,
+  RESPONSE_WINDOW_FIELD,
+  RESPONSE_WINDOW_MAX_DAYS,
+  RESPONSE_WINDOW_MIN_DAYS,
   StudentFeedbackErrorCode,
   StudentFeedbackMessageCode,
   StudentFeedbackMilestone,
@@ -21,6 +24,7 @@ import {
   notFoundError,
   openRequestWhere,
   requiredAnswerMissingError,
+  responseWindowDaysOf,
   sendEmailSafely,
   tryLockStudentFeedback,
   visibleQuestions,
@@ -36,6 +40,7 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_CONFLICT = 409;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CUSTOM_WINDOW_DAYS = 5;
 const TRAINER_ID = 'trainer-1';
 const STUDENT_ID = 'student-1';
 const TEMPLATE_ID = 'template-1';
@@ -266,6 +271,24 @@ describe('findGeneralTemplate', () => {
   });
 });
 
+describe('responseWindowDaysOf', () => {
+  it.each([RESPONSE_WINDOW_MIN_DAYS, CUSTOM_WINDOW_DAYS, RESPONSE_WINDOW_MAX_DAYS])('should return the %i days stored in the config', (days) => {
+    expect(responseWindowDaysOf({ autoSendEnabled: true, [RESPONSE_WINDOW_FIELD]: days })).toBe(days);
+  });
+
+  it.each([null, undefined])('should return the default window for a %s config', (config) => {
+    expect(responseWindowDaysOf(config)).toBe(RESPONSE_WINDOW_DAYS);
+  });
+
+  it('should return the default window for a row without the value', () => {
+    expect(responseWindowDaysOf({ autoSendEnabled: true })).toBe(RESPONSE_WINDOW_DAYS);
+  });
+
+  it('should return the default window for a row whose value is null', () => {
+    expect(responseWindowDaysOf({ autoSendEnabled: true, [RESPONSE_WINDOW_FIELD]: null })).toBe(RESPONSE_WINDOW_DAYS);
+  });
+});
+
 describe('createRequest', () => {
   it('should look for a published diet protocol of the student under an active nutritionist link', async () => {
     const tx = buildRequestTx(null);
@@ -318,6 +341,30 @@ describe('createRequest', () => {
         expiresAt: new Date(NOW.getTime() + RESPONSE_WINDOW_DAYS * DAY_MS),
       },
     });
+  });
+
+  it('should expire the request after the response window of the trainer when one is given', async () => {
+    const tx = buildRequestTx(null);
+
+    await createRequest(tx, buildRequestInput({ responseWindowDays: CUSTOM_WINDOW_DAYS }));
+
+    expect(tx.studentFeedbackRequest.create.mock.calls[0][0].data.expiresAt).toEqual(new Date(NOW.getTime() + CUSTOM_WINDOW_DAYS * DAY_MS));
+  });
+
+  it('should expire the request after the default response window when none is given', async () => {
+    const tx = buildRequestTx(null);
+
+    await createRequest(tx, buildRequestInput());
+
+    expect(tx.studentFeedbackRequest.create.mock.calls[0][0].data.expiresAt).toEqual(new Date(NOW.getTime() + RESPONSE_WINDOW_DAYS * DAY_MS));
+  });
+
+  it('should keep sentAt at now whatever the response window is', async () => {
+    const tx = buildRequestTx(null);
+
+    await createRequest(tx, buildRequestInput({ responseWindowDays: RESPONSE_WINDOW_MAX_DAYS }));
+
+    expect(tx.studentFeedbackRequest.create.mock.calls[0][0].data.sentAt).toEqual(NOW);
   });
 
   it('should keep a null dueAt for a request sent by hand', async () => {

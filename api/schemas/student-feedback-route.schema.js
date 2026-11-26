@@ -3,6 +3,10 @@ import {
   INBOX_MAX_LIMIT,
   MILESTONE_TEMPLATE_SLOTS,
   OPEN_ANSWER_MAX_LENGTH,
+  RESPONSE_WINDOW_DAYS,
+  RESPONSE_WINDOW_FIELD,
+  RESPONSE_WINDOW_MAX_DAYS,
+  RESPONSE_WINDOW_MIN_DAYS,
   STUDENT_FEEDBACK_CONFIG_FIELDS,
   STUDENT_FEEDBACK_TEMPLATE_LIMITS,
   studentFeedbackInboxFilterValues,
@@ -129,8 +133,16 @@ const requestSummaryProperties = {
   ...i18nField('band', 'studentFeedbackBand', { nullable: true }),
 };
 
-const configProperties = Object.fromEntries(STUDENT_FEEDBACK_CONFIG_FIELDS.map((field) => [field, { type: 'boolean' }]));
-const configResponseSchema = { type: 'object', properties: configProperties };
+const configSwitchProperties = Object.fromEntries(STUDENT_FEEDBACK_CONFIG_FIELDS.filter((field) => field !== RESPONSE_WINDOW_FIELD).map((field) => [field, { type: 'boolean' }]));
+const responseWindowBodyProperty = {
+  type: 'integer',
+  minimum: RESPONSE_WINDOW_MIN_DAYS,
+  maximum: RESPONSE_WINDOW_MAX_DAYS,
+  description: `Days a student has to answer a feedback sent from now on (default ${RESPONSE_WINDOW_DAYS}); requests already sent keep their deadline`,
+};
+const configBodyProperties = { ...configSwitchProperties, [RESPONSE_WINDOW_FIELD]: responseWindowBodyProperty };
+const configResponseProperties = { ...configSwitchProperties, [RESPONSE_WINDOW_FIELD]: { type: 'integer', description: 'Days a student has to answer a feedback sent from now on' } };
+const configResponseSchema = { type: 'object', properties: configResponseProperties };
 
 export const getPendingFeedbackSchema = {
   tags: [STUDENT_TAG],
@@ -273,10 +285,35 @@ export const markAsReadSchema = {
   },
 };
 
+const pillarAnswerSchema = {
+  type: 'object',
+  properties: {
+    questionId: { type: 'string', format: 'uuid' },
+    question: { type: 'string' },
+    ...i18nField('type', 'studentFeedbackQuestionType'),
+    value: { type: 'integer', description: 'Answer as the student gave it, before any inversion' },
+    max: { type: 'integer', description: 'Maximum of the scale of the question type' },
+    inverted: { type: 'boolean', description: 'Whether a higher answer lowers the pillar score' },
+  },
+};
+
+const autoSendSchema = {
+  type: 'object',
+  properties: {
+    enabled: { type: 'boolean', description: 'Whether the trainer has automatic sending on' },
+    next: {
+      type: 'object',
+      nullable: true,
+      description: 'Next automatic feedback of this student; null when auto-send is off, nothing is left to send or the student is blocked on the plan',
+      properties: { ...i18nField('milestone', 'studentFeedbackMilestone'), dueAt: dateTime },
+    },
+  },
+};
+
 export const getStudentHistorySchema = {
   tags: [TRAINER_TAG],
   summary: 'Get the feedback history of a student',
-  description: 'Feedbacks this trainer sent to the student, oldest first, with pillar scores and open answers of the answered ones.',
+  description: 'Feedbacks this trainer sent to the student, oldest first, with pillar scores, bands, scored answers and open answers of the answered ones, plus the auto-send state and the next automatic milestone.',
   security,
   headers: authHeaders,
   params: uuidParams('studentId'),
@@ -286,6 +323,7 @@ export const getStudentHistorySchema = {
       properties: {
         student: studentSchema,
         hasPending: { type: 'boolean' },
+        autoSend: autoSendSchema,
         feedbacks: {
           type: 'array',
           items: {
@@ -297,7 +335,12 @@ export const getStudentHistorySchema = {
                 type: 'array',
                 items: {
                   type: 'object',
-                  properties: { ...i18nField('pillar', 'studentFeedbackPillar'), score: { type: 'integer' } },
+                  properties: {
+                    ...i18nField('pillar', 'studentFeedbackPillar'),
+                    score: { type: 'integer' },
+                    ...i18nField('band', 'studentFeedbackBand'),
+                    answers: { type: 'array', description: 'Scored answers behind the pillar score, in question order', items: pillarAnswerSchema },
+                  },
                 },
               },
               openAnswers: {
@@ -366,7 +409,7 @@ export const updateConfigSchema = {
   description: 'Partial update: any subset of the booleans. Turning auto-send on never sends milestones that fell due before.',
   security,
   headers: authHeaders,
-  body: { type: 'object', additionalProperties: false, properties: configProperties },
+  body: { type: 'object', additionalProperties: false, properties: configBodyProperties },
   response: { 200: configResponseSchema, ...errorResponses(400) },
 };
 
