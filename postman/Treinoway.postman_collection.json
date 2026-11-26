@@ -11071,6 +11071,250 @@
       "name": "Admin - Manager",
       "item": [
         {
+          "name": "Get Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/overview?period=30d",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "30d",
+                  "description": "Optional: 7d | 30d | 90d (default 30d)"
+                }
+              ]
+            },
+            "description": "Manager dashboard: KPIs for the period [now - P, now) vs the previous period, last 8 Sao Paulo weeks of signups, iArnold usage for the current UTC billing month (estimated USD cost from a per-model price table; costComplete=false when a model has no price), trainers per plan (missing subscription = FREE), pending items and the 5 newest trainers. Requires ADMIN role. Read-only, isolated admin DB client. Errors: 400 validation (unknown period), 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get Overview - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/overview?period=30d",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "30d",
+                      "description": "Optional: 7d | 30d | 90d (default 30d)"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"period\": \"30d\",\n  \"generatedAt\": \"2026-11-24T15:00:00.000Z\",\n  \"range\": {\n    \"from\": \"2026-10-25T15:00:00.000Z\",\n    \"to\": \"2026-11-24T15:00:00.000Z\"\n  },\n  \"previousRange\": {\n    \"from\": \"2026-09-25T15:00:00.000Z\",\n    \"to\": \"2026-10-25T15:00:00.000Z\"\n  },\n  \"kpis\": {\n    \"newTrainers\": {\n      \"current\": 12,\n      \"previous\": 9\n    },\n    \"newStudents\": {\n      \"current\": 48,\n      \"previous\": 40\n    },\n    \"activeTrainers\": {\n      \"current\": 31,\n      \"previous\": 28\n    },\n    \"completedSessions\": {\n      \"current\": 1290,\n      \"previous\": 1105\n    }\n  },\n  \"weeklySignups\": [\n    {\n      \"weekStart\": \"2026-10-05\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-10-12\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-10-19\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-10-26\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-11-02\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-11-09\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-11-16\",\n      \"trainers\": 2,\n      \"students\": 10\n    },\n    {\n      \"weekStart\": \"2026-11-23\",\n      \"trainers\": 2,\n      \"students\": 10\n    }\n  ],\n  \"ai\": {\n    \"month\": \"2026-11\",\n    \"inputTokens\": 3300000,\n    \"outputTokens\": 510000,\n    \"cacheReadTokens\": 1000000,\n    \"cacheWriteTokens\": 200000,\n    \"totalTokens\": 5010000,\n    \"interactions\": 340,\n    \"trainers\": 14,\n    \"estimatedCostUsd\": 12.4,\n    \"costComplete\": true,\n    \"topTrainers\": [\n      {\n        \"trainerId\": \"7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d\",\n        \"firstName\": \"Ana\",\n        \"lastName\": \"Lima\",\n        \"email\": \"ana@example.com\",\n        \"tier\": \"DIAMOND\",\n        \"totalTokens\": 4700000,\n        \"estimatedCostUsd\": 11.3\n      }\n    ]\n  },\n  \"plans\": [\n    {\n      \"tier\": \"FREE\",\n      \"count\": 20\n    },\n    {\n      \"tier\": \"PRO\",\n      \"count\": 8\n    },\n    {\n      \"tier\": \"PLATINUM\",\n      \"count\": 3\n    },\n    {\n      \"tier\": \"DIAMOND\",\n      \"count\": 1\n    },\n    {\n      \"tier\": \"BETA\",\n      \"count\": 15\n    }\n  ],\n  \"pending\": {\n    \"pendingInvites\": 3,\n    \"newFeedbacks\": 5,\n    \"trainersWithoutStudents\": 4\n  },\n  \"latestTrainers\": [\n    {\n      \"userId\": \"4b2c9e1a-7d3f-4a58-8c06-1e2f3a4b5c6d\",\n      \"firstName\": \"Maria\",\n      \"lastName\": \"Silva\",\n      \"email\": \"maria@example.com\",\n      \"tier\": \"BETA\",\n      \"studentCount\": 2,\n      \"createdAt\": \"2026-11-22T13:10:00.000Z\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Overview - 400 Invalid period",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/overview?period=14d",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "14d"
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"VALIDATION_ERROR\",\n  \"messageCode\": \"validation.failed\",\n  \"message\": \"Validation failed\",\n  \"details\": [\n    {\n      \"field\": \"period\",\n      \"message\": \"must be equal to one of the allowed values\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Get Overview - 503 Query timeout",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/overview?period=30d",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "30d",
+                      "description": "Optional: 7d | 30d | 90d (default 30d)"
+                    }
+                  ]
+                }
+              },
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SERVICE_UNAVAILABLE\",\n  \"messageCode\": \"admin.queryTimeout\",\n  \"message\": \"The query took too long. Narrow the search and try again.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pending",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/manager/pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "manager",
+                "pending"
+              ]
+            },
+            "description": "Pending-item counts for the Manager navigation badge: unexpired pending trainer invites and NEW trainer feedbacks. Requires ADMIN role. Read-only, isolated admin DB client. Errors: 401, 403 (not admin), 429, 503 (query timeout)."
+          },
+          "response": [
+            {
+              "name": "Get Pending - 200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "pending"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"pendingInvites\": 3,\n  \"newFeedbacks\": 5\n}"
+            },
+            {
+              "name": "Get Pending - 503 Query timeout",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/manager/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "manager",
+                    "pending"
+                  ]
+                }
+              },
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"SERVICE_UNAVAILABLE\",\n  \"messageCode\": \"admin.queryTimeout\",\n  \"message\": \"The query took too long. Narrow the search and try again.\",\n  \"details\": {}\n}"
+            }
+          ]
+        },
+        {
           "name": "List Users",
           "request": {
             "method": "GET",
